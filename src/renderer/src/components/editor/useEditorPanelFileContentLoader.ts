@@ -25,7 +25,7 @@ import { findRestoredEditorWorkspaceRuntimeOwner } from './restored-editor-works
 import type { RuntimeWorkspaceFileRoute } from '@/lib/runtime-workspace-file-route'
 import { editorTabFileAccess, isClientLocalReadOnlyTab } from '@/lib/local-file-access'
 import { isFloatingWorkspaceId } from '../../../../shared/floating-workspace-worktree'
-import { renewTerminalArtifactGrant } from '@/runtime/runtime-terminal-artifact-grant'
+import { grantRestoredHostFile } from './restored-host-file-grant'
 import { chatScratchFileAddress } from '@/runtime/runtime-chat-scratch-file-address'
 import { stampCleanTabDiskBaseline } from './editor-clean-tab-disk-baseline'
 import { applyEditorFileLoadFailure } from './editor-deleted-file-reload'
@@ -171,20 +171,8 @@ export function useEditorPanelFileContentLoader({
               !readGrantId &&
               !chatScratchFileAddress(filePath)
             ) {
-              // Why: grants are never persisted, so a restored host file outside workspaces asks its host again.
-              const renewed =
-                readTarget.kind === 'environment' && readWorktreeId
-                  ? await renewTerminalArtifactGrant({
-                      target: readTarget,
-                      worktreeId: readWorktreeId,
-                      absolutePath: filePath
-                    })
-                  : null
-              if (!renewed) {
-                throw new Error('External local files are not available for remote workspaces.')
-              }
-              readGrantId = renewed.grantId
-              useAppStore.getState().setTerminalArtifactGrant(id, renewed.grantId)
+              readGrantId = await grantRestoredHostFile(readTarget, readWorktreeId, filePath)
+              useAppStore.getState().setTerminalArtifactGrant(id, readGrantId)
             }
             if (!externalSshOwnerId) {
               // Client-local external tabs must stay off the workspace’s SSH host.

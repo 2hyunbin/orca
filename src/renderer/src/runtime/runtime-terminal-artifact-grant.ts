@@ -1,6 +1,9 @@
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
-import type { RuntimeTerminalPathResolution } from '../../../shared/runtime-file-contracts'
-import { callRuntimeRpc } from './runtime-rpc-client'
+import {
+  TERMINAL_PATH_ABSOLUTE_FILES_RUNTIME_CAPABILITY,
+  type RuntimeTerminalPathResolution
+} from '../../../shared/runtime-file-contracts'
+import { callRuntimeRpc, runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 
@@ -42,6 +45,16 @@ export async function renewTerminalArtifactGrant(
     return { grantId: openTarget.grantId, readOnly: openTarget.readOnly === true }
   }
   if (!resolved.exists) {
+    // Why: older hosts re-grant only for the terminal that printed the path, so their "absent" is no proof.
+    if (
+      !(await runtimeEnvironmentSupportsCapability(
+        args.target.environmentId,
+        TERMINAL_PATH_ABSOLUTE_FILES_RUNTIME_CAPABILITY,
+        15_000
+      ))
+    ) {
+      throw new Error('Update Orca on this host to keep editing files outside its workspaces.')
+    }
     return null
   }
   // Why: never redirect a read or save elsewhere; the host must grant this exact path.

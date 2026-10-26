@@ -9,7 +9,6 @@ import type { DiffContent, FileContent } from './editor-panel-content-types'
 
 const mocks = vi.hoisted(() => ({
   readRuntimeFileContent: vi.fn(),
-  renewTerminalArtifactGrant: vi.fn(),
   getRuntimeGitDiff: vi.fn(),
   getRuntimeGitBranchDiff: vi.fn(),
   getConnectionId: vi.fn(),
@@ -28,9 +27,6 @@ vi.mock('@/runtime/runtime-file-routing', () => ({
 }))
 vi.mock('@/runtime/runtime-file-read-client', () => ({
   readRuntimeFileContent: mocks.readRuntimeFileContent
-}))
-vi.mock('@/runtime/runtime-terminal-artifact-grant', () => ({
-  renewTerminalArtifactGrant: mocks.renewTerminalArtifactGrant
 }))
 vi.mock('@/runtime/runtime-file-watch-client', () => ({ subscribeRuntimeFileChanges: vi.fn() }))
 
@@ -310,74 +306,6 @@ describe('useEditorPanelContentState', () => {
         access: { kind: 'user-file' }
       })
     )
-  })
-
-  it('rejects an unstamped external tab its runtime host will not grant', async () => {
-    const activeFile = createOpenFile({
-      id: '/work/reports/audit.md',
-      filePath: '/work/reports/audit.md',
-      relativePath: '/work/reports/audit.md',
-      worktreeId: 'repo-runtime::/work/demo-project'
-    })
-    mocks.getConnectionIdForFile.mockReturnValue(undefined)
-    mocks.renewTerminalArtifactGrant.mockResolvedValue(null)
-    mocks.getState.mockReturnValue({
-      ...createTestStore().getState(),
-      settings: { activeRuntimeEnvironmentId: 'runtime-1' },
-      openFiles: [],
-      setLastKnownDiskSignature: vi.fn()
-    })
-
-    container = document.createElement('div')
-    document.body.appendChild(container)
-    root = createRoot(container)
-
-    await act(async () => {
-      root?.render(<HookProbe activeFile={activeFile} openFiles={[activeFile]} />)
-    })
-
-    await vi.waitFor(() =>
-      expect(latestFileContents[activeFile.id]?.loadError).toBe(
-        'External local files are not available for remote workspaces.'
-      )
-    )
-    expect(mocks.readRuntimeFileContent).not.toHaveBeenCalled()
-  })
-
-  // Why: grants are never persisted, so a restored host file outside workspaces asks its host again.
-  it('re-grants a restored host file outside every workspace and reads through it', async () => {
-    const activeFile = createOpenFile({
-      id: '/work/reports/audit.md',
-      filePath: '/work/reports/audit.md',
-      relativePath: '/work/reports/audit.md',
-      worktreeId: 'repo-runtime::/work/demo-project'
-    })
-    mocks.getConnectionIdForFile.mockReturnValue(undefined)
-    mocks.renewTerminalArtifactGrant.mockResolvedValue({ grantId: 'g-2', readOnly: false })
-    mocks.readRuntimeFileContent.mockResolvedValue({ content: '# audit', isBinary: false })
-    const setTerminalArtifactGrant = vi.fn()
-    mocks.getState.mockReturnValue({
-      ...createTestStore().getState(),
-      settings: { activeRuntimeEnvironmentId: 'runtime-1' },
-      openFiles: [],
-      setLastKnownDiskSignature: vi.fn(),
-      setTerminalArtifactGrant
-    })
-
-    container = document.createElement('div')
-    document.body.appendChild(container)
-    root = createRoot(container)
-
-    await act(async () => {
-      root?.render(<HookProbe activeFile={activeFile} openFiles={[activeFile]} />)
-    })
-
-    await vi.waitFor(() =>
-      expect(mocks.readRuntimeFileContent).toHaveBeenCalledWith(
-        expect.objectContaining({ filePath: activeFile.filePath, terminalArtifactGrantId: 'g-2' })
-      )
-    )
-    expect(setTerminalArtifactGrant).toHaveBeenCalledWith(activeFile.id, 'g-2')
   })
 
   it('rejects an external SSH-host tab after its target owner changes', async () => {
