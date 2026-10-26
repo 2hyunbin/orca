@@ -16,6 +16,9 @@ import type { WslHostDistroCandidate } from './wsl-host-distro-list'
 import { WslHostService, type WslHostConnector } from './wsl-host-service'
 import { WslOrcadLaunchDeferredError } from './wsl-orcad-connection-errors'
 import type { WslOrcadConnection } from './wsl-orcad-connection'
+import { setWslHostService } from './wsl-host-service-instance'
+import { onWslHostUserAction, type WslHostUserAction } from './wsl-host-user-actions'
+import { removeThroughOwningService } from '../ipc/runtime-environments/runtime-environment-host-service-ops'
 
 const KEY = Buffer.alloc(32, 3).toString('base64')
 const UBUNTU_ID = '0e3a7f2c-1b4d-4c5e-9f60-7a8b9c0d1e2f'
@@ -800,5 +803,40 @@ describe('WslHostService', () => {
     await expect(service.add({ distro: 'Ubuntu' })).rejects.toThrow(
       'WSL hosts are not available on this computer.'
     )
+  })
+
+  // D3a: Settings → Remote Orca Servers removes through the owning service, not wslHosts:remove;
+  // that Remove must decline the distro's move too, and the orchestrator's own add never counts.
+  it('reports a Remove made from Settings as the user declining the host', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    const heard: WslHostUserAction[] = []
+    const stop = onWslHostUserAction((action) => heard.push(action))
+    setWslHostService(service)
+    try {
+      await service.add({ distro: 'Ubuntu' })
+      const [environment] = listEnvironments(userDataPath)
+      expect(environment).toBeDefined()
+      await removeThroughOwningService(environment!)
+      expect(heard).toEqual([{ kind: 'removed', distro: 'Ubuntu' }])
+    } finally {
+      stop()
+      setWslHostService(null)
+    }
+  })
+
+  it('reports the Remove even when the cleanup after it fails', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    removed.mockRejectedValueOnce(new Error('transport cleanup failed'))
+    const heard: WslHostUserAction[] = []
+    const stop = onWslHostUserAction((action) => heard.push(action))
+    try {
+      await expect(service.remove('wsl:ubuntu')).rejects.toThrow('transport cleanup failed')
+      expect(heard).toEqual([{ kind: 'removed', distro: 'Ubuntu' }])
+    } finally {
+      stop()
+    }
   })
 })

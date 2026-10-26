@@ -326,6 +326,10 @@ vi.mock('../wsl-move-handlers', () => ({
   registerWslMoveHandlers: vi.fn()
 }))
 
+vi.mock('../wsl-move-orchestrator-wiring', () => ({
+  registerWslMoveOrchestrator: vi.fn()
+}))
+
 vi.mock('../ephemeral-vm', () => ({
   registerEphemeralVmHandlers: registerEphemeralVmHandlersMock
 }))

@@ -4,6 +4,7 @@
  * parked: polls and visible work keep it down until the user acts or the distro runs again.
  */
 import { errorMessage } from '../../shared/error-message'
+import { noteWslHostUserAction } from './wsl-host-user-actions'
 import { removeWslHostEnvironment } from '../../shared/runtime-environment-wsl-host-store'
 import {
   readWslHostDeployments,
@@ -196,6 +197,9 @@ export class WslHostService {
     }
     this.statuses.delete(environmentId)
     this.notifyStatusesChanged()
+    // Every Remove (sidebar or Settings) is the user's: the move orchestrator never removes a host.
+    // Before the cleanup await, so a failed cleanup cannot drop the decline of a host already gone.
+    noteWslHostUserAction({ kind: 'removed', distro: record.distro })
     await this.deps.removed(environmentId)
     return serverStop
   }

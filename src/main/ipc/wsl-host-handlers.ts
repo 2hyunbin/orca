@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain } from 'electron'
+import { noteWslHostUserAction } from '../wsl/wsl-host-user-actions'
 import {
   WSL_HOST_STATUS_CHANNEL,
   type WslHostAddResult,
@@ -189,8 +190,16 @@ export function registerWslHostHandlers(args: WslHostHandlerArgs): void {
   ipcMain.handle('wslHosts:listDistros', () => wsl.listDistros())
   ipcMain.handle(
     'wslHosts:add',
-    (_event, request: { distro: string; startIfStopped?: boolean }): Promise<WslHostAddResult> =>
-      wsl.add(request)
+    async (
+      _event,
+      request: { distro: string; startIfStopped?: boolean }
+    ): Promise<WslHostAddResult> => {
+      const result = await wsl.add(request)
+      if (result.ok) {
+        noteWslHostUserAction({ kind: 'added', distro: request.distro })
+      }
+      return result
+    }
   )
   ipcMain.handle('wslHosts:remove', async (_event, request: { environmentId: string }) => {
     if (args.store.getSettings().activeRuntimeEnvironmentId === request.environmentId) {

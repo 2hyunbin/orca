@@ -24,6 +24,9 @@ import {
   startWslMove,
   useWslMoveDialogStore
 } from './wsl-move-dialog-store'
+import { collectWslMoveSleptPaneBindings } from './wsl-move-slept-pane-bindings'
+import { findWorktreeById } from '@/store/github/worktree-refresh'
+import { getWslDistroFromPath } from '@/lib/local-preflight-context'
 import {
   wslMoveBlockerProjects,
   wslMoveCounts,
@@ -79,6 +82,30 @@ export function WslMoveDialogHost(): React.JSX.Element | null {
   // A run this window did not start (it reloaded mid-move) still gets its progress and reload.
   useEffect(
     () => (enabled ? window.api.wslMove.onProgress(adoptWslMoveProgress) : undefined),
+    [enabled]
+  )
+  // Opening a bridge project is the trigger bridge users give; main checks it runs.
+  // Gated so flag-off windows skip the per-update worktree lookup.
+  const activeWslDistro = useAppStore((s) => {
+    const worktree = enabled && s.activeWorktreeId ? findWorktreeById(s, s.activeWorktreeId) : null
+    return worktree ? getWslDistroFromPath(worktree.path) : null
+  })
+  useEffect(() => {
+    if (enabled && activeWslDistro) {
+      void window.api.wslMove.orchestratorProjectOpened(activeWslDistro)
+    }
+  }, [enabled, activeWslDistro])
+  // An automatic move (D3a) needs this window's slept-pane bindings, as the dialog's start does.
+  useEffect(
+    () =>
+      enabled
+        ? window.api.wslMove.onOrchestratorSleptPanesRequest((requestId) => {
+            void window.api.wslMove.answerOrchestratorSleptPanes(
+              requestId,
+              collectWslMoveSleptPaneBindings(useAppStore.getState())
+            )
+          })
+        : undefined,
     [enabled]
   )
   return open ? (
