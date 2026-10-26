@@ -127,7 +127,7 @@ export function MobileNativeChatOverlay({
   return (
     <MobileNativeChatRowOverlaysHost
       conversation={{ surfaceId: sendSurfaceId, sessionId }}
-      imageClient={controller.nativeChatVisualSource?.client ?? null}
+      imageClient={controller.nativeChatVisualSource?.client}
     >
       <View style={styles.overlay}>
         <MobileNativeChatVisualContext.Provider value={visuals}>
