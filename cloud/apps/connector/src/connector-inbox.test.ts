@@ -1,15 +1,10 @@
-import {
-  CONNECTOR_LIMITS,
-  ConnectorHostSessionResponseSchema,
-  ConnectorPollResponseSchema
-} from '@orca-cloud/connector-contract'
+import { CONNECTOR_LIMITS, ConnectorPollResponseSchema } from '@orca-cloud/connector-contract'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import type { DeliveryBody } from './connector-inbox.js'
 import {
   cleanupConnectorHarnesses,
   createConnectorHarness,
-  hiddenField,
   pauseBefore
 } from './connector-server-harness.test-fixture.js'
 
@@ -39,9 +34,12 @@ function failOnce(database: CloudDatabase, prefix: string) {
   return { database: wrap(database), arm: () => (armed = true) }
 }
 
-async function setup(options: Parameters<typeof createConnectorHarness>[1] = {}) {
+async function setup(
+  options: Parameters<typeof createConnectorHarness>[1] = {},
+  machineOptions: Parameters<Awaited<ReturnType<typeof createConnectorHarness>>['machine']>[1] = {}
+) {
   const harness = await createConnectorHarness({}, options)
-  const machine = await harness.linkedMachine()
+  const machine = await harness.machine('user-1', machineOptions)
   expect((await machine.hello()).status).toBe(204)
   const enqueue = (externalId: string, deliveryId: string, body: DeliveryBody) =>
     harness.runtime.queueDelivery({
@@ -67,9 +65,24 @@ async function setup(options: Parameters<typeof createConnectorHarness>[1] = {})
 }
 
 describe('connector inbox', () => {
+  it('refuses a request without a connector token', async () => {
+    const harness = await createConnectorHarness()
+    expect((await harness.json('/v1/connector/poll', { v: 1, helloRev: 1 })).status).toBe(401)
+  })
+
+  it('names a host by account and machine, whichever token it presents', async () => {
+    const { harness, machine, enqueue, ids } = await setup()
+    await enqueue('a', 'a1', START)
+    const sameMachine = await harness.machine('user-1', { machineId: machine.machineId })
+    expect(ConnectorPollResponseSchema.parse((await sameMachine.poll()).body).deliveries).toHaveLength(1)
+    const otherAccount = await harness.machine('user-2', { machineId: machine.machineId })
+    expect((await otherAccount.poll()).status).toBe(409)
+    expect(await ids()).toEqual([])
+  })
+
   it('requires a hello for the revision a poll names', async () => {
     const harness = await createConnectorHarness()
-    const machine = await harness.linkedMachine()
+    const machine = await harness.machine()
     expect((await machine.poll()).status).toBe(409)
     await machine.hello(1)
     expect((await machine.poll(2)).status).toBe(409)
@@ -125,8 +138,8 @@ describe('connector inbox', () => {
     expect(await ids()).toEqual(['a1'])
   })
 
-  it('lists received-but-not-done deliveries on the first poll of a new session only', async () => {
-    const { harness, machine, enqueue, poll } = await setup()
+  it('lists received-but-not-done deliveries on the first poll after each hello only', async () => {
+    const { machine, enqueue, poll } = await setup()
     await enqueue('a', 'a1', START)
     await enqueue('b', 'b1', START)
     await poll()
@@ -137,17 +150,14 @@ describe('connector inbox', () => {
     ])
     expect((await poll()).unsettled).toBeUndefined()
 
-    // The machine restarts: a new session, a new hello, then its first poll.
-    const { sessionToken } = ConnectorHostSessionResponseSchema.parse(
-      await (await harness.machineSession(machine.host)).json()
-    )
-    const auth = { authorization: `Bearer ${sessionToken}` }
-    const first = await harness.json('/v1/connector/poll', { v: 1, helloRev: 1 }, auth)
-    expect(ConnectorPollResponseSchema.parse(await first.json()).unsettled).toEqual([
+    // The machine restarts: a new hello, then its first poll.
+    await machine.hello(2)
+    const first = ConnectorPollResponseSchema.parse((await machine.poll(2)).body)
+    expect(first.unsettled).toEqual([
       { deliveryId: 'a1', conversation: { source: 'slack', externalId: 'a' } }
     ])
-    const second = await harness.json('/v1/connector/poll', { v: 1, helloRev: 1 }, auth)
-    expect(ConnectorPollResponseSchema.parse(await second.json()).unsettled).toBeUndefined()
+    const second = ConnectorPollResponseSchema.parse((await machine.poll(2)).body)
+    expect(second.unsettled).toBeUndefined()
   })
 
   // SQLite runs one transaction at a time, so only Postgres can interleave the sweep with a claim.
@@ -180,7 +190,7 @@ describe('connector inbox', () => {
 
   it('keeps recovery for the next poll when the first one fails', async () => {
     let fault!: ReturnType<typeof failOnce>
-    const { harness, machine, enqueue, poll } = await setup({
+    const { machine, enqueue, poll } = await setup({
       wrapDatabase: (database) => {
         fault = failOnce(database, 'SELECT delivery_id, external_id, seq')
         return fault.database
@@ -189,14 +199,11 @@ describe('connector inbox', () => {
     await enqueue('a', 'a1', START)
     await poll()
     await machine.ack([{ deliveryId: 'a1', step: 'received' }])
-    const { sessionToken } = ConnectorHostSessionResponseSchema.parse(
-      await (await harness.machineSession(machine.host)).json()
-    )
-    const auth = { authorization: `Bearer ${sessionToken}` }
+    await machine.hello(2)
     fault.arm()
-    expect((await harness.json('/v1/connector/poll', { v: 1, helloRev: 1 }, auth)).status).toBe(500)
-    const retry = await harness.json('/v1/connector/poll', { v: 1, helloRev: 1 }, auth)
-    expect(ConnectorPollResponseSchema.parse(await retry.json()).unsettled).toEqual([
+    expect((await machine.poll(2)).status).toBe(500)
+    const retry = ConnectorPollResponseSchema.parse((await machine.poll(2)).body)
+    expect(retry.unsettled).toEqual([
       { deliveryId: 'a1', conversation: { source: 'slack', externalId: 'a' } }
     ])
   })
@@ -209,18 +216,6 @@ describe('connector inbox', () => {
     expect((await machine.hello(2)).status).toBe(204)
     expect((await held).status).toBe(409)
     expect(Date.now() - startedAt).toBeLessThan(5_000)
-  })
-
-  it('refuses an ack from a session a newer one replaced', async () => {
-    const { harness, machine, enqueue, poll } = await setup()
-    await enqueue('a', 'a1', START)
-    await poll()
-    expect((await harness.machineSession(machine.host)).status).toBe(200)
-    expect((await machine.ack([{ deliveryId: 'a1', step: 'received' }])).status).toBe(401)
-    const [row] = await harness.database.query(
-      "SELECT state FROM connector_inbox WHERE delivery_id = 'a1'"
-    )
-    expect(row?.state).toBe('leased')
   })
 
   it('keeps the first done', async () => {
@@ -269,13 +264,25 @@ describe('connector inbox', () => {
     expect(await ids()).toEqual(['a3'])
   })
 
-  it('queues nothing for a revoked machine', async () => {
-    const { machine, enqueue } = await setup()
-    const page = await (await machine.owner.get('/machines')).text()
-    await machine.owner.post(`/v1/account/hosts/${machine.hostId}/revoke`, {
-      csrf: hiddenField(page, 'csrf')
-    })
-    await expect(enqueue('a', 'a1', START)).resolves.toBe('host_not_linked')
+  it('queues nothing for a machine that never said hello', async () => {
+    const { harness, enqueue } = await setup()
+    const silent = await harness.machine('user-1')
+    await expect(
+      harness.runtime.queueDelivery({
+        thread: {
+          externalId: 'a',
+          teamId: 'T1',
+          channelId: 'C1',
+          threadTs: 'a',
+          ownerUserId: 'U1',
+          hostId: silent.hostId,
+          placeId: 'pl_1'
+        },
+        deliveryId: 'a1',
+        body: START
+      })
+    ).resolves.toBe('unknown_host')
+    await expect(enqueue('b', 'b1', START)).resolves.toBe('queued')
   })
 
   it('expires pending work at its deadline and leased work 30 s after it', async () => {
@@ -307,48 +314,35 @@ describe('connector inbox', () => {
     expect(row?.state).toBe('received')
   })
 
-  it('stops a held poll that a revoke lands on and expires its waiting work', async () => {
-    const { harness, machine, enqueue, poll } = await setup({ pollHoldMs: 10_000 })
-    await enqueue('a', 'a1', START)
-    await poll()
-    // Queued behind the leased a1, so the next poll is held.
-    await enqueue('a', 'a2', SEND)
-    const page = await (await machine.owner.get('/machines')).text()
-    const held = machine.poll()
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    await machine.owner.post(`/v1/account/hosts/${machine.hostId}/revoke`, {
-      csrf: hiddenField(page, 'csrf')
-    })
-    expect((await held).status).toBe(401)
-    const states = await harness.database.query(
-      'SELECT delivery_id, state FROM connector_inbox ORDER BY seq'
-    )
-    expect(states).toEqual([
-      { delivery_id: 'a1', state: 'expired' },
-      { delivery_id: 'a2', state: 'expired' }
-    ])
+  it('ends a held poll by its token expiry', async () => {
+    const { machine, poll } = await setup({ pollHoldMs: 10_000 }, { ttlSeconds: 2 })
+    const reply = await poll()
+    expect(reply.deliveries).toEqual([])
+    expect(Date.now()).toBeGreaterThanOrEqual(machine.expiresAt)
+    expect(Date.now() - machine.expiresAt).toBeLessThan(1_000)
   })
 
-  it('refuses a poll whose request was authorized just before a revoke committed', async () => {
+  it('hands nothing out on a token that expired while its poll waited', async () => {
     let gate!: ReturnType<typeof pauseBefore>
-    const { machine, enqueue } = await setup({
-      wrapDatabase: (database) => {
-        gate = pauseBefore(database, 'UPDATE connector_hosts SET revoked_at')
-        return gate.database
-      }
-    })
+    const { harness, machine, enqueue } = await setup(
+      {
+        wrapDatabase: (database) => {
+          gate = pauseBefore(database, 'SELECT hello_rev')
+          return gate.database
+        }
+      },
+      { ttlSeconds: 2 }
+    )
     await enqueue('a', 'a1', START)
-    const page = await (await machine.owner.get('/machines')).text()
-    const revoke = machine.owner.post(`/v1/account/hosts/${machine.hostId}/revoke`, {
-      csrf: hiddenField(page, 'csrf')
-    })
-    await gate.atStatement
-    // Holding the host lock, the revoke makes the poll's locked pass wait and then see it.
     const reply = machine.poll()
-    await new Promise((resolve) => setTimeout(resolve, 200))
+    await gate.atStatement
+    await new Promise((resolve) => setTimeout(resolve, machine.expiresAt - Date.now() + 10))
     gate.release()
-    expect((await revoke).status).toBe(303)
-    expect((await reply).status).toBe(401)
+    expect(ConnectorPollResponseSchema.parse((await reply).body).deliveries).toEqual([])
+    const [row] = await harness.database.query(
+      "SELECT state FROM connector_inbox WHERE delivery_id = 'a1'"
+    )
+    expect(row?.state).toBe('pending')
   })
 
   it('wakes a held poll when a lease runs out', async () => {

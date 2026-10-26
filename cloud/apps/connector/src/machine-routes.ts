@@ -1,3 +1,4 @@
+import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import {
   CONNECTOR_CONTRACT_VERSION,
   CONNECTOR_PATHS,
@@ -9,27 +10,27 @@ import {
   type ConnectorPollResponse
 } from '@orca-cloud/connector-contract'
 import type { Hono, MiddlewareHandler } from 'hono'
+import { lockConnectorHost, type ConnectorHosts } from './connector-hosts.js'
 import type { ConnectorInbox, Unsettled } from './connector-inbox.js'
 import type { ConnectorThreads } from './connector-threads.js'
-import type { ConnectorHostLinks } from './host-links.js'
 import type { InboxWaker } from './inbox-waker.js'
-import type { MachineEnv, MachineSession } from './machine-session.js'
+import type { MachineEnv } from './machine-auth.js'
 
-// The machine API behind a host session: hello, the held poll, confirmations and turn events.
+// The machine API behind a connector token: hello, the held poll, confirmations and turn events.
 export function registerMachineRoutes(
   app: Hono<MachineEnv>,
   deps: {
+    database: CloudDatabase
     inbox: ConnectorInbox
     threads: ConnectorThreads
-    hostLinks: ConnectorHostLinks
+    hosts: ConnectorHosts
     waker: InboxWaker
-    session: MachineSession
     now: () => number
     holdMs: number
     limitBody: MiddlewareHandler
   }
 ): void {
-  const { inbox, threads, hostLinks, waker, session, now, holdMs, limitBody } = deps
+  const { database, inbox, threads, hosts, waker, now, holdMs, limitBody } = deps
 
   app.put(CONNECTOR_PATHS.hello, limitBody, async (context) => {
     const body = ConnectorHelloRequestSchema.safeParse(await context.req.json().catch(() => null))
@@ -39,11 +40,12 @@ export function registerMachineRoutes(
     if (body.data.contract < CONNECTOR_CONTRACT_VERSION) {
       return context.json({ error: 'client_too_old' }, 426)
     }
-    const hostId = context.get('hostId')
-    const recorded = await session.locked(context, (transaction) =>
-      hostLinks.recordHello(transaction, hostId, body.data)
-    )
-    return recorded instanceof Response ? recorded : context.body(null, 204)
+    const host = context.get('host')
+    await database.transaction(async (transaction) => {
+      await lockConnectorHost(transaction, host.hostId)
+      await hosts.recordHello(transaction, host, body.data)
+    })
+    return context.body(null, 204)
   })
 
   app.post(CONNECTOR_PATHS.poll, limitBody, async (context) => {
@@ -51,27 +53,31 @@ export function registerMachineRoutes(
     if (!body.success) {
       return context.json({ error: 'invalid_request' }, 400)
     }
-    const hostId = context.get('hostId')
+    const { hostId, expiresAt } = context.get('host')
     const { helloRev } = body.data
-    await hostLinks.touch(hostId)
-    const holdUntil = Date.now() + holdMs
+    await hosts.touch(hostId)
+    const holdUntil = Math.min(Date.now() + holdMs, expiresAt)
     let deliveries: ConnectorDelivery[] = []
     let unsettled: Unsettled[] = []
     for (;;) {
       const waiter = waker.register(hostId)
       try {
-        // Each pass decides under the host lock, so a revoke or newer hello either lands before it
-        // (and this refuses) or after it has committed what it hands out.
-        const pass = await session.locked(context, async (transaction, current) => {
-          if ((await hostLinks.helloRev(transaction, hostId)) !== helloRev) {
+        // Each pass decides under the host lock, so a newer hello either lands before it (and this
+        // refuses) or after it has committed what it hands out.
+        const pass = await database.transaction(async (transaction) => {
+          await lockConnectorHost(transaction, hostId)
+          if ((await hosts.helloRev(transaction, hostId)) !== helloRev) {
             return null
           }
-          const recovered = await inbox.takeFirstPollUnsettled(transaction, hostId, current.sessionId)
+          // Last check before claiming: nothing goes out on a token past its expiry.
+          if (Date.now() >= expiresAt) {
+            return { recovered: [], deliveries: [], nextLeaseDueAt: null }
+          }
+          const recovered = (await hosts.takeUnsettledDue(transaction, hostId))
+            ? await inbox.listUnsettled(transaction, hostId)
+            : []
           return { recovered, ...(await inbox.claim(transaction, hostId)) }
         })
-        if (pass instanceof Response) {
-          return pass
-        }
         if (pass === null) {
           return context.json({ error: 'hello_required' }, 409)
         }
@@ -106,11 +112,11 @@ export function registerMachineRoutes(
     if (!body.success) {
       return context.json({ error: 'invalid_request' }, 400)
     }
-    const hostId = context.get('hostId')
-    const acknowledged = await session.locked(context, (transaction) =>
+    const { hostId } = context.get('host')
+    await database.transaction((transaction) =>
       inbox.acknowledge(transaction, hostId, body.data.acks)
     )
-    return acknowledged instanceof Response ? acknowledged : context.body(null, 204)
+    return context.body(null, 204)
   })
 
   app.post(CONNECTOR_PATHS.events, limitBody, async (context) => {
@@ -118,17 +124,13 @@ export function registerMachineRoutes(
     if (!body.success) {
       return context.json({ error: 'invalid_request' }, 400)
     }
-    const hostId = context.get('hostId')
-    // A stale batch still answers 200: the machine has nothing to retry.
-    const applied = await session.locked(context, (transaction, current) =>
-      threads.applyEvents(
-        transaction,
-        // The connection is the host session for now; only this key changes if that does.
-        { hostId, connectionId: current.sessionId },
-        body.data.seq,
-        body.data.events
-      )
-    )
-    return applied instanceof Response ? applied : context.body(null, 204)
+    const { hostId } = context.get('host')
+    // A stale batch still answers 204: the machine has nothing to retry.
+    await database.transaction(async (transaction) => {
+      if (await hosts.advanceEventsSeq(transaction, hostId, body.data.seq)) {
+        await threads.applyEvents(transaction, hostId, body.data.events)
+      }
+    })
+    return context.body(null, 204)
   })
 }

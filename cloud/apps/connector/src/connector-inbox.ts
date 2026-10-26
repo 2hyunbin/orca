@@ -30,17 +30,7 @@ export class ConnectorInbox {
     private readonly now: () => number
   ) {}
 
-  // Inside the caller's transaction (revoke, logout): the host's waiting deliveries expire at once.
-  async expireHost(transaction: CloudDatabase, hostId: string): Promise<void> {
-    await transaction.query(
-      `UPDATE connector_inbox SET state = 'expired', payload = NULL, settled_at = ?
-       WHERE host_id = ? AND state IN ('pending', 'leased')`,
-      [this.now(), hostId]
-    )
-    await this.wake(transaction, hostId)
-  }
-
-  // Under the host lock, after the caller checked the link and bound the thread (queueDelivery).
+  // Under the host lock, after the caller found the host and bound the thread (queueDelivery).
   async enqueue(
     transaction: CloudDatabase,
     input: { hostId: string; externalId: string; deliveryId: string; body: DeliveryBody }
@@ -87,7 +77,7 @@ export class ConnectorInbox {
     return 'queued'
   }
 
-  // Under the host lock (MachineSession.locked). Each conversation's head goes out; the next waits
+  // Under the host lock (the poll's pass). Each conversation's head goes out; the next waits
   // until the head is received. A cancel skips the queue unless its start is still unreceived.
   async claim(
     transaction: CloudDatabase,
@@ -140,21 +130,8 @@ export class ConnectorInbox {
     return { deliveries, nextLeaseDueAt: next?.due === null ? null : Number(next?.due) }
   }
 
-  // Under the host lock, in the same transaction as the claim: a session's first poll lists what
-  // an earlier process received but never settled, and marks the session so later polls don't.
-  async takeFirstPollUnsettled(
-    transaction: CloudDatabase,
-    hostId: string,
-    sessionId: string
-  ): Promise<Unsettled[]> {
-    const [first] = await transaction.query(
-      `UPDATE connector_sessions SET first_polled_at = ?
-       WHERE token_hash = ? AND host_fingerprint = ? AND first_polled_at IS NULL`,
-      [this.now(), sessionId, hostId]
-    )
-    if (Number(first?.changes ?? 0) === 0) {
-      return []
-    }
+  // What an earlier process received but never settled; the first poll after each hello lists it.
+  async listUnsettled(transaction: CloudDatabase, hostId: string): Promise<Unsettled[]> {
     const rows = await transaction.query(
       `SELECT delivery_id, external_id FROM connector_inbox
        WHERE host_id = ? AND state = 'received' ORDER BY seq`,
@@ -170,8 +147,7 @@ export class ConnectorInbox {
     await this.notifications.notify(transaction, INBOX_CHANNEL, hostId)
   }
 
-  // Under the host lock, so an ack from a replaced session can't slip past a new session's
-  // recovery list. A late received is accepted (it did arrive); the first done wins.
+  // A late received is accepted (it did arrive); the first done wins.
   async acknowledge(
     transaction: CloudDatabase,
     hostId: string,

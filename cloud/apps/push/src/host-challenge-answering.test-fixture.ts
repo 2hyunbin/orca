@@ -6,7 +6,7 @@ import {
   PUSH_LIMITS
 } from '@orca-cloud/push-contract'
 import nacl from 'tweetnacl'
-import { decodeCanonicalBase64 } from '@orca-cloud/host-handshake'
+import { decodeCanonicalBase64 } from './canonical-base64.js'
 import { deriveHostFingerprint } from './host-fingerprint.js'
 
 // Model shipped desktop challenge answering so gateway tests use a real box-opening peer.

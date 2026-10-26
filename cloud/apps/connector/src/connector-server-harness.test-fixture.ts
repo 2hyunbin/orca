@@ -1,21 +1,15 @@
-import { createHmac, randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { openCloudNotifications, type CloudDatabase } from '@orca-cloud/cloud-database'
-import {
-  CONNECTOR_PATHS,
-  ConnectorHostChallengeResponseSchema,
-  ConnectorHostSessionResponseSchema,
-  ConnectorSignInStartResponseSchema
-} from '@orca-cloud/connector-contract'
-import { buildHostProofMacInput, type HostProofDomains } from '@orca-cloud/push-contract'
+import { CONNECTOR_PATHS } from '@orca-cloud/connector-contract'
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import pg from 'pg'
-import nacl from 'tweetnacl'
 import type { ConnectorConfig } from './config.js'
 import { openConnectorDatabase, openInMemoryConnectorDatabase } from './connector-database.js'
-import { CONNECTOR_HOST_PROOF_DOMAINS } from './connector-host-handshake.js'
 import { createConnectorServer } from './connector-server.js'
+import { connectorHostId } from './connector-token-verifier.js'
 
 export const PUBLIC_URL = 'https://connector.onorca.dev'
-export const AUTH_URL = 'https://auth.onorca.dev'
+export const AUTH_ISSUER = 'https://login.onorca.dev'
 export const HOST_IP = '203.0.113.7'
 
 // Real Postgres when the CI service is present; each harness gets its own schema.
@@ -28,9 +22,8 @@ export function testConnectorConfig(): ConnectorConfig {
     publicUrl: PUBLIC_URL,
     dataDir: './data/connector-test',
     databasePoolMax: 4,
-    authUrl: AUTH_URL,
-    authClientId: 'orca-connector',
-    cookieSecret: 'test-cookie-secret-that-is-at-least-32-chars',
+    authIssuer: AUTH_ISSUER,
+    jwksUrl: `${AUTH_ISSUER}/.well-known/jwks.json`,
     trustedProxyHops: 0
   }
 }
@@ -61,116 +54,26 @@ async function openTestDatabase(): Promise<{ database: CloudDatabase; databaseUr
   return { database, databaseUrl: url.toString() }
 }
 
-// Stands in for the auth service: each code it hands out signs in as the queued account.
-export function fakeIssuer() {
-  const calls: { path: string; body: Record<string, unknown> }[] = []
-  let account = { userId: 'user-1', email: 'ada@example.com' }
-  let logoutStatus = 200
-  const fetchImpl: typeof fetch = async (input, init) => {
-    const path = new URL(String(input)).pathname
-    const body = JSON.parse(String(init?.body ?? '{}'))
-    calls.push({ path, body })
-    if (path === '/v1/desktop/auth/session') {
-      return Response.json({
-        accessToken: 'access',
-        refreshToken: `refresh-${account.userId}`,
-        expiresAt: 0,
-        cloud: { cloudProfileId: 'profile', ...account, linkedAt: 0 },
-        capabilities: { flags: {}, refreshedAt: 0 }
-      })
-    }
-    if (path === '/v1/desktop/auth/logout') {
-      return Response.json({ ok: logoutStatus === 200 }, { status: logoutStatus })
-    }
-    return Response.json({ error: 'not_found' }, { status: 404 })
-  }
+// Stands in for the auth service's connector token route.
+async function testTokenIssuer() {
+  const { privateKey, publicKey } = await generateKeyPair('ES256')
+  const jwk = { ...(await exportJWK(publicKey)), kid: 'test-key', alg: 'ES256' }
   return {
-    calls,
-    fetch: fetchImpl,
-    signInAs: (next: { userId: string; email: string }) => {
-      account = next
-    },
-    failLogout: () => {
-      logoutStatus = 503
-    }
+    jwks: createLocalJWKSet({ keys: [jwk] }),
+    sign: async (claims: { sub: string; mid: string }, expiresAtSeconds: number) =>
+      await new SignJWT({ prof: 'profile-1', sid: 'family-1', mid: claims.mid, purpose: 'connector-host' })
+        .setProtectedHeader({ alg: 'ES256', kid: 'test-key' })
+        .setIssuer(AUTH_ISSUER)
+        .setAudience('orca-connector')
+        .setSubject(claims.sub)
+        .setIssuedAt()
+        .setExpirationTime(expiresAtSeconds)
+        .sign(privateKey)
   }
 }
 
-export function hostKeypair(): nacl.BoxKeyPair {
-  return nacl.box.keyPair()
-}
-
-export const publicKeyB64 = (host: nacl.BoxKeyPair): string =>
-  Buffer.from(host.publicKey).toString('base64')
-
-// Opens the sealed challenge and answers it under `domains` (the connector's unless a test crosses them).
-export function answerChallenge(
-  challenge: { gatewayEphemeralPublicKeyB64: string; nonceB64: string; ciphertextB64: string },
-  host: nacl.BoxKeyPair,
-  domains: HostProofDomains = CONNECTOR_HOST_PROOF_DOMAINS
-): string {
-  const plaintext = nacl.box.open(
-    Buffer.from(challenge.ciphertextB64, 'base64'),
-    Buffer.from(challenge.nonceB64, 'base64'),
-    Buffer.from(challenge.gatewayEphemeralPublicKeyB64, 'base64'),
-    host.secretKey
-  )
-  if (!plaintext) {
-    throw new Error('challenge did not open')
-  }
-  const bytes = Buffer.from(plaintext)
-  const lengthAt = bytes.indexOf(0) + 1
-  const transcript = bytes.subarray(lengthAt + 4, lengthAt + 4 + bytes.readUInt32BE(lengthAt))
-  const secret = bytes.subarray(bytes.byteLength - 32)
-  return createHmac('sha256', secret).update(buildHostProofMacInput(domains, transcript)).digest('base64')
-}
-
-// A browser for app.request: keeps cookies across requests and reads hidden form fields.
-export function testBrowser(request: (path: string, init?: RequestInit) => Promise<Response>) {
-  const jar = new Map<string, string>()
-  const send = async (path: string, init: RequestInit = {}): Promise<Response> => {
-    const headers = new Headers(init.headers)
-    headers.set('x-forwarded-for', HOST_IP)
-    if (jar.size > 0) {
-      headers.set('cookie', [...jar].map(([k, v]) => `${k}=${v}`).join('; '))
-    }
-    const response = await request(path, { ...init, headers })
-    for (const cookie of response.headers.getSetCookie()) {
-      const [pair, ...attributes] = cookie.split(';')
-      const [name, ...value] = (pair ?? '').split('=')
-      if (!name) {
-        continue
-      }
-      if (attributes.some((attribute) => /max-age=0\b/i.test(attribute.trim()))) {
-        jar.delete(name)
-      } else {
-        jar.set(name, value.join('='))
-      }
-    }
-    return response
-  }
-  return {
-    jar,
-    get: (path: string) => send(path),
-    post: (path: string, form: Record<string, string>) =>
-      send(path, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(form).toString()
-      })
-  }
-}
-
-export function hiddenField(html: string, name: string): string {
-  const match = new RegExp(`name="${name}" value="([^"]*)"`).exec(html)
-  if (!match?.[1]) {
-    throw new Error(`missing hidden field ${name}`)
-  }
-  return match[1]
-}
-
-// Holds the first statement starting with `prefix` (after `skip` earlier ones) until release(),
-// with its transaction's locks still held.
+// Holds the first transaction statement starting with `prefix` until release(), locks still held.
+// `skip` lets that many matching statements through first.
 export function pauseBefore(database: CloudDatabase, prefix: string, skip = 0) {
   let reached!: () => void
   const atStatement = new Promise<void>((resolve) => (reached = resolve))
@@ -203,14 +106,14 @@ export async function createConnectorHarness(
   } = {}
 ) {
   let now = 1_800_000_000_000
-  const issuer = fakeIssuer()
+  const issuer = await testTokenIssuer()
   const { database, databaseUrl } = await openTestDatabase()
   const notifications = openCloudNotifications(databaseUrl ? { databaseUrl } : {})
   const runtime = createConnectorServer(
     { ...testConnectorConfig(), ...config },
     options.wrapDatabase?.(database) ?? database,
     notifications,
-    { now: () => now, fetch: issuer.fetch, pollHoldMs: options.pollHoldMs ?? 0 }
+    { now: () => now, jwks: issuer.jwks, pollHoldMs: options.pollHoldMs ?? 0 }
   )
   await runtime.waker.start()
   cleanups.push(() => runtime.waker.close())
@@ -223,75 +126,28 @@ export async function createConnectorHarness(
       body: JSON.stringify(body)
     })
 
-  // Signs a browser in through the fake issuer, as the redirect round trip would.
-  async function signedInBrowser(account = { userId: 'user-1', email: 'ada@example.com' }) {
-    issuer.signInAs(account)
-    const browser = testBrowser(request)
-    const redirect = await browser.get('/host-login')
-    const authorize = new URL(redirect.headers.get('location') ?? '')
-    await browser.get(`/auth/callback?code=code-1&state=${authorize.searchParams.get('state')}`)
-    return browser
-  }
-
-  async function startSignIn(
-    host: nacl.BoxKeyPair | string,
-    headers: Record<string, string> = {}
+  // A signed-in machine holding a connector token, with helpers for the machine API.
+  async function machine(
+    account = 'user-1',
+    { machineId = randomBytes(16).toString('base64url'), ttlSeconds = 300 } = {}
   ) {
-    const hostPublicKeyB64 = typeof host === 'string' ? host : publicKeyB64(host)
-    const response = await json(
-      CONNECTOR_PATHS.signInStart,
-      { v: 1, hostPublicKeyB64, hostName: 'build-box', platform: 'linux', runtime: 'serve', orcaVersion: '1.4.230' },
-      headers
-    )
-    const body: unknown = await response.json()
-    return { response, body, started: ConnectorSignInStartResponseSchema.safeParse(body).data }
-  }
-
-  async function approve(browser: ReturnType<typeof testBrowser>, userCode: string, allow = true) {
-    const entry = await browser.get('/host-login')
-    const confirm = await browser.post('/host-login', {
-      csrf: hiddenField(await entry.text(), 'csrf'),
-      userCode
-    })
-    const page = await confirm.text()
-    return await browser.post('/host-login/decision', {
-      csrf: hiddenField(page, 'csrf'),
-      userCode: hiddenField(page, 'userCode'),
-      decision: allow ? 'allow' : 'deny'
-    })
-  }
-
-  async function machineSession(host: nacl.BoxKeyPair): Promise<Response> {
-    const challenge = ConnectorHostChallengeResponseSchema.parse(
-      await (
-        await json(CONNECTOR_PATHS.hostChallenge, { v: 1, hostPublicKeyB64: publicKeyB64(host) })
-      ).json()
-    )
-    return await json(CONNECTOR_PATHS.hostSession, {
-      v: 1,
-      challengeId: challenge.challengeId,
-      proofB64: answerChallenge(challenge, host)
-    })
-  }
-
-  // A linked machine holding a session, with helpers for the machine API.
-  async function linkedMachine(browser?: ReturnType<typeof testBrowser>) {
-    const host = hostKeypair()
-    const owner = browser ?? (await signedInBrowser())
-    await approve(owner, (await startSignIn(host)).started!.userCode)
-    const session = ConnectorHostSessionResponseSchema.parse(await (await machineSession(host)).json())
-    const auth = { authorization: `Bearer ${session.sessionToken}` }
+    const claims = { sub: account, mid: machineId }
+    const expiresAt = (Math.floor(Date.now() / 1000) + ttlSeconds) * 1000
+    const token = await issuer.sign(claims, expiresAt / 1000)
     const call = (path: string, body: unknown, method = 'POST') =>
       request(path, {
         method,
-        headers: { 'content-type': 'application/json', 'x-forwarded-for': HOST_IP, ...auth },
+        headers: {
+          'content-type': 'application/json',
+          'x-forwarded-for': HOST_IP,
+          authorization: `Bearer ${token}`
+        },
         body: JSON.stringify(body)
       })
     return {
-      host,
-      hostId: session.hostId,
-      sessionToken: session.sessionToken,
-      owner,
+      hostId: connectorHostId(claims),
+      machineId,
+      expiresAt,
       call,
       hello: (helloRev = 1) =>
         call(
@@ -323,14 +179,9 @@ export async function createConnectorHarness(
   return {
     runtime,
     database,
-    issuer,
-    linkedMachine,
+    machine,
     request,
     json,
-    signedInBrowser,
-    startSignIn,
-    approve,
-    machineSession,
     advance: (ms: number) => {
       now += ms
     },

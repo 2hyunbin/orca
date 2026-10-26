@@ -1,8 +1,4 @@
-import {
-  CONNECTOR_PATHS,
-  ConnectorHostSessionResponseSchema,
-  ConnectorPollResponseSchema
-} from '@orca-cloud/connector-contract'
+import { CONNECTOR_PATHS, ConnectorPollResponseSchema } from '@orca-cloud/connector-contract'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   cleanupConnectorHarnesses,
@@ -16,7 +12,7 @@ const conversation = { source: 'slack', externalId: 'T1:C1:1.0:U1' }
 // A loopback origin turns on the dev enqueue route, which also creates the thread.
 async function setup() {
   const harness = await createConnectorHarness({ publicUrl: 'http://127.0.0.1:8080' })
-  const machine = await harness.linkedMachine()
+  const machine = await harness.machine()
   await machine.hello()
   const enqueue = (hostId: string) =>
     harness.json('/dev/enqueue', {
@@ -105,7 +101,7 @@ describe('connector turn events', () => {
     expect(await thread()).toMatchObject({ turn_state: 'unverifiable' })
   })
 
-  it('drops a batch at or below the session high-water mark', async () => {
+  it("drops a batch at or below the host's high-water mark", async () => {
     const { machine, enqueue, events, thread } = await setup()
     await enqueue(machine.hostId)
     const prompt = { kind: 'approval', promptId: 'p1', tool: 'Bash', options: [] }
@@ -127,40 +123,28 @@ describe('connector turn events', () => {
     expect(await thread()).toMatchObject({ pending_prompt: null })
   })
 
-  it('restarts the high-water mark with each new session', async () => {
+  it('keeps the high-water mark across tokens for the same machine', async () => {
     const { harness, machine, enqueue, events, thread } = await setup()
     await enqueue(machine.hostId)
     await events([{ conversation, paneKey: 'pane-1', kind: 'turn-started', at: 100 }], 5)
-    const { sessionToken } = ConnectorHostSessionResponseSchema.parse(
-      await (await harness.machineSession(machine.host)).json()
-    )
-    const fresh = await harness.json(
-      CONNECTOR_PATHS.events,
-      {
+    const refreshed = await harness.machine('user-1', { machineId: machine.machineId })
+    const batch = (seq: number, paneKey: string) =>
+      refreshed.call(CONNECTOR_PATHS.events, {
         v: 1,
-        seq: 0,
-        events: [{ conversation, paneKey: 'pane-2', kind: 'turn-started', at: 200 }]
-      },
-      { authorization: `Bearer ${sessionToken}` }
-    )
-    expect(fresh.status).toBe(204)
-    expect(await thread()).toMatchObject({ pane_key: 'pane-2' })
-    // The replaced session is refused outright.
-    expect((await events([{ kind: 'snapshot', conversations: [] }], 6)).status).toBe(401)
-  })
-
-  it('prunes high-water marks a day after their last batch', async () => {
-    const { harness, machine, enqueue, events } = await setup()
-    await enqueue(machine.hostId)
-    await events([{ conversation, paneKey: 'pane-1', kind: 'turn-started', at: 100 }])
-    harness.advance(24 * 60 * 60_000 + 1)
-    await expect(harness.runtime.pruneEventMarks(24 * 60 * 60_000)).resolves.toBe(1)
+        seq,
+        events: [{ conversation, paneKey, kind: 'linked', agent: 'claude' }]
+      })
+    expect((await batch(5, 'pane-2')).status).toBe(204)
+    expect(await thread()).toMatchObject({ pane_key: 'pane-1' })
+    await batch(6, 'pane-3')
+    expect(await thread()).toMatchObject({ pane_key: 'pane-3' })
   })
 
   it("ignores events for another host's thread", async () => {
     const { harness, machine, enqueue, thread } = await setup()
     await enqueue(machine.hostId)
-    const other = await harness.linkedMachine(machine.owner)
+    const other = await harness.machine('user-1')
+    await other.hello()
     await other.call(CONNECTOR_PATHS.events, {
       v: 1,
       seq: 0,

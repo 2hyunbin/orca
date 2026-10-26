@@ -13,7 +13,7 @@ const DevEnqueueSchema = z.object({
   delivery: z.record(z.string(), z.unknown())
 })
 
-// Queues a delivery for a linked host without Slack; registered only on a loopback origin.
+// Queues a delivery without Slack for a host that said hello; only on a loopback origin.
 export function registerDevEnqueueRoute<E extends Env>(
   app: Hono<E>,
   deps: {
@@ -53,7 +53,7 @@ export function registerDevEnqueueRoute<E extends Env>(
       deliveryId,
       body: rest
     })
-    if (status === 'host_not_linked') {
+    if (status === 'unknown_host') {
       return context.json({ error: status }, 404)
     }
     if (status === 'not_this_hosts_thread') {

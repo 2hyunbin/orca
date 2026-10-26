@@ -196,15 +196,12 @@ importers:
       '@orca-cloud/connector-contract':
         specifier: workspace:*
         version: link:../../packages/connector-contract
-      '@orca-cloud/host-handshake':
-        specifier: workspace:*
-        version: link:../../packages/host-handshake
-      '@orca-cloud/push-contract':
-        specifier: workspace:*
-        version: link:../../packages/push-contract
       hono:
         specifier: ^4.13.13
         version: 4.13.13
+      jose:
+        specifier: ^6.2.13
+        version: 6.2.13
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -221,9 +218,6 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
-      tweetnacl:
-        specifier: ^1.0.3
-        version: 1.0.3
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -239,9 +233,6 @@ importers:
       '@orca-cloud/cloud-database':
         specifier: workspace:*
         version: link:../../packages/cloud-database
-      '@orca-cloud/host-handshake':
-        specifier: workspace:*
-        version: link:../../packages/host-handshake
       '@orca-cloud/push-contract':
         specifier: workspace:*
         version: link:../../packages/push-contract
@@ -251,6 +242,9 @@ importers:
       hono:
         specifier: ^4.13.13
         version: 4.13.13
+      tweetnacl:
+        specifier: ^1.0.3
+        version: 1.0.3
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -267,9 +261,6 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
-      tweetnacl:
-        specifier: ^1.0.3
-        version: 1.0.3
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -394,28 +385,6 @@ importers:
       tweetnacl:
         specifier: ^1.0.3
         version: 1.0.3
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: ^5.0.5
-        version: 5.0.5(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15))
-
-  packages/host-handshake:
-    dependencies:
-      '@orca-cloud/cloud-database':
-        specifier: workspace:*
-        version: link:../cloud-database
-      '@orca-cloud/push-contract':
-        specifier: workspace:*
-        version: link:../push-contract
-      tweetnacl:
-        specifier: ^1.0.3
-        version: 1.0.3
-    devDependencies:
-      '@types/node':
-        specifier: ^24.19.2
-        version: 24.19.2
       typescript:
         specifier: ^7.0.2
         version: 7.0.2

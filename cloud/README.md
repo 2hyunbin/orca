@@ -29,12 +29,9 @@ the validation required before rolling out the updated images and host pins.
   the APNs key and sends to phones through APNs and FCM, and its wire contract.
   Deployment and operations are owned by the private `stablyai/orca-cloud` repository.
 - `apps/connector` and `packages/connector-contract`: the Slack connector service
-  (experimental). An Orca links its own machine key to a person's account once,
-  then proves who it is with push's handshake under connector-only domains.
+  (experimental). A signed-in Orca calls it with short-lived connector tokens
+  from the auth service, checked the way the relay checks relay tokens.
   Deployed like push from the private repository.
-- `packages/cloud-database` and `packages/host-handshake`: the database layer
-  (Postgres in production, SQLite in tests) and the machine handshake that push
-  and the connector share.
 
 ## Mobile push gateway
 
