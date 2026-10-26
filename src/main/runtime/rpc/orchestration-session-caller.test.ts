@@ -303,6 +303,14 @@ describe('orchestration session callers at the dispatch entry', () => {
       })
     })
 
+    it('a released lease the host has not reconciled since restart', async () => {
+      h.records.set(
+        SESSION_X,
+        sessionRecord(SESSION_X, { lease: { claimStatus: 'released', unreconciled: true } })
+      )
+      await expectRefusedWithNoEffects(SESSION_X, CODES.notLive, /no live owner/)
+    })
+
     it('a lease mid owner change', async () => {
       h.records.set(
         SESSION_X,
