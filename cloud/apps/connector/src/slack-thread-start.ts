@@ -36,7 +36,6 @@ type ThreadMessage = z.infer<typeof RepliesSchema>['messages'][number]
 
 type HeldStart = {
   messageKey: string
-  externalId: string
   teamId: string
   channelId: string
   threadTs: string
@@ -67,27 +66,20 @@ export class SlackThreadStarts {
     )
     for (const row of conversations) {
       const externalId = String(row.external_id)
-      const start = this.startOf(await heldMessages(this.deps.database, externalId))
+      const [first] = this.unexpired(await heldMessages(this.deps.database, externalId))
+      const start = first ? heldStart(first) : null
       await this.release(externalId, start, start ? await this.threadBefore(start) : null)
     }
   }
 
-  // The oldest held message still inside its 5 minutes is the start; it is derived at release, not
-  // fixed on arrival, so a start that expired while the worker lagged hands over to the next one.
-  private startOf(held: SqlRow[]): HeldStart | null {
-    const row = held.find(
-      (message) => Number(message.received_at) + CONNECTOR_LIMITS.deliveryTtlMs > this.deps.now()
+  // Held messages still inside their 5 minutes, against one clock reading. The first is the start:
+  // derived at release, not fixed on arrival, so a start that expired while the worker lagged hands
+  // over to the next one.
+  private unexpired(held: SqlRow[]): SqlRow[] {
+    const cutoff = this.deps.now()
+    return held.filter(
+      (message) => Number(message.received_at) + CONNECTOR_LIMITS.deliveryTtlMs > cutoff
     )
-    return row
-      ? {
-          messageKey: String(row.message_key),
-          externalId: String(row.external_id),
-          teamId: String(row.team_id),
-          channelId: String(row.channel_id),
-          threadTs: String(row.thread_ts),
-          ts: String(row.ts)
-        }
-      : null
   }
 
   // The thread's earlier messages from full members, labelled; null when Slack couldn't be read.
@@ -151,8 +143,8 @@ export class SlackThreadStarts {
     })
   }
 
-  // Queues the start, then every later held message as a follow-up, in one transaction under the
-  // Slack thread's routing lock; expired ones are dropped. If what was read before taking the lock
+  // Queues the start, then every later unexpired held message as a follow-up, in one transaction
+  // under the Slack thread's routing lock; expired ones are dropped. If what was read before taking the lock
   // no longer names the same start, the next pass does it.
   private async release(
     externalId: string,
@@ -168,15 +160,10 @@ export class SlackThreadStarts {
       await transaction.lockQuotaScope(
         `orca-connector-slack-thread:${String(first.team_id)}:${String(first.channel_id)}:${String(first.thread_ts)}`
       )
-      const held = await heldMessages(transaction, externalId)
-      const current = this.startOf(held)
-      if (current?.messageKey !== start?.messageKey) {
+      const live = this.unexpired(await heldMessages(transaction, externalId))
+      if ((live[0] === undefined ? undefined : String(live[0].message_key)) !== start?.messageKey) {
         return
       }
-      // Held messages before the start are past their deadline and are dropped with the rest.
-      const live = current
-        ? held.slice(held.findIndex((row) => row.message_key === current.messageKey))
-        : []
       for (const [index, row] of live.entries()) {
         const request = String(row.text)
         await queue(transaction, {
@@ -208,10 +195,20 @@ export class SlackThreadStarts {
       await transaction.query('DELETE FROM connector_slack_pending WHERE external_id = ?', [
         externalId
       ])
-      if (current) {
+      if (live.length > 0) {
         await refreshSlackStatus(transaction, posts, String(first.host_id), externalId)
       }
     })
+  }
+}
+
+function heldStart(row: SqlRow): HeldStart {
+  return {
+    messageKey: String(row.message_key),
+    teamId: String(row.team_id),
+    channelId: String(row.channel_id),
+    threadTs: String(row.thread_ts),
+    ts: String(row.ts)
   }
 }
 

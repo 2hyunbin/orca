@@ -422,6 +422,39 @@ describe('Slack event ingress', () => {
     expect(send?.kind === 'send' ? send.text : '').toMatch(/\[Bob\] it is the cache\n\ngo$/)
   })
 
+  it('drops an expired held follow-up between live ones, leaving the teammate context for the next', async () => {
+    const harness = await linkedOwner()
+    await harness.message({
+      text: `<@${BOT}> fix this`,
+      ts: '1800000000.000400',
+      thread_ts: THREAD
+    })
+    await harness.message({
+      user: TEAMMATE,
+      text: 'it is the cache',
+      ts: '1800000000.000500',
+      thread_ts: THREAD
+    })
+    await harness.edge.members.checkContextAuthors()
+    // Routed by an instance whose clock puts it at its deadline already.
+    harness.advance(-5 * 60_000)
+    await harness.message({ text: 'stale', ts: '1800000000.000600', thread_ts: THREAD })
+    harness.advance(5 * 60_000)
+    await harness.message({ text: 'go', ts: '1800000000.000700', thread_ts: THREAD })
+    harness.fake.respond('conversations.replies', Response.json({ ok: true, messages: [] }))
+    await harness.edge.starts.buildDue()
+    const [start] = await harness.poll()
+    expect(start).toMatchObject({ kind: 'start', prompt: 'fix this' })
+    await harness.machine.ack([{ deliveryId: start?.deliveryId, step: 'received' }])
+    expect(await harness.poll()).toEqual([
+      expect.objectContaining({
+        kind: 'send',
+        deliveryId: `${TEAM}:${CHANNEL}:1800000000.000700`,
+        text: expect.stringMatching(/\[Bob\] it is the cache\n\ngo$/)
+      })
+    ])
+  })
+
   it('reads a long thread page by page, keeping the first and the latest messages', async () => {
     const harness = await linkedOwner()
     await harness.message({
