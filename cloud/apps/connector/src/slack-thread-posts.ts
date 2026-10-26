@@ -4,7 +4,8 @@ import {
   type ConnectorHelloRequest
 } from '@orca-cloud/connector-contract'
 import { knownHost } from './slack-machine-choice.js'
-import { answerablePrompt, refreshPromptCards } from './slack-prompt-cards.js'
+import { stoppableTurn } from './owner-controls.js'
+import { refreshPromptCards, slackAnswerablePrompt, statusBlocks } from './slack-prompt-cards.js'
 import type { SlackPlace, SlackPosts } from './slack-posts.js'
 import { escapeSlackText, slackText } from './slack-text.js'
 
@@ -37,6 +38,8 @@ async function boundThread(
     : null
 }
 
+export const statusPostId = (externalId: string) => `status:${externalId}`
+
 // The status message is a projection of the thread's current state: refreshing twice is a no-op.
 export async function refreshSlackStatus(
   transaction: CloudDatabase,
@@ -51,17 +54,28 @@ export async function refreshSlackStatus(
     return
   }
   const [latest] = await transaction.query(
-    `SELECT state, result FROM connector_inbox
-     WHERE host_id = ? AND external_id = ? AND kind IN ('start', 'send', 'answer')
+    `SELECT kind, state, result FROM connector_inbox
+     WHERE host_id = ? AND external_id = ? AND kind IN ('start', 'send', 'answer', 'cancel')
      ORDER BY seq DESC LIMIT 1`,
     [hostId, externalId]
   )
-  const prompt = answerablePrompt(thread.row.pending_prompt, thread.hello)
+  const prompt = slackAnswerablePrompt(thread.row, thread.hello)
   const place = { teamId: thread.teamId, channelId: thread.channelId, threadTs: thread.threadTs }
+  // A stop on its way to the machine; it settles when the turn ends.
+  const stopping =
+    latest?.kind === 'cancel' && ['pending', 'leased', 'received'].includes(String(latest.state))
+  const text = stopping
+    ? slackText.status.stopping(thread.hostName)
+    : statusText(thread.row, latest, thread.hostName, prompt !== null)
   await posts.setStatus(transaction, {
     ...place,
-    postId: `status:${externalId}`,
-    text: statusText(thread.row, latest, thread.hostName, prompt !== null)
+    postId: statusPostId(externalId),
+    text,
+    // No Stop while stopping, or while the machine can't be reached.
+    blocks: statusBlocks(
+      text,
+      stopping || unreached(latest) ? null : stoppableTurn(thread.row, thread.hello)
+    )
   })
   await refreshPromptCards(transaction, posts, { ...place, hostId, externalId }, prompt)
 }
@@ -123,18 +137,26 @@ export async function queueAgentReply(
   return await posts.find(transaction, postId)
 }
 
+function resultOf(latest: SqlRow | undefined) {
+  return latest?.state === 'done'
+    ? ConnectorDeliveryResultSchema.safeParse(JSON.parse(String(latest.result))).data
+    : undefined
+}
+
+// The newest delivery never reached the machine.
+function unreached(latest: SqlRow | undefined): boolean {
+  return latest?.state === 'expired' || resultOf(latest)?.outcome === 'expired'
+}
+
 function statusText(
   thread: SqlRow,
   latest: SqlRow | undefined,
   hostName: string,
   answerableHere: boolean
 ): string {
-  const result =
-    latest?.state === 'done'
-      ? ConnectorDeliveryResultSchema.safeParse(JSON.parse(String(latest.result))).data
-      : undefined
+  const result = resultOf(latest)
   // The newest message never arriving outranks whatever the last turn left showing.
-  if (latest?.state === 'expired' || result?.outcome === 'expired') {
+  if (unreached(latest)) {
     return slackText.status.offline(String(thread.owner_user_id), hostName)
   }
   if (thread.pending_prompt !== null) {

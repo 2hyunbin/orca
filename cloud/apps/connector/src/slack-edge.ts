@@ -15,7 +15,7 @@ import { readSlackEnvelope } from './slack-events.js'
 import { SlackInstalls } from './slack-installs.js'
 import { SlackMembers } from './slack-members.js'
 import { SlackPostWorker } from './slack-post-worker.js'
-import { answerFromSlack, readSlackClick } from './slack-prompt-answers.js'
+import { handleSlackClick, readSlackClick } from './slack-clicks.js'
 import { SlackPosts } from './slack-posts.js'
 import { routeSlackMessage, type QueueInTransaction } from './slack-routing.js'
 import { verifySlackSignature } from './slack-signature.js'
@@ -116,14 +116,14 @@ export function createSlackEdge(deps: {
       return context.body(null, 200)
     })
 
-    // Button presses on prompt cards; answered before any Slack call, like events.
+    // Button presses (answers on prompt cards, Stop on the status); answered before any Slack call.
     fromSlack(app, '/slack/interactivity', async (context, rawBody) => {
       const click = readSlackClick(rawBody)
       if (click === 'invalid') {
         return context.json({ error: 'invalid_request' }, 400)
       }
       if (click !== 'ignored' && config.teamIds.has(click.teamId)) {
-        await answerFromSlack({ config, database, installs, posts, queue: deps.queue }, click)
+        await handleSlackClick({ config, database, installs, posts, queue: deps.queue }, click)
       }
       return context.body(null, 200)
     })

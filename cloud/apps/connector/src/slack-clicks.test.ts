@@ -8,6 +8,7 @@ import {
   OWNER,
   startedThread,
   TEAMMATE,
+  TURN,
   turnEnded,
   turnStarted
 } from './slack-harness.test-fixture.js'
@@ -35,6 +36,8 @@ async function asked(prompt: unknown = approval()) {
   const harness = await startedThread()
   await harness.machine.ack([{ deliveryId: harness.start?.deliveryId, step: 'received' }])
   await harness.events(turnStarted, prompt)
+  // The reaction, the status and the card, one per pass in the channel.
+  await harness.pass()
   await harness.pass()
   await harness.pass()
   const card = async () => {
@@ -46,19 +49,29 @@ async function asked(prompt: unknown = approval()) {
       ? { ...JSON.parse(String(row.body)), ts: row.slack_ts === null ? null : String(row.slack_ts) }
       : undefined
   }
+  const statusTs = async () => {
+    const [row] = await harness.database.query(
+      'SELECT slack_ts FROM connector_slack_posts WHERE post_id = ?',
+      [`status:${EXTERNAL_ID}`]
+    )
+    return String(row?.slack_ts)
+  }
   const deliveries = async () =>
     ConnectorPollResponseSchema.parse((await harness.machine.poll()).body).deliveries
   const ephemerals = async () =>
     (await harness.posts())
       .filter((post) => post.kind === 'ephemeral')
       .map((post) => [String(post.post_id), JSON.parse(String(post.body)).text])
-  return { ...harness, card, deliveries, ephemerals }
+  return { ...harness, card, statusTs, deliveries, ephemerals }
 }
 
 describe('Slack prompt cards', () => {
   it('posts the prompt with a button per option, and says the answer is wanted here', async () => {
     const harness = await asked()
-    expect(harness.fake.take('chat.postMessage').at(-1)?.args).toMatchObject({
+    const posted = harness.fake
+      .take('chat.postMessage')
+      .find((call) => JSON.stringify(call.args).includes(CARD))
+    expect(posted?.args).toMatchObject({
       channel: CHANNEL,
       text: '*Bash* wants approval\nrm -rf &lt;dist&gt;',
       blocks: [
@@ -105,7 +118,7 @@ describe('Slack prompt cards', () => {
     await harness.click({ user: TEAMMATE, messageTs: ts, value: 'allow_once' })
     expect(await harness.deliveries()).toEqual([])
     expect(await harness.ephemerals()).toEqual([
-      [`only-owner:${CARD}:${TEAMMATE}`, `Only <@${OWNER}> can answer this.`]
+      [`only-owner:${CARD}:${TEAMMATE}`, `Only <@${OWNER}> can do this.`]
     ])
     expect((await harness.card()).blocks).toHaveLength(2)
   })
@@ -190,5 +203,40 @@ describe('Slack prompt cards', () => {
     expect((await harness.ephemerals()).map(([, text]) => text)).toEqual([
       'Orca for Slack is paused.'
     ])
+  })
+
+  it('stops the running turn on the owner’s Stop, once, and shows it stopping', async () => {
+    const harness = await asked()
+    const ts = await harness.statusTs()
+    await harness.click({ messageTs: ts, actionId: 'stop', value: String(TURN) })
+    await harness.click({ messageTs: ts, actionId: 'stop', value: String(TURN) })
+    expect(await harness.deliveries()).toEqual([
+      expect.objectContaining({ kind: 'cancel', deliveryId: `stop:${EXTERNAL_ID}:${TURN}` })
+    ])
+    const [status] = await harness.database.query(
+      'SELECT body FROM connector_slack_posts WHERE post_id = ?',
+      [`status:${EXTERNAL_ID}`]
+    )
+    const body = JSON.parse(String(status?.body))
+    expect(body.text).toBe('Stopping on build-box…')
+    expect(body.blocks.map((block: { type: string }) => block.type)).toEqual(['section'])
+    expect(await harness.ephemerals()).toEqual([])
+  })
+
+  it('stops nothing for a teammate, a finished turn, or a Stop pressed on a prompt card', async () => {
+    const harness = await asked()
+    const ts = await harness.statusTs()
+    await harness.click({ user: TEAMMATE, messageTs: ts, actionId: 'stop', value: String(TURN) })
+    expect(await harness.ephemerals()).toEqual([
+      [`only-owner:status:${EXTERNAL_ID}:${TEAMMATE}`, `Only <@${OWNER}> can do this.`]
+    ])
+    await harness.click({
+      messageTs: (await harness.card()).ts,
+      actionId: 'stop',
+      value: String(TURN)
+    })
+    await harness.events(turnEnded)
+    await harness.click({ messageTs: ts, actionId: 'stop', value: String(TURN) })
+    expect(await harness.deliveries()).toEqual([])
   })
 })

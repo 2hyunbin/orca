@@ -1,13 +1,13 @@
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
-import { ConnectorPendingPromptSchema } from '@orca-cloud/connector-contract'
 import { z } from 'zod'
-import { lockConnectorHost } from './connector-hosts.js'
+import { applyOwnerAction, type OwnerAction } from './owner-controls.js'
 import type { SlackConfig } from './slack-config.js'
 import type { SlackInstalls } from './slack-installs.js'
 import type { SlackPosts } from './slack-posts.js'
-import { answerDeliveryId, promptCardId, settledCard } from './slack-prompt-cards.js'
+import { promptCardId, settledCard } from './slack-prompt-cards.js'
 import type { QueueInTransaction } from './slack-routing.js'
 import { slackText } from './slack-text.js'
+import { refreshSlackStatus, statusPostId } from './slack-thread-posts.js'
 
 const BlockActionsSchema = z.looseObject({
   type: z.literal('block_actions'),
@@ -20,13 +20,14 @@ const BlockActionsSchema = z.looseObject({
     .min(1)
 })
 
-// A press of one of a prompt card's buttons; what it answers is found from the message it is on.
+// A press of a button on a prompt card (answer) or on the status message (stop). What it acts on is
+// found from the message it is on; the button only says which option or turn.
 export type SlackClick = {
   teamId: string
   channelId: string
   userId: string
   messageTs: string
-  optionId: string
+  button: { kind: 'answer'; optionId: string } | { kind: 'stop'; turnId: number }
 }
 
 // Slack sends interactions form-encoded, the JSON in `payload`. Other interactions are ignored.
@@ -42,7 +43,16 @@ export function readSlackClick(rawBody: string): SlackClick | 'ignored' | 'inval
     return typeof payload === 'object' && payload !== null ? 'ignored' : 'invalid'
   }
   const [action] = parsed.data.actions
-  if (!action?.action_id.startsWith('answer:') || action.value === undefined) {
+  const value = action?.value
+  const button =
+    value === undefined
+      ? undefined
+      : action?.action_id.startsWith('answer:')
+        ? { kind: 'answer' as const, optionId: value }
+        : action?.action_id === 'stop' && Number.isSafeInteger(Number(value))
+          ? { kind: 'stop' as const, turnId: Number(value) }
+          : undefined
+  if (!button) {
     return 'ignored'
   }
   return {
@@ -50,13 +60,12 @@ export function readSlackClick(rawBody: string): SlackClick | 'ignored' | 'inval
     channelId: parsed.data.channel.id,
     userId: parsed.data.user.id,
     messageTs: parsed.data.container.message_ts,
-    optionId: action.value
+    button
   }
 }
 
-// Decisions §1: only the conversation's owner answers. The answer goes to the machine through the
-// inbox, once per prompt, and only while the agent still shows that prompt.
-export async function answerFromSlack(
+// Decisions §1: only the conversation's owner answers or stops; anyone else is told so privately.
+export async function handleSlackClick(
   deps: {
     config: SlackConfig
     database: CloudDatabase
@@ -69,39 +78,39 @@ export async function answerFromSlack(
   const { config, installs, posts, queue } = deps
   await deps.database.transaction(async (transaction) => {
     const install = await installs.find(transaction, click.teamId)
-    const [card] = await transaction.query(
+    const [message] = await transaction.query(
       `SELECT post_id, thread_ts, body FROM connector_slack_posts
        WHERE team_id = ? AND channel_id = ? AND slack_ts = ? AND kind = 'status'`,
       [click.teamId, click.channelId, click.messageTs]
     )
-    if (!install || !card) {
+    if (!install || !message) {
       return
     }
-    const cardId = String(card.post_id)
+    const postId = String(message.post_id)
     const place = {
       teamId: click.teamId,
       channelId: click.channelId,
-      threadTs: String(card.thread_ts)
+      threadTs: String(message.thread_ts)
     }
     const threads = await transaction.query(
-      `SELECT external_id, owner_user_id, host_id, place_id FROM connector_threads
+      `SELECT external_id, host_id FROM connector_threads
        WHERE team_id = ? AND channel_id = ? AND thread_ts = ?`,
       [place.teamId, place.channelId, place.threadTs]
     )
+    // The button must sit on the message that offers it: a stop on a status, an answer on a card.
     const thread = threads.find((row) =>
-      cardId.startsWith(promptCardId(String(row.external_id), ''))
+      click.button.kind === 'stop'
+        ? postId === statusPostId(String(row.external_id))
+        : postId.startsWith(promptCardId(String(row.external_id), ''))
     )
     if (!thread) {
       return
     }
     const externalId = String(thread.external_id)
-    const ownerUserId = String(thread.owner_user_id)
-    const hostId = String(thread.host_id)
-    const promptId = cardId.slice(promptCardId(externalId, '').length)
-    const tell = (postId: string, text: string) =>
+    const tell = (id: string, text: string) =>
       posts.queue(transaction, {
         ...place,
-        postId,
+        postId: id,
         kind: 'ephemeral',
         body: { text, user: click.userId, threadTs: place.threadTs }
       })
@@ -112,49 +121,38 @@ export async function answerFromSlack(
       )
       return
     }
-    if (click.userId !== ownerUserId) {
-      await tell(`only-owner:${cardId}:${click.userId}`, slackText.onlyOwner(ownerUserId))
-      return
-    }
-    // The order events take, so the prompt read here is the one the machine last reported.
-    await lockConnectorHost(transaction, hostId)
-    await transaction.lockQuotaScope(`orca-connector-slack-status:${externalId}`)
-    const [current] = await transaction.query(
-      'SELECT pending_prompt FROM connector_threads WHERE external_id = ? AND host_id = ?',
-      [externalId, hostId]
-    )
-    const prompt =
-      typeof current?.pending_prompt === 'string'
-        ? ConnectorPendingPromptSchema.safeParse(JSON.parse(current.pending_prompt)).data
-        : undefined
-    const option =
-      prompt?.kind !== 'unsupported' && prompt?.promptId === promptId
-        ? prompt.options.find((candidate) => candidate.id === click.optionId)
-        : undefined
-    const queued = option
-      ? await queue(transaction, {
-          thread: {
-            externalId,
-            ...place,
-            ownerUserId,
-            hostId,
-            placeId: String(thread.place_id)
-          },
-          deliveryId: answerDeliveryId(externalId, promptId),
-          body: { kind: 'answer', promptId, optionId: click.optionId }
+    const action: OwnerAction =
+      click.button.kind === 'stop'
+        ? click.button
+        : {
+            kind: 'answer',
+            promptId: postId.slice(promptCardId(externalId, '').length),
+            optionId: click.button.optionId
+          }
+    const outcome = await applyOwnerAction(transaction, queue, externalId, click.userId, action)
+    switch (outcome?.kind) {
+      case 'not_owner':
+        await tell(`only-owner:${postId}:${click.userId}`, slackText.onlyOwner(outcome.ownerUserId))
+        return
+      case 'moved_on':
+        // A repeated Stop needs no reply: the status already says it is stopping or done.
+        if (action.kind === 'answer') {
+          await tell(`moved-on:${postId}:${click.userId}`, slackText.alreadyAnswered)
+        }
+        return
+      case 'answered':
+        await transaction.lockQuotaScope(`orca-connector-slack-status:${externalId}`)
+        await posts.setStatus(transaction, {
+          ...place,
+          postId,
+          ...settledCard(
+            JSON.parse(String(message.body)),
+            slackText.promptAnswered(outcome.ownerUserId, outcome.label)
+          )
         })
-      : undefined
-    if (!option || queued !== 'queued') {
-      await tell(`moved-on:${cardId}:${click.userId}`, slackText.alreadyAnswered)
-      return
+        return
+      case 'stopping':
+        await refreshSlackStatus(transaction, posts, String(thread.host_id), externalId)
     }
-    await posts.setStatus(transaction, {
-      ...place,
-      postId: cardId,
-      ...settledCard(
-        JSON.parse(String(card.body)),
-        slackText.promptAnswered(ownerUserId, option.label)
-      )
-    })
   })
 }

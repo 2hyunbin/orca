@@ -1,5 +1,5 @@
 import type { PlaceOption } from './slack-machine-choice.js'
-import type { SlackAnswerablePrompt } from './slack-prompt-cards.js'
+import type { AnswerablePrompt } from './owner-controls.js'
 
 // Every line Orca posts in Slack, in one place for review. Replies meant only for the person who
 // wrote (paused, unlinked, update, which project) go out ephemeral. Inputs are escaped here, so
@@ -32,6 +32,7 @@ export const slackText = {
       `Waiting for your answer in Orca on ${escapeSlackText(hostName)}.`,
     // The prompt's card in the thread has the buttons.
     needsAnswerHere: 'Waiting for your answer.',
+    stopping: (hostName: string) => `Stopping on ${escapeSlackText(hostName)}…`,
     done: (hostName: string) => `Done on ${escapeSlackText(hostName)}.`,
     // Q18, in the public status: the thread sees who it was waiting on (Slack renders <@U…> as a name).
     offline: (ownerUserId: string, hostName: string) =>
@@ -42,7 +43,7 @@ export const slackText = {
     noUpdate: 'No update from your Orca; check Orca.'
   },
   // A prompt's card: what the agent asks, then its state once it stops taking answers.
-  promptCard: (prompt: SlackAnswerablePrompt) => {
+  promptCard: (prompt: AnswerablePrompt) => {
     const lines =
       prompt.kind === 'approval'
         ? [
@@ -55,7 +56,8 @@ export const slackText = {
   promptAnswered: (ownerUserId: string, label: string) =>
     `<@${ownerUserId}> answered: ${escapeSlackText(label)}.`,
   promptClosed: 'No longer waiting for this answer.',
-  onlyOwner: (ownerUserId: string) => `Only <@${ownerUserId}> can answer this.`,
+  onlyOwner: (ownerUserId: string) => `Only <@${ownerUserId}> can do this.`,
+  stopButton: 'Stop',
   alreadyAnswered: 'Already answered or moved on.',
   // Agent-facing, not posted: a mention's earlier thread (null when Slack couldn't be read).
   threadStart: (thread: { name: string; text: string }[] | null, request: string) => {

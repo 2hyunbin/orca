@@ -1,21 +1,13 @@
-import type { CloudDatabase } from '@orca-cloud/cloud-database'
-import {
-  ConnectorPendingPromptSchema,
-  type ConnectorHelloRequest,
-  type ConnectorPendingPrompt
-} from '@orca-cloud/connector-contract'
+import type { CloudDatabase, SqlRow } from '@orca-cloud/cloud-database'
+import type { ConnectorHelloRequest } from '@orca-cloud/connector-contract'
 import { z } from 'zod'
+import { answerablePrompt, promptAnswered, type AnswerablePrompt } from './owner-controls.js'
 import type { SlackBlock, SlackPlace, SlackPosts } from './slack-posts.js'
 import { slackText } from './slack-text.js'
 
 // Slack's limits: buttons per actions block, characters per button label.
 const MAX_BUTTONS = 25
 const MAX_BUTTON_LABEL_CHARS = 75
-
-export type SlackAnswerablePrompt = Extract<
-  ConnectorPendingPrompt,
-  { kind: 'approval' | 'question' }
->
 
 const CardBodySchema = z.object({
   blocks: z.array(z.looseObject({ type: z.string() })).optional()
@@ -24,36 +16,45 @@ const CardBodySchema = z.object({
 export const promptCardId = (externalId: string, promptId: string) =>
   `prompt:${externalId}:${promptId}`
 
-export const answerDeliveryId = (externalId: string, promptId: string) =>
-  `answer:${externalId}:${promptId}`
-
-// The thread's pending prompt when Slack can answer it: the machine takes answers of its kind and
-// every option fits on a button. Anything else is answered in Orca.
-export function answerablePrompt(
-  pendingPrompt: unknown,
+// An answerable prompt whose options all fit on buttons; anything else is answered in Orca.
+export function slackAnswerablePrompt(
+  thread: SqlRow,
   hello: ConnectorHelloRequest | undefined
-): SlackAnswerablePrompt | null {
-  const parsed =
-    typeof pendingPrompt === 'string'
-      ? ConnectorPendingPromptSchema.safeParse(JSON.parse(pendingPrompt)).data
-      : undefined
-  if (
-    parsed === undefined ||
-    parsed.kind === 'unsupported' ||
-    !hello?.features.includes('answer') ||
-    !hello.promptKinds.includes(parsed.kind)
-  ) {
-    return null
-  }
+): AnswerablePrompt | null {
+  const prompt = answerablePrompt(thread, hello)
   const fits =
-    parsed.options.length > 0 &&
-    parsed.options.length <= MAX_BUTTONS &&
-    parsed.options.every((option) => option.label.trim().length > 0) &&
-    slackText.promptCard(parsed).length > 0
-  return fits ? parsed : null
+    prompt !== null &&
+    prompt.options.length > 0 &&
+    prompt.options.length <= MAX_BUTTONS &&
+    prompt.options.every((option) => option.label.trim().length > 0) &&
+    slackText.promptCard(prompt).length > 0
+  return fits ? prompt : null
 }
 
-function openCard(prompt: SlackAnswerablePrompt): { text: string; blocks: SlackBlock[] } {
+// The status message's blocks: its text, and Stop while the owner can stop the turn. Always sent, so
+// an edit that drops the button replaces the old blocks.
+export function statusBlocks(text: string, stoppableTurnId: number | null): SlackBlock[] {
+  return [
+    { type: 'section', text: { type: 'mrkdwn', text } },
+    ...(stoppableTurnId === null
+      ? []
+      : [
+          {
+            type: 'actions',
+            elements: [
+              {
+                type: 'button',
+                action_id: 'stop',
+                text: { type: 'plain_text', text: slackText.stopButton },
+                value: String(stoppableTurnId)
+              }
+            ]
+          }
+        ])
+  ]
+}
+
+function openCard(prompt: AnswerablePrompt): { text: string; blocks: SlackBlock[] } {
   const text = slackText.promptCard(prompt)
   return {
     text,
@@ -96,16 +97,13 @@ export async function refreshPromptCards(
   transaction: CloudDatabase,
   posts: SlackPosts,
   thread: SlackPlace & { hostId: string; externalId: string },
-  prompt: SlackAnswerablePrompt | null
+  prompt: AnswerablePrompt | null
 ): Promise<void> {
   const { hostId, externalId } = thread
-  const [answered] = prompt
-    ? await transaction.query(
-        'SELECT 1 AS found FROM connector_inbox WHERE host_id = ? AND delivery_id = ?',
-        [hostId, answerDeliveryId(externalId, prompt.promptId)]
-      )
-    : []
-  const openId = prompt && !answered ? promptCardId(externalId, prompt.promptId) : null
+  const openId =
+    prompt && !(await promptAnswered(transaction, hostId, externalId, prompt.promptId))
+      ? promptCardId(externalId, prompt.promptId)
+      : null
   if (prompt && openId) {
     await posts.setStatus(transaction, { ...thread, postId: openId, ...openCard(prompt) })
   }
