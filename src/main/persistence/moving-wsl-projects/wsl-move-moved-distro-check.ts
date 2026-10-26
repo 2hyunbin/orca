@@ -4,7 +4,7 @@
  * files, which the registry cannot tell apart.
  */
 import type { WslDistroRegistration } from '../../wsl/wsl-distro-registry-id'
-import type { WslMovedDistroVerdict } from './wsl-move-orchestrator-transitions'
+import type { WslMovedDistroVerdict } from './wsl-move-orchestrator-external-transitions'
 
 export function wslMovedDistroVerdict(
   registrations: readonly WslDistroRegistration[] | null,

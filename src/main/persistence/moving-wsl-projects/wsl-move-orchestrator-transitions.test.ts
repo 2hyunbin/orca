@@ -5,23 +5,25 @@ import type {
 } from '../../../shared/wsl-move/wsl-move-driver-types'
 import type { WslMoveOrchestratorRecord } from '../../../shared/wsl-move/wsl-move-orchestrator-types'
 import {
-  applyWslMovedDistroVerdict,
   applyWslMoveOutcome,
-  applyWslMoveHostAddedByUser,
-  applyWslMoveHostRemovalPending,
-  applyWslMoveReleasedByUser,
-  applyWslMoveUserAction,
   classifyWslMoveOutcome,
   mayStartWslMove,
   newWslMoveOrchestratorRecord,
   sameWslMoveOrchestratorRecord,
-  settleWslMoveOrchestratorRecord,
   WSL_MOVE_ORCHESTRATOR_BACKOFF_MS,
   WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS,
   WSL_MOVE_ORCHESTRATOR_MAX_ATTEMPTS,
   WSL_MOVE_ORCHESTRATOR_NOT_NOW_MS,
   wslMoveOrchestratorTimerDelay
 } from './wsl-move-orchestrator-transitions'
+import {
+  applyWslMovedDistroVerdict,
+  applyWslMoveHostAddedByUser,
+  applyWslMoveHostRemovalPending,
+  applyWslMoveReleasedByUser,
+  applyWslMoveUserAction,
+  settleWslMoveOrchestratorRecord
+} from './wsl-move-orchestrator-external-transitions'
 
 const NOW = 1_000_000
 const context = { now: NOW, appVersion: '1.0.0', trigger: 'connect' as const }

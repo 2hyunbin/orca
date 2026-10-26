@@ -7,11 +7,8 @@
  */
 import type { WslMovePreview, WslMoveResult } from '../../../shared/wsl-move/wsl-move-driver-types'
 import type { WslMoveUseLocallyResult } from '../../../shared/wsl-move/wsl-moved-project'
-import type {
-  WslMoveFinishedMove,
-  WslMoveHostReadiness,
-  WslMoveOrchestratorPorts
-} from './wsl-move-orchestrator-ports'
+import type { WslMoveOrchestratorPorts } from './wsl-move-orchestrator-ports'
+import { readWslMoveFinishedMove, runWslMoveOrchestratorStep } from './wsl-move-orchestrator-step'
 import { wslMoveJournalKey } from '../../../shared/wsl-move/wsl-move-cutover'
 import type {
   WslMoveOrchestratorRecord,
@@ -19,21 +16,16 @@ import type {
   WslMoveOrchestratorUserAction
 } from '../../../shared/wsl-move/wsl-move-orchestrator-types'
 import {
-  applyWslMoveOutcome,
-  applyWslMovedDistroVerdict,
-  applyWslMoveHostAddedByUser,
-  applyWslMoveHostRemovalPending,
-  applyWslMoveReleasedByUser,
-  applyWslMoveUserAction,
-  classifyWslMoveOutcome,
-  mayStartWslMove,
   newWslMoveOrchestratorRecord,
   sameWslMoveOrchestratorRecord,
-  settleWslMoveOrchestratorRecord,
-  wslMoveOrchestratorTimerDelay,
-  type WslMovedDistroVerdict,
-  type WslMoveOutcome
+  wslMoveOrchestratorTimerDelay
 } from './wsl-move-orchestrator-transitions'
+import {
+  applyWslMoveHostAddedByUser,
+  applyWslMoveReleasedByUser,
+  applyWslMoveUserAction,
+  settleWslMoveOrchestratorRecord
+} from './wsl-move-orchestrator-external-transitions'
 
 /** A project opened again within this window does not read the running distros again. */
 export const WSL_MOVE_ORCHESTRATOR_PROJECT_OPENED_THROTTLE_MS = 60_000
@@ -48,6 +40,7 @@ export class WslMoveOrchestrator {
     string,
     { distro: string; trigger: WslMoveOrchestratorTrigger }
   >()
+  private readonly inFlight = new Set<Promise<void>>()
   private disposed = false
 
   constructor(private readonly ports: WslMoveOrchestratorPorts) {
@@ -56,7 +49,11 @@ export class WslMoveOrchestrator {
       [...ports.load()].map(([key, record]) => [
         key,
         // An unreadable journal says nothing about whether a move is finished: keep the record.
-        settleWslMoveOrchestratorRecord(record, now, this.readFinishedMove(record.distro) !== null)
+        settleWslMoveOrchestratorRecord(
+          record,
+          now,
+          readWslMoveFinishedMove(ports, record.distro) !== null
+        )
       ])
     )
     for (const [key, record] of this.records) {
@@ -100,12 +97,28 @@ export class WslMoveOrchestrator {
     trigger: WslMoveOrchestratorTrigger
   ): Promise<void> {
     this.busy.add(key)
+    const running = (async () => {
+      try {
+        await this.step(key, distro, trigger)
+      } finally {
+        this.busy.delete(key)
+        // In `finally`, so a step that throws never strands the wake queued behind it.
+        await this.replayQueued(key)
+      }
+    })()
+    this.inFlight.add(running)
     try {
-      await this.step(key, distro, trigger)
+      await running
     } finally {
-      this.busy.delete(key)
+      this.inFlight.delete(running)
     }
-    await this.replayQueued(key)
+  }
+
+  /** Resolves once no step is running; the IPC never waits on a move, so tests and quit do. */
+  async whenIdle(): Promise<void> {
+    while (this.inFlight.size > 0) {
+      await Promise.allSettled(this.inFlight)
+    }
   }
 
   /** Runs the wake that arrived while the distro was busy, once it no longer is. */
@@ -152,7 +165,8 @@ export class WslMoveOrchestrator {
     if (action !== 'restore') {
       this.commit(key, 'user', this.userActionRecord(current, action))
       if (action !== 'not-now') {
-        await this.trigger(distro, 'user')
+        // The reply carries the new state; the move itself reports through status events.
+        void this.trigger(distro, 'user')
       }
       return { record: this.recordFor(key, distro) }
     }
@@ -175,10 +189,9 @@ export class WslMoveOrchestrator {
     if (release.released) {
       this.commit(key, 'user', this.userActionRecord(current, action))
     }
-    const result = { record: this.recordFor(key, distro), release }
-    // A wake that came in during the release runs now, as it would after any step.
-    await this.replayQueued(key)
-    return result
+    // A wake that came in during the release runs now, as after any step, without holding the reply.
+    void this.replayQueued(key)
+    return { record: this.recordFor(key, distro), release }
   }
 
   private userActionRecord(
@@ -203,15 +216,6 @@ export class WslMoveOrchestrator {
     )
   }
 
-  /** The newest finished move; `unknown` when the journal cannot be read. */
-  private readFinishedMove(distro: string): WslMoveFinishedMove | null | 'unknown' {
-    try {
-      return this.ports.finishedMove(distro)
-    } catch {
-      return 'unknown'
-    }
-  }
-
   /**
    * True when the record changed under an await (the user released the move, or chose Not now):
    * the step's view is stale and must not overwrite the user's choice.
@@ -221,99 +225,17 @@ export class WslMoveOrchestrator {
     return current !== undefined && current !== seen
   }
 
-  private async step(
-    key: string,
-    distro: string,
-    trigger: WslMoveOrchestratorTrigger
-  ): Promise<void> {
-    let record = this.recordFor(key, distro)
-    // Before anything that could connect, add or move: even the user's Retry waits for the Remove.
-    let removalPending: boolean
-    try {
-      removalPending = this.ports.hostRemovalPending(distro)
-    } catch {
-      // An unreadable host record proves nothing either way; touch nothing this time.
-      return
-    }
-    if (removalPending) {
-      this.commit(key, trigger, applyWslMoveHostRemovalPending(record, this.ports.now()))
-      return
-    }
-    // A timer re-check leaves R38 to the triggers, so a deferred move never polls the registry.
-    const finished = trigger === 'timer' ? null : this.readFinishedMove(distro)
-    if (finished === 'unknown') {
-      return
-    }
-    if (finished) {
-      const verdict = await this.ports
-        .checkMovedDistro(distro, finished)
-        .catch((): WslMovedDistroVerdict => 'unknown')
-      if (this.changedUnder(key, record)) {
-        return
-      }
-      record = this.commit(
-        key,
-        trigger,
-        applyWslMovedDistroVerdict(record, verdict, this.ports.now())
-      )
-    }
-    if (!mayStartWslMove(record, trigger, this.ports.now(), this.ports.appVersion)) {
-      return
-    }
-    // A1: only an explicit user action may wake a distro; every other step needs it running.
-    // A timer step never connects either: connecting can hold a running distro up.
-    if (trigger === 'timer') {
-      if (!this.ports.isHostReady(distro)) {
-        return
-      }
-    } else if (trigger !== 'user') {
-      const readiness = await this.ports
-        .prepareHost(distro)
-        .catch((): WslMoveHostReadiness => 'unverifiable')
-      if (readiness !== 'ready' || this.changedUnder(key, record)) {
-        return
-      }
-    }
-    const preview = await this.settle(() => this.ports.preview(distro))
-    if (this.changedUnder(key, record)) {
-      return
-    }
-    record = this.commit(key, trigger, this.apply(record, preview, trigger), preview)
-    if (record.state.kind !== 'moving') {
-      return
-    }
-    const result = await this.settle(() => this.ports.start(distro))
-    if (!this.changedUnder(key, record)) {
-      this.commit(key, trigger, this.apply(record, result, trigger), result)
-    }
-  }
-
-  /** A port that throws is a transient failure, never a lost record. */
-  private async settle<T extends WslMovePreview | WslMoveResult>(
-    run: () => Promise<T>
-  ): Promise<T | { outcome: 'reset'; migrationId: string; detail: string }> {
-    try {
-      return await run()
-    } catch (error) {
-      return {
-        outcome: 'reset',
-        migrationId: '',
-        detail: error instanceof Error ? error.message : 'orchestrator_error'
-      }
-    }
-  }
-
-  private apply(
-    record: WslMoveOrchestratorRecord,
-    cause: WslMovePreview | WslMoveResult,
-    trigger: WslMoveOrchestratorTrigger
-  ): WslMoveOrchestratorRecord {
-    const outcome: WslMoveOutcome = classifyWslMoveOutcome(cause)
-    return applyWslMoveOutcome(record, outcome, {
-      now: this.ports.now(),
-      appVersion: this.ports.appVersion,
+  private step(key: string, distro: string, trigger: WslMoveOrchestratorTrigger): Promise<void> {
+    return runWslMoveOrchestratorStep(
+      {
+        ports: this.ports,
+        record: this.recordFor(key, distro),
+        changedUnder: (seen) => this.changedUnder(key, seen),
+        commit: (next, cause) => this.commit(key, trigger, next, cause)
+      },
+      distro,
       trigger
-    })
+    )
   }
 
   /** Stores, reports and schedules a record; unchanged records cost nothing. */

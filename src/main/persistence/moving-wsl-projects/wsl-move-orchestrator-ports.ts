@@ -5,7 +5,7 @@ import type {
   WslMoveOrchestratorRecord,
   WslMoveOrchestratorTrigger
 } from '../../../shared/wsl-move/wsl-move-orchestrator-types'
-import type { WslMovedDistroVerdict } from './wsl-move-orchestrator-transitions'
+import type { WslMovedDistroVerdict } from './wsl-move-orchestrator-external-transitions'
 
 export type WslMoveHostReadiness = 'ready' | 'not-running' | 'unverifiable' | 'failed'
 
@@ -25,10 +25,16 @@ export type WslMoveOrchestratorPorts = {
   prepareHost: (distro: string) => Promise<WslMoveHostReadiness>
   /** E11: the user's Remove of the distro's host has not proven its server stopped. */
   hostRemovalPending: (distro: string) => boolean
+  /** Whether the distro still has a WSL host record; never connects. */
+  hasHost: (distro: string) => boolean
   /** Whether the distro's host connection is ready now; never connects. Gates timer steps. */
   isHostReady: (distro: string) => boolean
   preview: (distro: string) => Promise<WslMovePreview>
-  start: (distro: string) => Promise<WslMoveResult>
+  /**
+   * Runs the move. `stillWanted` turns false once the user released or snoozed the distro; the
+   * port checks it after its own waits (the window's panes) and refuses rather than start.
+   */
+  start: (distro: string, stillWanted: () => boolean) => Promise<WslMoveResult>
   finishedMove: (distro: string) => WslMoveFinishedMove | null
   /** R38: reads the registry and, when ready, the host's catalog; never boots the distro. */
   checkMovedDistro: (distro: string, move: WslMoveFinishedMove) => Promise<WslMovedDistroVerdict>

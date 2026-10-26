@@ -3,12 +3,9 @@
  * closed, or without a WSL host service, nothing is constructed and the IPC answers empty.
  * Automatic starts also stop when ORCA_WSL_MOVE_AUTO=0; explicit user actions still run.
  */
-import { randomUUID } from 'node:crypto'
 import { app, ipcMain, type WebContents } from 'electron'
 import { WSL_MOVE_CUTOVER_PHASES, wslMoveJournalKey } from '../../shared/wsl-move/wsl-move-cutover'
-import type { WslMoveRequest } from '../../shared/wsl-move/wsl-move-driver-types'
 import {
-  WSL_MOVE_ORCHESTRATOR_SLEPT_PANES_REQUEST_CHANNEL,
   WSL_MOVE_ORCHESTRATOR_STATUS_CHANNEL,
   type WslMoveOrchestratorRecord,
   type WslMoveOrchestratorUserAction
@@ -46,6 +43,7 @@ import { onWslHostUserAction } from '../wsl/wsl-host-user-actions'
 import { getTrustedUIRendererWebContents, getTrustedUIRendererWindow } from './ui'
 import { onWslMoveReleasedByUser, releaseWslMoveChainHere } from './wsl-move-release-here'
 import { createWslMoveUndoPorts } from './wsl-move-undo-wiring'
+import { answerWslMoveSleptPanes, requestSleptPanes } from './wsl-move-orchestrator-slept-panes'
 
 export const WSL_MOVE_ORCHESTRATOR_AUTO_ENV = 'ORCA_WSL_MOVE_AUTO'
 
@@ -56,57 +54,8 @@ export const WSL_MOVE_ORCHESTRATOR_HANDLER_CHANNELS = [
   'wslMoveOrchestrator:answerSleptPanes'
 ] as const
 
-const SLEPT_PANES_TIMEOUT_MS = 5_000
 const COMMITTED_FROM = WSL_MOVE_CUTOVER_PHASES.indexOf('destination-committed')
 const USER_ACTIONS: readonly WslMoveOrchestratorUserAction[] = ['retry', 'not-now', 'restore']
-
-type SleptPanes = NonNullable<WslMoveRequest['sleptPanes']>
-
-const sleptPaneRequests = new Map<string, (panes: SleptPanes | null) => void>()
-
-/** The window's slept-pane bindings, which only it knows; a move without them misses their history. */
-function requestSleptPanes(): Promise<SleptPanes> {
-  const window = getTrustedUIRendererWindow()
-  if (!window || window.isDestroyed() || window.webContents.isDestroyed()) {
-    return Promise.reject(new Error('wsl_move_window_unavailable'))
-  }
-  const requestId = randomUUID()
-  return new Promise<SleptPanes>((resolve, reject) => {
-    const timer = setTimeout(() => answer(null), SLEPT_PANES_TIMEOUT_MS)
-    function answer(panes: SleptPanes | null): void {
-      clearTimeout(timer)
-      sleptPaneRequests.delete(requestId)
-      if (panes) {
-        resolve(panes)
-      } else {
-        reject(new Error('wsl_move_window_unavailable'))
-      }
-    }
-    sleptPaneRequests.set(requestId, answer)
-    window.webContents.send(WSL_MOVE_ORCHESTRATOR_SLEPT_PANES_REQUEST_CHANNEL, { requestId })
-  })
-}
-
-function parseSleptPanes(value: unknown): SleptPanes | null {
-  if (!Array.isArray(value)) {
-    return null
-  }
-  const panes: SleptPanes = []
-  for (const entry of value) {
-    if (
-      typeof entry !== 'object' ||
-      entry === null ||
-      !('paneKey' in entry) ||
-      !('sessionId' in entry) ||
-      typeof entry.paneKey !== 'string' ||
-      typeof entry.sessionId !== 'string'
-    ) {
-      return null
-    }
-    panes.push({ paneKey: entry.paneKey, sessionId: entry.sessionId })
-  }
-  return panes
-}
 
 function finishedWslMove(userDataPath: string, distro: string): WslMoveFinishedMove | null {
   const move = listWslMoveCutoverChain(userDataPath, wslMoveJournalKey(distro)).findLast(
@@ -178,14 +127,20 @@ function createOrchestrator(
     autoMoveEnabled: () => process.env[WSL_MOVE_ORCHESTRATOR_AUTO_ENV] !== '0',
     prepareHost: (distro) => prepareHost(userDataPath, distro),
     hostRemovalPending: (distro) => hostRemovalPending(userDataPath, distro),
+    hasHost: (distro) =>
+      getWslHostService()?.recordForEnvironment(defaultWslOrcadEnvironmentId(distro)) != null,
     isHostReady,
     preview: async (distro) =>
       previewWslMove(driverDeps(), {
         distro,
         sleptPanes: await requestSleptPanes()
       }),
-    start: async (distro) => {
+    start: async (distro, stillWanted) => {
       const sleptPanes = await requestSleptPanes()
+      // The user may have released or snoozed the distro while the window answered.
+      if (!stillWanted()) {
+        return { outcome: 'refused', code: 'wsl_move_cancelled' }
+      }
       return runTrackedWslMove(driverDeps(), (deps) =>
         moveProjectsToWslHost(deps, { distro, sleptPanes })
       )
@@ -306,7 +261,7 @@ export function registerWslMoveOrchestrator(
       ) {
         return
       }
-      sleptPaneRequests.get(request.requestId)?.(parseSleptPanes(request.sleptPanes))
+      answerWslMoveSleptPanes(request.requestId, request.sleptPanes)
     }
   )
   // Dark: nothing is constructed or read while the gate is closed.

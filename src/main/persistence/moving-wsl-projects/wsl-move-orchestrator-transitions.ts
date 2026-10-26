@@ -11,8 +11,7 @@ import type {
   WslMoveOrchestratorParkReason,
   WslMoveOrchestratorRecord,
   WslMoveOrchestratorState,
-  WslMoveOrchestratorTrigger,
-  WslMoveOrchestratorUserAction
+  WslMoveOrchestratorTrigger
 } from '../../../shared/wsl-move/wsl-move-orchestrator-types'
 
 /** Delay after failed automatic attempt n; the attempt after the last delay parks if it fails. */
@@ -165,7 +164,8 @@ export function wslMoveOrchestratorTimerDelay(
     : null
 }
 
-function withState(
+/** The record in a new state, stamped now; shared with the user- and host-event transitions. */
+export function withWslMoveOrchestratorState(
   record: WslMoveOrchestratorRecord,
   state: WslMoveOrchestratorState,
   now: number,
@@ -181,7 +181,7 @@ function failedAttempt(
   appVersion: string
 ): WslMoveOrchestratorRecord {
   if (UNCOUNTED_FAILURES.has(reason)) {
-    return withState(
+    return withWslMoveOrchestratorState(
       record,
       { kind: 'backoff', nextAttemptAt: now + WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS, reason },
       now
@@ -196,13 +196,28 @@ function failedAttempt(
     ((record.state.kind === 'backoff' && record.state.reason === reason) ||
       (record.state.kind === 'parked' && record.state.reason === 'host-update-required'))
   if (updateStillRequired) {
-    return withState(record, { kind: 'parked', reason: 'host-update-required' }, now, counted)
+    return withWslMoveOrchestratorState(
+      record,
+      { kind: 'parked', reason: 'host-update-required' },
+      now,
+      counted
+    )
   }
   if (attempts >= WSL_MOVE_ORCHESTRATOR_MAX_ATTEMPTS) {
-    return withState(record, { kind: 'parked', reason: 'attempts-exhausted' }, now, counted)
+    return withWslMoveOrchestratorState(
+      record,
+      { kind: 'parked', reason: 'attempts-exhausted' },
+      now,
+      counted
+    )
   }
   const delay = WSL_MOVE_ORCHESTRATOR_BACKOFF_MS[attempts - 1]
-  return withState(record, { kind: 'backoff', nextAttemptAt: now + delay, reason }, now, counted)
+  return withWslMoveOrchestratorState(
+    record,
+    { kind: 'backoff', nextAttemptAt: now + delay, reason },
+    now,
+    counted
+  )
 }
 
 /**
@@ -217,25 +232,33 @@ export function applyWslMoveOutcome(
   const { now, appVersion } = context
   switch (outcome.next) {
     case 'start':
-      return withState(record, { kind: 'moving' }, now)
+      return withWslMoveOrchestratorState(record, { kind: 'moving' }, now)
     case 'stay':
       // Another run of this process owns the move; this one must not stay marked running.
-      return record.state.kind === 'moving' ? withState(record, { kind: 'pending' }, now) : record
+      return record.state.kind === 'moving'
+        ? withWslMoveOrchestratorState(record, { kind: 'pending' }, now)
+        : record
     case 'idle':
       // A distro moved earlier stays done: nothing new to move is its normal answer.
-      return record.state.kind === 'done' ? record : withState(record, { kind: 'idle' }, now)
+      return record.state.kind === 'done'
+        ? record
+        : withWslMoveOrchestratorState(record, { kind: 'idle' }, now)
     case 'deferred': {
       // Only timer re-checks spend the series; a wake or the user starts it again.
       const rechecks =
         context.trigger === 'timer' && record.state.kind === 'deferred'
           ? record.state.rechecks + 1
           : 0
-      return withState(record, { kind: 'deferred', blockers: outcome.blockers, rechecks }, now)
+      return withWslMoveOrchestratorState(
+        record,
+        { kind: 'deferred', blockers: outcome.blockers, rechecks },
+        now
+      )
     }
     case 'transient':
       return failedAttempt(record, outcome.reason, now, appVersion)
     case 'parked':
-      return withState(
+      return withWslMoveOrchestratorState(
         record,
         outcome.reason === 'not-now'
           ? { kind: 'parked', reason: 'not-now', until: now + WSL_MOVE_ORCHESTRATOR_NOT_NOW_MS }
@@ -243,105 +266,22 @@ export function applyWslMoveOutcome(
         now
       )
     case 'waiting':
-      return withState(record, { kind: 'waiting-for-host', migrationId: outcome.migrationId }, now)
+      return withWslMoveOrchestratorState(
+        record,
+        { kind: 'waiting-for-host', migrationId: outcome.migrationId },
+        now
+      )
     case 'done':
-      return withState(record, { kind: 'done', migrationId: outcome.migrationId }, now, {
-        attempts: 0,
-        appVersion
-      })
+      return withWslMoveOrchestratorState(
+        record,
+        { kind: 'done', migrationId: outcome.migrationId },
+        now,
+        {
+          attempts: 0,
+          appVersion
+        }
+      )
   }
-}
-
-/** Whether a finished move's distro is still the one it moved into (R38). */
-export type WslMovedDistroVerdict =
-  | 'present'
-  /** Neither its name nor its recorded GUID is registered. */
-  | 'gone'
-  /** The host lists none of the moved projects (needs the host-catalog check). */
-  | 'replaced'
-  /** The registry or host could not be read, or only the GUID differs; nothing is concluded. */
-  | 'unknown'
-
-export function applyWslMovedDistroVerdict(
-  record: WslMoveOrchestratorRecord,
-  verdict: WslMovedDistroVerdict,
-  now: number
-): WslMoveOrchestratorRecord {
-  switch (verdict) {
-    case 'gone':
-      return withState(record, { kind: 'distro-gone' }, now)
-    case 'replaced':
-      return withState(record, { kind: 'restore-offered' }, now)
-    case 'present':
-      // A distro registered again, or whose host still has the projects, is back.
-      return record.state.kind === 'distro-gone' || record.state.kind === 'restore-offered'
-        ? withState(record, { kind: 'pending' }, now)
-        : record
-    case 'unknown':
-      return record
-  }
-}
-
-/** The record after a user action; `restore` applies only once the release succeeded. */
-export function applyWslMoveUserAction(
-  record: WslMoveOrchestratorRecord,
-  action: WslMoveOrchestratorUserAction,
-  now: number,
-  appVersion: string
-): WslMoveOrchestratorRecord {
-  if (record.state.kind === 'moving') {
-    return record
-  }
-  if (action === 'not-now') {
-    return withState(
-      record,
-      { kind: 'parked', reason: 'not-now', until: now + WSL_MOVE_ORCHESTRATOR_NOT_NOW_MS },
-      now
-    )
-  }
-  return withState(record, { kind: 'pending' }, now, { attempts: 0, appVersion })
-}
-
-/** "Use on this computer again" is the user saying no: nothing moves the distro until Retry. */
-export function applyWslMoveReleasedByUser(
-  record: WslMoveOrchestratorRecord,
-  now: number
-): WslMoveOrchestratorRecord {
-  return withState(record, { kind: 'parked', reason: 'declined' }, now)
-}
-
-/** The user added the host themselves: a decline (theirs, by Remove or release) is taken back. */
-export function applyWslMoveHostAddedByUser(
-  record: WslMoveOrchestratorRecord,
-  now: number
-): WslMoveOrchestratorRecord {
-  return record.state.kind === 'parked' && record.state.reason === 'declined'
-    ? withState(record, { kind: 'pending' }, now)
-    : record
-}
-
-/** A host whose Remove is unfinished is the user's to settle; park the distro until they act. */
-export function applyWslMoveHostRemovalPending(
-  record: WslMoveOrchestratorRecord,
-  now: number
-): WslMoveOrchestratorRecord {
-  return withState(record, { kind: 'parked', reason: 'removal-pending' }, now)
-}
-
-/** A record read at startup, made true to what survived the last process. */
-export function settleWslMoveOrchestratorRecord(
-  record: WslMoveOrchestratorRecord,
-  now: number,
-  hasFinishedMove: boolean
-): WslMoveOrchestratorRecord {
-  // The driver's own startup recovery resumes or resets the journal; the next trigger previews.
-  if (record.state.kind === 'moving') {
-    return withState(record, { kind: 'pending' }, now)
-  }
-  // A Restore that released the move before the app quit has nothing left to restore.
-  return record.state.kind === 'restore-offered' && !hasFinishedMove
-    ? withState(record, { kind: 'pending' }, now)
-    : record
 }
 
 /** Records that differ only in when they were written are the same decision. */

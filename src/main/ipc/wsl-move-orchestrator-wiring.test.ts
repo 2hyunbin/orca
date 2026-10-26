@@ -385,4 +385,46 @@ describe('WSL move orchestrator wiring', () => {
       expect.objectContaining({ distro: 'Ubuntu', state: { kind: 'pending' } })
     ])
   })
+
+  // Review 3 #3: a release while the start waits for the window's panes must not be moved.
+  it('does not start a move the user released while the window answered', async () => {
+    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
+    host.statuses = [
+      { distro: 'Ubuntu', state: 'ready', environmentId: 'wsl:Ubuntu', detail: null }
+    ]
+    await register()
+    // Answer the preview's request only, then release before answering the start's.
+    const answerOne = async (): Promise<boolean> => {
+      for (let turn = 0; turn < 50; turn++) {
+        const index = sent.findIndex(
+          (message) => message.channel === WSL_MOVE_ORCHESTRATOR_SLEPT_PANES_REQUEST_CHANNEL
+        )
+        if (index >= 0) {
+          const [message] = sent.splice(index, 1)
+          await handlers.get('wslMoveOrchestrator:answerSleptPanes')?.(
+            { sender: { id: MAIN_WINDOW_ID } },
+            { requestId: requestIdOf(message?.payload), sleptPanes }
+          )
+          return true
+        }
+        await new Promise((resolve) => setImmediate(resolve))
+      }
+      return false
+    }
+    expect(await answerOne()).toBe(true)
+    await vi.waitFor(() =>
+      expect(
+        sent.some(
+          (message) => message.channel === WSL_MOVE_ORCHESTRATOR_SLEPT_PANES_REQUEST_CHANNEL
+        )
+      ).toBe(true)
+    )
+    for (const listener of releases.listeners) {
+      listener('Ubuntu')
+    }
+    expect(await answerOne()).toBe(true)
+    await answerWindow()
+    expect(driver.previewWslMove).toHaveBeenCalledTimes(1)
+    expect(driver.moveProjectsToWslHost).not.toHaveBeenCalled()
+  })
 })
