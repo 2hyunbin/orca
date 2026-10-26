@@ -3,7 +3,7 @@ import {
   updateMobileNativeChatDraftInputs,
   type MobileNativeChatDraftDestination
 } from './mobile-native-chat-draft-inputs'
-import { useCallback, useRef } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { buildAgentTuiClearInputForText } from '../../../../../src/shared/agent-tui-input-clear'
 import type { RpcClient } from '../../../transport/rpc-client'
 import type { ConnectionState } from '../../../transport/types'
@@ -120,7 +120,8 @@ export function useMobileNativeChatImageAttachments({
   sleep = defaultSleep
 }: Args): MobileNativeChatImageAttachments {
   const idCounter = useRef(0)
-  const attachments = [...useMobileNativeChatDraftInputs(scopeKey).images]
+  const images = useMobileNativeChatDraftInputs(scopeKey).images
+  const attachments = useMemo(() => [...images], [images])
 
   const addUploadedImages = useCallback(
     (

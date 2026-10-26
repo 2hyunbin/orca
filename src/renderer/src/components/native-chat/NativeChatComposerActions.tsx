@@ -86,7 +86,17 @@ export function NativeChatComposerActions({
     ? translate('components.native-chat.composer.stopDictation', 'Stop dictation')
     : translate('components.native-chat.composer.startDictation', 'Start dictation')
   const sendReason = stops ? null : (sendBlockedReason ?? null)
-  const sendButton = (
+  const sendButton = editSession ? (
+    <Button
+      type="button"
+      size="sm"
+      disabled={sendDisabled}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={handleCriticalAction}
+    >
+      {translate('components.native-chat.queuedMessages.save', 'Save')}
+    </Button>
+  ) : (
     <Button
       type="button"
       data-native-chat-critical-action={stops ? 'stop' : undefined}
@@ -95,26 +105,17 @@ export function NativeChatComposerActions({
           ? isStopping
             ? translate('components.native-chat.status.stopping', 'Stopping…')
             : translate('components.native-chat.stop', 'Stop the agent')
-          : (sendReason ??
-            (editSession
-              ? translate('components.native-chat.queuedMessages.save', 'Save')
-              : translate('components.native-chat.composer.send', 'Send')))
+          : (sendReason ?? translate('components.native-chat.composer.send', 'Send'))
       }
       disabled={sendDisabled || (isWorking && isStopping)}
       // A press keeps focus where it was; a focused button drops it to <body> when it disables.
       onMouseDown={(event) => event.preventDefault()}
       onClick={handleCriticalAction}
       variant={stops ? 'secondary' : 'default'}
-      size={editSession ? 'sm' : 'icon'}
-      className={editSession ? '' : 'size-8 rounded-full pointer-coarse:size-10'}
+      size="icon"
+      className="size-8 rounded-full pointer-coarse:size-10"
     >
-      {editSession ? (
-        translate('components.native-chat.queuedMessages.save', 'Save')
-      ) : stops ? (
-        <Square className="size-3.5 fill-current" />
-      ) : (
-        <ArrowUp className="size-4" />
-      )}
+      {stops ? <Square className="size-3.5 fill-current" /> : <ArrowUp className="size-4" />}
     </Button>
   )
 
