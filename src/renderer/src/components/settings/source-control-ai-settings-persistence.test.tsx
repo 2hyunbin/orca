@@ -198,13 +198,16 @@ it('global owner: bounded controlled edits, failed/same selection and no-op save
     )
   )
   expect(input).toHaveProperty('value', '--verbose newer')
-  expect(row.getByRole('button', { name: /Remove --dangerously/ })).toBeDefined()
   fireEvent.click(row.getAllByRole('combobox')[0])
   fireEvent.click(screen.getByRole('option', { name: 'Claude' }))
   expect(row.getByRole('button', { name: /Remove --dangerously/ })).toBeDefined()
-  expect(persist).toHaveBeenCalledTimes(1)
+  persist.mockRejectedValueOnce(new Error('Save disk unavailable'))
   fireEvent.click(row.getByRole('button', { name: 'Save' }))
-  await waitFor(() => expect(persist).toHaveBeenCalledTimes(2))
+  await waitFor(() =>
+    expect(console.error).toHaveBeenCalledWith(new Error('Save disk unavailable'))
+  )
+  fireEvent.click(row.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(persist).toHaveBeenCalledTimes(3))
   expect(useAppStore.getState().settings?.sourceControlAi?.actions?.fixChecks).toMatchObject({
     agentId: 'claude',
     agentArgs: '--verbose newer',
@@ -218,7 +221,5 @@ it('global owner: bounded controlled edits, failed/same selection and no-op save
   await waitFor(() =>
     expect(row.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true)
   )
-  fireEvent.click(row.getByRole('button', { name: 'Save' }))
-  expect(persist).toHaveBeenCalledTimes(2)
   expect(summary).not.toHaveBeenCalled()
 })

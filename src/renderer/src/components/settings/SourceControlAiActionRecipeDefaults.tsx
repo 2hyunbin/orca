@@ -236,7 +236,7 @@ export function SourceControlAiActionRecipeDefaults({
               onAgentArgsChange={onActionAgentArgsChange}
               onAppendVariable={appendVariable}
               onDiscard={discardActionTemplateDraft}
-              onSave={(id) => void saveActionTemplateDraft(id)}
+              onSave={(id) => void saveActionTemplateDraft(id).catch(console.error)}
             />
           )
         })}
