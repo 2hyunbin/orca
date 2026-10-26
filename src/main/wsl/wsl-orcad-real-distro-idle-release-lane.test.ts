@@ -181,6 +181,8 @@ async function idleReleasePhase(): Promise<void> {
   receipt.vmBeforeLaunchKiB = await vmWorkingSetKiB()
   let connection = await manager.ensure(PLAIN)
   await rpc(connection, 'status.get')
+  // The release hunt: a zombie low-pid `cat` under a session init kept the distro up; name its parent.
+  receipt.processesAfterLaunch = await guest('ps -eo pid,ppid,sid,stat,args')
   const repoPath = (await guest('cd "$HOME/wsl-orcad-lane-repo" && pwd')).trim()
   const created = await rpc<{ terminal: { handle: string } }>(connection, 'terminal.create', {
     worktree: `path:${repoPath}`
@@ -213,7 +215,7 @@ async function idleReleasePhase(): Promise<void> {
       .map((row) => `${row.pid} ${row.command}`)
     receipt.holderState = await holder.holderState(PLAIN)
     receipt.stillRunning = await guest(
-      'ls -la "$HOME/.orca/wsl-holder-release" 2>&1; ps -eo pid,ppid,args | grep -v orca-wsl-exec-loop || true'
+      'ls -la "$HOME/.orca/wsl-holder-release" 2>&1; ps -eo pid,ppid,sid,stat,args | grep -v orca-wsl-exec-loop || true'
     ).catch(String)
     throw error
   })
