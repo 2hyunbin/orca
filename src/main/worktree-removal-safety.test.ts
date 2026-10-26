@@ -325,6 +325,7 @@ describe('canSafelyRemoveOrphanedWorktreeDirectory', () => {
         makeReadPath([
           ['/workspaces/orphan/.git', 'gitdir: /common/.git/worktrees/orphan\n'],
           ['/repos/main-linked/.git', 'gitdir: /common/.git/worktrees/main-linked\n'],
+          ['/common/.git/worktrees/main-linked/commondir', '../..\n'],
           ['/common/.git/worktrees/main-linked/gitdir', '/repos/main-linked/.git\n'],
           ['/common/.git/worktrees/orphan/gitdir', '/workspaces/orphan/.git\n']
         ])

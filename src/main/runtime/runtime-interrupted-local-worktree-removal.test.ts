@@ -2,17 +2,29 @@ import { installRealWorkerThreadChildProcesses } from '../worker-thread-child-pr
 // Use real Git/disk evidence to finish interrupted removal regardless of how far the earlier run progressed.
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, realpath, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { GitPushTarget } from '../../shared/worktree/types'
 import type { Repo } from '../../shared/repo-types'
 import { removeTree } from '../../shared/windows-transient-lock-removal'
 import type { RemoveWorktreeResult } from '../../shared/worktree/create-types'
 import type { Store } from '../persistence'
 import type * as HostTreeRemoval from '../host-tree-removal'
 import { removeHostTree } from '../host-tree-removal'
+import * as nativeFs from '../asar-transparent-fs'
+import { executeWorktreeRemoval } from '../ipc/worktrees/removal/execute-worktree-removal'
+import { RuntimeWorktreeRemovalInFlight } from './runtime-worktree-removal-in-flight'
+import { OrcaRuntimeWithResolveWorktreeRemovalTarget } from './workspaces/workspace-removal-target'
+import type { WorktreeIpcContext } from '../ipc/worktrees/worktree-ipc-context'
+import { stopPtysForDestructiveWorktreeRemoval } from '../ipc/worktrees/removal/worktree-removal-ownership'
+import * as backgroundRemoval from '../worktree-background-removal'
+import * as worktreeGit from '../git/worktree'
+import * as worktreeRemote from '../ipc/worktree-remote'
+import { getLocalProjectWorktreeGitOptions } from '../project-runtime-git-options'
+import { pendingWorktreeRemovals } from '../worktree-removal-table'
 import { listWorktreesStrict } from '../git/worktree'
 import { areWorktreePathsEqual } from '../git/worktree-path-comparison'
 import {
@@ -36,12 +48,17 @@ import {
 import { interruptedLocalWorktreeRemovalJob } from './runtime-interrupted-local-worktree-removal'
 
 vi.mock('../project-runtime-git-options', () => ({
-  getLocalProjectWorktreeGitOptions: () => ({})
+  getLocalProjectWorktreeGitOptions: vi.fn(() => ({}))
 }))
 vi.mock('../host-tree-removal', async (importOriginal) => {
   const actual = await importOriginal<typeof HostTreeRemoval>()
   return { ...actual, removeHostTree: vi.fn(actual.removeHostTree) }
 })
+
+vi.mock('../ipc/worktrees/removal/worktree-removal-ownership', () => ({
+  stopPtysForDestructiveWorktreeRemoval: vi.fn(async () => {}),
+  removeWorktreeMetadataAndTransientState: vi.fn()
+}))
 
 const execFileAsync = promisify(execFile)
 
@@ -50,6 +67,7 @@ let recordsDir = ''
 let repoPath = ''
 let worktreePath = ''
 let repo: Repo
+let pushTarget: GitPushTarget | undefined
 
 async function git(args: string[], cwd = repoPath): Promise<string> {
   const { stdout } = await execFileAsync('git', args, { cwd })
@@ -64,6 +82,8 @@ async function isRegistered(path: string): Promise<boolean> {
 }
 
 beforeEach(async () => {
+  pushTarget = undefined
+  vi.mocked(getLocalProjectWorktreeGitOptions).mockReturnValue({})
   // realpath: macOS hands out /var/... temp paths while Git reports /private/var/....
   scratchDir = await realpath(await mkdtemp(join(tmpdir(), 'orca-interrupted-removal-')))
   recordsDir = join(scratchDir, 'profile')
@@ -83,7 +103,9 @@ beforeEach(async () => {
 
 afterEach(async () => {
   _resetPendingWorktreeRemovalsForTests()
+  vi.restoreAllMocks()
   vi.mocked(removeHostTree).mockClear()
+  vi.mocked(stopPtysForDestructiveWorktreeRemoval).mockReset()
   await removeTree(scratchDir)
 })
 
@@ -92,7 +114,13 @@ type FinishOutcome =
   | { status: 'failed'; error: string }
 
 async function finishAfterRestart(
-  options: { repoGone?: boolean; head?: string; force?: boolean } = {}
+  options: {
+    repoGone?: boolean
+    branch?: string
+    head?: string
+    force?: boolean
+    stopPtys?: () => Promise<void>
+  } = {}
 ): Promise<{
   outcome: FinishOutcome
   purged: string[]
@@ -104,7 +132,7 @@ async function finishAfterRestart(
     repoId: 'repo-1',
     repoPath,
     worktreePath,
-    branch: 'feature',
+    branch: options.branch ?? 'feature',
     head: options.head ?? (await git(['rev-parse', 'feature'])).trim(),
     deleteBranch: true,
     force: options.force ?? false,
@@ -119,32 +147,15 @@ async function finishAfterRestart(
   expect(() => beginTerminalInstall(worktreePath)).toThrow(/being removed/)
   expect(() => beginWatcherInstall(worktreePath)).toThrow(/being removed/)
 
-  const storeStub = {
-    getRepo: (id: string) => (id === repo.id && !options.repoGone ? repo : undefined),
-    getRepos: () => (options.repoGone ? [] : [repo]),
-    getWorktreeMeta: () => undefined
-  }
   const purged: string[] = []
   const remember = vi.fn()
+  const host = removalHost(options.repoGone, options.stopPtys)
+  host.purge = ({ worktreeId }) => {
+    purged.push(worktreeId)
+  }
+  host.preservedBranchCleanup.remember = remember
   resumeInterruptedWorktreeRemovals((interrupted) =>
-    interruptedLocalWorktreeRemovalJob(interrupted, {
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the finish reads only repos and worktree metadata from the store here; git options and push-target cleanup are stubbed or short-circuit without a push target.
-      store: storeStub as unknown as Store,
-      // Takes the real gate synchronously, as the runtime's does.
-      acquireWatcherRemoval: async (path) => {
-        const gate = acquireWatcherRemovalGate(path)
-        expect(() => beginTerminalInstall(worktreePath)).toThrow(/being removed/)
-        return { finish: async () => gate.release() }
-      },
-      closeWatchers: async () => {},
-      preservedBranchCleanup: {
-        preserveHead: (result) => result ?? {},
-        remember
-      },
-      purge: ({ worktreeId }) => purged.push(worktreeId),
-      onRemoved: () => {},
-      publish: () => {}
-    })
+    interruptedLocalWorktreeRemovalJob(interrupted, host)
   )
   const outcome: FinishOutcome = await joined!.then(
     (result) => ({ status: 'removed' as const, ...result }),
@@ -165,34 +176,336 @@ async function listedRows(): Promise<{ path: string; removalError?: string }[]> 
     .map(({ path, removalError }) => ({ path, ...(removalError ? { removalError } : {}) }))
 }
 
+function removalHost(
+  repoGone = false,
+  stopPtys = async () => {}
+): Parameters<typeof interruptedLocalWorktreeRemovalJob>[1] {
+  const store = {
+    getRepo: (id: string) => (id === repo.id && !repoGone ? repo : undefined),
+    getRepos: () => (repoGone ? [] : [repo]),
+    getWorktreeMeta: () => ({ orcaCreatedAt: 1, orcaCreationSource: 'runtime', pushTarget }),
+    getAllWorktreeMeta: () => ({})
+  }
+  return {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these removal paths read only repo and metadata methods; the fixture owns all process/session services.
+    store: store as unknown as Store,
+    acquireWatcherRemoval: async (path) => {
+      const gate = acquireWatcherRemovalGate(path)
+      return { finish: async () => gate.release() }
+    },
+    closeWatchers: vi.fn(async () => {}),
+    stopPtys,
+    preservedBranchCleanup: { preserveHead: (result) => result ?? {}, remember: vi.fn() },
+    purge: () => expect(existsSync(worktreePath)).toBe(false),
+    onRemoved: () => {},
+    publish: () => {}
+  }
+}
+
+const deletionOperations = () => [
+  vi.spyOn(nativeFs, 'rm'),
+  vi.spyOn(nativeFs, 'unlink'),
+  vi.spyOn(nativeFs, 'rmdir')
+]
+
+function expectNoTeardownOrDeletion(
+  stop: ReturnType<typeof vi.fn>,
+  teardown: ReturnType<typeof vi.fn>,
+  operations: ReturnType<typeof deletionOperations>
+): void {
+  expect(stop).not.toHaveBeenCalled()
+  expect(teardown).not.toHaveBeenCalled()
+  operations.forEach((operation) => expect(operation).not.toHaveBeenCalled())
+}
+
+type RemovalEntry = 'desktop' | 'runtime'
+
+async function deleteViaEntry(
+  entry: RemovalEntry,
+  force: boolean,
+  stop = async () => {},
+  teardown = vi.fn()
+): Promise<unknown> {
+  const worktreeId = `repo-1::${worktreePath}`
+  const host = removalHost(false, stop)
+  host.closeWatchers = async () => teardown()
+  const { store, acquireWatcherRemoval } = host
+  host.acquireWatcherRemoval = async (path) => {
+    teardown()
+    return acquireWatcherRemoval(path)
+  }
+  const runtime: OrcaRuntimeWithResolveWorktreeRemovalTarget = Object.assign(
+    Object.create(OrcaRuntimeWithResolveWorktreeRemovalTarget.prototype),
+    {
+      store,
+      requireStore: () => store,
+      resolveWorktreeRemovalTarget: async () => ({
+        id: worktreeId,
+        repoId: repo.id,
+        path: worktreePath
+      }),
+      removeManagedWorktreeInFlight: new RuntimeWorktreeRemovalInFlight(),
+      localRemovalJobHost: () => host,
+      acquireFileWatcherRemoval: host.acquireWatcherRemoval,
+      stopPtysForDestructiveWorktreeRemoval: stop,
+      closeFileWatchersForRemoval: host.closeWatchers,
+      preservedBranchCleanup: { ...host.preservedBranchCleanup, delete: vi.fn() },
+      purgeRemovedWorktree: host.purge,
+      clearOptimisticReconcileToken: () => {},
+      publishWorktreeRemovalChange: () => {},
+      notifyWorktreesChanged: () => {},
+      emitWorktreeLifecycle: () => {}
+    }
+  )
+  vi.mocked(stopPtysForDestructiveWorktreeRemoval).mockImplementation(stop)
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: native dispatch reads only the fixture-owned context fields below.
+  const context = {
+    store,
+    runtime,
+    mainWindow: { isDestroyed: () => true }
+  } as unknown as WorktreeIpcContext
+  try {
+    const accepted =
+      entry === 'desktop'
+        ? await executeWorktreeRemoval(
+            context,
+            { worktreeId, force },
+            repo,
+            repo.id,
+            worktreePath,
+            'local'
+          )
+        : await runtime.removeManagedWorktree(`id:${worktreeId}`, {
+            force,
+            waitForBackgroundRemoval: true
+          })
+    if (accepted.removing) {
+      return await waitForPendingWorktreeRemoval(worktreeId)
+    }
+    return accepted
+  } finally {
+    await _settlePendingWorktreeRemovalsForTests()
+  }
+}
+
+async function orphanAdmin(): Promise<void> {
+  const admin = (await readFile(join(worktreePath, '.git'), 'utf8')).trim().replace(/^gitdir: /, '')
+  await removeTree(admin)
+  await writeFile(join(worktreePath, '.git'), `  gitdir: ${admin}\nignored second line\n`)
+}
+
+async function recordFailedRemoval(force: boolean): Promise<void> {
+  await writeWorktreeRemovalRecords(recordsDir, () => [
+    {
+      worktreeId: `repo-1::${worktreePath}`,
+      repoId: repo.id,
+      repoPath,
+      worktreePath,
+      branch: 'feature',
+      head: '',
+      deleteBranch: true,
+      force,
+      requestedAt: 1,
+      failure: { message: 'held file', failedAt: 2 }
+    }
+  ])
+  await loadWorktreeRemovalRecords(recordsDir)
+}
+
 describe('finishing an interrupted worktree removal after a restart', () => {
-  it('finishes a forced delete Git was still deleting, branch and metadata included', async () => {
-    // Git stopped partway: part of the checkout is gone, which reads as local changes.
-    await unlink(join(worktreePath, 'seed.txt'))
+  it.skipIf(process.platform !== 'win32').each([
+    { entry: 'desktop', phase: 'child' },
+    { entry: 'runtime', phase: 'child' },
+    { entry: 'desktop', phase: 'root' },
+    { entry: 'runtime', phase: 'root' }
+  ] as const)(
+    '$entry completes explicit retry after releasing held $phase across restart',
+    async ({ entry, phase }) => {
+      pushTarget = {
+        remoteName: 'pr-contributor',
+        branchName: 'feature',
+        remoteCreated: true,
+        remoteUrl: 'https://example.invalid/repo.git'
+      }
+      await git(['remote', 'add', pushTarget.remoteName, pushTarget.remoteUrl])
+      await git(['config', `remote.${pushTarget.remoteName}.orca-created`, 'true'])
+      const held =
+        phase === 'child'
+          ? vi
+              .spyOn(nativeFs, 'rm')
+              .mockRejectedValue(Object.assign(new Error('held child'), { code: 'EBUSY' }))
+          : vi
+              .spyOn(nativeFs, 'rmdir')
+              .mockRejectedValue(Object.assign(new Error('held root'), { code: 'EBUSY' }))
+      const { outcome } = await finishAfterRestart({ force: true })
+      expect(outcome.status).toBe('failed')
+      expect(await listedRows()).toMatchObject([{ removalError: expect.any(String) }])
+      expect(await git(['remote'])).toContain(pushTarget.remoteName)
+      expect(await isRegistered(worktreePath)).toBe(true)
+      expect(await git(['branch', '--list', 'feature'])).not.toBe('')
+      _resetPendingWorktreeRemovalsForTests()
+      await loadWorktreeRemovalRecords(recordsDir)
+      const resume = vi.fn()
+      resumeInterruptedWorktreeRemovals(resume)
+      expect(resume).not.toHaveBeenCalled()
+      await expect(deleteViaEntry(entry, true)).rejects.toThrow()
+      expect(await isRegistered(worktreePath)).toBe(true)
+      held.mockRestore()
+      await deleteViaEntry(entry, true)
+      expect(existsSync(worktreePath)).toBe(false)
+      expect(await isRegistered(worktreePath)).toBe(false)
+      expect(await git(['branch', '--list', 'feature'])).toBe('')
+      expect(await git(['remote'])).not.toContain(pushTarget.remoteName)
+      expect(await readWorktreeRemovalRecords(recordsDir)).toEqual([])
+    },
+    60_000
+  )
 
-    const { outcome, purged, records } = await finishAfterRestart({ force: true })
+  it
+    .skipIf(process.platform !== 'win32')
+    .each(
+      (['desktop', 'runtime'] as const).flatMap((entry) =>
+        ['native', 'wsl'].map((route) => ({ entry, route }))
+      )
+    )(
+    '$entry refuses $route before publication/teardown and honors current native force',
+    async ({ entry, route }) => {
+      await orphanAdmin()
+      if (route === 'wsl') {
+        expect(worktreePath).toMatch(/^[A-Za-z]:/)
+        await unlink(join(worktreePath, '.git'))
+        vi.mocked(getLocalProjectWorktreeGitOptions).mockReturnValue({ wslDistro: 'Ubuntu' })
+        // A route-list seam, not a distro run: the request must refuse before invoking a job.
+        vi.spyOn(worktreeGit, 'listWorktreesStrict').mockResolvedValue([])
+      }
+      const retryJob = vi.spyOn(backgroundRemoval, 'retryFailedWorktreeRemoval')
+      const pushCleanup = vi.spyOn(worktreeRemote, 'cleanupUnusedWorktreePushTargetRemote')
+      await recordFailedRemoval(true)
+      const stop = vi.fn(async () => {})
+      const teardown = vi.fn()
+      const operations = deletionOperations()
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await expect(deleteViaEntry(entry, false, stop, teardown)).rejects.toThrow(
+          /no longer (?:registered|a Git worktree)/
+        )
+        expect(retryJob).not.toHaveBeenCalled()
+        expect(pushCleanup).not.toHaveBeenCalled()
+        expectNoTeardownOrDeletion(stop, teardown, operations)
+        expect(await readFile(join(worktreePath, 'seed.txt'), 'utf8')).toBe('seed\n')
+        expect(await readWorktreeRemovalRecords(recordsDir)).toMatchObject([
+          { force: true, failure: { message: 'held file' } }
+        ])
+        _resetPendingWorktreeRemovalsForTests()
+        await loadWorktreeRemovalRecords(recordsDir)
+      }
+      if (route === 'wsl') {
+        return
+      }
+      await recordFailedRemoval(false)
+      const started = Promise.withResolvers<void>()
+      const paused = Promise.withResolvers<void>()
+      const retry = deleteViaEntry(entry, true, async () => {
+        started.resolve()
+        await paused.promise
+      }).catch((error: unknown) => error)
+      try {
+        await started.promise
+        expect([...pendingWorktreeRemovals.values()]).toMatchObject([
+          { force: true, branch: 'feature', deleteBranch: true }
+        ])
+        expect(await readWorktreeRemovalRecords(recordsDir)).toMatchObject([{ force: true }])
+      } finally {
+        paused.resolve()
+      }
+      expect(await retry).not.toBeInstanceOf(Error)
+    }
+  )
 
-    expect(outcome).toMatchObject({ status: 'removed' })
-    expect(records).toEqual([])
-    expect(
-      outcome && 'preservedBranch' in outcome ? outcome.preservedBranch : undefined
-    ).toBeUndefined()
-    expect(existsSync(worktreePath)).toBe(false)
-    expect(await isRegistered(worktreePath)).toBe(false)
-    expect(await git(['branch', '--list', 'feature'])).toBe('')
-    expect(purged).toEqual([`repo-1::${worktreePath}`])
-  })
+  it.skipIf(process.platform !== 'win32').each(['desktop', 'runtime'] as const)(
+    '%s retains unrelated missing registration through targeted completion',
+    async (entry) => {
+      const sibling = join(scratchDir, 'temporarily-missing')
+      await git(['worktree', 'add', '-q', sibling, '-b', 'sibling'])
+      await rename(sibling, join(scratchDir, 'offline'))
+      await removeTree(worktreePath)
+      await loadWorktreeRemovalRecords(recordsDir)
+      await deleteViaEntry(entry, true)
+      expect(await isRegistered(worktreePath)).toBe(false)
+      expect(await isRegistered(sibling)).toBe(true)
+      await git(['worktree', 'add', '-q', worktreePath, '-b', 'feature'])
+      await orphanAdmin()
+      await recordFailedRemoval(false)
+      await deleteViaEntry(entry, true)
+      expect(await isRegistered(sibling)).toBe(true)
+      expect(await git(['branch', '--list', 'feature'])).toBe('')
+    }
+  )
 
-  it('finishes a clean checkout with the recorded non-forced choice', async () => {
-    const { outcome, purged, records } = await finishAfterRestart({ force: false })
+  it.skipIf(process.platform !== 'win32').each(
+    (['desktop', 'runtime'] as const).flatMap((entry) =>
+      ['attached', 'detached', 'folder', 'nested'].map((schedule) => ({
+        entry,
+        schedule
+      }))
+    )
+  )(
+    '$entry preserves $schedule replacements before/after teardown',
+    async ({ entry, schedule }) => {
+      await orphanAdmin()
+      await loadWorktreeRemovalRecords(recordsDir)
+      const change = async () => {
+        if (schedule === 'nested') {
+          await git(['worktree', 'add', '-q', join(worktreePath, 'nested'), '-b', 'nested'])
+        } else {
+          await rename(worktreePath, join(scratchDir, 'original'))
+          await (schedule === 'folder'
+            ? mkdir(worktreePath)
+            : git([
+                'worktree',
+                'add',
+                '-q',
+                ...(schedule === 'detached' ? ['--detach'] : ['-b', 'other']),
+                worktreePath
+              ]))
+        }
+        await writeFile(join(worktreePath, 'notes.txt'), 'mine\n')
+      }
+      const stop = vi.fn(change)
+      const teardown = vi.fn()
+      await expect(deleteViaEntry(entry, true, stop, teardown)).rejects.toThrow()
+      expect(await readFile(join(worktreePath, 'notes.txt'), 'utf8')).toBe('mine\n')
+      expect(stop).toHaveBeenCalledOnce()
+      // A second ordinary Delete refuses proofless/nested contents before teardown.
+      if (['folder', 'nested'].includes(schedule)) {
+        stop.mockClear()
+        teardown.mockClear()
+        const operations = deletionOperations()
+        await expect(deleteViaEntry(entry, true, stop, teardown)).rejects.toThrow()
+        expectNoTeardownOrDeletion(stop, teardown, operations)
+        expect(await readFile(join(worktreePath, 'notes.txt'), 'utf8')).toBe('mine\n')
+      }
+    }
+  )
 
-    expect(outcome).toMatchObject({ status: 'removed' })
-    expect(records).toEqual([])
-    expect(existsSync(worktreePath)).toBe(false)
-    expect(await isRegistered(worktreePath)).toBe(false)
-    expect(await git(['branch', '--list', 'feature'])).toBe('')
-    expect(purged).toEqual([`repo-1::${worktreePath}`])
-  })
+  it.each(['partial', 'detached'])(
+    'finishes the accepted %s pending checkout after restart',
+    async (kind) => {
+      await (kind === 'partial'
+        ? unlink(join(worktreePath, 'seed.txt'))
+        : git(['checkout', '--detach', '-q'], worktreePath))
+      const { outcome, purged, records } = await finishAfterRestart({
+        force: kind === 'partial',
+        branch: kind === 'detached' ? '' : 'feature',
+        head: (await git(['rev-parse', 'HEAD'], worktreePath)).trim()
+      })
+      expect(outcome).toMatchObject({ status: 'removed' })
+      expect(records).toEqual([])
+      expect(existsSync(worktreePath)).toBe(false)
+      expect(await isRegistered(worktreePath)).toBe(false)
+      expect((await git(['branch', '--list', 'feature'])).trim() !== '').toBe(kind === 'detached')
+      expect(purged).toEqual([`repo-1::${worktreePath}`])
+    }
+  )
 
   it('keeps the user’s non-forced choice: Git refuses local changes and the row returns as before', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -200,18 +513,18 @@ describe('finishing an interrupted worktree removal after a restart', () => {
 
     const { outcome, purged, records } = await finishAfterRestart({ force: false })
 
-    expect(outcome).toMatchObject({ status: 'failed', error: expect.stringMatching(/--force/) })
+    expect(outcome).toMatchObject({ status: 'failed' })
     expect(await readFile(join(worktreePath, 'notes.txt'), 'utf8')).toBe('mine\n')
     expect(existsSync(join(worktreePath, 'seed.txt'))).toBe(true)
     expect(await isRegistered(worktreePath)).toBe(true)
     expect(await git(['branch', '--list', 'feature'])).not.toBe('')
     expect(purged).toEqual([])
-    expect(records).toEqual([])
-    expect(await listedRows()).toEqual([{ path: worktreePath }])
+    expect(records).toMatchObject([{ failure: { message: expect.any(String) } }])
+    expect(await listedRows()).toEqual([{ path: worktreePath, removalError: expect.any(String) }])
   })
 
   it.each([true, false])(
-    'unregisters a checkout whose .git Git deleted first, keeping its files (force %s)',
+    'preserves a nonempty markerless checkout and platform cleanup policy (force %s)',
     async (force) => {
       vi.spyOn(console, 'warn').mockImplementation(() => {})
       // Git deletes in directory order; without `.git` no `worktree remove` can validate it.
@@ -224,9 +537,9 @@ describe('finishing an interrupted worktree removal after a restart', () => {
       expect(existsSync(join(worktreePath, '.git'))).toBe(false)
       expect(existsSync(join(worktreePath, 'seed.txt'))).toBe(true)
       expect(removeHostTree).not.toHaveBeenCalled()
-      expect(await isRegistered(worktreePath)).toBe(false)
-      // The merged branch goes with the registration, as the delete asked.
-      expect(await git(['branch', '--list', 'feature'])).toBe('')
+      const native = process.platform === 'win32'
+      expect(await isRegistered(worktreePath)).toBe(native)
+      expect((await git(['branch', '--list', 'feature'])).trim() !== '').toBe(native)
       expect(purged).toEqual([])
       expect(records).toMatchObject([{ failure: { message: refusal } }])
       expect(await listedRows()).toEqual([{ path: worktreePath, removalError: refusal }])
@@ -243,14 +556,14 @@ describe('finishing an interrupted worktree removal after a restart', () => {
 
     const { outcome, purged, records } = await finishAfterRestart({ force: false })
 
-    expect(outcome).toMatchObject({ status: 'failed', error: expect.stringMatching(/--force/) })
+    expect(outcome).toMatchObject({ status: 'failed' })
     expect(await readFile(join(worktreePath, 'kept.txt'), 'utf8')).toBe('kept\n')
     expect(existsSync(join(worktreePath, '.git'))).toBe(true)
     expect(await isRegistered(worktreePath)).toBe(true)
     expect(await git(['branch', '--list', 'feature'])).not.toBe('')
     expect(purged).toEqual([])
-    expect(records).toEqual([])
-    expect(await listedRows()).toEqual([{ path: worktreePath }])
+    expect(records).toMatchObject([{ failure: { message: expect.any(String) } }])
+    expect(await listedRows()).toEqual([{ path: worktreePath, removalError: expect.any(String) }])
   })
 
   it('deletes nothing in a folder put at the path after Git unregistered the checkout', async () => {
@@ -334,7 +647,7 @@ describe('finishing an interrupted worktree removal after a restart', () => {
     // Not pruned either: the lock keeps Git's registration.
     expect(await isRegistered(worktreePath)).toBe(true)
     expect(purged).toEqual([])
-    expect(records).toEqual([])
+    expect(records).toMatchObject([{ failure: { message: expect.any(String) } }])
   })
 
   it('deletes the branch when Git finished the checkout but the quit came before the branch', async () => {
@@ -398,8 +711,8 @@ describe('finishing an interrupted worktree removal after a restart', () => {
     expect(existsSync(worktreePath)).toBe(true)
     expect(await isRegistered(worktreePath)).toBe(true)
     expect(purged).toEqual([])
-    expect(records).toEqual([])
-    expect(await listedRows()).toEqual([{ path: worktreePath }])
+    expect(records).toMatchObject([{ failure: { message: expect.any(String) } }])
+    expect(await listedRows()).toEqual([{ path: worktreePath, removalError: expect.any(String) }])
   })
 
   it('drops a record whose repo Orca no longer has', async () => {

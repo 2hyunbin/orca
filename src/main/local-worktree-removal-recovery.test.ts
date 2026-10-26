@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as LocalWorktreeFilesystem from './local-worktree-filesystem'
 
-const { gitExecFileAsyncMock, listWorktreesStrictMock, removeLocalWorktreePathMock, hostRmMock } =
-  vi.hoisted(() => ({
+const { gitExecFileAsyncMock, listWorktreesStrictMock, removeLocalWorktreePathMock } = vi.hoisted(
+  () => ({
     gitExecFileAsyncMock: vi.fn(),
     listWorktreesStrictMock: vi.fn(),
-    removeLocalWorktreePathMock: vi.fn(),
-    hostRmMock: vi.fn()
-  }))
+    removeLocalWorktreePathMock: vi.fn()
+  })
+)
 
 vi.mock('./git/runner', () => ({
   gitExecFileAsync: gitExecFileAsyncMock
@@ -16,8 +15,6 @@ vi.mock('./git/runner', () => ({
 vi.mock('./local-worktree-filesystem', () => ({
   removeLocalWorktreePath: removeLocalWorktreePathMock
 }))
-
-vi.mock('./asar-transparent-fs', () => ({ rm: hostRmMock }))
 
 vi.mock('./git/worktree', () => ({
   listWorktreesStrict: listWorktreesStrictMock
@@ -118,42 +115,6 @@ describe('recoverLocalWindowsWorktreeRemoval', () => {
           head: 'abc123'
         }
       })
-    })
-  })
-
-  it('rejects native recovery without pruning or another pass when deletion is cancelled', async () => {
-    const native = await vi.importActual<typeof LocalWorktreeFilesystem>(
-      './local-worktree-filesystem'
-    )
-    removeLocalWorktreePathMock.mockImplementationOnce(native.removeLocalWorktreePath)
-    const controller = new AbortController()
-    const closeWatcher = vi.fn().mockResolvedValue(undefined)
-    hostRmMock.mockImplementationOnce(async () => {
-      controller.abort()
-      throw Object.assign(new Error('file held open'), { code: 'EBUSY' })
-    })
-    await withPlatform('win32', async () => {
-      await expect(
-        recoverLocalWindowsWorktreeRemoval({
-          error: new Error('Git deregistered but left the checkout'),
-          force: true,
-          canonicalWorktreePath: 'C:/repo/worktree/feature',
-          repoPath: 'C:/repo',
-          localWorktreeGitOptions: {},
-          registeredWorktree: { branch: 'refs/heads/feature', head: 'abc123' },
-          deleteBranch: false,
-          closeWatcher,
-          signal: controller.signal
-        })
-      ).rejects.toThrow(/aborted/i)
-      expect(removeLocalWorktreePathMock).toHaveBeenCalledWith(
-        'C:/repo/worktree/feature',
-        {},
-        controller.signal
-      )
-      expect(closeWatcher).toHaveBeenCalledOnce()
-      expect(hostRmMock).toHaveBeenCalledOnce()
-      expect(gitExecFileAsyncMock).not.toHaveBeenCalled()
     })
   })
 
