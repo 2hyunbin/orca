@@ -79,12 +79,7 @@ async function testTokenIssuer() {
   return {
     jwks: createLocalJWKSet({ keys: [jwk] }),
     sign: async (claims: { sub: string; mid: string }, expiresAtSeconds: number) =>
-      await new SignJWT({
-        prof: 'profile-1',
-        sid: 'family-1',
-        mid: claims.mid,
-        purpose: 'connector-host'
-      })
+      await new SignJWT({ prof: 'profile-1', sid: 'family-1', mid: claims.mid, purpose: 'connector-host' })
         .setProtectedHeader({ alg: 'ES256', kid: 'test-key' })
         .setIssuer(AUTH_ISSUER)
         .setAudience('orca-connector')
