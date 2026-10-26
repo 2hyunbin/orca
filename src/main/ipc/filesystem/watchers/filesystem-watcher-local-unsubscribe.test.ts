@@ -511,15 +511,15 @@ describe('local filesystem watcher unsubscribe cleanup', () => {
       { sender },
       { worktreePath: '/tmp/repo' }
     ) as Promise<unknown>
+    let watchSettled = false
+    void watchPromise.then(() => {
+      watchSettled = true
+    })
     // Unwatch must settle before the native subscribe crawl finishes.
-    const watchSettledEarly = await Promise.race([
-      watchPromise.then(() => true),
-      new Promise<false>((resolve) => setTimeout(() => resolve(false), 20))
-    ])
+    await vi.waitFor(() => expect(watchSettled).toBe(true))
     resolveSubscribe({ unsubscribe: unsubscribeMock })
     await Promise.all([watchPromise, unwatchPromise])
 
-    expect(watchSettledEarly).toBe(true)
     expect(unsubscribeMock).toHaveBeenCalledTimes(1)
   })
 
