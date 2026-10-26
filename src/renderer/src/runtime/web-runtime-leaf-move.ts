@@ -2,7 +2,7 @@ import type { TerminalLeafMoveRequest } from '../../../shared/terminal-leaf-move
 import { SESSION_TABS_MOVE_PANE_TO_NEW_TAB_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-runtime-capabilities'
 import { toHostSessionTabId } from '../../../shared/terminal-surface-id'
 import { makePaneKey } from '../../../shared/stable-pane-id'
-import { isRecoverableRemoteRuntimeConnectionError } from '../../../shared/remote-runtime-client-error-classification'
+import { isRecoverableRemoteRuntimeConnectionError } from '../../../shared/remote-runtime/remote-runtime-client-error-classification'
 import { runtimeEnvironmentIdUnlessTwin } from '../lib/resolve-owner'
 import { useAppStore } from '../store'
 import { runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'

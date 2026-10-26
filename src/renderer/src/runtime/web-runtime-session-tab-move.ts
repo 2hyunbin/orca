@@ -34,7 +34,7 @@ export async function moveWebRuntimeSessionTab(
   const callEnvironment = captureRuntimeEnvironmentCall(environmentId, intentOwner.pairingRevision)
 
   if (args.kind === 'reorder') {
-    // Why: record local order synchronously before async host resolution, so a pre-move snapshot can't snap the tab back.
+    // Record local order before async resolution so pre-move snapshots cannot snap it back.
     recordWebSessionReorderIntent(
       intentOwner,
       args.worktreeId,
@@ -82,7 +82,7 @@ export async function moveWebRuntimeSessionTab(
         ? {
             ...base,
             kind: 'reorder' as const,
-            // Why: the host reorder API only accepts host tab ids, so local-only tabs must be omitted from the mirrored order.
+            // Host reorder accepts only host tab IDs; omit local-only tabs.
             tabOrder: reorderedHostTabOrder
           }
         : args.kind === 'split'
@@ -94,6 +94,7 @@ export async function moveWebRuntimeSessionTab(
           : {
               ...base,
               kind: 'move-to-group' as const,
+              // Host indexes must count only host-backed tabs in mixed web groups.
               index: targetHostIndex
             }
     const response = await callEnvironment({
@@ -135,7 +136,7 @@ async function hostDropResolvers(
   const targetGroup = groups.find((group) => group.id === targetGroupId)
   const recordedHostGroupId = (tabId: string): string | null =>
     resolveHostSessionGroupIdForWebSessionTab({ environmentId, worktreeId, tabId })
-  // Why: until the next server list, a split-off tab still records its source group, as tabs outside do.
+  // Before the next server list, split-off tabs still carry their source group like outside tabs.
   const hostGroupIdsOutsideTarget = new Set(
     groups
       .filter((group) => group.id !== targetGroupId)
@@ -143,7 +144,7 @@ async function hostDropResolvers(
       .filter((tabId) => tabId !== movingTabId)
       .map(recordedHostGroupId)
   )
-  // Why: a group this desktop split off has another id on the host, so name it by a tab it holds.
+  // Name client-split host groups by a contained tab; desktop group IDs differ.
   const targetHostGroupId =
     (targetGroup?.tabOrder ?? [])
       .filter((tabId) => tabId !== movingTabId)
