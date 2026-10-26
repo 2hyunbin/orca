@@ -3,6 +3,7 @@ import { openCloudNotifications, type CloudDatabase } from '@orca-cloud/cloud-da
 import {
   CONNECTOR_PATHS,
   ConnectorHostChallengeResponseSchema,
+  ConnectorHostSessionResponseSchema,
   ConnectorSignInStartResponseSchema
 } from '@orca-cloud/connector-contract'
 import { buildHostProofMacInput, type HostProofDomains } from '@orca-cloud/push-contract'
@@ -262,10 +263,57 @@ export async function createConnectorHarness(
     })
   }
 
+  // A linked machine holding a session, with helpers for the machine API.
+  async function linkedMachine(browser?: ReturnType<typeof testBrowser>) {
+    const host = hostKeypair()
+    const owner = browser ?? (await signedInBrowser())
+    await approve(owner, (await startSignIn(host)).started!.userCode)
+    const session = ConnectorHostSessionResponseSchema.parse(await (await machineSession(host)).json())
+    const auth = { authorization: `Bearer ${session.sessionToken}` }
+    const call = (path: string, body: unknown, method = 'POST') =>
+      request(path, {
+        method,
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': HOST_IP, ...auth },
+        body: JSON.stringify(body)
+      })
+    return {
+      host,
+      hostId: session.hostId,
+      sessionToken: session.sessionToken,
+      owner,
+      call,
+      hello: (helloRev = 1) =>
+        call(
+          CONNECTOR_PATHS.hello,
+          {
+            v: 1,
+            helloRev,
+            contract: 1,
+            hostName: 'build-box',
+            platform: 'linux',
+            runtime: 'serve',
+            orcaVersion: '1.4.230',
+            agents: ['claude'],
+            promptKinds: ['approval'],
+            features: ['answer', 'cancel'],
+            projects: []
+          },
+          'PUT'
+        ),
+      poll: async (helloRev = 1) => {
+        const response = await call(CONNECTOR_PATHS.poll, { v: 1, helloRev })
+        const body: unknown = await response.json()
+        return { status: response.status, body }
+      },
+      ack: (acks: unknown[]) => call(CONNECTOR_PATHS.acks, { v: 1, acks })
+    }
+  }
+
   return {
     runtime,
     database,
     issuer,
+    linkedMachine,
     request,
     json,
     signedInBrowser,
