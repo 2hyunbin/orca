@@ -18,6 +18,7 @@ type ImportedWorktreeCardActionDeps = {
         Repo,
         | 'externalWorktreeVisibility'
         | 'externalWorktreeVisibilityPromptDismissedAt'
+        | 'externalWorktreeDiscoverySuppressedAt'
         | 'externalWorktreeInboxBaselinePaths'
       >
     >
@@ -72,6 +73,7 @@ export async function keepImportedWorktreesHiddenCard(
   args.setCardState(args.projectId, { pending: true, error: null })
   const updated = await args.updateRepo(args.projectId, {
     externalWorktreeVisibilityPromptDismissedAt: Date.now(),
+    externalWorktreeDiscoverySuppressedAt: Date.now(),
     ...(args.hiddenWorktreePaths && args.hiddenWorktreePaths.length > 0
       ? {
           externalWorktreeInboxBaselinePaths: mergeExternalWorktreeInboxPaths(

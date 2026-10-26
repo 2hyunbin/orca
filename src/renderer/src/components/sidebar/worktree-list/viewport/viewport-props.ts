@@ -20,7 +20,6 @@ import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { ExecutionHostRegistryEntry } from '../../../../../../shared/execution-host-registry'
 import type { HostSectionRow } from '../../../../../../shared/sidebar-list/host-section-rows'
 import type { ImportedWorktreeCardActionState } from '../../imported-worktrees-card-actions'
-import type { NewExternalWorktreesInboxActionState } from '../../new-external-worktrees-inbox-actions'
 import type {
   ShouldShowWorkspaceBoardDropIndicator,
   WorktreeDropCommitContext,
@@ -50,11 +49,9 @@ export type VirtualizedWorktreeViewportProps = {
   handleCreateForRepo: (projectId: string) => void
   handleOpenRepoSettings: (projectId: string, sectionId?: string) => void
   handleOpenWorktreeVisibility: (repo: Repo) => void
-  handleShowImportedWorktrees: (projectId: string) => void
-  handleKeepImportedWorktreesHidden: (projectId: string) => void
+  handleShowImportedWorktrees: (repo: Repo, paths: readonly string[]) => Promise<boolean>
+  handleKeepImportedWorktreesHidden: (repo: Repo) => Promise<boolean>
   importedWorktreeCardActionState: ReadonlyMap<string, ImportedWorktreeCardActionState>
-  handleOpenSuppressExternalWorktreeInbox: (projectId: string) => void
-  newExternalWorktreeInboxActionState: ReadonlyMap<string, NewExternalWorktreesInboxActionState>
   handleRemoveProject: (repo: Repo) => void
   handleCreateGroupFromRepo: (repo: Repo) => void
   handleMoveProjectToGroup: (repo: Repo, groupId: string) => void

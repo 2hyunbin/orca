@@ -1,159 +1,117 @@
-import { renderToStaticMarkup } from 'react-dom/server'
-import type { ComponentProps } from 'react'
-import { describe, expect, it, vi } from 'vitest'
-
+// @vitest-environment happy-dom
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import ImportedWorktreesVisibilityLine, {
-  groupWorktreesByParentPath
+  type ImportedWorktreesVisibilityLineProps
 } from './ImportedWorktreesVisibilityLine'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 const hiddenWorktrees = [
-  {
-    id: 'hidden-1',
-    displayName: 'payments-refactor',
-    path: '/worktrees/demo-project/payments-refactor',
-    branch: 'refs/heads/payments-refactor'
-  },
-  {
-    id: 'hidden-2',
-    displayName: 'auth-cache-debug',
-    path: '/worktrees/demo-project/auth-cache-debug',
-    branch: 'refs/heads/auth-cache-debug'
-  },
-  {
-    id: 'hidden-3',
-    displayName: 'legacy-oauth-fix',
-    path: '/worktrees/legacy/legacy-oauth-fix',
-    branch: 'refs/heads/legacy-oauth-fix'
-  },
-  {
-    id: 'hidden-4',
-    displayName: 'ssh-worktree',
-    path: '/srv/repos/orca/ssh-worktree',
-    branch: 'refs/heads/ssh-worktree'
-  }
+  { displayName: 'openusage', path: '/worktrees/one', branch: 'refs/heads/feature-one' },
+  { displayName: 'openusage', path: '/worktrees/two', branch: 'refs/heads/feature-two' }
 ]
-
-function renderLine(
-  overrides: Partial<ComponentProps<typeof ImportedWorktreesVisibilityLine>> = {}
-): string {
-  return renderToStaticMarkup(
+function renderLine(overrides: Partial<ImportedWorktreesVisibilityLineProps> = {}) {
+  const onShow = vi.fn().mockResolvedValue(true)
+  const onKeepHidden = vi.fn().mockResolvedValue(true)
+  const props = {
+    repoDisplayName: 'orca',
+    hiddenWorktrees,
+    placement: 'repo-group' as const,
+    pending: false,
+    error: null,
+    onShow,
+    onKeepHidden,
+    ...overrides
+  }
+  const view = render(
     <TooltipProvider>
-      <ImportedWorktreesVisibilityLine
-        repoDisplayName="orca"
-        hiddenWorktrees={hiddenWorktrees}
-        placement="repo-group"
-        pending={false}
-        error={null}
-        onShow={vi.fn()}
-        onKeepHidden={vi.fn()}
-        {...overrides}
-      />
+      <ImportedWorktreesVisibilityLine {...props} />
     </TooltipProvider>
   )
+  return { ...view, onShow, onKeepHidden }
 }
+afterEach(cleanup)
 
-describe('ImportedWorktreesVisibilityLine', () => {
-  it('renders the compact repo-group line with expand and dismiss actions', () => {
-    const markup = renderLine()
+describe('workspace discovery', () => {
+  it('starts collapsed and adds only the selected path, with names and paths visible', async () => {
+    const { onShow } = renderLine()
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Review hidden workspaces for orca' }))
+    expect(screen.getByText('/worktrees/two')).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('checkbox')[1])
+    fireEvent.click(screen.getByRole('button', { name: 'Add 1 to sidebar' }))
+    await waitFor(() => expect(onShow).toHaveBeenCalledWith(['/worktrees/two']))
+    await waitFor(() => expect(screen.queryAllByRole('checkbox')).toHaveLength(0))
+  })
 
-    expect(markup).toContain('Hiding 4 discovered worktrees')
-    expect(markup).toContain('Expand hidden worktrees for orca')
-    expect(markup).toContain(
-      'Keep 4 discovered worktrees hidden for orca; recover from the project menu'
+  it('retains selection when adding fails and retries it', async () => {
+    const onShow = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    renderLine({ onShow })
+    fireEvent.click(screen.getByRole('button', { name: 'Review hidden workspaces for orca' }))
+    fireEvent.click(screen.getAllByRole('checkbox')[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Add 1 to sidebar' }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Add 1 to sidebar' }).hasAttribute('disabled')
+      ).toBe(false)
     )
-    expect(markup).toContain('aria-expanded="false"')
-    expect(markup).not.toContain('Imported 4 existing worktrees')
-    expect(markup).not.toContain('Orca found 4 worktrees')
-    expect(markup).not.toContain('repo options')
-    expect(markup).not.toContain('Reveal')
-    expect(markup).not.toContain('Always show')
-    expect(markup).not.toContain('Hidden worktrees by location')
-    expect(markup).not.toContain('payments-refactor')
-    expect(markup).not.toContain('/worktrees/demo-project')
+    expect(screen.getAllByRole('checkbox')[0].getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Add 1 to sidebar' }))
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(2))
+    expect(onShow).toHaveBeenLastCalledWith(['/worktrees/one'])
   })
 
-  it('names the host when the project is checked out on more than one', () => {
-    const markup = renderLine({ hostContextLabel: 'openclaw' })
-
-    expect(markup).toContain('openclaw')
-    expect(markup).toContain('Expand hidden worktrees for orca on openclaw')
-    expect(markup).toContain(
-      'Keep 4 discovered worktrees hidden for orca on openclaw; recover from the project menu'
+  it('locks dismissal and selection while saving', async () => {
+    let finish: (value: boolean) => void = () => undefined
+    const onShow = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve
+        })
     )
+    renderLine({ onShow })
+    fireEvent.click(screen.getByRole('button', { name: 'Review hidden workspaces for orca' }))
+    fireEvent.click(screen.getAllByRole('checkbox')[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Add 1 to sidebar' }))
+    expect(
+      screen
+        .getByRole('button', { name: 'Hide workspace suggestions for orca' })
+        .hasAttribute('disabled')
+    ).toBe(true)
+    expect(screen.getAllByRole('checkbox')[0].hasAttribute('disabled')).toBe(true)
+    await act(async () => finish(true))
   })
 
-  it('folds the host into pinned fallback copy, which already names the repo', () => {
-    const markup = renderLine({
-      hostContextLabel: 'openclaw',
-      placement: 'pinned-fallback',
-      onKeepHidden: undefined
-    })
-
-    expect(markup).toContain('Hiding 4 discovered worktrees in orca on openclaw')
+  it('preserves checked workspaces through search', async () => {
+    const worktrees = Array.from({ length: 25 }, (_, i) => ({
+      displayName: `workspace-${i}`,
+      path: `/worktrees/${i}`
+    }))
+    const onShow = vi.fn().mockResolvedValue(true)
+    renderLine({ hiddenWorktrees: worktrees, onShow })
+    fireEvent.click(screen.getByRole('button', { name: 'Review hidden workspaces for orca' }))
+    fireEvent.click(screen.getAllByRole('checkbox')[0])
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'workspace-24' } })
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1)
+    fireEvent.click(screen.getAllByRole('checkbox')[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Add 2 to sidebar' }))
+    await waitFor(() => expect(onShow).toHaveBeenCalledWith(['/worktrees/0', '/worktrees/24']))
   })
 
-  it('scopes pinned fallback copy to the repo name without a dismiss action', () => {
-    const markup = renderLine({ placement: 'pinned-fallback', onKeepHidden: undefined })
-
-    expect(markup).toContain('Hiding 4 discovered worktrees in orca')
-    expect(markup).not.toContain('Review')
-    expect(markup).not.toContain('Keep hidden - recover from the project menu')
+  it('opens management without another dismiss action and closes it with Escape', () => {
+    const onClose = vi.fn()
+    renderLine({ managing: true, onClose })
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'Hide workspace suggestions for orca' })).toBeNull()
+    fireEvent.keyDown(screen.getAllByRole('checkbox')[0], { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('normalizes Windows parent path separators in preview groups', () => {
-    const groups = groupWorktreesByParentPath([
-      {
-        id: 'windows-hidden',
-        displayName: 'FeatureX',
-        path: 'C:\\Repos\\Orca\\FeatureX'
-      }
-    ])
-
-    expect(groups).toMatchObject([{ path: 'C:/Repos/Orca' }])
-    expect(groups[0]?.path).not.toBe('C:\\Repos\\Orca')
-  })
-
-  it('keeps Windows drive roots as parent path labels', () => {
-    const groups = groupWorktreesByParentPath([
-      {
-        id: 'windows-root-hidden',
-        displayName: 'FeatureX',
-        path: 'C:/'
-      }
-    ])
-
-    expect(groups).toMatchObject([{ path: 'C:/' }])
-  })
-
-  it('keeps UNC share roots as parent path labels', () => {
-    const groups = groupWorktreesByParentPath([
-      {
-        id: 'unc-root-hidden',
-        displayName: 'ShareRoot',
-        path: '\\\\server\\share'
-      },
-      {
-        id: 'unc-repo-hidden',
-        displayName: 'Repo',
-        path: '\\\\server\\share\\repo'
-      }
-    ])
-
-    expect(groups).toMatchObject([
-      {
-        path: '//server/share',
-        worktrees: [{ id: 'unc-root-hidden' }, { id: 'unc-repo-hidden' }]
-      }
-    ])
-  })
-
-  it('disables actions while pending and renders inline errors', () => {
-    const markup = renderLine({ pending: true, error: 'Could not show imported worktrees.' })
-
-    expect(markup).toContain('aria-busy="true"')
-    expect(markup).toContain('disabled=""')
-    expect(markup).toContain('role="alert"')
-    expect(markup).toContain('Could not show imported worktrees.')
+  it('dismisses suggestions directly without a confirmation or secondary button', async () => {
+    const { onKeepHidden } = renderLine()
+    fireEvent.click(screen.getByRole('button', { name: 'Hide workspace suggestions for orca' }))
+    await waitFor(() => expect(onKeepHidden).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByText('Keep hidden')).toBeNull()
   })
 })

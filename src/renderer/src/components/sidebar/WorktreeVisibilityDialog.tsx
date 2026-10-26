@@ -73,7 +73,7 @@ export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
   const [isToggling, setIsToggling] = useState(false)
   const [listState, setListState] = useState<'checking' | 'ready' | 'failed'>('checking')
 
-  const isOpen = activeModal === 'worktree-visibility'
+  const isOpen = activeModal === 'worktree-visibility' && modalData.inline !== true
   const repoId = typeof modalData.repoId === 'string' ? modalData.repoId : ''
   const {
     detected,

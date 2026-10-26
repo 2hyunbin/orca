@@ -4,15 +4,17 @@ import type { Row } from '../../../../../../shared/sidebar-list/row-types'
 import { getVirtualRowTransform } from '../viewport/virtual-rows'
 import { PendingWorktreeRow } from '../../PendingWorktreeRow'
 import ImportedWorktreesVisibilityLine from '../../ImportedWorktreesVisibilityLine'
-import NewExternalWorktreesInboxLine from '../../NewExternalWorktreesInboxLine'
+import { useAppStore } from '@/store'
+import { getRepoHostIdentity } from '@/store/slices/repo-host-identity'
+import { getRepoExecutionHostId } from '../../../../../../shared/execution-host'
+import type { Repo } from '../../../../../../shared/repo-types'
 import type { ImportedWorktreeCardActionState } from '../../imported-worktrees-card-actions'
-import type { NewExternalWorktreesInboxActionState } from '../../new-external-worktrees-inbox-actions'
 
 export function canKeepImportedWorktreesHidden(
   row: Extract<Row, { type: 'imported-worktrees-card' }>,
   actionState: ImportedWorktreeCardActionState | undefined
 ): boolean {
-  return row.placement === 'repo-group' && actionState?.forceVisible !== true
+  return !row.managing && actionState?.forceVisible !== true
 }
 
 type NoticeRowFrameProps = {
@@ -45,13 +47,22 @@ function NoticeRowFrame({
   )
 }
 
+function focusProjectMenu(repo: Repo): void {
+  requestAnimationFrame(() => {
+    const scope = getRepoHostIdentity(repo)
+    Array.from(document.querySelectorAll<HTMLButtonElement>('[data-workspace-project-menu]'))
+      .find((button) => button.dataset.workspaceProjectMenu === scope)
+      ?.focus({ preventScroll: true })
+  })
+}
+
 export function renderImportedWorktreesVirtualRow(args: {
   row: Extract<Row, { type: 'imported-worktrees-card' }>
   vItem: VirtualItem
   measureVirtualRowElement: (element: HTMLDivElement | null) => void
   actionState: ImportedWorktreeCardActionState | undefined
-  onShow: (projectId: string) => void
-  onKeepHidden: (projectId: string) => void
+  onShow: (repo: Repo, paths: readonly string[]) => Promise<boolean>
+  onKeepHidden: (repo: Repo) => Promise<boolean>
 }): React.JSX.Element {
   const { row, actionState } = args
   return (
@@ -66,14 +77,27 @@ export function renderImportedWorktreesVirtualRow(args: {
         hostContextHostId={row.hostContextHostId}
         hiddenWorktrees={row.hiddenWorktrees}
         placement={row.placement}
+        managing={row.managing}
         pending={actionState?.pending ?? false}
         error={actionState?.error ?? null}
-        onShow={() => args.onShow(row.repo.id)}
+        onShow={(paths) => args.onShow(row.repo, paths)}
         onKeepHidden={
           canKeepImportedWorktreesHidden(row, actionState)
-            ? () => args.onKeepHidden(row.repo.id)
+            ? () => args.onKeepHidden(row.repo)
             : undefined
         }
+        onFocusRecovery={() => focusProjectMenu(row.repo)}
+        onClose={() => {
+          const state = useAppStore.getState()
+          if (
+            state.activeModal === 'worktree-visibility' &&
+            state.modalData.inline === true &&
+            state.modalData.repoId === row.repo.id &&
+            state.modalData.hostId === getRepoExecutionHostId(row.repo)
+          ) {
+            state.closeModal()
+          }
+        }}
       />
     </NoticeRowFrame>
   )
@@ -83,29 +107,19 @@ export function renderNewExternalWorktreesInboxVirtualRow(args: {
   row: Extract<Row, { type: 'new-external-worktrees-inbox' }>
   vItem: VirtualItem
   measureVirtualRowElement: (element: HTMLDivElement | null) => void
-  actionState: NewExternalWorktreesInboxActionState | undefined
-  onReview: (repo: Extract<Row, { type: 'new-external-worktrees-inbox' }>['repo']) => void
-  onSuppress: (projectId: string) => void
+  actionState: ImportedWorktreeCardActionState | undefined
+  onShow: (repo: Repo, paths: readonly string[]) => Promise<boolean>
+  onKeepHidden: (repo: Repo) => Promise<boolean>
 }): React.JSX.Element {
-  const { row, actionState } = args
-  return (
-    <NoticeRowFrame
-      key={args.vItem.key}
-      vItem={args.vItem}
-      measureVirtualRowElement={args.measureVirtualRowElement}
-    >
-      <NewExternalWorktreesInboxLine
-        repoDisplayName={row.repo.displayName}
-        hostContextLabel={row.hostContextLabel}
-        hostContextHostId={row.hostContextHostId}
-        inboxCount={row.inboxWorktrees.length}
-        pending={actionState?.pending ?? false}
-        error={actionState?.error ?? null}
-        onReview={() => args.onReview(row.repo)}
-        onSuppress={() => args.onSuppress(row.repo.id)}
-      />
-    </NoticeRowFrame>
-  )
+  return renderImportedWorktreesVirtualRow({
+    ...args,
+    row: {
+      ...args.row,
+      type: 'imported-worktrees-card',
+      hiddenWorktrees: args.row.inboxWorktrees,
+      placement: 'repo-group'
+    }
+  })
 }
 
 export function renderPendingCreationVirtualRow(args: {

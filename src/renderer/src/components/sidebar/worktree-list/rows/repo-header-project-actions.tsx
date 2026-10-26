@@ -30,10 +30,7 @@ import type { ProjectGroup } from '../../../../../../shared/project-group-types'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { WorktreeVisibilityDefaults } from '../../../../../../shared/global-settings-types'
 import { isGitRepoKind } from '../../../../../../shared/repo-kind'
-import {
-  effectiveExternalWorktreeVisibility,
-  isLegacyRepoForExternalWorktreeVisibility
-} from '../../../../../../shared/worktree/ownership'
+import { getRepoHostIdentity } from '@/store/slices/repo-host-identity'
 import {
   REPO_HEADER_ACTION_BUTTON_CLASS,
   REPO_HEADER_ACTION_REVEAL_CLASS
@@ -44,18 +41,6 @@ import {
   stopRepoHeaderKeyboardToggle,
   stopRepoHeaderMenuEvent
 } from './header-event-guards'
-
-function getWorktreeVisibilityMenuLabel(
-  repo: Repo,
-  visibilityDefaults?: WorktreeVisibilityDefaults
-): string {
-  const visibility = effectiveExternalWorktreeVisibility(
-    repo,
-    isLegacyRepoForExternalWorktreeVisibility(repo),
-    visibilityDefaults
-  )
-  return visibility === 'show' ? 'Hide non-Orca worktrees' : 'Show hidden worktrees'
-}
 
 export type RepoHeaderProjectActions = {
   getWorktreeVisibilityDefaults: (repo: Repo) => WorktreeVisibilityDefaults | undefined
@@ -90,6 +75,7 @@ export function RepoHeaderProjectActionsMenu({
               size="icon-xs"
               className={REPO_HEADER_ACTION_BUTTON_CLASS}
               data-repo-header-action=""
+              data-workspace-project-menu={getRepoHostIdentity(repo)}
               aria-label={translate(
                 'auto.components.sidebar.WorktreeList.609633a9e6',
                 'Project actions for {{value0}}',
@@ -132,7 +118,7 @@ export function RepoHeaderProjectActionsMenu({
         {isGitRepoKind(repo) ? (
           <DropdownMenuItem onSelect={() => actions.onOpenWorktreeVisibility(repo)}>
             <Eye className="size-3.5" />
-            {getWorktreeVisibilityMenuLabel(repo, actions.getWorktreeVisibilityDefaults(repo))}
+            {translate('workspaceDiscovery.manage', 'Manage workspaces')}
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem onSelect={() => actions.onCreateGroupFromRepo(repo)}>
@@ -201,6 +187,7 @@ export function RepoHeaderCreateWorkspaceButton({
               REPO_HEADER_ACTION_REVEAL_CLASS
             )}
             data-repo-header-action=""
+            data-workspace-project-menu={getRepoHostIdentity(repo)}
             tabIndex={0}
             aria-label={createState.ariaLabel}
             onKeyDown={stopRepoHeaderKeyboardToggle}
@@ -225,6 +212,7 @@ export function RepoHeaderCreateWorkspaceButton({
             size="icon-xs"
             className={REPO_HEADER_ACTION_BUTTON_CLASS}
             data-repo-header-action=""
+            data-workspace-project-menu={getRepoHostIdentity(repo)}
             aria-label={createState?.ariaLabel ?? fallbackLabel}
             onKeyDown={stopRepoHeaderKeyboardToggle}
             onPointerDown={handleRepoHeaderActionPointerDown}

@@ -1,32 +1,13 @@
 import React from 'react'
 import { translate } from '@/i18n/i18n'
-import { findRepoForHost } from '@/store/slices/repo-host-identity'
-import type { AppState } from '@/store/types'
-import type { Repo } from '../../../../../../shared/repo-types'
 import { ProjectGroupNameDialog } from '../../ProjectGroupNameDialog'
 import { ProjectGroupDeleteDialog } from '../../ProjectGroupDeleteDialog'
-import SuppressExternalWorktreeInboxDialog from '../../SuppressExternalWorktreeInboxDialog'
-import type { NewExternalWorktreesInboxActionState } from '../../new-external-worktrees-inbox-actions'
 import type { ProjectGroupDialogs } from './use-project-group-dialogs'
 
 export function SidebarWorktreeListDialogs({
-  dialogs,
-  repos,
-  settings,
-  suppressExternalWorktreeInboxRepoId,
-  setSuppressExternalWorktreeInboxRepoId,
-  newExternalWorktreeInboxActionState,
-  onConfirmSuppressExternalWorktreeInbox,
-  onOpenWorktreeVisibility
+  dialogs
 }: {
   dialogs: ProjectGroupDialogs
-  repos: readonly Repo[]
-  settings: AppState['settings']
-  suppressExternalWorktreeInboxRepoId: string | null
-  setSuppressExternalWorktreeInboxRepoId: (repoId: string | null) => void
-  newExternalWorktreeInboxActionState: ReadonlyMap<string, NewExternalWorktreesInboxActionState>
-  onConfirmSuppressExternalWorktreeInbox: () => void
-  onOpenWorktreeVisibility: (repo: Repo) => void
 }): React.JSX.Element {
   const { nameDialog, setNameDialog, deleteDialog, setDeleteDialog } = dialogs
   return (
@@ -63,37 +44,6 @@ export function SidebarWorktreeListDialogs({
           }
         }}
         onSubmit={dialogs.handleSubmitProjectGroupName}
-      />
-      <SuppressExternalWorktreeInboxDialog
-        open={suppressExternalWorktreeInboxRepoId !== null}
-        repoDisplayName={
-          suppressExternalWorktreeInboxRepoId
-            ? (repos.find((repo) => repo.id === suppressExternalWorktreeInboxRepoId)?.displayName ??
-              '')
-            : ''
-        }
-        pending={
-          suppressExternalWorktreeInboxRepoId
-            ? (newExternalWorktreeInboxActionState.get(suppressExternalWorktreeInboxRepoId)
-                ?.pending ?? false)
-            : false
-        }
-        onOpenChange={(open) => {
-          if (!open) {
-            setSuppressExternalWorktreeInboxRepoId(null)
-          }
-        }}
-        onConfirm={onConfirmSuppressExternalWorktreeInbox}
-        onOpenRecovery={() => {
-          if (!suppressExternalWorktreeInboxRepoId) {
-            return
-          }
-          const repo = findRepoForHost(repos, suppressExternalWorktreeInboxRepoId, { settings })
-          setSuppressExternalWorktreeInboxRepoId(null)
-          if (repo) {
-            onOpenWorktreeVisibility(repo)
-          }
-        }}
       />
       <ProjectGroupDeleteDialog
         open={deleteDialog !== null}

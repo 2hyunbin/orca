@@ -97,6 +97,7 @@ describe('imported worktrees card actions', () => {
 
     expect(updateRepo).toHaveBeenCalledWith(projectId, {
       externalWorktreeVisibilityPromptDismissedAt: expect.any(Number),
+      externalWorktreeDiscoverySuppressedAt: expect.any(Number),
       externalWorktreeInboxBaselinePaths: ['/scratch/old', '/scratch/external']
     })
     expect(setCardState).toHaveBeenLastCalledWith(projectId, null)

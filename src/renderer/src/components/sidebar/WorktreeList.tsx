@@ -177,7 +177,11 @@ const WorktreeList = React.memo(function WorktreeList({
   )
   const handleOpenWorktreeVisibility = useCallback(
     (repo: Repo) => {
-      openModal('worktree-visibility', { repoId: repo.id, hostId: getRepoExecutionHostId(repo) })
+      openModal('worktree-visibility', {
+        repoId: repo.id,
+        hostId: getRepoExecutionHostId(repo),
+        inline: true
+      })
     },
     [openModal]
   )
@@ -232,24 +236,7 @@ const WorktreeList = React.memo(function WorktreeList({
 
   return (
     <>
-      <SidebarWorktreeListDialogs
-        dialogs={projectGroupDialogs}
-        repos={repos}
-        settings={settings}
-        suppressExternalWorktreeInboxRepoId={
-          externalWorktreeCards.suppressExternalWorktreeInboxRepoId
-        }
-        setSuppressExternalWorktreeInboxRepoId={
-          externalWorktreeCards.setSuppressExternalWorktreeInboxRepoId
-        }
-        newExternalWorktreeInboxActionState={
-          externalWorktreeCards.newExternalWorktreeInboxActionState
-        }
-        onConfirmSuppressExternalWorktreeInbox={() => {
-          void externalWorktreeCards.handleConfirmSuppressExternalWorktreeInbox()
-        }}
-        onOpenWorktreeVisibility={handleOpenWorktreeVisibility}
-      />
+      <SidebarWorktreeListDialogs dialogs={projectGroupDialogs} />
       <VirtualizedWorktreeViewport
         // Wake moves status headers; preserve viewport identity across those changes.
         key={`group:${groupBy}:host:${filterState.visibleWorkspaceHostIds?.join(',') ?? 'all'}:lineage`}
@@ -274,12 +261,6 @@ const WorktreeList = React.memo(function WorktreeList({
         handleShowImportedWorktrees={externalWorktreeCards.handleShowImportedWorktrees}
         handleKeepImportedWorktreesHidden={externalWorktreeCards.handleKeepImportedWorktreesHidden}
         importedWorktreeCardActionState={externalWorktreeCards.importedWorktreeCardActionState}
-        handleOpenSuppressExternalWorktreeInbox={
-          externalWorktreeCards.handleOpenSuppressExternalWorktreeInbox
-        }
-        newExternalWorktreeInboxActionState={
-          externalWorktreeCards.newExternalWorktreeInboxActionState
-        }
         handleRemoveProject={handleRemoveProject}
         handleCreateGroupFromRepo={projectGroupDialogs.handleCreateGroupFromRepo}
         handleMoveProjectToGroup={projectGroupDialogs.handleMoveProjectToGroup}
