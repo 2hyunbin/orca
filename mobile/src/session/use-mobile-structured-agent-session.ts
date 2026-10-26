@@ -168,7 +168,7 @@ export function useMobileStructuredAgentSession(
     enabled: enabled && connected && hostSupport?.statusFeed === true
   })
   const stopPress = useMobileStructuredStopPress(sessionKey)
-  const { canStop, trackSend } = useMobileStructuredStopOffer({
+  const { canStop, sendsOut } = useMobileStructuredStopOffer({
     sessionKey,
     turnId,
     isWorking,
@@ -198,13 +198,13 @@ export function useMobileStructuredAgentSession(
     accept: sends.accept,
     hold: sends.hold,
     commandPending: commandPendingRef,
+    sendsOut,
     controller: sendController,
     sessionCommands: args.sessionCommands,
     onSendError,
     queueSendsNext,
     sendOptions: hostSupport?.sendOptions === true ? options.sendSelection : undefined
   })
-  const trackedSend = useMemo(() => trackSend(sendWithOutcome), [trackSend, sendWithOutcome])
   const { items, currentRequests, actionablePromptIds, status } = state
   // Prefer host actionability: ended-agent prompts must receive no answer.
   const [approvalPrompt, questionPrompt] = useMemo(() => {
@@ -288,7 +288,7 @@ export function useMobileStructuredAgentSession(
     turnId,
     turnIndicator,
     ...turnTiming,
-    sendWithOutcome: trackedSend,
+    sendWithOutcome,
     cancel: () => void stopPress.track(() => requestCancel()),
     cancelPrompt: (prompt?: { itemId: string; expectedRevision: number }) =>
       requestCancel(prompt ?? pendingStructuredPromptIdentity(stateRef.current)),
