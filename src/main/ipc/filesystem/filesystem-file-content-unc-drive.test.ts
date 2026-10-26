@@ -6,6 +6,7 @@ import {
   localFileHandleMock,
   lstatMock,
   openMock,
+  writeFileMock,
   realpathMock,
   statMock,
   resetFilesystemIpcMocks
@@ -14,8 +15,15 @@ import {
 const diskPreconditionMock = vi.hoisted(() => ({ writeLocalTextFileWithDiskPrecondition: vi.fn() }))
 vi.mock('./local-disk-write-precondition', () => diskPreconditionMock)
 vi.mock('electron', async () => (await import('./filesystem-test-harness')).electronMock)
-vi.mock('fs/promises', async () => (await import('./filesystem-test-harness')).fsPromisesMock)
-vi.mock('node:fs/promises', async () => (await import('./filesystem-test-harness')).fsPromisesMock)
+const mkdirMock = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock('fs/promises', async () => ({
+  ...(await import('./filesystem-test-harness')).fsPromisesMock,
+  mkdir: mkdirMock
+}))
+vi.mock('node:fs/promises', async () => ({
+  ...(await import('./filesystem-test-harness')).fsPromisesMock,
+  mkdir: mkdirMock
+}))
 vi.mock(
   '../../wsl-unc-delete',
   async () => (await import('./filesystem-test-harness')).wslUncDeleteMock
@@ -116,6 +124,47 @@ describe.runIf(process.platform === 'win32')('editor IPC on a UNC drive-mount pr
     expect(diskPreconditionMock.writeLocalTextFileWithDiskPrecondition).toHaveBeenCalledWith(
       readme,
       '# saved\n',
+      undefined
+    )
+  })
+
+  it('creates a file and a folder, and saves a new file, where nothing exists yet', async () => {
+    // Only the project folder exists; WSL still refuses every UNC access.
+    const missing = (target: string): Error =>
+      Object.assign(new Error(`ENOENT: no such file, '${target}'`), { code: 'ENOENT' })
+    const onDisk = (target: string): boolean => target === 'C:\\src\\app'
+    realpathMock.mockImplementation(
+      deniedOnUnc((target) => {
+        if (!onDisk(target)) {
+          throw missing(target)
+        }
+        return target
+      })
+    )
+    lstatMock.mockImplementation(
+      deniedOnUnc((target) => {
+        if (!onDisk(target)) {
+          throw missing(target)
+        }
+        return { ...fileStats, isFile: () => false, isDirectory: () => true }
+      })
+    )
+    const newFile = path.win32.join(unc, 'src', 'new.ts')
+
+    await handlers.get('fs:createFile')!(null, { filePath: newFile })
+    expect(writeFileMock).toHaveBeenCalledWith('C:\\src\\app\\src\\new.ts', '', {
+      encoding: 'utf-8',
+      flag: 'wx'
+    })
+    await handlers.get('fs:createDir')!(null, { dirPath: path.win32.join(unc, 'docs') })
+    expect(mkdirMock).toHaveBeenCalledWith('C:\\src\\app\\docs', { recursive: true })
+    await handlers.get('fs:writeFile')!(null, {
+      filePath: path.win32.join(unc, 'notes.md'),
+      content: 'hi'
+    })
+    expect(diskPreconditionMock.writeLocalTextFileWithDiskPrecondition).toHaveBeenCalledWith(
+      path.win32.join(unc, 'notes.md'),
+      'hi',
       undefined
     )
   })
