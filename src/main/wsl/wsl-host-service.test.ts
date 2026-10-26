@@ -609,6 +609,18 @@ describe('WslHostService', () => {
     await expect(service.isConnected('wsl:ubuntu')).resolves.toBe(true)
   })
 
+  it('an automation wake with no bridge yet connects without a WSL reachability probe', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    await connector.disconnect('Ubuntu')
+    connector.connect.mockClear()
+    connector.reachability.mockClear()
+    await service.wakeForAutomation('wsl:ubuntu')
+    expect(connector.reachability).not.toHaveBeenCalled()
+    expect(connector.connect).toHaveBeenCalledExactlyOnceWith('Ubuntu')
+  })
+
   it('lifts a park on an explicit Connect', async () => {
     const connector = makeConnector([UBUNTU])
     const service = makeService(connector)
