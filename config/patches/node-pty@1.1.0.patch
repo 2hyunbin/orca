@@ -310,7 +310,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..5e67653b45061e9a9cad4b2d461d563e
  #include <thread>
  
  #include <sys/types.h>
-@@ -47,6 +49,36 @@
+@@ -47,6 +49,39 @@
  #include <termios.h>
  #endif
  
@@ -331,13 +331,16 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..5e67653b45061e9a9cad4b2d461d563e
 +__asm__(".symver forkpty,forkpty@" ORCA_GLIBC_COMPAT_VERSION);
 +__asm__(".symver pthread_sigmask,pthread_sigmask@" ORCA_GLIBC_COMPAT_VERSION);
 +/* glibc 2.42 versioned cfset*speed to take literal rates (B38400 == 38400U);
-+ * the pinned compat versions take the legacy CBAUD code, which 2.42+ headers
-+ * rename __B38400 and reject anything else with EINVAL (#19420). */
++ * the pinned compat versions accept only the legacy CBAUD code (named
++ * __B38400 in 2.42+ headers) and return EINVAL otherwise (#19420). */
 +__asm__(".symver cfsetispeed,cfsetispeed@" ORCA_GLIBC_COMPAT_VERSION);
 +__asm__(".symver cfsetospeed,cfsetospeed@" ORCA_GLIBC_COMPAT_VERSION);
 +#    ifdef __B38400
 +#      define ORCA_B38400 __B38400
++#    else
++#      define ORCA_B38400 B38400
 +#    endif
++static_assert(ORCA_B38400 == 0000017, "pinned cfset*speed take legacy CBAUD codes");
 +#  endif
 +#endif
 +#ifndef ORCA_B38400
@@ -347,7 +350,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..5e67653b45061e9a9cad4b2d461d563e
  /* Some platforms name VWERASE and VDISCARD differently */
  #if !defined(VWERASE) && defined(VWERSE)
  #define VWERASE	VWERSE
-@@ -228,6 +260,9 @@ Napi::Value PtyGetProc(const Napi::CallbackInfo& info);
+@@ -228,6 +263,9 @@ Napi::Value PtyGetProc(const Napi::CallbackInfo& info);
  static int
  pty_nonblock(int);
  
@@ -357,7 +360,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..5e67653b45061e9a9cad4b2d461d563e
  #if defined(__APPLE__)
  static char *
  pty_getproc(int);
-@@ -237,13 +272,23 @@ pty_getproc(int, char *);
+@@ -237,13 +275,23 @@ pty_getproc(int, char *);
  #endif
  
  #if defined(__APPLE__) || defined(__OpenBSD__)
@@ -382,7 +385,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..5e67653b45061e9a9cad4b2d461d563e
  #endif
  
  struct DelBuf {
-@@ -345,8 +390,8 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
+@@ -345,8 +393,8 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
    term->c_cc[VSTATUS] = 20;
    #endif
  
@@ -393,7 +396,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..5e67653b45061e9a9cad4b2d461d563e
  
    // helperPath
    std::string helper_path = info[9].As<Napi::String>();
-@@ -367,14 +412,18 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
+@@ -367,14 +415,18 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
      argv[i + 3] = strdup(arg.c_str());
    }
  
@@ -416,7 +419,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..5e67653b45061e9a9cad4b2d461d563e
  #else
    int argc = argv_.Length();
    int argl = argc + 2;
-@@ -445,6 +494,9 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
+@@ -445,6 +497,9 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
        if (pty_nonblock(master) == -1) {
          throw Napi::Error::New(napiEnv, "Could not set master fd to nonblocking.");
        }
@@ -426,7 +429,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..5e67653b45061e9a9cad4b2d461d563e
    }
  #endif
  
-@@ -586,6 +638,23 @@ pty_nonblock(int fd) {
+@@ -586,6 +641,23 @@ pty_nonblock(int fd) {
    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
  }
  
@@ -450,7 +453,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..5e67653b45061e9a9cad4b2d461d563e
  /**
   * pty_getproc
   * Taken from tmux.
-@@ -684,15 +753,73 @@ pty_getproc(int fd, char *tty) {
+@@ -684,15 +756,73 @@ pty_getproc(int fd, char *tty) {
  #endif
  
  #if defined(__APPLE__)
@@ -526,7 +529,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..5e67653b45061e9a9cad4b2d461d563e
  
    for (; count < 3; count++) {
      low_fds[count] = posix_openpt(O_RDWR);
-@@ -706,80 +833,118 @@ pty_posix_spawn(char** argv, char** env,
+@@ -706,80 +836,118 @@ pty_posix_spawn(char** argv, char** env,
                POSIX_SPAWN_SETSID;
    *master = posix_openpt(O_RDWR);
    if (*master == -1) {
