@@ -574,3 +574,55 @@ describe('execution-host conversation writer inspection', () => {
     await expect(check('opencode')).resolves.toBeUndefined()
   })
 })
+
+it.each([10, 100])(
+  'resolves holder coordinates only on refusal across %s execution links',
+  async (count) => {
+    class CountedRuntime extends OrcaRuntimeService {
+      paneReads = 0
+      countReads() {
+        const read = this.paneOfPty.bind(this)
+        this.paneOfPty = (...args) => {
+          this.paneReads++
+          return read(...args)
+        }
+      }
+    }
+    const runtime = new CountedRuntime(
+      ORCA_LAYOUT_OWNER_IS_MAIN ? writerLayoutStore() : null,
+      undefined,
+      { getAgentProviderSessionSnapshot: () => [] }
+    )
+    const leafFor = (i: number) => `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`
+    for (let i = 0; i < count; i++) {
+      const leafId = leafFor(i)
+      const tabId = `tab-${i}`,
+        ptyId = `pty-${i}`
+      bindPaneFirst(runtime, { worktreeId: 'workspace', tabId, leafId, ptyId })
+      runtime.registerPty(ptyId, 'workspace', null, { tabId, leafId, incarnationId: `life-${i}` })
+      runtime.recordCliWriterConversation({
+        paneKey: `${tabId}:${leafId}`,
+        connectionId: null,
+        receivedAt: 1,
+        stateStartedAt: 1,
+        providerSession: { key: 'session_id', id: `conversation-${i}` },
+        payload: { state: 'done', prompt: '', agentType: 'codex' }
+      })
+    }
+    runtime.countReads()
+    await expect(
+      runtime.assertStructuredAdoptionTerminalWritersExited('codex', 'unrelated')
+    ).resolves.toBeUndefined()
+    expect(runtime.paneReads).toBe(0)
+    await expect(
+      runtime.assertStructuredAdoptionTerminalWritersExited('codex', `conversation-${count - 1}`)
+    ).rejects.toMatchObject({
+      refusal: {
+        details: {
+          terminal: { paneKey: `tab-${count - 1}:${leafFor(count - 1)}`, worktreeId: 'workspace' }
+        }
+      }
+    })
+    expect(runtime.paneReads).toBeLessThanOrEqual(2)
+  }
+)

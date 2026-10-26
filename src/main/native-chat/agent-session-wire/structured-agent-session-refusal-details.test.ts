@@ -342,3 +342,27 @@ it('whitelists terminal identity only on terminal refusals, preserving legacy pa
     })
   ).toEqual({ reason: 'attachFailed' })
 })
+
+it('bounds optional holder evidence without changing the refusal from old/new hosts', () => {
+  const reason = 'conversationHeldElsewhere'
+  const terminal = { paneKey: 't:leaf', worktreeId: 'w', incarnationId: 'life' }
+  expect(readAgentSessionRefusalDetails('agent_session_conflict', { reason, terminal })).toEqual({
+    reason,
+    terminal
+  })
+  expect(
+    readAgentSessionRefusalDetails('agent_session_conflict', {
+      reason,
+      terminal: { ...terminal, incarnationId: 'x'.repeat(257) }
+    })
+  ).toEqual({ reason, terminal: { paneKey: 't:leaf', worktreeId: 'w' } })
+  for (const bad of [
+    { ...terminal, paneKey: 'x'.repeat(513) },
+    { ...terminal, worktreeId: 'x'.repeat(4097) },
+    { ...terminal, paneKey: 't\0leaf' }
+  ]) {
+    expect(
+      readAgentSessionRefusalDetails('agent_session_conflict', { reason, terminal: bad })
+    ).toEqual({ reason })
+  }
+})

@@ -1,3 +1,4 @@
+import type { TerminalPaneCloseCallbacks } from '@/constants/terminal'
 import { useAppStore } from '@/store'
 import { closeWebRuntimeSessionTab } from '@/runtime/web-runtime-session-tab-lifecycle'
 import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
@@ -47,14 +48,12 @@ export function closeTerminalTab(
     localPtyTeardownOwnedExternally?: boolean
     precomputedRetirementPlan?: TerminalTabRetirementPlan
     precomputedCloseState?: PrecomputedTerminalCloseState
-    isCurrent?: () => boolean
     onClosed?: () => void
-    onHostClosed?: (closed: boolean) => void
     onCancel?: () => void
-  }
+  } & TerminalPaneCloseCallbacks
 ): void {
-  if (options?.isCurrent?.() === false) {
-    options.onCancel?.()
+  if (options?.signal?.aborted || options?.isCurrent?.() === false) {
+    options?.onCancel?.()
     return
   }
   const state = useAppStore.getState()
@@ -101,6 +100,7 @@ export function closeTerminalTab(
     // Disabling pin prompts must not bypass running-process confirmation for busy pinned tabs (#10142).
     if (shouldConfirmPinnedTabClose(state)) {
       guardPinnedTabClose({
+        signal: options?.signal,
         isPinned: true,
         tabLabel: resolvePinnedTabLabel(state, owningWorktreeId, terminalTabId),
         onClose: () => closeTerminalTab(tabId, { ...options, force: true }),
@@ -115,11 +115,17 @@ export function closeTerminalTab(
   if (shouldConfirmRunningTerminalClose(options)) {
     guardRunningTerminalClose({
       terminalTabId,
+      signal: options?.signal,
       tabLabel: resolvePinnedTabLabel(state, owningWorktreeId, terminalTabId),
       // Re-enter after consent to revalidate pinned, route, and precomputed state against the latest store.
       onClose: () => closeTerminalTab(tabId, { ...options, skipRunningProcessConfirm: true }),
       ...(options?.onCancel ? { onCancel: options.onCancel } : {})
     })
+    return
+  }
+
+  if (options?.onConfirm) {
+    options.onConfirm()
     return
   }
 
@@ -174,10 +180,7 @@ export function closeTerminalTab(
           options?.force || pinnedCloseConsented
           ? { force: true }
           : {})
-    }).then(
-      (outcome) => options?.onHostClosed?.(outcome === 'applied' || outcome === 'unknown-tab'),
-      () => options?.onHostClosed?.(false)
-    )
+    })
     options?.onClosed?.()
     return
   }

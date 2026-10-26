@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { MobileHeldTerminalContext } from './MobileNativeChatNoticeRow'
+import { MobileHeldTerminalContext } from './mobile-held-terminal-context'
 import { Animated, View, Text, Pressable, ActivityIndicator } from 'react-native'
 import { saveTerminalTextScale } from '../storage/preferences'
 import { MobileBrowserPane } from '../browser/MobileBrowserPane'

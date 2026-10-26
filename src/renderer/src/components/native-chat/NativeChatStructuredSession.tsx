@@ -246,7 +246,6 @@ export function NativeChatStructuredSession(
     target: props.target,
     startFailures,
     stopView: continuation.view,
-    retryFor: controller.retryTerminalMessage,
     launch: install.slot.kind === 'install' ? { ...launch, lifecycle: null } : launch,
     agentLabel,
     sessionError,

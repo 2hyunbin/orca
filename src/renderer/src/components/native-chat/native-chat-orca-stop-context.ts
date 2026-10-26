@@ -5,7 +5,6 @@ import { createContext, useContext } from 'react'
 export type NativeChatOrcaStopView = {
   heldTerminal?: {
     executionHostId: ExecutionHostId
-    retryFor: (messageId: string | undefined) => (() => void) | null
   }
   hostLabel: string | null
   remoteHost: boolean

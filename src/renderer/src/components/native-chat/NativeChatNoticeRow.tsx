@@ -76,8 +76,7 @@ export function NativeChatNoticeRow({
   const heldNotice = useHeldTerminalNotice(
     block.failure?.kind === 'conversationOpenInTerminal' ? block.heldByTerminal : undefined,
     holder?.executionHostId,
-    agentName ?? 'The agent',
-    block.heldByTerminal ? (holder?.retryFor(messageId) ?? null) : null
+    agentName ?? 'The agent'
   )
   const look = nativeChatNoticeLook(block)
   if (look.kind === 'divider') {

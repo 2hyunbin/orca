@@ -11,20 +11,17 @@ import {
 } from './terminal-pane-retirement-ownership'
 
 /** An exact scoped handle authorizes close; a native hint cannot name its incarnation. */
-export function retireUnboundRuntimeTerminalPane(
-  args: UnboundTerminalPaneRetirement,
-  onClosed?: (closed: boolean) => void
-): boolean {
+export function retireUnboundRuntimeTerminalPane(args: UnboundTerminalPaneRetirement): void {
   const { getState, tabId, leafId, transport } = args
   if (!transport || transport.getPtyId()) {
-    return false
+    return
   }
   const state = getState()
   const requestedPtyId = state.terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId?.[leafId]
   const remote = requestedPtyId ? parseRemoteRuntimePtyId(requestedPtyId) : null
   const environmentId = remote?.environmentId?.trim()
   if (!requestedPtyId || !remote?.handle || !environmentId) {
-    return false
+    return
   }
   const plan = buildTerminalTabRetirementPlan(state, tabId)
   const identity = getTerminalPtyOwnershipIdentity(state, requestedPtyId, plan.worktreeId)
@@ -41,11 +38,10 @@ export function retireUnboundRuntimeTerminalPane(
     !ownerIsCurrent() ||
     terminalPaneHasOtherOwner(args, identity, plan.worktreeId, leafId)
   ) {
-    return false
+    return
   }
   startTerminalTabProviderRetirement({
     localPtyTeardownOwnedExternally: false,
-    onRuntimeTerminalClosed: onClosed,
     remoteCloseOwnedByHost: false,
     retirementPlan: {
       ...plan,
@@ -61,5 +57,4 @@ export function retireUnboundRuntimeTerminalPane(
     canRetireRuntimeTerminal: () =>
       ownerIsCurrent() && !terminalPaneHasOtherOwner(args, identity, plan.worktreeId)
   })
-  return true
 }

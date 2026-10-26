@@ -1,7 +1,8 @@
-import { createContext, useContext } from 'react'
+import { useContext } from 'react'
+import { MobileHeldTerminalContext } from './mobile-held-terminal-context'
+export { MobileHeldTerminalContext } from './mobile-held-terminal-context'
 import { HELD_TERMINAL_CONTINUE_SENTENCE } from '../../../src/shared/agent-session-failure-copy'
 import { parsePaneKey } from '../../../src/shared/stable-pane-id'
-import type { MobileSessionTab } from './mobile-session-route-types'
 import { getMobileSessionTabTitle } from './mobile-terminal-tab-agent'
 import { tuiAgentDisplayName } from '../../../src/shared/tui-agent-display-names'
 import { StyleSheet, Text, View } from 'react-native'
@@ -19,12 +20,6 @@ import { MobileMarkdown } from '../components/MobileMarkdown'
 import { INLINE_TEXT_SELECTION } from '../components/inline-text-selection'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import { MONO_SIZE, TEXT_SIZE, scaledType } from './mobile-native-chat-message-styles'
-
-export const MobileHeldTerminalContext = createContext<{
-  tabs: readonly MobileSessionTab[]
-  worktreeId: string
-  agent: string
-} | null>(null)
 
 const TONE_COLOR: Record<NativeChatNoticeTone, string> = {
   warning: colors.statusAmber,
@@ -117,6 +112,8 @@ export function MobileNativeChatNoticeRow({
           ? holder.tabs.find(
               (tab) =>
                 tab.type === 'terminal' &&
+                !!notice.heldByTerminal?.incarnationId &&
+                tab.incarnationId === notice.heldByTerminal.incarnationId &&
                 (tab.parentTabId ?? tab.id) === pane.tabId &&
                 tab.leafId === pane.leafId
             )
@@ -125,7 +122,7 @@ export function MobileNativeChatNoticeRow({
         tab && holder
           ? HELD_TERMINAL_CONTINUE_SENTENCE.replace(/<\/?terminal>/g, '')
               .replace('{{agent}}', tuiAgentDisplayName(holder.agent))
-              .replace('{{terminal}}', getMobileSessionTabTitle(tab))
+              .replace('{{terminal}}', getMobileSessionTabTitle(tab) ?? tab.title)
           : usageLimitLineText(notice)
       const textStyle = [
         styles.line,

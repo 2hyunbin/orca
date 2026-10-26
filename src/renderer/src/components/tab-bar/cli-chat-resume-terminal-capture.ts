@@ -4,6 +4,7 @@ import type { CliChatResumeSource } from './cli-chat-resume-source'
 import type { RuntimeTerminalResolvePane } from '../../../../shared/runtime-types'
 import { getRemoteRuntimePtyOwner } from '@/runtime/runtime-terminal-stream'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
+import { toHostSessionPaneKey } from '../../../../shared/terminal-surface-id'
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 
 import { parseHostAuthorityKey } from '../../../../shared/host-authority'
@@ -14,7 +15,12 @@ import {
 } from '../../../../shared/terminal-tab-close'
 
 /** Capture the existing host handle and incarnation before starting the destination. */
-export async function captureSourceTerminal(source: CliChatResumeSource) {
+export async function captureSourceTerminal(
+  source: Pick<
+    CliChatResumeSource,
+    'tabId' | 'workspaceId' | 'paneKey' | 'executionHostId' | 'ptyId'
+  >
+) {
   const owner = source.ptyId ? getRemoteRuntimePtyOwner(source.ptyId) : null
   if (isRemoteRuntimePtyId(source.ptyId) && !owner) {
     return null
@@ -40,13 +46,15 @@ export async function captureSourceTerminal(source: CliChatResumeSource) {
   ) {
     return null
   }
+  const hostPaneKey = owner ? toHostSessionPaneKey(source.paneKey) : source.paneKey
+  const hostTabId = hostPaneKey.slice(0, hostPaneKey.indexOf(':'))
   const target = owner?.target ?? { kind: 'local' as const }
   try {
     const { terminal } = await callRuntimeRpc<{ terminal: RuntimeTerminalResolvePane }>(
       target,
       'terminal.resolvePane',
       {
-        paneKey: source.paneKey,
+        paneKey: hostPaneKey,
         worktreeId: source.workspaceId
       }
     )
@@ -57,7 +65,7 @@ export async function captureSourceTerminal(source: CliChatResumeSource) {
       !original ||
       !terminal.incarnationId ||
       original.worktreeId !== source.workspaceId ||
-      original.tabId !== source.tabId ||
+      original.tabId !== hostTabId ||
       original.leafId !== leafId ||
       (terminal.executionHostId != null && terminal.executionHostId !== authority?.at) ||
       original.ptyId !== terminal.ptyId ||

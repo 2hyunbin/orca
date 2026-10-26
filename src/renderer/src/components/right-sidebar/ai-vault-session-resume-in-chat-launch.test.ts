@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   beginStructuredAgentSessionProvisionalLaunch: vi.fn<(args: BeginArgs) => Launch | null>(),
   prepareAiVaultSessionForResume: vi.fn<() => Promise<{ sessionId: string }>>(),
   activateAndRevealWorkspace: vi.fn<(workspaceId: string) => unknown>(),
-  heldToast: vi.fn<(input: { fallback: string; onContinue: () => Promise<void> }) => void>(),
+  heldToast: vi.fn<(input: { fallback: string; executionHostId?: string }) => void>(),
   toastError: vi.fn<(message: string) => void>(),
   admitStructuredLaunchOnHost:
     vi.fn<(target: unknown, worktree: string, agent: string) => Promise<{ kind: string }>>(),
@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../native-chat/native-chat-held-terminal', () => ({
-  toastHeldTerminal: (input: { fallback: string; onContinue: () => Promise<void> }) => {
+  toastHeldTerminal: (input: { fallback: string; executionHostId?: string }) => {
     mocks.heldToast(input)
     mocks.toastError(input.fallback)
   }
@@ -231,7 +231,8 @@ describe('resumeAiVaultSessionInNewChat', () => {
   })
 })
 
-it('continues a refused replacement with a fresh request and frozen slot, settling its owner once', async () => {
+it('keeps refused History publication deferred and offers no automatic retry', async () => {
+  vi.clearAllMocks()
   const onSettled = vi.fn(() => false)
   const failure = Object.assign(new Error('held'), {
     refusal: {
@@ -254,13 +255,9 @@ it('continues a refused replacement with a fresh request and frozen slot, settli
   })
   await vi.waitFor(() => expect(mocks.heldToast).toHaveBeenCalledOnce())
   const recovery = mocks.heldToast.mock.calls[0][0]
-  await recovery.onContinue()
-  const resumed = mocks.beginStructuredAgentSessionProvisionalLaunch.mock.calls.at(-1)?.[0]
-  expect(resumed?.plan).not.toMatchObject({ requestId: 'first-click' })
-  expect(resumed).not.toHaveProperty('afterTabId')
-  expect(resumed).not.toHaveProperty('focusIntent')
-  expect(resumed).toMatchObject({
-    target: { surfaceAddress: { worktreeId: 'worktree-1' } },
+  expect(recovery).not.toHaveProperty('onContinue')
+  expect(mocks.beginStructuredAgentSessionProvisionalLaunch).toHaveBeenCalledOnce()
+  expect(mocks.beginStructuredAgentSessionProvisionalLaunch.mock.calls[0][0]).toMatchObject({
     deferPublication: true
   })
   expect(onSettled).toHaveBeenCalledOnce()

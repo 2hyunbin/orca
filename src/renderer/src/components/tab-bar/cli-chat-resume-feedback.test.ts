@@ -7,9 +7,6 @@ const mocks = vi.hoisted(() => ({
   activate: vi.fn()
 }))
 vi.mock('../native-chat/native-chat-held-terminal', () => ({ toastHeldTerminal: mocks.toast }))
-vi.mock('../right-sidebar/ai-vault-session-resume-in-chat-launch', () => ({
-  resumeCliConversationInNewChat: mocks.resume
-}))
 vi.mock('@/lib/structured-agent-session-launch-surface', () => ({
   captureStructuredLaunchSurfaceAddress: () => ({
     worktreeId: 'w',
@@ -28,7 +25,7 @@ import { startCliChatReturn, toastCliChatResumeFailure } from './cli-chat-resume
 const source: CliChatResumeSource = {
   tabId: 'source',
   workspaceId: 'w',
-  paneKey: 'source:l',
+  paneKey: 'source:11111111-1111-4111-8111-111111111111',
   agent: 'codex',
   providerSessionId: 'conversation',
   executionHostId: 'local',
@@ -39,33 +36,26 @@ const refusal = {
   message: 'held',
   details: {
     reason: 'conversationOpenInTerminal',
-    terminal: { paneKey: 'source:l', worktreeId: 'w' }
+    terminal: { paneKey: 'source:11111111-1111-4111-8111-111111111111', worktreeId: 'w' }
   }
 }
 beforeEach(() => vi.clearAllMocks())
-it('create recovery retains identity and slot without recapturing or retiring its removed source', async () => {
+it('offers only Close for a refused create; a later continuation remains an explicit action', () => {
   toastCliChatResumeFailure(source, Object.assign(new Error('held'), { refusal }))
-  const recovery = mocks.toast.mock.calls[0][0]
-  await recovery.onContinue()
-  expect(mocks.resume).toHaveBeenCalledExactlyOnceWith({
-    rowAgent: 'codex',
-    executionHostId: 'local',
-    worktreeId: 'w',
-    providerSessionId: 'conversation',
-    surfaceAddress: { worktreeId: 'w', precedingTabIds: ['before', 'source'] }
-  })
-})
-it('switch recovery switches and reveals the same existing chat after its source is gone', async () => {
-  mocks.call.mockResolvedValueOnce({ ok: false, refusal }).mockResolvedValueOnce({ ok: true })
-  expect(await startCliChatReturn(source, 'existing', { kind: 'local' })).toBe(false)
-  await mocks.toast.mock.calls[0][0].onContinue()
-  expect(mocks.call).toHaveBeenNthCalledWith(2, { kind: 'local' }, 'agentSession.switchToChat', {
-    sessionId: 'existing'
-  })
-  expect(mocks.resume).not.toHaveBeenCalled()
-  expect(mocks.activate).toHaveBeenCalledExactlyOnceWith(
-    { structuredSession: { sessionId: 'existing', workspaceId: 'w' } },
-    undefined,
-    { kind: 'local' }
+  expect(mocks.toast).toHaveBeenCalledWith(
+    expect.objectContaining({ terminal: refusal.details.terminal, executionHostId: 'local' })
   )
+  expect(mocks.toast.mock.calls[0][0]).not.toHaveProperty('onContinue')
+  expect(mocks.resume).not.toHaveBeenCalled()
+  expect(mocks.call).not.toHaveBeenCalled()
+})
+it('does not repeat a refused switch or activate its chat automatically', async () => {
+  mocks.call.mockResolvedValueOnce({ ok: false, refusal })
+  expect(await startCliChatReturn(source, 'existing', { kind: 'local' })).toBe(false)
+  expect(mocks.toast.mock.calls[0][0]).not.toHaveProperty('onContinue')
+  expect(mocks.call).toHaveBeenCalledOnce()
+  expect(mocks.activate).not.toHaveBeenCalled()
+  mocks.call.mockResolvedValueOnce({ ok: true })
+  expect(await startCliChatReturn(source, 'existing', { kind: 'local' })).toBe(true)
+  expect(mocks.call).toHaveBeenCalledTimes(2)
 })

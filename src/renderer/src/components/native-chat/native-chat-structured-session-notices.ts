@@ -35,7 +35,7 @@ function nativeChatLaunchNotice({
   failure?: StructuredLaunchFailure | null
   agentLabel?: string
   onRetry: () => void
-  heldTerminal?: { content: React.JSX.Element; action?: NativeChatComposerNotice['action'] } | null
+  heldTerminal?: { content?: React.JSX.Element; action?: NativeChatComposerNotice['action'] } | null
   /** Replace Retry with sign-in until authentication succeeds. */
   claudeSignIn?: NativeChatClaudeSignIn | null
 }): NativeChatComposerNotice | null {
@@ -103,7 +103,7 @@ export function structuredSessionNotices({
   agentLabel: string
   sessionError: string | null
   composerError: (NativeChatComposerNoticeContent & { onDismiss: () => void }) | null
-  heldTerminal?: { content: React.JSX.Element; action?: NativeChatComposerNotice['action'] } | null
+  heldTerminal?: { content?: React.JSX.Element; action?: NativeChatComposerNotice['action'] } | null
   claudeSignIn?: NativeChatClaudeSignIn | null
   availability?: NativeChatComposerNotice | null
   hostPermission?: NativeChatComposerNotice | null
@@ -141,22 +141,18 @@ export function useStructuredSessionNotices(
     target: RuntimeClientTarget
     startFailures: readonly AgentSessionFailureFact[]
     stopView: NativeChatOrcaStopView
-    retryFor: NonNullable<NativeChatOrcaStopView['heldTerminal']>['retryFor']
   }
 ) {
-  const { target, retryFor, stopView } = input
+  const { target, stopView } = input
   const executionHostId = executionHostIdForStructuredTarget(target)
   const view = useMemo(
-    () => ({ ...stopView, heldTerminal: { executionHostId, retryFor } }),
-    [stopView, executionHostId, retryFor]
+    () => ({ ...stopView, heldTerminal: { executionHostId } }),
+    [stopView, executionHostId]
   )
   const heldTerminal = useHeldTerminalNotice(
-    input.launch.failure?.details && 'terminal' in input.launch.failure.details
-      ? input.launch.failure.details.terminal
-      : undefined,
+    input.launch.failure?.terminal,
     executionHostId,
-    input.agentLabel,
-    input.launch.retry
+    input.agentLabel
   )
   const claudeSignIn = useNativeChatClaudeSignIn({
     agent: input.agent,

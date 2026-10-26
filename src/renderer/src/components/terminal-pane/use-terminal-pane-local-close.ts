@@ -1,10 +1,8 @@
-import type { TerminalPaneCloseCallbacks } from '@/constants/terminal'
 import { useCallback } from 'react'
 import { useAppStore } from '../../store'
 import type { TerminalPaneBindingController } from './use-terminal-pane-layout-bindings'
 import { retireUnboundRuntimeTerminalPane } from './retire-unbound-runtime-terminal-pane'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
-import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { closeWebRuntimeTerminal } from '@/runtime/web-runtime-terminal-actions'
 import { clearPaneTerminalError } from './terminal-error-accumulation'
 import { retireUnboundIpcTerminalPane } from './retire-unbound-ipc-terminal-pane'
@@ -25,23 +23,19 @@ export function useTerminalPaneLocalClose(controller: TerminalPaneBindingControl
   } = controller
   // The window's half of a split pane's close: its transport, status and pane go.
   const closePaneLocally = useCallback(
-    (paneId: number, committedLeafId?: string, callbacks?: TerminalPaneCloseCallbacks) => {
+    (paneId: number, committedLeafId?: string) => {
       const manager = managerRef.current
       // Why the pane check: main's answer can land after the pane already went.
       if (!manager || (committedLeafId && manager.getLeafId(paneId) !== committedLeafId)) {
-        callbacks?.onCancel?.()
         return
       }
       // A sibling went while main answered: this pane is now the tab's last, so the tab closes.
       if (committedLeafId && manager.getPanes().length <= 1) {
-        onCloseTab(callbacks)
+        onCloseTab()
         return
       }
       const ptyId = paneTransportsRef.current.get(paneId)?.getPtyId() ?? null
-      const sent = closeWebRuntimeTerminal(ptyId, worktreeId, callbacks?.onHostClosed)
-      if (!sent && isRemoteRuntimePtyId(ptyId)) {
-        callbacks?.onHostClosed?.(false)
-      }
+      closeWebRuntimeTerminal(ptyId, worktreeId)
       clearSessionRestoredBannerForPane(paneId)
       const leafId = manager.getLeafId(paneId)
       if (leafId) {
@@ -67,25 +61,18 @@ export function useTerminalPaneLocalClose(controller: TerminalPaneBindingControl
       }
       setTerminalErrorsByPaneId((current) => clearPaneTerminalError(current, paneId))
       if (leafId) {
-        const retiring = retireUnboundRuntimeTerminalPane(
-          {
-            getState: useAppStore.getState,
-            tabId,
-            leafId,
-            transport: paneTransportsRef.current.get(paneId),
-            getTransports: () => paneTransportsRef.current
-          },
-          callbacks?.onHostClosed
-        )
-        if (!ptyId && !retiring) {
-          callbacks?.onHostClosed?.(false)
-        }
+        retireUnboundRuntimeTerminalPane({
+          getState: useAppStore.getState,
+          tabId,
+          leafId,
+          transport: paneTransportsRef.current.get(paneId),
+          getTransports: () => paneTransportsRef.current
+        })
         syncPanePtyLayoutBindingForLeaf?.(leafId, null, paneId)
       } else {
         syncPanePtyLayoutBinding(paneId, null)
       }
       manager.closePane(paneId)
-      callbacks?.onClosed?.()
     },
     [
       clearSessionRestoredBannerForPane,

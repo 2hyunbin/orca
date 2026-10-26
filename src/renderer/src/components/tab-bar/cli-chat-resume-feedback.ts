@@ -1,7 +1,5 @@
 import { toastHeldTerminal } from '../native-chat/native-chat-held-terminal'
 import { executionHostIdForStructuredTarget } from '@/runtime/structured-agent-session-owner'
-import { resumeCliConversationInNewChat } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
-import { captureStructuredLaunchSurfaceAddress } from '@/lib/structured-agent-session-launch-surface'
 import { useAppStore } from '@/store'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getIndexedWorktreeById } from '@/store/worktree-repo-index'
@@ -51,13 +49,7 @@ export async function switchIntoOwner(
     await activateAiVaultStructuredSession({ structuredSession }, undefined, target)
     return false
   }
-  if (
-    !(await startCliChatReturn(
-      { ...source, workspaceId: structuredSession.workspaceId },
-      structuredSession.sessionId,
-      target
-    ))
-  ) {
+  if (!(await startCliChatReturn(source, structuredSession.sessionId, target))) {
     return false
   }
   const shown = await activateAiVaultStructuredSessionVerified(
@@ -116,7 +108,7 @@ export async function switchIntoOwner(
 
 /** Explicit returns await the selected child; ordinary lazy creation remains unchanged. */
 export async function startCliChatReturn(
-  source: Pick<CliChatResumeSource, 'agent' | 'workspaceId'>,
+  source: Pick<CliChatResumeSource, 'agent'>,
   sessionId: string,
   target: RuntimeClientTarget
 ): Promise<boolean> {
@@ -133,19 +125,10 @@ export async function startCliChatReturn(
       failure.details?.reason === 'conversationOpenInTerminal'
     ) {
       toastHeldTerminal({
-        terminal: failure.details.terminal,
+        terminal: failure.terminal,
         executionHostId: executionHostIdForStructuredTarget(target),
         agent: agentLabel(source.agent),
-        fallback: cliConversationExitGuidance(source.agent, true),
-        onContinue: async () => {
-          if (await startCliChatReturn(source, sessionId, target)) {
-            await activateAiVaultStructuredSession(
-              { structuredSession: { sessionId, workspaceId: source.workspaceId } },
-              undefined,
-              target
-            )
-          }
-        }
+        fallback: cliConversationExitGuidance(source.agent, true)
       })
     } else {
       toast.error(
@@ -168,23 +151,11 @@ export function toastCliChatResumeFailure(source: CliChatResumeSource, error: un
     (refusal?.code === 'agent_session_operation_invalid' &&
       refusal.details?.reason === 'conversationOpenInTerminal')
   ) {
-    const resume = {
-      rowAgent: source.agent,
-      executionHostId: source.executionHostId,
-      worktreeId: source.workspaceId,
-      providerSessionId: source.providerSessionId,
-      surfaceAddress: captureStructuredLaunchSurfaceAddress(
-        source.workspaceId,
-        undefined,
-        source.tabId
-      )
-    }
     toastHeldTerminal({
-      terminal: refusal.details?.terminal,
+      terminal: refusal.terminal,
       executionHostId: source.executionHostId,
       agent: agentLabel(source.agent),
-      fallback: cliConversationExitGuidance(source.agent, true),
-      onContinue: () => resumeCliConversationInNewChat(resume)
+      fallback: cliConversationExitGuidance(source.agent, true)
     })
     return
   }

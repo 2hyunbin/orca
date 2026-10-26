@@ -1,4 +1,3 @@
-import type { RuntimeTerminalClose } from '../../../../shared/runtime-types'
 import {
   captureRuntimeEnvironmentRequestRevision,
   getRuntimeEnvironmentRevision
@@ -20,15 +19,13 @@ export function startTerminalTabProviderRetirement({
   retirementPlan,
   state,
   tabId,
-  canRetireRuntimeTerminal,
-  onRuntimeTerminalClosed
+  canRetireRuntimeTerminal
 }: {
   localPtyTeardownOwnedExternally: boolean
   remoteCloseOwnedByHost: boolean
   retirementPlan: TerminalTabRetirementPlan
   state: AppState
   tabId: string
-  onRuntimeTerminalClosed?: (closed: boolean) => void
   canRetireRuntimeTerminal?: () => boolean
 }): void {
   const { worktreeId } = retirementPlan
@@ -51,16 +48,7 @@ export function startTerminalTabProviderRetirement({
       }
       const environmentId = terminal.environmentId ?? fallbackWorktreeRoute?.runtimeEnvironmentId
       retirementTasks.push(
-        retireRuntimeTerminal(environmentId, terminal.handle, canRetireRuntimeTerminal).then(
-          (result) => {
-            onRuntimeTerminalClosed?.(!!result?.close && result.close.ptyStopVerdict === undefined)
-            return result
-          },
-          (error) => {
-            onRuntimeTerminalClosed?.(false)
-            throw error
-          }
-        )
+        retireRuntimeTerminal(environmentId, terminal.handle, canRetireRuntimeTerminal)
       )
     }
   }
@@ -95,14 +83,12 @@ async function retireRuntimeTerminal(
   environmentId: string | null | undefined,
   handle: string,
   canRetire?: () => boolean
-): Promise<{ close: RuntimeTerminalClose } | undefined> {
+): Promise<unknown> {
   const target = environmentId
     ? { kind: 'environment' as const, environmentId }
     : { kind: 'local' as const }
   if (!canRetire) {
-    return callRuntimeRpc<{ close: RuntimeTerminalClose }>(target, 'terminal.close', {
-      terminal: handle
-    })
+    return callRuntimeRpc(target, 'terminal.close', { terminal: handle })
   }
   const revision = environmentId
     ? captureRuntimeEnvironmentRequestRevision(environmentId)
@@ -119,7 +105,7 @@ async function retireRuntimeTerminal(
     return
   }
   // Compatibility was checked above; recheck pane ownership at the actual dispatch boundary.
-  return callRuntimeRpc<{ close: RuntimeTerminalClose }>(
+  return callRuntimeRpc(
     target,
     'terminal.close',
     { terminal: handle },

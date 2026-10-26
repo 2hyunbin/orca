@@ -9,11 +9,18 @@ import { installIpcPtyWindow, restorePtySpecWindow } from './pty-transport-test-
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 
+const effectOwner = vi.hoisted(() => ({
+  effect: undefined as (() => (() => void) | void) | undefined
+}))
+export const mountPendingCloseOwner = () => effectOwner.effect?.()
+
 const store = vi.hoisted((): { current: AppState | null } => ({ current: null }))
 vi.mock('../../store', () => ({ useAppStore: { getState: () => store.current } }))
 vi.mock('react', () => ({
   useCallback: (fn: unknown) => fn,
-  useEffect: () => {},
+  useEffect: (effect: () => (() => void) | void) => {
+    effectOwner.effect = effect
+  },
   useImperativeHandle: () => {},
   useRef: (current: unknown) => ({ current })
 }))

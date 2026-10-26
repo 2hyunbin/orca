@@ -56,7 +56,8 @@ export type TerminalPaneCloseCallbacks = {
   isCurrent?: () => boolean
   onClosed?: () => void
   onCancel?: () => void
-  onHostClosed?: (closed: boolean) => void
+  onConfirm?: () => void
+  signal?: AbortSignal
 }
 
 /** Unlike a split request, a close always names its tab: an untargeted close must not reach every mounted pane. */

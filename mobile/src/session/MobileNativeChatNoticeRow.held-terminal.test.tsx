@@ -26,12 +26,13 @@ const heldScreen = {
       leafId,
       title: 'Review',
       terminal: 'pty',
+      incarnationId: 'life',
       isActive: false
     }
   ]
 } satisfies NonNullable<ContextType<typeof MobileHeldTerminalContext>>
 const missingScreen = { ...heldScreen, tabs: [] }
-it.each(['named', 'workspace', 'missing'] as const)(
+it.each(['named', 'workspace', 'missing', 'replaced', 'legacy'] as const)(
   'renders a plain title only for the matching screen: %s',
   (kind) => {
     const text = renderToStaticMarkup(
@@ -46,7 +47,8 @@ it.each(['named', 'workspace', 'missing'] as const)(
               failure: { kind: 'conversationOpenInTerminal' },
               heldByTerminal: {
                 paneKey: `t:${leafId}`,
-                worktreeId: kind === 'workspace' ? 'other' : 'w'
+                worktreeId: kind === 'workspace' ? 'other' : 'w',
+                incarnationId: kind === 'legacy' ? undefined : kind === 'replaced' ? 'old' : 'life'
               }
             }
           ]}

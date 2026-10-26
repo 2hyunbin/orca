@@ -164,8 +164,7 @@ function getPendingWebRuntimeSplitMirrorTelemetryKey(
 /** `worktreeId`: the pane's workspace, whose server frames redraw a pane the server kept. */
 export function closeWebRuntimeTerminal(
   ptyId: string | null | undefined,
-  worktreeId?: string,
-  onClosed?: (closed: boolean) => void
+  worktreeId?: string
 ): boolean {
   if (!ptyId) {
     return false
@@ -187,13 +186,9 @@ export function closeWebRuntimeTerminal(
       timeoutMs: 15_000
     })
     .then((response) => {
-      const { close } = unwrapRuntimeRpcResult(
-        response as RuntimeRpcResponse<{ close: RuntimeTerminalClose }>
-      )
-      onClosed?.(close.ptyStopVerdict === undefined)
+      unwrapRuntimeRpcResult(response as RuntimeRpcResponse<{ close: RuntimeTerminalClose }>)
     })
     .catch((error) => {
-      onClosed?.(false)
       // Switch point: the window already dropped the pane; the server's frames draw what it kept.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && worktreeId) {
         redrawServerLayoutWorkspace(environmentId, worktreeId)

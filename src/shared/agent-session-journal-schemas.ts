@@ -246,8 +246,13 @@ const KnownItemBody = z.discriminatedUnion('kind', [
     threadGoal: AgentJournalThreadGoalStateSchema.optional(),
     failure: AgentSessionFailureFactSchema.optional(),
     heldByTerminal: z
-      .object({ paneKey: z.string().min(1), worktreeId: z.string().min(1) })
-      .optional(),
+      .object({
+        paneKey: z.string().min(1).max(512),
+        worktreeId: z.string().min(1).max(4096),
+        incarnationId: z.string().min(1).max(256).optional().catch(undefined)
+      })
+      .optional()
+      .catch(undefined),
     orcaStop: z.object({ cause: z.string().min(1) }).optional()
   }),
   z.object({

@@ -1,7 +1,6 @@
 import { captureStructuredLaunchSurfaceAddress } from '@/lib/structured-agent-session-launch-surface'
 import { toastHeldTerminal } from '../native-chat/native-chat-held-terminal'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
-import type { StructuredLaunchSurfaceAddress } from '@/lib/agent-session/launch/structured-agent-session-launch-record'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
@@ -14,7 +13,7 @@ import {
 import { hasRuntimeRpcErrorCode } from '../../../../shared/runtime-rpc-error-code'
 import { prepareAiVaultSessionForResume } from '@/lib/ai-vault-session-resume-preparation'
 import { adoptAgentSessionLaunchVerdict } from '@/lib/agent-session-launch-plan'
-import { newAgentLaunchRequestId, type AgentLaunchRequestId } from '@/lib/agent-launch-request-id'
+import type { AgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 import {
   beginStructuredAgentSessionProvisionalLaunch,
@@ -50,67 +49,27 @@ export async function resumeAiVaultSessionInNewChat(
   requestId: AgentLaunchRequestId,
   replacing?: AiVaultChatReplacement
 ): Promise<void> {
-  try {
-    const prepared = await prepareAiVaultSessionForResume(session)
-    await resumeCliConversationInNewChat(
-      {
-        rowAgent,
-        worktreeId,
-        providerSessionId: prepared.sessionId,
-        executionHostId: session.executionHostId
-      },
-      requestId,
-      replacing
-    )
-  } catch (error) {
-    notifyAiVaultSessionResumeInChatFailure(error, rowAgent)
-    replacing?.onSettled(null)
-  }
-}
-
-export async function resumeCliConversationInNewChat(
-  input: {
-    rowAgent: CliConversationRowAgent
-    worktreeId: string
-    providerSessionId: string
-    executionHostId?: ExecutionHostId
-    surfaceAddress?: StructuredLaunchSurfaceAddress
-  },
-  requestId = newAgentLaunchRequestId(),
-  replacing?: AiVaultChatReplacement
-): Promise<void> {
-  const { rowAgent, worktreeId, providerSessionId } = input
   const owner = structuredLaunchOwner(
-    { route: 'structured-native-chat', executionHostId: input.executionHostId },
+    { route: 'structured-native-chat', executionHostId: session.executionHostId },
     worktreeId
   )
-  const frozen = {
-    ...input,
-    executionHostId: owner?.executionHostId,
-    surfaceAddress:
-      input.surfaceAddress ??
-      captureStructuredLaunchSurfaceAddress(worktreeId, undefined, replacing?.afterTabId)
-  }
+  const surfaceAddress = captureStructuredLaunchSurfaceAddress(
+    worktreeId,
+    undefined,
+    replacing?.afterTabId
+  )
   const notify = (error: unknown) =>
-    notifyAiVaultSessionResumeInChatFailure(
-      error,
-      rowAgent,
-      owner
-        ? {
-            executionHostId: owner.executionHostId,
-            onContinue: () => resumeCliConversationInNewChat(frozen)
-          }
-        : undefined
-    )
+    notifyAiVaultSessionResumeInChatFailure(error, rowAgent, owner?.executionHostId)
   try {
-    const agent = await adoptingAgentOnHost(rowAgent, worktreeId, frozen.executionHostId)
+    const preparedSession = await prepareAiVaultSessionForResume(session)
+    const agent = await adoptingAgentOnHost(rowAgent, worktreeId, owner?.executionHostId)
     const plan = adoptAgentSessionLaunchVerdict({
       route: 'structured-native-chat',
       requestId,
-      executionHostId: frozen.executionHostId,
+      executionHostId: owner?.executionHostId,
       agent,
       worktreeId,
-      resumeFrom: { providerSessionId: providerSessionId }
+      resumeFrom: { providerSessionId: preparedSession.sessionId }
     })
     const selection = useAppStore.getState()
     const launch = beginStructuredAgentSessionProvisionalLaunch({
@@ -120,7 +79,7 @@ export async function resumeCliConversationInNewChat(
         ? { afterTabId: replacing.afterTabId, focusIntent: replacing.focusIntent }
         : {}),
       deferPublication: true,
-      target: { surfaceAddress: frozen.surfaceAddress }
+      target: { surfaceAddress }
     })
     if (!launch) {
       replacing?.onSettled(null)
@@ -181,17 +140,21 @@ export async function adoptingAgentOnHost(
 function notifyAiVaultSessionResumeInChatFailure(
   error: unknown,
   rowAgent: CliConversationRowAgent,
-  recovery?: { executionHostId: ExecutionHostId; onContinue: () => Promise<void> }
+  executionHostId?: ExecutionHostId
 ): void {
   const failure = structuredLaunchFailure(error)
   if (
     hasRuntimeRpcErrorCode(error, 'agent_session_conflict') ||
     failure?.code === 'agent_session_conflict'
   ) {
-    if (failure?.details?.reason === 'conversationHeldElsewhere' && !failure.owner && recovery) {
+    if (
+      failure?.details?.reason === 'conversationHeldElsewhere' &&
+      !failure.owner &&
+      executionHostId
+    ) {
       toastHeldTerminal({
-        ...recovery,
-        terminal: 'terminal' in failure.details ? failure.details.terminal : undefined,
+        executionHostId,
+        terminal: failure.terminal,
         agent: agentLabel(rowAgent),
         fallback: cliConversationExitGuidance(rowAgent)
       })

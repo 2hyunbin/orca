@@ -70,11 +70,17 @@ export async function assertCliConversationWritersExited(
   providerSessionId: string,
   source?: CliWriterCoordinates
 ): Promise<void> {
-  const refuse = (at?: { paneKey?: string; worktreeId?: string }) =>
+  const refuse = (at?: { paneKey?: string; worktreeId?: string }, pane?: CliWriterPane | null) =>
     agentSessionRefusalError('agent_session_conflict', {
       reason: 'conversationHeldElsewhere',
       ...(at?.paneKey && at.worktreeId
-        ? { terminal: { paneKey: at.paneKey, worktreeId: at.worktreeId } }
+        ? {
+            terminal: {
+              paneKey: at.paneKey,
+              worktreeId: at.worktreeId,
+              ...(pane ? { incarnationId: pane.incarnationId } : {})
+            }
+          }
         : {})
     })
   const isConversation = (rowAgent: unknown, id: string | undefined) =>
@@ -103,7 +109,7 @@ export async function assertCliConversationWritersExited(
       !(await host.shellAlone(pane)) ||
       read()?.pane?.identity !== pane.identity
     ) {
-      throw refuse(at)
+      throw refuse(at, pane)
     }
     proofs.push(
       () => !host.sleeping(at.worktreeId ?? '') && read()?.pane?.identity === pane.identity
@@ -169,7 +175,7 @@ export async function assertCliConversationWritersExited(
         presence === 'unverifiable' ||
         (pane && paneOf(row)?.identity !== pane.identity)
       ) {
-        throw refuse(row)
+        throw refuse(row, pane)
       }
       if (!host.terminal(row)) {
         proofs.push(() => !host.terminal(row))
@@ -184,7 +190,7 @@ export async function assertCliConversationWritersExited(
         continue
       }
       if (observed.topology !== 'pane-owned' || host.sleeping(row.worktreeId ?? '')) {
-        throw refuse(row)
+        throw refuse(row, pane)
       }
       if (presence === 'exited' && matching.length === 0) {
         await censusPane(() => host.terminal(row), row, true)
@@ -201,7 +207,7 @@ export async function assertCliConversationWritersExited(
         host.sleeping(row.worktreeId ?? '') ||
         matching.some((record) => !host.saved().includes(record) || !matches(record))
       ) {
-        throw refuse(row)
+        throw refuse(row, pane)
       }
       const current = () =>
         paneOf(row)?.identity === pane.identity && !host.sleeping(row.worktreeId ?? '')
@@ -219,7 +225,7 @@ export async function assertCliConversationWritersExited(
         !link.paneOwned ||
         (link.process && (await probeAgentProcessPresence(link.process)) !== 'exited')
       ) {
-        throw refuse(link)
+        throw refuse(link, link.terminal()?.pane)
       }
       await censusPane(link.terminal, link, false)
     }
@@ -247,7 +253,7 @@ export async function assertCliConversationWritersExited(
         paneOf(coordinates)?.identity === pane.identity &&
         !host.rows().some((row) => row.paneKey === paneKey)
       if (!current() || !(await host.shellAlone(pane)) || !current()) {
-        throw refuse({ paneKey, worktreeId })
+        throw refuse({ paneKey, worktreeId }, pane)
       }
       covered.set(record, current)
     }
