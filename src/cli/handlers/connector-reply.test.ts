@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HandlerContext } from '../dispatch'
 import { RuntimeClientError, type RuntimeClient } from '../runtime-client'
+import { CONNECTOR_REPLY_UNAVAILABLE } from '../../shared/rpc-contract/connector-params'
 import { CONNECTOR_HANDLERS, formatReply } from './connector'
 
 const call = vi.fn()
@@ -41,6 +42,19 @@ describe('orca connector reply', () => {
     call.mockResolvedValue({ result: { status: 'queued' } })
     await CONNECTOR_HANDLERS['connector reply'](context())
     expect(call.mock.calls[0]?.[1]).toMatchObject({ paneKey: 'tab:2' })
+  })
+
+  it.each([
+    'not_a_cloud_conversation',
+    'connector_not_connected',
+    'connectors_disabled',
+    'method_not_found'
+  ])('says replies are not available from this host when the host answers %s', async (code) => {
+    call.mockRejectedValue(new RuntimeClientError(code, code))
+    await expect(CONNECTOR_HANDLERS['connector reply'](context())).rejects.toMatchObject({
+      code: 'not_a_cloud_conversation',
+      message: CONNECTOR_REPLY_UNAVAILABLE
+    })
   })
 
   it('passes a refusal through, and refuses outside an agent pane', async () => {
