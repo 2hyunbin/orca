@@ -4,8 +4,10 @@ const { renewTerminalArtifactGrant, hostSavesGrantedFiles } = vi.hoisted(() => (
   renewTerminalArtifactGrant: vi.fn(),
   hostSavesGrantedFiles: vi.fn(async () => true)
 }))
-vi.mock('@/runtime/runtime-terminal-artifact-grant', () => ({ renewTerminalArtifactGrant }))
-vi.mock('@/components/terminal-pane/host-file-refusal', () => ({ hostSavesGrantedFiles }))
+vi.mock('@/runtime/runtime-terminal-artifact-grant', () => ({
+  renewTerminalArtifactGrant,
+  hostSavesGrantedFiles
+}))
 
 import {
   grantRestoredHostFile,

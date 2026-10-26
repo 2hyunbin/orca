@@ -13,7 +13,8 @@ import {
   TERMINAL_PATH_CROSS_WORKSPACE_RUNTIME_CAPABILITY,
   type RuntimeTerminalPathResolution
 } from '../../../../shared/runtime-file-contracts'
-import { HostFileRefusal, hostAbsentRefusal, hostSavesGrantedFiles } from './host-file-refusal'
+import { HostFileRefusal, hostAbsentRefusal } from './host-file-refusal'
+import { hostSavesGrantedFiles } from '@/runtime/runtime-terminal-artifact-grant'
 
 export type HostWorkspaceFile = {
   kind: 'host'
