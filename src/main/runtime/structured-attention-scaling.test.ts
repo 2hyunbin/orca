@@ -63,7 +63,7 @@ it.each([
       { caller: 'client-1', snapshots: 1, candidates: 1, filters: 1 }
     ])
     expect(flow.tail.events.filter((event) => event.type === 'notification')).toHaveLength(0)
-    expect(flow.proof).toEqual([{ result: true, filter: 8, membership: 16 }])
+    expect(flow.proof).toEqual([{ result: true, visits: 1 }])
     await flow.prompt(0, 'measured')
     expect(flow.provenance).toHaveLength(2)
     expect(flow.provenance.at(-1)).toEqual({
@@ -126,32 +126,38 @@ it.each([2, 20])(
   }
 )
 
-it.each([
-  [8, 2],
-  [80, 2],
-  [8, 20]
-])(
-  'proves completion against D=%i authenticated sockets c=%i capabilities',
-  async (sockets, capabilities) => {
-    const flow = await structuredAttentionScaling({ sockets, capabilities })
+it.each([8, 80])('bounds delivery lookup across U=%i live source subscribers', async (relays) => {
+  const flow = await structuredAttentionScaling({ relays })
+  try {
+    const first = await flow.send('Scoped request')
+    await flow.writeTurn('scoped', first, 'running')
+    flow.reset()
+    await flow.writeTurn('scoped', first, 'completed')
+    expect(flow.proof).toEqual([{ result: true, visits: 1 }])
+    expect(flow.tail.events.filter((event) => event.type === 'notification')).toHaveLength(0)
+    flow.socket.disconnect()
+    const second = await flow.send('No live relay')
+    await flow.writeTurn('fallback', second, 'running')
+    await flow.writeTurn('fallback', second, 'completed')
+    expect(flow.proof.at(-1)).toEqual({ result: false, visits: 2 })
+    expect(flow.tail.events.filter((event) => event.type === 'notification')).toHaveLength(1)
+    console.info('source-relay-scaling', { relays, proof: flow.proof })
+  } finally {
+    await flow.close()
+  }
+})
+
+it.each([8, 80])(
+  'bounds unmatched delivery across U=%i live relays without a second source registry',
+  async (relays) => {
+    const flow = await structuredAttentionScaling({ relays, matchingRelay: false })
     try {
-      expect(flow.socket.wiring.connectionCount).toBe(sockets)
-      const first = await flow.send('Connected request')
-      await flow.writeTurn('connected', first, 'running')
+      const operation = await flow.send('No matching responsible caller')
+      await flow.writeTurn('unmatched', operation, 'running')
       flow.reset()
-      await flow.writeTurn('connected', first, 'completed')
-      expect(flow.proof).toEqual([
-        { result: true, filter: sockets, membership: sockets * capabilities }
-      ])
-      expect(flow.tail.events.filter((event) => event.type === 'notification')).toHaveLength(0)
-      flow.socket.disconnect()
-      expect(flow.socket.wiring.connectionCount).toBe(0)
-      const second = await flow.send('Disconnected request')
-      await flow.writeTurn('disconnected', second, 'running')
-      await flow.writeTurn('disconnected', second, 'completed')
-      expect(flow.proof.at(-1)?.result).toBe(false)
+      await flow.writeTurn('unmatched', operation, 'completed')
+      expect(flow.proof).toEqual([{ result: false, visits: relays + 2 }])
       expect(flow.tail.events.filter((event) => event.type === 'notification')).toHaveLength(1)
-      console.info('socket-proof-scaling', { sockets, capabilities, proof: flow.proof })
     } finally {
       await flow.close()
     }

@@ -38,7 +38,6 @@ export type RuntimeServiceCommandSurface = {
   reconcileDismissedPushes: RuntimeMobileNotificationController['reconcileDismissedPushes']
   getMobileNotificationEpoch: RuntimeMobileNotificationController['getEpoch']
   dismissMobileNotification: RuntimeMobileNotificationController['dismiss']
-  setNotificationDesktopProof: (proof: (deviceId: string) => boolean) => void
   retireLiveNotifications: RuntimeMobileNotificationController['retireLiveNotifications']
   retireStructuredAttention: RuntimeMobileNotificationController['retireStructuredAttention']
   reconcileStructuredPromptAttention: RuntimeMobileNotificationController['reconcileStructuredPromptAttention']
@@ -150,9 +149,6 @@ export function installRuntimeServiceCommandSurface(
     reconcileDismissedPushes: notifications.reconcileDismissedPushes.bind(notifications),
     getMobileNotificationEpoch: notifications.getEpoch.bind(notifications),
     dismissMobileNotification: notifications.dismiss.bind(notifications),
-    setNotificationDesktopProof: (proof) => {
-      notifications.isConnectedDesktop = proof
-    },
     retireLiveNotifications: notifications.retireLiveNotifications.bind(notifications),
     retireStructuredAttention: notifications.retireStructuredAttention.bind(notifications),
     reconcileStructuredPromptAttention:

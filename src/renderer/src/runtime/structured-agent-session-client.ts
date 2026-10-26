@@ -171,13 +171,15 @@ async function subscribeStructuredAgentSessionMethod<TEvent>(
   params: unknown,
   onEvent: (event: TEvent) => void,
   onError: (error: unknown) => void,
-  onClose: () => void
+  onClose: () => void,
+  signal?: AbortSignal
 ): Promise<{ unsubscribe: () => void }> {
   return subscribeRuntimeRpc(target, method, params, {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: each caller names the method whose frames are TEvent; unchecked as before.
     onEvent: (result) => onEvent(result as TEvent),
     onError,
-    onClose
+    onClose,
+    signal
   })
 }
 
@@ -287,15 +289,18 @@ export function subscribeStructuredAgentSessionTurnCompletions(
   target: RuntimeClientTarget,
   onEvent: (event: AgentSessionTurnCompletionEvent) => void,
   onError: (error: unknown) => void,
-  onClose: () => void
+  onClose: () => void,
+  phoneRelaySessionId?: string,
+  signal?: AbortSignal
 ): Promise<{ unsubscribe: () => void }> {
   return subscribeStructuredAgentSessionMethod(
     target,
     'agentSession.subscribeTurnCompletions',
     // An older host ignores this and sends completions only: it raises no prompt alert, as before.
-    { includePrompts: true },
+    { includePrompts: true, ...(phoneRelaySessionId ? { phoneRelaySessionId } : {}) },
     onEvent,
     onError,
-    onClose
+    onClose,
+    signal
   )
 }

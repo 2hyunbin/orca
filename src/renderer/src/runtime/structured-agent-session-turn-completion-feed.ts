@@ -2,7 +2,14 @@
 
 import type { AgentSessionTurnCompletionEvent } from '../../../shared/agent-session-wire'
 import type { AgentSessionAttentionEdge } from '../../../shared/agent-session-attention'
-import { AGENT_SESSION_TURN_COMPLETION_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
+import {
+  AGENT_SESSION_TURN_COMPLETION_RUNTIME_CAPABILITY,
+  AGENT_SESSION_PHONE_RELAY_RUNTIME_CAPABILITY
+} from '../../../shared/protocol-version'
+import {
+  onRuntimeEnvironmentsRetired,
+  onRuntimeEnvironmentRevisionsChanged
+} from './runtime-environment-revision'
 import { runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { subscribeStructuredAgentSessionTurnCompletions } from './structured-agent-session-client'
@@ -25,9 +32,16 @@ export function structuredAgentSessionTurnCompletionFeedKey(target: RuntimeClien
   return target.kind === 'local' ? 'local' : `environment:${target.environmentId}`
 }
 
-function createOwner(target: RuntimeClientTarget): OwnedTurnCompletionFeed {
+function createOwner(
+  target: RuntimeClientTarget,
+  phoneRelaySessionId: string | undefined,
+  evict: () => void,
+  retain: () => OwnedTurnCompletionFeed
+): OwnedTurnCompletionFeed {
   const listeners = new Set<StructuredAgentSessionTurnCompletionListener>()
   const activations = new Set<symbol>()
+  let stopRevisionListeners = (): void => {}
+  let setup: AbortController | null = null
   let generation = 0
   let handle: { unsubscribe: () => void } | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -51,6 +65,8 @@ function createOwner(target: RuntimeClientTarget): OwnedTurnCompletionFeed {
     }
   }
   const dropHandle = (): void => {
+    setup?.abort()
+    setup = null
     handle?.unsubscribe()
     handle = null
   }
@@ -78,8 +94,8 @@ function createOwner(target: RuntimeClientTarget): OwnedTurnCompletionFeed {
     scheduleReconnect(generation)
   }
   const subscribeToHost = (candidate: number): void => {
-    void subscribeStructuredAgentSessionTurnCompletions(
-      target,
+    setup = target.kind === 'environment' ? new AbortController() : null
+    const callbacks = [
       (event: AgentSessionTurnCompletionEvent) => {
         if (!active(candidate)) {
           return
@@ -104,7 +120,16 @@ function createOwner(target: RuntimeClientTarget): OwnedTurnCompletionFeed {
           loseConnection(candidate)
         }
       }
-    )
+    ] as const
+    const opening = setup
+      ? subscribeStructuredAgentSessionTurnCompletions(
+          target,
+          ...callbacks,
+          phoneRelaySessionId,
+          setup.signal
+        )
+      : subscribeStructuredAgentSessionTurnCompletions(target, ...callbacks)
+    void opening
       .then((opened) => {
         if (active(candidate)) {
           handle = opened
@@ -127,13 +152,35 @@ function createOwner(target: RuntimeClientTarget): OwnedTurnCompletionFeed {
       environmentId,
       AGENT_SESSION_TURN_COMPLETION_RUNTIME_CAPABILITY
     )
-      .then((supported) => {
+      .then(async (supported) => {
         if (!active(candidate)) {
           return
         }
         // Unsupported methods stop permanently; failed probes remain retryable to avoid endless relay probing.
         if (supported) {
-          subscribeToHost(candidate)
+          if (
+            phoneRelaySessionId &&
+            !(await runtimeEnvironmentSupportsCapability(
+              environmentId,
+              AGENT_SESSION_PHONE_RELAY_RUNTIME_CAPABILITY
+            ))
+          ) {
+            if (active(candidate)) {
+              const fallback = getStructuredAgentSessionTurnCompletionFeed(target)
+              const stopListening = fallback.subscribe(deliver)
+              const release = fallback.activate()
+              handle = {
+                unsubscribe: () => {
+                  release()
+                  stopListening()
+                }
+              }
+            }
+            return
+          }
+          if (active(candidate)) {
+            subscribeToHost(candidate)
+          }
           return
         }
         console.warn(
@@ -147,38 +194,91 @@ function createOwner(target: RuntimeClientTarget): OwnedTurnCompletionFeed {
     generation += 1
     clearReconnect()
     dropHandle()
+    stopRevisionListeners()
+    stopRevisionListeners = () => {}
     reconnectAttempt = 0
   }
+  const evictIdle = (): void => {
+    if (activations.size === 0 && listeners.size === 0) {
+      evict()
+    }
+  }
 
-  return {
+  const owner: OwnedTurnCompletionFeed = {
     activate: () => {
+      const current = retain()
+      if (current !== owner) {
+        return current.activate()
+      }
       const token = Symbol('turn-completion-feed')
       activations.add(token)
       if (activations.size === 1) {
+        if (target.kind === 'environment') {
+          const changed = (ids: readonly string[]): void => {
+            if (ids.includes(target.environmentId)) {
+              loseConnection(generation)
+            }
+          }
+          const stopRetired = onRuntimeEnvironmentsRetired(changed)
+          const stopChanged = onRuntimeEnvironmentRevisionsChanged(changed)
+          stopRevisionListeners = () => {
+            stopRetired()
+            stopChanged()
+          }
+        }
         open()
       }
       return () => {
         activations.delete(token)
         if (activations.size === 0) {
           stop()
+          evictIdle()
         }
       }
     },
     subscribe: (listener) => {
+      const current = retain()
+      if (current !== owner) {
+        return current.subscribe(listener)
+      }
       listeners.add(listener)
-      return () => listeners.delete(listener)
+      return () => {
+        listeners.delete(listener)
+        evictIdle()
+      }
     },
     stop
   }
+  return owner
 }
 
 export function getStructuredAgentSessionTurnCompletionFeed(
-  target: RuntimeClientTarget
+  target: RuntimeClientTarget,
+  phoneRelaySessionId?: string
 ): StructuredAgentSessionTurnCompletionFeedOwner {
-  const key = structuredAgentSessionTurnCompletionFeedKey(target)
+  const key = JSON.stringify([
+    structuredAgentSessionTurnCompletionFeedKey(target),
+    phoneRelaySessionId
+  ])
   let owner = owners.get(key)
   if (!owner) {
-    owner = createOwner(target)
+    const created = createOwner(
+      target,
+      phoneRelaySessionId,
+      () => {
+        if (owners.get(key) === created) {
+          owners.delete(key)
+        }
+      },
+      () => {
+        const current = owners.get(key)
+        if (!current) {
+          owners.set(key, created)
+        }
+        return current ?? created
+      }
+    )
+    owner = created
     owners.set(key, owner)
   }
   return owner

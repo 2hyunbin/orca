@@ -66,7 +66,6 @@ export type MobilePushRegistrar = {
 
 export class RuntimeMobileNotificationController {
   readonly announcedNotifications = createAnnouncedNotificationRegistry()
-  isConnectedDesktop: (deviceId: string) => boolean = () => false
   private readonly listeners = new Set<(event: MobileNotificationEvent) => void>()
   private readonly legacyCooldown = new Map<string, number>()
   private readonly replay = new MobileNotificationReplayBuffer()

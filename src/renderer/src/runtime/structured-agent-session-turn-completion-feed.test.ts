@@ -248,3 +248,158 @@ describe('structured turn completion feed (renderer)', () => {
     ).not.toBe(local)
   })
 })
+
+describe('source forwarding lifetime', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    resetStructuredAgentSessionTurnCompletionFeedsForTests()
+    subscriptions.length = 0
+    mocks.supportsCapability.mockReset().mockResolvedValue(true)
+    mocks.subscribe.mockReset().mockImplementation((_target, emit, fail, close) => {
+      const unsubscribe = vi.fn()
+      subscriptions.push({ emit, fail, close, unsubscribe })
+      return Promise.resolve({ unsubscribe })
+    })
+  })
+  afterEach(() => {
+    resetStructuredAgentSessionTurnCompletionFeedsForTests()
+    vi.useRealTimers()
+  })
+
+  it('declares only after the listener, scopes S/S2 independently and evicts released owners', async () => {
+    const target = { kind: 'environment', environmentId: 'env-source' } as const
+    const first = getStructuredAgentSessionTurnCompletionFeed(target, 'session-1')
+    const second = getStructuredAgentSessionTurnCompletionFeed(target, 'session-2')
+    const seen: string[] = []
+    const stopFirst = first.subscribe((edge) => seen.push(label(edge)))
+    const stopSecond = second.subscribe((edge) => seen.push(label(edge)))
+    const releaseFirst = first.activate()
+    const releaseSecond = second.activate()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(subscriptions).toHaveLength(2)
+    expect(mocks.subscribe.mock.calls.map((call) => call[4])).toEqual(['session-1', 'session-2'])
+    subscription(0).emit({ type: 'completion', completion: completion('epoch-one') })
+    subscription(0).emit({
+      type: 'completion',
+      completion: {
+        ...completion('epoch-two'),
+        journalCursor: { epoch: 'new-epoch', sequence: 1 }
+      }
+    })
+    expect(seen).toEqual(['epoch-one', 'epoch-two'])
+    releaseFirst()
+    stopFirst()
+    expect(subscription(0).unsubscribe).toHaveBeenCalledOnce()
+    expect(subscription(1).unsubscribe).not.toHaveBeenCalled()
+    expect(getStructuredAgentSessionTurnCompletionFeed(target, 'session-1')).not.toBe(first)
+    subscription(1).emit({
+      type: 'completion',
+      completion: { ...completion('sibling'), sessionId: 'session-2' }
+    })
+    expect(seen.at(-1)).toBe('sibling')
+    releaseSecond()
+    stopSecond()
+  })
+
+  it('keeps one old-host global stream and never sends a source declaration to it', async () => {
+    mocks.supportsCapability.mockImplementation((_id, capability) =>
+      Promise.resolve(capability === 'agent-session.turn-completion.v1')
+    )
+    const target = { kind: 'environment', environmentId: 'old-host' } as const
+    const first = getStructuredAgentSessionTurnCompletionFeed(target, 'session-1')
+    const second = getStructuredAgentSessionTurnCompletionFeed(target, 'session-2')
+    const stopFirst = first.subscribe(() => {})
+    const stopSecond = second.subscribe(() => {})
+    const releaseFirst = first.activate()
+    const releaseSecond = second.activate()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(subscriptions).toHaveLength(1)
+    expect(mocks.subscribe.mock.calls[0]).toHaveLength(6)
+    expect(mocks.subscribe.mock.calls[0]![4]).toBeUndefined()
+    expect(mocks.subscribe.mock.calls[0]![5]).toBeInstanceOf(AbortSignal)
+    releaseFirst()
+    stopFirst()
+    expect(subscription().unsubscribe).not.toHaveBeenCalled()
+    releaseSecond()
+    stopSecond()
+    expect(subscription().unsubscribe).toHaveBeenCalledOnce()
+  })
+
+  it('cancels pending setup, disposes its late handle and rejects old callbacks after rebind', async () => {
+    const { replaceRuntimeEnvironmentRevisions } = await import('./runtime-environment-revision')
+    replaceRuntimeEnvironmentRevisions([{ id: 'env-source', pairingRevision: 1, createdAt: 1 }])
+    const gate = Promise.withResolvers<{ unsubscribe: () => void }>()
+    mocks.subscribe.mockReturnValueOnce(gate.promise)
+    const target = { kind: 'environment', environmentId: 'env-source' } as const
+    const feed = getStructuredAgentSessionTurnCompletionFeed(target, 'session-1')
+    const seen: string[] = []
+    const stop = feed.subscribe((edge) => seen.push(label(edge)))
+    const release = feed.activate()
+    await vi.advanceTimersByTimeAsync(0)
+    const old = mocks.subscribe.mock.calls[0]
+    const signal: AbortSignal = old[5]
+    replaceRuntimeEnvironmentRevisions([{ id: 'env-source', pairingRevision: 2, createdAt: 1 }], {
+      retired: ['env-source'],
+      sameHost: []
+    })
+    expect(signal.aborted).toBe(true)
+    await vi.advanceTimersByTimeAsync(250)
+    expect(mocks.subscribe).toHaveBeenCalledTimes(2)
+    const late = vi.fn()
+    gate.resolve({ unsubscribe: late })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(late).toHaveBeenCalledOnce()
+    old[1]({ type: 'completion', completion: completion('old-incarnation') })
+    subscription().emit({ type: 'completion', completion: completion('current-incarnation') })
+    expect(seen).toEqual(['current-incarnation'])
+    release()
+    stop()
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(mocks.subscribe).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([8, 80])(
+    'owns exactly N=%i streams and returns to baseline after source release',
+    async (count) => {
+      const target = { kind: 'environment', environmentId: 'many-sources' } as const
+      const feeds = Array.from({ length: count }, (_, index) =>
+        getStructuredAgentSessionTurnCompletionFeed(target, `source-${index}`)
+      )
+      const stops = feeds.map((feed) => {
+        const stop = feed.subscribe(() => {})
+        const release = feed.activate()
+        return () => {
+          release()
+          stop()
+        }
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(subscriptions).toHaveLength(count)
+      expect(mocks.supportsCapability).toHaveBeenCalledTimes(2 * count)
+      stops.forEach((stop) => stop())
+      for (let index = 0; index < count; index += 1) {
+        expect(subscription(index).unsubscribe).toHaveBeenCalledOnce()
+        expect(getStructuredAgentSessionTurnCompletionFeed(target, `source-${index}`)).not.toBe(
+          feeds[index]
+        )
+      }
+      const replacement = getStructuredAgentSessionTurnCompletionFeed(target, 'source-0')
+      const stopReplacement = replacement.subscribe(() => {})
+      const releaseReplacement = replacement.activate()
+      // A held, previously evicted owner must join the replacement, never open a duplicate.
+      const stopHeld = feeds[0]!.subscribe(() => {})
+      const releaseHeld = feeds[0]!.activate()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(subscriptions).toHaveLength(count + 1)
+      releaseHeld()
+      stopHeld()
+      expect(subscription(count).unsubscribe).not.toHaveBeenCalled()
+      releaseReplacement()
+      stopReplacement()
+      expect(subscription(count).unsubscribe).toHaveBeenCalledOnce()
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(subscriptions).toHaveLength(count + 1)
+      expect(vi.getTimerCount()).toBe(0)
+    }
+  )
+})

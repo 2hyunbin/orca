@@ -280,6 +280,7 @@ beforeEach(() => {
     gh: {},
     runtime: { subscribe },
     runtimeEnvironments: {
+      cancelSubscription: vi.fn().mockResolvedValue(undefined),
       subscribe: (
         request: { method: string },
         callbacks: { onResponse: (response: RuntimeRpcResponse<unknown>) => void }

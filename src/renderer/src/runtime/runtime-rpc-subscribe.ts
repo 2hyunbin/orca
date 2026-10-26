@@ -1,3 +1,4 @@
+import { createNonSecureContextUuid } from '../../../shared/non-secure-context-uuid'
 import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { subscribeRuntimeEnvironment } from './runtime-environment-pairing-refresh'
@@ -9,6 +10,7 @@ export type RuntimeRpcSubscriptionHandlers = {
   onError: (error: unknown) => void
   /** Only a remote transport reports its own close; the local stream ends with a frame. */
   onClose: () => void
+  signal?: AbortSignal
 }
 
 /** The streaming counterpart of `callRuntimeRpc`: the same method over either transport. */
@@ -28,14 +30,34 @@ export async function subscribeRuntimeRpc(
   if (target.kind === 'local') {
     return window.api.runtime.subscribe({ method, params }, onResponse)
   }
-  return subscribeRuntimeEnvironment(
-    {
-      selector: target.environmentId,
-      method,
-      params,
-      timeoutMs: 15_000,
-      expectedEnvironmentPairingRevision: getRuntimeEnvironmentRevision(target.environmentId)
-    },
-    { onResponse, onError: handlers.onError, onClose: handlers.onClose }
-  )
+  const subscriptionId = createNonSecureContextUuid()
+  const cancel = (): void => {
+    void window.api.runtimeEnvironments.cancelSubscription({ subscriptionId }).catch((error) => {
+      console.warn('[runtime-subscription] setup cancellation failed', error)
+    })
+  }
+  if (handlers.signal?.aborted) {
+    throw new Error('Runtime subscription setup cancelled')
+  }
+  handlers.signal?.addEventListener('abort', cancel, { once: true })
+  try {
+    const handle = await subscribeRuntimeEnvironment(
+      {
+        ...(handlers.signal ? { subscriptionId } : {}),
+        selector: target.environmentId,
+        method,
+        params,
+        timeoutMs: 15_000,
+        expectedEnvironmentPairingRevision: getRuntimeEnvironmentRevision(target.environmentId)
+      },
+      { onResponse, onError: handlers.onError, onClose: handlers.onClose }
+    )
+    if (handlers.signal?.aborted) {
+      handle.unsubscribe()
+      throw new Error('Runtime subscription setup cancelled')
+    }
+    return handle
+  } finally {
+    handlers.signal?.removeEventListener('abort', cancel)
+  }
 }

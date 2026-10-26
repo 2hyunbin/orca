@@ -17,6 +17,7 @@ import {
 } from './structured-agent-session-read-owner'
 import { structuredAttentionReadObservation } from './structured-attention-read-observation'
 import { useAppStore } from '@/store'
+import { isWebClientLocation } from '@/lib/web-client-location'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import {
   structuredAgentSessionOwnerForTab,
@@ -54,12 +55,18 @@ function StructuredAgentSessionOwnedAttention({
   tab: StructuredTab
   target: RuntimeClientTarget
 }): null {
-  const feed = useMemo(() => getStructuredAgentSessionTurnCompletionFeed(target), [target])
+  const feed = useMemo(
+    () =>
+      getStructuredAgentSessionTurnCompletionFeed(
+        target,
+        target.kind === 'environment' && !isWebClientLocation() ? tab.entityId : undefined
+      ),
+    [target, tab.entityId]
+  )
   const owner = useMemo(
     () => getStructuredAgentSessionReadOwner(tab.entityId, target),
     [tab.entityId, target]
   )
-  useEffect(() => feed.activate(), [feed])
   const paneKey = structuredAgentSessionPaneKey(tab.id, tab.entityId)
   useEffect(() => {
     const owed = new Map<string, AgentJournalCursor>()
@@ -231,38 +238,41 @@ function StructuredAgentSessionOwnedAttention({
       surfaced.current = undefined
     }
   }, [paneKey, tab.entityId, target])
-  useEffect(
-    () =>
-      feed.subscribe((edge) => {
-        const payload = edge.type === 'prompt' ? edge.prompt : edge.completion
-        const cursor = payload.sessionId === tab.entityId ? payload.journalCursor : undefined
-        if (cursor && (!surfaced.current || isLaterCursor(cursor, surfaced.current))) {
-          surfaced.current = { ...cursor }
-        }
-        if (edge.type === 'prompt') {
-          if (edge.prompt.sessionId === tab.entityId) {
-            if (target.kind === 'environment') {
-              relayedPrompt.current = {
-                scope: edge.prompt.scope,
-                raisedAt: Math.max(edge.prompt.raisedAt, relayedPrompt.current?.raisedAt ?? 0)
-              }
+  useEffect(() => {
+    const stopListening = feed.subscribe((edge) => {
+      const payload = edge.type === 'prompt' ? edge.prompt : edge.completion
+      const cursor = payload.sessionId === tab.entityId ? payload.journalCursor : undefined
+      if (cursor && (!surfaced.current || isLaterCursor(cursor, surfaced.current))) {
+        surfaced.current = { ...cursor }
+      }
+      if (edge.type === 'prompt') {
+        if (edge.prompt.sessionId === tab.entityId) {
+          if (target.kind === 'environment') {
+            relayedPrompt.current = {
+              scope: edge.prompt.scope,
+              raisedAt: Math.max(edge.prompt.raisedAt, relayedPrompt.current?.raisedAt ?? 0)
             }
-            dispatchStructuredPromptAttention(tab, edge.prompt, target, () => {
-              const read = readFrontier.current
-              return read?.sessionId === tab.entityId &&
-                sameStructuredReadTarget(read.target, target)
-                ? read
-                : undefined
-            })
-            // Its own resolution may already be mirrored; the relay above is already in main.
-            settleRelayedPrompt.current()
           }
-        } else if (edge.completion.sessionId === tab.entityId) {
-          dispatchStructuredTurnCompletionAttention(tab, edge.completion, target)
+          dispatchStructuredPromptAttention(tab, edge.prompt, target, () => {
+            const read = readFrontier.current
+            return read?.sessionId === tab.entityId && sameStructuredReadTarget(read.target, target)
+              ? read
+              : undefined
+          })
+          // Its own resolution may already be mirrored; the relay above is already in main.
+          settleRelayedPrompt.current()
         }
-      }),
-    [feed, tab, target]
-  )
+      } else if (edge.completion.sessionId === tab.entityId) {
+        dispatchStructuredTurnCompletionAttention(tab, edge.completion, target)
+      }
+    })
+    // The real forwarding listener must exist before insertion grants host responsibility.
+    const release = feed.activate()
+    return () => {
+      release()
+      stopListening()
+    }
+  }, [feed, tab, target])
   useEffect(() => {
     if (target.kind !== 'environment') {
       return undefined

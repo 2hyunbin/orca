@@ -212,6 +212,9 @@ export class StructuredAgentSessionClientDelivery {
     subscriber: StructuredAgentSessionTurnCompletionSubscriber
   ): (() => void) => this.turnCompletionFeed.subscribe(subscriber)
 
+  hasPhoneRelay = (sessionId: string, callerKey: string): boolean =>
+    this.turnCompletionFeed.hasPhoneRelay(sessionId, callerKey)
+
   /** Closing handles retains session-list rows; agent-status retains them only while tabs need them. */
   closeSession(sessionId: string, options: { listed: boolean }): void {
     this.requestFailures.forget(sessionId)

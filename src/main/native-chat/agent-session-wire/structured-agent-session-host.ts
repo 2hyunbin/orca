@@ -342,6 +342,7 @@ export class StructuredAgentSessionHost {
 
   /** Live-only completion/prompt events; missed events are never replayed. */
   subscribeTurnCompletions = this.clientDelivery.subscribeTurnCompletions
+  hasPhoneRelay = this.clientDelivery.hasPhoneRelay
   phoneAlertCaller = structuredPhoneAlertCaller.bind(null, this.sessions, () => this.deps.store)
 
   readStatusSummary = this.clientDelivery.readStatusSummary

@@ -1,6 +1,6 @@
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import type { AgentJournalCursor } from '../../shared/agent-session-journal-types'
-// Execution-host delivery for work without a proven connected desktop mirror.
+// Execution-host delivery falls back unless the native origin has a live source forwarding subscriber.
 // Read labels synchronously at the raising commit so alerts cannot outlive prompts; edge ids dedupe delivery and address retirement.
 import type { AgentSessionStatusSummary } from '../../shared/agent-session-wire'
 import {
@@ -37,17 +37,12 @@ export type StructuredAttentionMobileDeliveryDeps = {
   dispatch: (event: MobileNotificationDispatchEvent) => void
   /** Withdraws a notification this host delivered; a no-op for one it never sent. */
   reconcile: (state: StructuredAttentionState) => void
-  isConnectedDesktop?: (deviceId: string) => boolean
   onTurnStarted?: (sessionId: string, cursor: AgentJournalCursor, sourceSequence: number) => void
   now: () => number
 }
 
 export type StructuredAttentionMobileDelivery = {
-  deliver: (
-    edge: AgentSessionAttentionEdge,
-    summary: AgentSessionStatusSummary | undefined,
-    caller?: string | null
-  ) => void
+  deliver: (edge: AgentSessionAttentionEdge, summary: AgentSessionStatusSummary | undefined) => void
   reconcile: (state: StructuredAttentionState) => void
   onTurnStarted?: StructuredAttentionMobileDeliveryDeps['onTurnStarted']
 }
@@ -88,10 +83,7 @@ export function createStructuredAttentionMobileDelivery(
   deps: StructuredAttentionMobileDeliveryDeps
 ): StructuredAttentionMobileDelivery {
   return {
-    deliver: (edge, summary, caller) => {
-      if (caller && deps.isConnectedDesktop?.(caller)) {
-        return
-      }
+    deliver: (edge, summary) => {
       const news = agentSessionAttentionNews(edge)
       if (!news) {
         return
@@ -158,7 +150,10 @@ export function subscribeStructuredAgentSessionAttention(
       }
       const sessionId =
         event.type === 'prompt' ? event.prompt.sessionId : event.completion.sessionId
-      delivery.deliver(event, host.readStatusSummary(sessionId), host.phoneAlertCaller(event))
+      const caller = host.phoneAlertCaller(event)
+      if (!caller || !host.hasPhoneRelay(sessionId, caller)) {
+        delivery.deliver(event, host.readStatusSummary(sessionId))
+      }
     },
     onState: delivery.reconcile,
     onTurnStarted: delivery.onTurnStarted

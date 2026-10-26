@@ -1,9 +1,11 @@
 // Emit future turn completions and opted-in prompts only; unlike status snapshots, missed edges never replay.
 
 import { defineMethod, defineStreamingMethod } from '../core'
+import { agentSessionRefusalError } from '../../../../shared/agent-session-wire-refusals'
 import {
   requireStructuredCapability,
-  requireStructuredHost as requireHost
+  requireStructuredHost as requireHost,
+  requireStructuredSessionHost
 } from './structured-agent-session-gate'
 import {
   AcknowledgeAttentionParams,
@@ -33,7 +35,18 @@ export const STRUCTURED_AGENT_SESSION_TURN_COMPLETION_METHODS = [
     permission: 'workspace',
     params: SubscribeTurnCompletionsParams,
     handler: async (params, ctx, emit) => {
-      const host = requireHost(ctx)
+      const sessionId = params.phoneRelaySessionId
+      const host = sessionId ? requireStructuredSessionHost(ctx, sessionId) : requireHost(ctx)
+      if (
+        sessionId &&
+        (!host.sessionAgent(sessionId) ||
+          ctx.clientKind !== 'runtime' ||
+          ctx.caller?.kind !== 'paired-device')
+      ) {
+        throw agentSessionRefusalError('structured_agent_session_unsupported', {
+          reason: 'clientCapabilityMissing'
+        })
+      }
       const subscriptionId = structuredAgentSessionTurnCompletionSubscriptionId(ctx)
       let dispose = (): void => {}
       const stream = bindStructuredAgentSessionStream(ctx, subscriptionId, () => dispose())
@@ -57,7 +70,10 @@ export const STRUCTURED_AGENT_SESSION_TURN_COMPLETION_METHODS = [
             emit(event)
           }
         },
-        includePrompts: params.includePrompts === true
+        includePrompts: params.includePrompts === true,
+        ...(sessionId && ctx.caller?.kind === 'paired-device'
+          ? { phoneRelay: { sessionId, callerKey: ctx.caller.deviceId } }
+          : {})
       })
       if (stream.isClosed()) {
         dispose()

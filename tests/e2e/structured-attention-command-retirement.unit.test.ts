@@ -14,6 +14,10 @@ import { Fragment, createElement } from 'react'
 import { act, render, waitFor } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
 import { z } from 'zod'
+import { dispatcher } from '../../src/main/runtime/rpc/methods/structured-agent-session-rpc.test-fixture'
+import { HISTORICAL_NATIVE_CLIENT } from '../../src/main/runtime/structured-phone-relay.test-fixture'
+import { RuntimeSubscriptionRegistry } from '../../src/main/runtime/runtime-subscription-registry'
+import { setStructuredAgentSessionHost } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-registry'
 import {
   attach,
   CALLER,
@@ -76,6 +80,11 @@ it('keeps an actual unread delivery through pending, refused and accepted compac
     .mockResolvedValue({ state: 'accepted', providerIdentity: null })
   Object.assign(h.host.deps.adapter, { compact })
   await attach()
+  setStructuredAgentSessionHost(h.host)
+  const registry = new RuntimeSubscriptionRegistry()
+  const rpc = dispatcher({
+    registerOwnedSubscriptionCleanup: registry.registerOwned.bind(registry)
+  })
   const journal = h.host.collaboratorsForTests().sessions.get(SESSION)!.journal
   resetNotificationDispatchMocks()
   registerSubjectRetirement({ suppressWhenFocused: false }, fixture.controller)
@@ -147,11 +156,22 @@ it('keeps an actual unread delivery through pending, refused and accepted compac
         .parse(request.params)
       stop = await h.host.subscribe({ id: 'command-reader', ...input, emit: reply })
     } else if (request.method === 'agentSession.subscribeTurnCompletions') {
-      stop = h.host.subscribeTurnCompletions({
-        id: 'command-edges',
-        includePrompts: true,
-        emit: reply
-      })
+      const controller = new AbortController()
+      await rpc.dispatchStreaming(
+        {
+          id: 'command-edges',
+          authToken: '',
+          method: request.method,
+          params: request.params
+        },
+        (raw) => emit(JSON.parse(raw)),
+        {
+          ...HISTORICAL_NATIVE_CLIENT,
+          connectionId: 'renderer-source',
+          signal: controller.signal
+        }
+      )
+      stop = () => controller.abort()
     } else if (request.method === 'agentSession.subscribeStatus') {
       stop = h.host.subscribeStatus({ id: 'command-status', emit: reply })
     } else {
@@ -239,6 +259,7 @@ it('keeps an actual unread delivery through pending, refused and accepted compac
   try {
     await waitFor(() => expect(publication).toBe(3))
     await waitFor(() => expect(owner.getSnapshot().current).toBe(true))
+    expect(h.host.hasPhoneRelay(SESSION, CALLER.callerKey)).toBe(true)
     const first = await send('Original request')
     await write('first', first, 'running')
     await write('first', first, 'completed')
@@ -428,5 +449,7 @@ it('keeps an actual unread delivery through pending, refused and accepted compac
     for (const stop of subscriptions) {
       stop()
     }
+    expect(h.host.hasPhoneRelay(SESSION, CALLER.callerKey)).toBe(false)
+    setStructuredAgentSessionHost(null)
   }
 })

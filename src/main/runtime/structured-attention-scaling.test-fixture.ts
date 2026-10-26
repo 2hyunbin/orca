@@ -29,15 +29,14 @@ import {
   isAttentionReplay
 } from './attention-operation-count.test-fixture'
 import { attentionDeliveryTail } from './attention-delivery-tail.test-fixture'
-import { authenticatedDesktopSockets } from './rpc/mobile-socket-wiring.test-fixture'
 
 export async function structuredAttentionScaling(
   options: {
     items?: number
     submissions?: number
     subscribers?: number
-    sockets?: number
-    capabilities?: number
+    relays?: number
+    matchingRelay?: boolean
   } = {}
 ) {
   const h = hostTestState()
@@ -84,12 +83,29 @@ export async function structuredAttentionScaling(
   }
   const controller = new RuntimeMobileNotificationController()
   const tail = attentionDeliveryTail(controller, h.root)
-  const socket = await authenticatedDesktopSockets(
-    CALLER.callerKey,
-    options.sockets ?? 8,
-    options.capabilities ?? 2
-  )
-  const proof: { filter: number; membership: number; result: boolean }[] = []
+  const relays: (() => void)[] = []
+  for (let index = 0; index < (options.relays ?? 8); index += 1) {
+    relays.push(
+      h.host.subscribeTurnCompletions({
+        id: `source-relay-${index}`,
+        includePrompts: true,
+        phoneRelay: {
+          sessionId: SESSION,
+          callerKey:
+            index === 0 && options.matchingRelay !== false ? CALLER.callerKey : `other-${index}`
+        },
+        emit: () => {}
+      })
+    )
+  }
+  const socket = { disconnect: () => relays.splice(0).forEach((stop) => stop()) }
+  const proof: { visits: number; result: boolean }[] = []
+  const originalRelay = h.host.hasPhoneRelay
+  vi.spyOn(h.host, 'hasPhoneRelay').mockImplementation((...args) => {
+    const { counts, result } = countAttentionCollectionWork(() => originalRelay(...args))
+    proof.push({ visits: counts.mapValues, result })
+    return result
+  })
   const retirements: number[] = []
   let starts = 0
   subscribeStructuredAgentSessionAttention(
@@ -108,13 +124,6 @@ export async function structuredAttentionScaling(
       }),
       readWorkspaceLabels: () => ({}),
       isWorkspaceMuted: () => false,
-      isConnectedDesktop: (id) => {
-        const { counts, result } = countAttentionCollectionWork(() =>
-          socket.wiring.isConnectedDesktop(id)
-        )
-        proof.push({ filter: counts.filter, membership: counts.membership, result })
-        return result
-      },
       dispatch: (event) => controller.dispatch(event),
       reconcile: (state) => controller.reconcileStructuredPromptAttention(state),
       onTurnStarted: (id, cursor, floor) => {
@@ -246,7 +255,7 @@ export async function structuredAttentionScaling(
     addCandidate,
     reset,
     async close() {
-      socket.close()
+      socket.disconnect()
       await tail.close()
       vi.restoreAllMocks()
     }
