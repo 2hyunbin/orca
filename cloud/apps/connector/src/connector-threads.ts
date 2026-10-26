@@ -2,7 +2,7 @@ import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import type { ConnectorEvent } from '@orca-cloud/connector-contract'
 
 // Linked and snapshot (re)bind a conversation's pane. Moving to another pane forgets the old pane's
-// turn, and a turn it left working becomes unverifiable. Takes the new pane twice.
+// turn, and a turn it left working becomes unverifiable. Takes the new pane three times.
 const REBIND_PANE = `pane_key = ?,
   open_turn_id = CASE WHEN pane_key = ? THEN open_turn_id END,
   turn_state = CASE WHEN turn_state = 'working' AND pane_key <> ? THEN 'unverifiable' ELSE turn_state END`
@@ -97,9 +97,10 @@ export class ConnectorThreads {
       switch (event.kind) {
         case 'linked':
           await transaction.query(
-            `UPDATE connector_threads SET ${REBIND_PANE}, agent = ?
+            `UPDATE connector_threads SET ${REBIND_PANE}, agent = ?,
+               pending_prompt = CASE WHEN pane_key = ? THEN pending_prompt END
              WHERE host_id = ? AND external_id = ?`,
-            [event.paneKey, event.paneKey, event.paneKey, event.agent, ...where]
+            [event.paneKey, event.paneKey, event.paneKey, event.agent, event.paneKey, ...where]
           )
           break
         case 'prompt':

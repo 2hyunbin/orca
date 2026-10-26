@@ -125,6 +125,17 @@ describe('connector turn events', () => {
     expect(await thread()).toMatchObject({ pane_key: 'new-pane', turn_state: 'working' })
   })
 
+  it("drops the old pane's prompt when a conversation links to another pane", async () => {
+    const { machine, enqueue, events, thread } = await setup()
+    await enqueue(machine.hostId)
+    const prompt = { kind: 'approval', promptId: 'p1', tool: 'Bash', options: [] }
+    await events([{ conversation, paneKey: 'old-pane', kind: 'prompt', prompt }])
+    await events([{ conversation, paneKey: 'old-pane', kind: 'linked', agent: 'claude' }])
+    expect(await thread()).toMatchObject({ pending_prompt: JSON.stringify(prompt) })
+    await events([{ conversation, paneKey: 'new-pane', kind: 'linked', agent: 'claude' }])
+    expect(await thread()).toMatchObject({ pane_key: 'new-pane', pending_prompt: null })
+  })
+
   it('clears the prompt of a conversation the snapshot no longer lists', async () => {
     const { machine, enqueue, events, thread } = await setup()
     await enqueue(machine.hostId)
