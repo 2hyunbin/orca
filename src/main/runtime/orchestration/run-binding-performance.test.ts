@@ -12,8 +12,7 @@ import {
 } from '../agent-session-record-store-test-harness'
 import { closeTestJournalHostDatabases } from '../../native-chat/agent-session-journal/journal-host-database-test-support'
 import { canonicalOrcaSessionId } from './canonical-orca-session-id'
-import { sameExactCaller } from './db/runs/run-actor'
-import { findCallerWorkerDispatches } from './db/runs/worker-run-binding'
+import { resolveRunActor, sameExactCaller } from './db/runs/run-actor'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OrchestrationDb } from './db'
 import { createRootDispatch } from './db/root-dispatch-test-fixture'
@@ -410,6 +409,7 @@ it.each([
       coordinatorPaneKey: null
     })
     const task = db.createTask({ runId: parent.id, spec: 'retained work' })
+    const selfTask = db.createTask({ runId: parent.id, spec: 'context-only work' })
     const insert = db.db.prepare(`INSERT INTO dispatch_contexts
         (id, task_id, run_id, assignee_handle, assignee_orca_session_id, creator_handle, status)
         VALUES (?, ?, ?, ?, ?, 'root', ?)`)
@@ -529,7 +529,7 @@ it.each([
       for (let n = 1; n < count; n++) {
         insert.run(
           `ambiguous_${n}`,
-          task.id,
+          selfTask.id,
           parent.id,
           `ambiguous_${n}`,
           ids[length + 2],
@@ -553,12 +553,13 @@ it.each([
       const selfContextWork = edgeWork
       candidates = 0
       expect(
-        findCallerWorkerDispatches(db, {
+        resolveRunActor(db, {
           terminalHandle: 'worker',
           paneKey: 'pane',
-          orcaSessionId: ids[length + 2]
-        }).map((row) => row.id)
-      ).toEqual([current.id])
+          orcaSessionId: ids[length + 2],
+          processIncarnation: 'process'
+        })
+      ).toMatchObject({ kind: 'local', dispatch: { id: current.id } })
       expect(candidates).toBe(count)
       expect(edgeWork - selfContextWork).toBeLessThanOrEqual(4 * count)
     }

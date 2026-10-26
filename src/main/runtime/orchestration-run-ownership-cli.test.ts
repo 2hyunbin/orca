@@ -119,14 +119,30 @@ describe(`Run ownership through the ${compiledCli ? 'compiled' : 'source'} CLI a
         await cli(coord, ['dispatch', '--task', task, '--to', worker]),
         'dispatch'
       )
+      const unbound = await cli(worker, ['task-list'], 1)
+      expect(unbound).toMatchObject({ error: { code: 'run_required' } })
+      expect(JSON.stringify(unbound)).toContain('plain `orchestration check`')
+      expect(JSON.stringify(unbound)).not.toContain('run-use')
+      expect(await cli(worker, ['check', '--run', root, '--peek'], 1)).toMatchObject({
+        error: { code: 'worker_cannot_coordinate_own_run', data: { effectsApplied: false } }
+      })
       const child = idOf(
         await cli(worker, ['run-create', '--objective', 'Task-owned child']),
         'run'
       )
       const foreign = idOf(await cli(coord, ['run-create', '--objective', 'Separate work']), 'run')
+      expect(await cli(replacement, ['run-use', '--id', foreign], 1)).toMatchObject({
+        error: { code: 'run_coordinator_live', data: { effectsApplied: false } }
+      })
+      await cli(replacement, ['run-use', '--id', foreign, '--takeover'])
+      expect(db.getRunRaw(foreign)?.coordinator_handle).toBe(replacement)
+      await cli(coord, ['run-use', '--id', foreign, '--takeover'])
       await cli(coord, ['run-use', '--id', root])
       expect(db.getRunRaw(foreign)?.coordinator_handle).toBeNull()
       const before = db.getRunRaw(foreign)
+      expect(await cli(worker, ['run-use', '--id', foreign, '--takeover'], 1)).toMatchObject({
+        error: { code: 'worker_cannot_take_over_run', data: { effectsApplied: false } }
+      })
       refuseOwnership(await cli(worker, ['run-use', '--id', foreign], 1))
       expect(db.getRunRaw(foreign)).toEqual(before)
       expect(db.getRunRaw(child)?.coordinator_handle).toBe(worker)
@@ -177,6 +193,7 @@ describe(`Run ownership through the ${compiledCli ? 'compiled' : 'source'} CLI a
       // A superseded attempt must fail before its old ownership can authorize an unchanged seat.
       db.db.prepare("UPDATE dispatch_contexts SET status = 'dispatched' WHERE id = ?").run(attempt)
       refuseOwnership(await cli(worker, ['run-use', '--id', child], 1))
+      refuseOwnership(await cli(worker, ['check', '--run', root, '--peek'], 1))
       expect(db.getRunRaw(foreign)?.coordinator_handle).toBe(replacement)
     } finally {
       await server.stop()

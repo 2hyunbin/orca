@@ -6,7 +6,12 @@ import { getRunAuthority } from './run-authority-store'
 
 type ScopedRun = { id: string; home: string | null }
 
-function assertNotAncestor(db: OrchestrationDb, start: ScopedRun, target: string): void {
+function assertNotAncestor(
+  db: OrchestrationDb,
+  start: ScopedRun,
+  target: string,
+  dispatchId?: string
+): void {
   const complete = new Set<string>()
   const path = new Set<string>()
   function visit(current: ScopedRun): void {
@@ -26,7 +31,7 @@ function assertNotAncestor(db: OrchestrationDb, start: ScopedRun, target: string
         throw new OrchestrationError(
           'worker_cannot_coordinate_own_run',
           'A worker cannot coordinate its own Run or an ancestor Run. Use plain orchestration check for your mail and orchestration send to report. No effects were applied.',
-          { effectsApplied: false }
+          { effectsApplied: false, ...(dispatchId ? { dispatchId } : {}) }
         )
       }
       const authority = getRunAuthority(db, current.id)
@@ -61,7 +66,7 @@ export function assertLocalDispatchCanCoordinate(
       refuseRunAuthority('This worker’s creation lineage contains a cycle.')
     }
     visited.add(row.id)
-    assertNotAncestor(db, { id: row.run_id, home: null }, runId)
+    assertNotAncestor(db, { id: row.run_id, home: null }, runId, dispatch.id)
     if (!row.creator_dispatch_id) {
       break
     }

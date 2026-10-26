@@ -38,7 +38,10 @@ export function authorizeRunBinding(
     throw new OrchestrationError(
       'worker_cannot_take_over_run',
       'A worker cannot use a takeover flag. Ask this Run’s coordinator for a hand-over with run-handover. No effects were applied.',
-      { effectsApplied: false }
+      {
+        effectsApplied: false,
+        ...(actor.kind === 'local' ? { dispatchId: actor.dispatch.id } : {})
+      }
     )
   }
   const callerTarget = handover?.target_caller_key

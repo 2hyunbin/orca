@@ -108,9 +108,9 @@ ORCA orchestration worker-start --spec "<worker B task>" --worktree current --ag
 ORCA orchestration check --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json
 ```
 
-After a restart, resume your own Run with `run-use --id <run_id>`. It is refused
-while another coordinator of that Run is still running; replace it with
-`--takeover` only when the user asks. A worker cannot bind the Run it works for
+After a restart, resume your own Run with `run-use --id <run_id>`. For a non-worker, a positively live coordinator requires
+`--takeover`, used only when the user asks; dead or unverifiable coordinators
+need no flag. A worker cannot bind the Run it works for
 or an ancestor. A replacement worker may resume a Run owned by its Task. For any other Run,
 its current or last coordinator must first authorize the worker with
 `run-handover --id <run_id> --to-task <task_id>` or `--to <address>`; the worker

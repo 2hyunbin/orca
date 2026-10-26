@@ -21,7 +21,7 @@ export const ORCHESTRATION_RUN_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'from', 'takeover', 'takeover-legacy', 'retry-request'],
     identityFlagRoles: { from: 'caller' },
     notes: [
-      'Refused while another coordinator of the Run is still open; --takeover replaces it, and its unacknowledged mail is replayed to you. A worker cannot bind its own or ancestor Run or use either takeover flag. Other Runs require Task ownership or an explicit run-handover, even when the prior coordinator is absent or unverifiable. --takeover-legacy must run in the live coordinator agent terminal it binds; it preserves existing worker assignments.'
+      'For non-workers, a positively live coordinator requires --takeover, which replaces it and replays its unacknowledged mail; dead or unverifiable coordinators need no flag. A worker cannot bind its own or ancestor Run or use either takeover flag. Other Runs require Task ownership or an explicit run-handover, even when the prior coordinator is absent or unverifiable. --takeover-legacy must run in the live coordinator agent terminal it binds; it preserves existing worker assignments.'
     ]
   },
   {
