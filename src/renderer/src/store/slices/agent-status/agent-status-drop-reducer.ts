@@ -1,4 +1,4 @@
-import type { AppState } from '../types'
+import type { AppState } from '../../types'
 import type { DropAgentStatusByTabPrefixOptions } from './agent-status-contract'
 import { pruneMigrationUnsupportedEntries } from './agent-status-migration-unsupported-entries'
 import {
@@ -8,7 +8,7 @@ import {
   closedAgentStatusRetirementKeys,
   removePaneKeysByTabPrefix
 } from './agent-status-pane-keyed-records'
-import { findCompletedOrphanPaneKeysForTabClose } from './agent-status-pane-key-tab-binding'
+import { findCompletedOrphanPaneKeysForTabClose } from '../agent-status-pane-key-tab-binding'
 
 /** The slice of app state the tab-prefix drop reduces over — narrow so callers
  *  outside the store (the paired snapshot apply) can build the same patch. */
