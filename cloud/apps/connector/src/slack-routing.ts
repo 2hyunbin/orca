@@ -65,10 +65,10 @@ export async function routeSlackMessage(
     const threads = await threadsIn(transaction, { teamId, channelId, threadTs })
     const own = threads.find((thread) => thread.ownerUserId === userId)
     const externalId = `${teamId}:${channelId}:${threadTs}:${userId}`
-    // Starts still reading their thread are conversations here too, just not bound yet.
+    // Conversations still waiting on their thread read are conversations here too, just not bound.
     const held = await transaction.query(
-      `SELECT external_id, owner_user_id, host_id, place_id FROM connector_slack_pending
-       WHERE team_id = ? AND channel_id = ? AND thread_ts = ? AND kind = 'start'`,
+      `SELECT DISTINCT external_id, owner_user_id, host_id, place_id, agent
+       FROM connector_slack_pending WHERE team_id = ? AND channel_id = ? AND thread_ts = ?`,
       [teamId, channelId, threadTs]
     )
     const pending = held.find((row) => row.owner_user_id === userId)
@@ -112,11 +112,11 @@ export async function routeSlackMessage(
     if (own) {
       await continueConversation(route, own)
     } else if (pending) {
-      // Behind a start still reading its thread: goes out right after it, in order.
+      // Held with the rest; the release decides which held message is the start.
       await holdForThreadStart(route, {
-        kind: 'send',
         hostId: String(pending.host_id),
-        placeId: String(pending.place_id)
+        placeId: String(pending.place_id),
+        agent: String(pending.agent)
       })
     } else {
       await startConversation(route)
@@ -179,7 +179,7 @@ async function startConversation(route: Route): Promise<void> {
   }
   // Partway through a thread, the start carries the thread so far; the start worker reads it.
   if (message.ts !== message.threadTs) {
-    await holdForThreadStart(route, { ...choice, kind: 'start' })
+    await holdForThreadStart(route, choice)
     return
   }
   await deliver(route, {
@@ -193,18 +193,17 @@ async function startConversation(route: Route): Promise<void> {
 // Held until the start worker has read the thread; the 5-minute expiry still runs from now.
 async function holdForThreadStart(
   route: Route,
-  held: { kind: 'start' | 'send'; hostId: string; placeId: string; agent?: string }
+  held: { hostId: string; placeId: string; agent: string }
 ): Promise<void> {
   const { deps, transaction, message, messageKey, place } = route
   await transaction.query(
     `INSERT INTO connector_slack_pending
-     (message_key, external_id, kind, team_id, channel_id, thread_ts, ts, owner_user_id, host_id,
+     (message_key, external_id, team_id, channel_id, thread_ts, ts, owner_user_id, host_id,
       place_id, agent, text, received_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       messageKey,
       route.externalId,
-      held.kind,
       place.teamId,
       place.channelId,
       place.threadTs,
@@ -212,7 +211,7 @@ async function holdForThreadStart(
       message.userId,
       held.hostId,
       held.placeId,
-      held.agent ?? null,
+      held.agent,
       route.text,
       deps.now()
     ]

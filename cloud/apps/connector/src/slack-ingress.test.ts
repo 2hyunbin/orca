@@ -533,4 +533,31 @@ describe('Slack event ingress', () => {
     const second = (await harness.poll()).find((delivery) => delivery.kind === 'start')
     expect(second?.kind === 'start' ? second.prompt : '').toContain('couldn’t be read')
   })
+
+  it('a held start that expired while the worker lagged hands over to the owner’s later message', async () => {
+    const harness = await linkedOwner()
+    await harness.message({
+      text: `<@${BOT}> fix this`,
+      ts: '1800000000.000400',
+      thread_ts: THREAD
+    })
+    harness.advance(5 * 60_000 + 1)
+    await harness.message({ text: 'retry now', ts: '1800000300.000100', thread_ts: THREAD })
+    harness.fake.respond('conversations.replies', Response.json({ ok: true, messages: [] }))
+    await harness.edge.starts.buildDue()
+    expect(harness.fake.take('conversations.replies')[0]?.args).toMatchObject({
+      latest: '1800000300.000100'
+    })
+    await harness.runtime.inbox.expireDue(harness.edge.onExpired)
+    const deliveries = await harness.poll()
+    expect(deliveries).toEqual([
+      expect.objectContaining({
+        kind: 'start',
+        deliveryId: `${TEAM}:${CHANNEL}:1800000300.000100`,
+        placeId: 'pl_orca',
+        prompt: 'retry now'
+      })
+    ])
+    expect(await harness.database.query('SELECT * FROM connector_slack_pending')).toEqual([])
+  })
 })

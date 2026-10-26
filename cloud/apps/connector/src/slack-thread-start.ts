@@ -1,4 +1,5 @@
-import type { CloudDatabase } from '@orca-cloud/cloud-database'
+import type { CloudDatabase, SqlRow } from '@orca-cloud/cloud-database'
+import { CONNECTOR_LIMITS } from '@orca-cloud/connector-contract'
 import { z } from 'zod'
 import { PERSON_SUBTYPES, promptText } from './slack-events.js'
 import type { SlackInstalls } from './slack-installs.js'
@@ -59,22 +60,34 @@ export class SlackThreadStarts {
   ) {}
 
   async buildDue(): Promise<void> {
-    const rows = await this.deps.database.query(
-      `SELECT message_key, external_id, team_id, channel_id, thread_ts, ts
-       FROM connector_slack_pending WHERE kind = 'start' ORDER BY received_at LIMIT ?`,
+    const conversations = await this.deps.database.query(
+      `SELECT external_id FROM connector_slack_pending
+       GROUP BY external_id ORDER BY MIN(received_at) LIMIT ?`,
       [STARTS_PER_PASS]
     )
-    for (const row of rows) {
-      const start: HeldStart = {
-        messageKey: String(row.message_key),
-        externalId: String(row.external_id),
-        teamId: String(row.team_id),
-        channelId: String(row.channel_id),
-        threadTs: String(row.thread_ts),
-        ts: String(row.ts)
-      }
-      await this.release(start, await this.threadBefore(start))
+    for (const row of conversations) {
+      const externalId = String(row.external_id)
+      const start = this.startOf(await heldMessages(this.deps.database, externalId))
+      await this.release(externalId, start, start ? await this.threadBefore(start) : null)
     }
+  }
+
+  // The oldest held message still inside its 5 minutes is the start; it is derived at release, not
+  // fixed on arrival, so a start that expired while the worker lagged hands over to the next one.
+  private startOf(held: SqlRow[]): HeldStart | null {
+    const row = held.find(
+      (message) => Number(message.received_at) + CONNECTOR_LIMITS.deliveryTtlMs > this.deps.now()
+    )
+    return row
+      ? {
+          messageKey: String(row.message_key),
+          externalId: String(row.external_id),
+          teamId: String(row.team_id),
+          channelId: String(row.channel_id),
+          threadTs: String(row.thread_ts),
+          ts: String(row.ts)
+        }
+      : null
   }
 
   // The thread's earlier messages from full members, labelled; null when Slack couldn't be read.
@@ -138,38 +151,40 @@ export class SlackThreadStarts {
     })
   }
 
-  // Queues the start, then every follow-up held behind it, in one transaction under the Slack
-  // thread's routing lock; another instance that got here first leaves nothing to do.
+  // Queues the start, then every later held message as a follow-up, in one transaction under the
+  // Slack thread's routing lock; expired ones are dropped. If what was read before taking the lock
+  // no longer names the same start, the next pass does it.
   private async release(
-    start: HeldStart,
+    externalId: string,
+    start: HeldStart | null,
     thread: { name: string; text: string }[] | null
   ): Promise<void> {
     const { database, posts, queue, now } = this.deps
     await database.transaction(async (transaction) => {
-      await transaction.lockQuotaScope(
-        `orca-connector-slack-thread:${start.teamId}:${start.channelId}:${start.threadTs}`
-      )
-      const [head] = await transaction.query(
-        'SELECT * FROM connector_slack_pending WHERE message_key = ?',
-        [start.messageKey]
-      )
-      if (!head) {
+      const [first] = await heldMessages(transaction, externalId)
+      if (!first) {
         return
       }
-      // The start first, then the owner's follow-ups in arrival order, each with its own receipt.
-      const followUps = await transaction.query(
-        `SELECT * FROM connector_slack_pending WHERE external_id = ? AND kind = 'send'
-         ORDER BY received_at, message_key`,
-        [start.externalId]
+      await transaction.lockQuotaScope(
+        `orca-connector-slack-thread:${String(first.team_id)}:${String(first.channel_id)}:${String(first.thread_ts)}`
       )
-      for (const row of [head, ...followUps]) {
+      const held = await heldMessages(transaction, externalId)
+      const current = this.startOf(held)
+      if (current?.messageKey !== start?.messageKey) {
+        return
+      }
+      // Held messages before the start are past their deadline and are dropped with the rest.
+      const live = current
+        ? held.slice(held.findIndex((row) => row.message_key === current.messageKey))
+        : []
+      for (const [index, row] of live.entries()) {
         const request = String(row.text)
         await queue(transaction, {
           thread: {
-            externalId: start.externalId,
-            teamId: start.teamId,
-            channelId: start.channelId,
-            threadTs: start.threadTs,
+            externalId,
+            teamId: String(row.team_id),
+            channelId: String(row.channel_id),
+            threadTs: String(row.thread_ts),
             ownerUserId: String(row.owner_user_id),
             hostId: String(row.host_id),
             placeId: String(row.place_id)
@@ -177,7 +192,7 @@ export class SlackThreadStarts {
           deliveryId: String(row.message_key),
           receivedAt: Number(row.received_at),
           body:
-            row === head
+            index === 0
               ? {
                   kind: 'start',
                   agent: String(row.agent),
@@ -186,14 +201,24 @@ export class SlackThreadStarts {
                 }
               : {
                   kind: 'send',
-                  text: await withTeammateContext(transaction, start.externalId, request, now())
+                  text: await withTeammateContext(transaction, externalId, request, now())
                 }
         })
       }
       await transaction.query('DELETE FROM connector_slack_pending WHERE external_id = ?', [
-        start.externalId
+        externalId
       ])
-      await refreshSlackStatus(transaction, posts, String(head.host_id), start.externalId)
+      if (current) {
+        await refreshSlackStatus(transaction, posts, String(first.host_id), externalId)
+      }
     })
   }
+}
+
+// A conversation's held messages in Slack order (message ts), not by any instance's clock.
+async function heldMessages(database: CloudDatabase, externalId: string): Promise<SqlRow[]> {
+  return await database.query(
+    'SELECT * FROM connector_slack_pending WHERE external_id = ? ORDER BY ts, message_key',
+    [externalId]
+  )
 }
