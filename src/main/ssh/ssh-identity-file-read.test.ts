@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, rm, symlink, truncate, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import type { SshTarget } from '../../shared/ssh-types'
@@ -68,11 +68,19 @@ describe('SSH identity file reads', () => {
     )
   })
 
-  it('leaves non-auth errors and missing files unannotated', () => {
+  it('names a missing configured key but not a missing default key', () => {
     const skipped: SkippedIdentityFiles = new Map()
-    expect(resolvePrivateKeys(targetFor(join(root, 'missing')), null, skipped)).toEqual([])
-    expect(skipped.size).toBe(0)
+    const missing = join(root, 'missing')
+    expect(resolvePrivateKeys(targetFor(missing), null, skipped)).toEqual([])
+    expect([...skipped]).toEqual([[missing, 'it does not exist']])
 
+    skipped.clear()
+    resolvePrivateKeys(targetFor(join(homedir(), '.ssh', 'id_xmss')), null, skipped)
+    expect(skipped.size).toBe(0)
+  })
+
+  it('leaves non-auth errors unannotated', () => {
+    const skipped: SkippedIdentityFiles = new Map()
     resolvePrivateKeys(targetFor(join(root, 'directory')), null, skipped)
     const networkError = new Error('connect ECONNREFUSED')
     withSkippedIdentityFileDetail(networkError, skipped)
