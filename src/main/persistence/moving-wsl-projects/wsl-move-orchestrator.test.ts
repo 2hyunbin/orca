@@ -6,7 +6,11 @@ import type {
 } from '../../../shared/wsl-move/wsl-move-driver-types'
 import { wslMoveJournalKey } from '../../../shared/wsl-move/wsl-move-cutover'
 import type { WslMoveOrchestratorRecord } from '../../../shared/wsl-move/wsl-move-orchestrator-types'
-import { WslMoveOrchestrator, type WslMoveOrchestratorPorts } from './wsl-move-orchestrator'
+import {
+  WslMoveOrchestrator,
+  WSL_MOVE_ORCHESTRATOR_PROJECT_OPENED_THROTTLE_MS,
+  type WslMoveOrchestratorPorts
+} from './wsl-move-orchestrator'
 import {
   WSL_MOVE_ORCHESTRATOR_BACKOFF_MS,
   WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS
@@ -52,7 +56,7 @@ function fakePorts(overrides: Partial<WslMoveOrchestratorPorts> = {}): Fake {
     now: () => clock.now,
     appVersion: '1.0.0',
     autoMoveEnabled: () => true,
-    isHostReady: () => true,
+    prepareHost: vi.fn(async () => 'ready' as const),
     preview: vi.fn(async (distro: string) => ready(distro)),
     start: vi.fn(async () => moved),
     finishedMove: () => null,
@@ -121,23 +125,108 @@ describe('WslMoveOrchestrator', () => {
     expect(ports.saved.get(wslMoveJournalKey('Debian'))?.state.kind).toBe('deferred')
   })
 
-  it('never wakes a distro on its own (A1): no ready host, no preview', async () => {
-    const ports = fakePorts({ isHostReady: () => false })
+  it('never wakes a distro on its own (A1): not running, no preview', async () => {
+    const ports = fakePorts({ prepareHost: vi.fn(async () => 'not-running' as const) })
     const orchestrator = new WslMoveOrchestrator(ports)
     await orchestrator.trigger('Ubuntu', 'connect')
-    await orchestrator.trigger('Ubuntu', 'startup')
+    await orchestrator.trigger('Ubuntu', 'project-opened')
     expect(ports.preview).not.toHaveBeenCalled()
     // An explicit user action is the user's choice to wake it.
     await orchestrator.trigger('Ubuntu', 'user')
+    expect(ports.prepareHost).toHaveBeenCalledTimes(2)
     expect(ports.preview).toHaveBeenCalledTimes(1)
   })
 
-  it('makes no automatic start with the kill switch off, but still runs Move now', async () => {
+  describe('T3 at startup', () => {
+    // Loss of contact is no evidence of state: an unreadable distro is never resumed.
+    for (const readiness of ['not-running', 'unverifiable', 'failed'] as const) {
+      it(`never resumes a distro that is ${readiness}`, async () => {
+        const ports = fakePorts({ prepareHost: vi.fn(async () => readiness) })
+        const orchestrator = new WslMoveOrchestrator(ports)
+        await orchestrator.trigger('Ubuntu', 'startup')
+        expect(ports.preview).not.toHaveBeenCalled()
+        expect(ports.start).not.toHaveBeenCalled()
+        expect(stateOf(orchestrator, 'Ubuntu')).toBeUndefined()
+      })
+    }
+
+    it('never resumes when the running-distro read throws', async () => {
+      const ports = fakePorts({
+        prepareHost: vi.fn(async () => {
+          throw new Error('wsl.exe timed out')
+        })
+      })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.trigger('Ubuntu', 'startup')
+      expect(ports.preview).not.toHaveBeenCalled()
+    })
+
+    it('keeps a finished move unchanged and unresumed when the registry read fails', async () => {
+      const loaded = new Map<string, WslMoveOrchestratorRecord>([
+        [
+          wslMoveJournalKey('Ubuntu'),
+          {
+            distro: 'Ubuntu',
+            state: { kind: 'done', migrationId: 'm1' },
+            attempts: 0,
+            appVersion: '1.0.0',
+            updatedAt: 0
+          }
+        ]
+      ])
+      const ports = fakePorts({
+        load: () => loaded,
+        finishedMove: () => ({ migrationId: 'm1', distroGuid: 'guid' }),
+        checkMovedDistro: vi.fn(async () => {
+          throw new Error('reg.exe failed')
+        }),
+        prepareHost: vi.fn(async () => 'unverifiable' as const)
+      })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.trigger('Ubuntu', 'startup')
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
+      expect(ports.preview).not.toHaveBeenCalled()
+      expect(ports.track).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('T2: a bridge project opened', () => {
+    it('moves a distro that is running, readying its host first', async () => {
+      const ports = fakePorts()
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.trigger('Ubuntu', 'project-opened')
+      expect(ports.prepareHost).toHaveBeenCalledWith('Ubuntu')
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
+    })
+
+    it('reads the running distros at most once a minute per distro', async () => {
+      const ports = fakePorts({ prepareHost: vi.fn(async () => 'not-running' as const) })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.trigger('Ubuntu', 'project-opened')
+      await orchestrator.trigger('ubuntu', 'project-opened')
+      await orchestrator.trigger('Debian', 'project-opened')
+      expect(ports.prepareHost).toHaveBeenCalledTimes(2)
+      ports.clock.now += WSL_MOVE_ORCHESTRATOR_PROJECT_OPENED_THROTTLE_MS
+      await orchestrator.trigger('Ubuntu', 'project-opened')
+      expect(ports.prepareHost).toHaveBeenCalledTimes(3)
+    })
+
+    it('readies no host for a distro parked for the user', async () => {
+      const ports = fakePorts()
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.userAction('Ubuntu', 'not-now')
+      await orchestrator.trigger('Ubuntu', 'project-opened')
+      expect(ports.prepareHost).not.toHaveBeenCalled()
+    })
+  })
+
+  it('makes no automatic start with the kill switch off, but still runs Retry', async () => {
     const ports = fakePorts({ autoMoveEnabled: () => false })
     const orchestrator = new WslMoveOrchestrator(ports)
     await orchestrator.trigger('Ubuntu', 'connect')
+    await orchestrator.trigger('Ubuntu', 'project-opened')
     expect(ports.preview).not.toHaveBeenCalled()
-    await orchestrator.userAction('Ubuntu', 'move-now')
+    await orchestrator.userAction('Ubuntu', 'retry')
     expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
   })
 
@@ -195,6 +284,7 @@ describe('WslMoveOrchestrator', () => {
     })
     const orchestrator = new WslMoveOrchestrator(ports)
     const first = orchestrator.trigger('Ubuntu', 'connect')
+    await vi.waitFor(() => expect(ports.preview).toHaveBeenCalled())
     await orchestrator.trigger('ubuntu', 'project-opened')
     release()
     await first

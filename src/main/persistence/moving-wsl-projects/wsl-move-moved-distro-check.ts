@@ -9,7 +9,7 @@ import type { WslMovedDistroVerdict } from './wsl-move-orchestrator-transitions'
 export function wslMovedDistroVerdict(
   registrations: readonly WslDistroRegistration[] | null,
   distro: string,
-  distroGuid: string | undefined
+  distroGuid?: string
 ): WslMovedDistroVerdict {
   if (!registrations) {
     return 'unknown'

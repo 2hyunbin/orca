@@ -28,7 +28,18 @@ vi.mock('./ui', () => {
 type Status = { distro: string; state: string; environmentId: string; detail: null }
 const host = vi.hoisted(() => ({
   statuses: new Array<Status>(),
-  listeners: new Set<() => void>()
+  listeners: new Set<() => void>(),
+  running: { status: 'confirmed', distros: ['Ubuntu'] } as
+    | { status: 'confirmed'; distros: string[] }
+    | { status: 'unavailable' },
+  added: new Array<string>()
+}))
+vi.mock('../wsl/wsl-distro-registry-id', () => ({ readWslDistroRegistrations: async () => null }))
+vi.mock('../wsl/wsl-orcad-deploy', () => ({
+  defaultWslOrcadEnvironmentId: (distro: string) => `wsl:${distro}`
+}))
+vi.mock('../wsl-background-distro-gate', () => ({
+  readConfirmedRunningWslDistros: async () => host.running
 }))
 vi.mock('../wsl/wsl-host-service-instance', () => ({
   getWslHostService: () => ({
@@ -36,6 +47,14 @@ vi.mock('../wsl/wsl-host-service-instance', () => ({
     onStatusesChanged: (listener: () => void) => {
       host.listeners.add(listener)
       return () => host.listeners.delete(listener)
+    },
+    recordForEnvironment: () => null,
+    connect: async () => {},
+    // A bridge user's host: adding it makes it ready.
+    add: async ({ distro }: { distro: string }) => {
+      host.added.push(distro)
+      host.statuses.push({ distro, state: 'ready', environmentId: `wsl:${distro}`, detail: null })
+      return { ok: true, environmentId: `wsl:${distro}` }
     }
   })
 }))
@@ -112,6 +131,8 @@ beforeEach(() => {
   sent.length = 0
   host.statuses = []
   host.listeners.clear()
+  host.running = { status: 'confirmed', distros: ['Ubuntu'] }
+  host.added = []
   store.reads = 0
   driver.previewWslMove.mockClear()
   driver.moveProjectsToWslHost.mockClear()
@@ -190,6 +211,47 @@ describe('WSL move orchestrator wiring', () => {
       { requestId, sleptPanes }
     )
     await new Promise((resolve) => setImmediate(resolve))
+    expect(driver.previewWslMove).not.toHaveBeenCalled()
+  })
+
+  it('T2: a bridge project opened on a running distro adds its host and moves it', async () => {
+    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
+    await register()
+    await handlers.get('wslMoveOrchestrator:projectOpened')?.(
+      { sender: { id: MAIN_WINDOW_ID } },
+      'Ubuntu'
+    )
+    await answerWindow()
+    expect(host.added).toEqual(['Ubuntu'])
+    expect(driver.moveProjectsToWslHost).toHaveBeenCalledTimes(1)
+  })
+
+  it('T2: never adds a host for a stopped distro or one whose state cannot be read', async () => {
+    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
+    await register()
+    host.running = { status: 'confirmed', distros: [] }
+    await handlers.get('wslMoveOrchestrator:projectOpened')?.(
+      { sender: { id: MAIN_WINDOW_ID } },
+      'Ubuntu'
+    )
+    host.running = { status: 'unavailable' }
+    await handlers.get('wslMoveOrchestrator:projectOpened')?.(
+      { sender: { id: MAIN_WINDOW_ID } },
+      'Debian'
+    )
+    await answerWindow()
+    expect(host.added).toEqual([])
+    expect(driver.previewWslMove).not.toHaveBeenCalled()
+  })
+
+  it('T3: a ready host whose distro is not confirmed running is not resumed', async () => {
+    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
+    host.running = { status: 'unavailable' }
+    host.statuses = [
+      { distro: 'Ubuntu', state: 'ready', environmentId: 'wsl:Ubuntu', detail: null }
+    ]
+    await register()
+    await answerWindow()
     expect(driver.previewWslMove).not.toHaveBeenCalled()
   })
 })

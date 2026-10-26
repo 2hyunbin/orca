@@ -53,6 +53,8 @@ export type WslMoveApi = {
     action: WslMoveOrchestratorUserAction
     unsavedWorkspaceIds?: string[]
   }) => Promise<{ record: WslMoveOrchestratorRecord; release?: WslMoveUseLocallyResult } | null>
+  /** T2: the window opened a bridge project of this distro; main never boots it. */
+  orchestratorProjectOpened: (distro: string) => Promise<void>
   /** Returns the unsubscribe. */
   onOrchestratorStatus: (listener: (records: WslMoveOrchestratorRecord[]) => void) => () => void
   /** Main asks for the window's slept-pane bindings before an automatic move. */
@@ -80,6 +82,8 @@ export const wslMoveApi: WslMoveApi = {
   listOrchestrator: () => ipcRenderer.invoke('wslMoveOrchestrator:list'),
   orchestratorUserAction: (request) =>
     ipcRenderer.invoke('wslMoveOrchestrator:userAction', request),
+  orchestratorProjectOpened: (distro) =>
+    ipcRenderer.invoke('wslMoveOrchestrator:projectOpened', distro),
   onOrchestratorStatus: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, records: WslMoveOrchestratorRecord[]) =>
       listener(records)

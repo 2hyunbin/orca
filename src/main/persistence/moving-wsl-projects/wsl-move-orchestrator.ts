@@ -26,6 +26,11 @@ import {
   type WslMoveOutcome
 } from './wsl-move-orchestrator-transitions'
 
+export type WslMoveHostReadiness = 'ready' | 'not-running' | 'unverifiable' | 'failed'
+
+/** A project opened again within this window does not read the running distros again. */
+export const WSL_MOVE_ORCHESTRATOR_PROJECT_OPENED_THROTTLE_MS = 60_000
+
 /** The newest finished move of a distro, as R38's check needs it. */
 export type WslMoveFinishedMove = { migrationId: string; distroGuid?: string }
 
@@ -34,8 +39,12 @@ export type WslMoveOrchestratorPorts = {
   appVersion: string
   /** Kill switches for automatic starts (env, rollout); explicit user actions still run. */
   autoMoveEnabled: () => boolean
-  /** Whether the distro's host connection is ready now. Must never connect or boot. */
-  isHostReady: (distro: string) => boolean
+  /**
+   * Readies the distro's host for an automatic step, only if the distro is confirmed running:
+   * connects or adds its host then, and never boots it (A1). A failed running-distro read is
+   * `unverifiable`, never `not-running`: losing contact is no evidence either way.
+   */
+  prepareHost: (distro: string) => Promise<WslMoveHostReadiness>
   preview: (distro: string) => Promise<WslMovePreview>
   start: (distro: string) => Promise<WslMoveResult>
   finishedMove: (distro: string) => WslMoveFinishedMove | null
@@ -66,6 +75,7 @@ export class WslMoveOrchestrator {
   private readonly records: Map<string, WslMoveOrchestratorRecord>
   private readonly busy = new Set<string>()
   private readonly timers = new Map<string, () => void>()
+  private readonly projectOpenedAt = new Map<string, number>()
   private disposed = false
 
   constructor(private readonly ports: WslMoveOrchestratorPorts) {
@@ -88,9 +98,16 @@ export class WslMoveOrchestrator {
     if (this.disposed || this.busy.has(key)) {
       return
     }
-    // A1: only an explicit user action may wake a distro; everything else needs it awake already.
-    if (trigger !== 'user' && (!this.ports.autoMoveEnabled() || !this.ports.isHostReady(distro))) {
+    if (trigger !== 'user' && !this.ports.autoMoveEnabled()) {
       return
+    }
+    if (trigger === 'project-opened') {
+      const now = this.ports.now()
+      const last = this.projectOpenedAt.get(key)
+      if (last !== undefined && now - last < WSL_MOVE_ORCHESTRATOR_PROJECT_OPENED_THROTTLE_MS) {
+        return
+      }
+      this.projectOpenedAt.set(key, now)
     }
     this.busy.add(key)
     try {
@@ -181,6 +198,15 @@ export class WslMoveOrchestrator {
     }
     if (!mayStartWslMove(record, trigger, this.ports.now(), this.ports.appVersion)) {
       return
+    }
+    // A1: only an explicit user action may wake a distro; every other step needs it running.
+    if (trigger !== 'user') {
+      const readiness = await this.ports
+        .prepareHost(distro)
+        .catch((): WslMoveHostReadiness => 'unverifiable')
+      if (readiness !== 'ready') {
+        return
+      }
     }
     const preview = await this.settle(() => this.ports.preview(distro))
     record = this.commit(key, trigger, this.apply(record, preview), preview)

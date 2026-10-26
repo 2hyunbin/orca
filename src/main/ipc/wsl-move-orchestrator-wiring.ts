@@ -22,8 +22,12 @@ import {
 import { wslMovedDistroVerdict } from '../persistence/moving-wsl-projects/wsl-move-moved-distro-check'
 import {
   WslMoveOrchestrator,
-  type WslMoveFinishedMove
+  type WslMoveFinishedMove,
+  type WslMoveHostReadiness
 } from '../persistence/moving-wsl-projects/wsl-move-orchestrator'
+import { prepareWslMoveHost } from '../persistence/moving-wsl-projects/wsl-move-host-readiness'
+import { readConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
+import { defaultWslOrcadEnvironmentId } from '../wsl/wsl-orcad-deploy'
 import {
   readWslMoveOrchestratorRecords,
   writeWslMoveOrchestratorRecords
@@ -45,18 +49,14 @@ export const WSL_MOVE_ORCHESTRATOR_AUTO_ENV = 'ORCA_WSL_MOVE_AUTO'
 
 export const WSL_MOVE_ORCHESTRATOR_HANDLER_CHANNELS = [
   'wslMoveOrchestrator:list',
+  'wslMoveOrchestrator:projectOpened',
   'wslMoveOrchestrator:userAction',
   'wslMoveOrchestrator:answerSleptPanes'
 ] as const
 
 const SLEPT_PANES_TIMEOUT_MS = 5_000
 const COMMITTED_FROM = WSL_MOVE_CUTOVER_PHASES.indexOf('destination-committed')
-const USER_ACTIONS: readonly WslMoveOrchestratorUserAction[] = [
-  'move-now',
-  'retry',
-  'not-now',
-  'restore'
-]
+const USER_ACTIONS: readonly WslMoveOrchestratorUserAction[] = ['retry', 'not-now', 'restore']
 
 type SleptPanes = NonNullable<WslMoveRequest['sleptPanes']>
 
@@ -129,6 +129,24 @@ function isHostReady(distro: string): boolean {
   )
 }
 
+function prepareHost(distro: string): Promise<WslMoveHostReadiness> {
+  const service = getWslHostService()
+  if (!service) {
+    return Promise.resolve('failed')
+  }
+  const environmentId = defaultWslOrcadEnvironmentId(distro)
+  return prepareWslMoveHost(
+    {
+      readRunningDistros: readConfirmedRunningWslDistros,
+      isHostReady,
+      hasHost: () => service.recordForEnvironment(environmentId) !== null,
+      connect: () => service.connect(environmentId),
+      add: () => service.add({ distro, startIfStopped: false })
+    },
+    distro
+  )
+}
+
 function publish(records: WslMoveOrchestratorRecord[]): void {
   const window = getTrustedUIRendererWindow()
   if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) {
@@ -145,7 +163,7 @@ function createOrchestrator(
     now: () => Date.now(),
     appVersion: app.getVersion(),
     autoMoveEnabled: () => process.env[WSL_MOVE_ORCHESTRATOR_AUTO_ENV] !== '0',
-    isHostReady,
+    prepareHost,
     preview: async (distro) =>
       previewWslMove(driverDeps(), {
         distro,
@@ -184,7 +202,7 @@ function createOrchestrator(
   })
 }
 
-/** T1 and T3: a host reaching ready (or already ready at start) is the only automatic trigger. */
+/** T1 and T3: a host reaching ready, or already ready at start; T2 arrives from the window. */
 function followHostReadiness(orchestrator: WslMoveOrchestrator): void {
   const service = getWslHostService()
   if (!service) {
@@ -226,6 +244,20 @@ export function registerWslMoveOrchestrator(
     !!sender && getTrustedUIRendererWebContents()?.id === sender.id
   ipcMain.handle('wslMoveOrchestrator:list', (): WslMoveOrchestratorRecord[] =>
     orchestrator && wslHostsGateOpen() ? orchestrator.list() : []
+  )
+  // T2: the window opened a bridge project of this distro; the orchestrator checks it is running.
+  ipcMain.handle(
+    'wslMoveOrchestrator:projectOpened',
+    (event: { sender?: WebContents }, distro: unknown): void => {
+      if (
+        orchestrator &&
+        wslHostsGateOpen() &&
+        isMainWindow(event.sender) &&
+        typeof distro === 'string'
+      ) {
+        void orchestrator.trigger(distro, 'project-opened')
+      }
+    }
   )
   ipcMain.handle(
     'wslMoveOrchestrator:userAction',

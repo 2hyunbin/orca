@@ -149,6 +149,7 @@ function createWebPreloadApi(): Partial<PreloadApi> {
       onProgress: () => () => {},
       listOrchestrator: () => Promise.resolve([]),
       orchestratorUserAction: () => Promise.resolve(null),
+      orchestratorProjectOpened: () => Promise.resolve(),
       onOrchestratorStatus: () => () => {},
       onOrchestratorSleptPanesRequest: () => () => {},
       answerOrchestratorSleptPanes: () => Promise.resolve()

@@ -13,7 +13,7 @@ export type WslMoveOrchestratorTrigger =
   | 'project-opened'
   /** App start, for a distro whose host is already ready. */
   | 'startup'
-  /** Move now, Retry or Restore from the UI. */
+  /** Retry or Restore from the distro's status line. */
   | 'user'
   /** A backoff retry or deferred re-check; runs only while the host stays ready. */
   | 'timer'
@@ -59,7 +59,7 @@ export type WslMoveOrchestratorRecord = {
 }
 
 /** What the user asked of a distro's move from its status line. */
-export type WslMoveOrchestratorUserAction = 'move-now' | 'retry' | 'not-now' | 'restore'
+export type WslMoveOrchestratorUserAction = 'retry' | 'not-now' | 'restore'
 
 export const WSL_MOVE_ORCHESTRATOR_STATUS_CHANNEL = 'wslMoveOrchestrator:status'
 /** Main asks the window for its slept-pane bindings before an automatic start. */
