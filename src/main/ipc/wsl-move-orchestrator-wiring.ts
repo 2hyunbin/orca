@@ -25,7 +25,6 @@ import type {
 import { prepareWslMoveHost } from '../persistence/moving-wsl-projects/wsl-move-host-readiness'
 import { readConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
 import { defaultWslOrcadEnvironmentId } from '../wsl/wsl-orcad-deploy'
-import { findWslHostDeployment } from '../../shared/runtime-environment-wsl-host-store'
 import {
   readWslMoveOrchestratorRecords,
   writeWslMoveOrchestratorRecords
@@ -44,6 +43,7 @@ import { getTrustedUIRendererWebContents, getTrustedUIRendererWindow } from './u
 import { onWslMoveReleasedByUser, releaseWslMoveChainHere } from './wsl-move-release-here'
 import { createWslMoveUndoPorts } from './wsl-move-undo-wiring'
 import { answerWslMoveSleptPanes, requestSleptPanes } from './wsl-move-orchestrator-slept-panes'
+import { wslHostRemovalPending } from './wsl-move-host-connect'
 
 export const WSL_MOVE_ORCHESTRATOR_AUTO_ENV = 'ORCA_WSL_MOVE_AUTO'
 
@@ -80,16 +80,6 @@ function isHostReady(distro: string): boolean {
   )
 }
 
-/** E11 (#33843): a Remove that could not prove the server stopped leaves `pendingStop` set. */
-function hostRemovalPending(userDataPath: string, distro: string): boolean {
-  const record: object | null = findWslHostDeployment(
-    userDataPath,
-    defaultWslOrcadEnvironmentId(distro)
-  )
-  // Optional until #33843 lands: older records have no such field.
-  return !!record && 'pendingStop' in record && !!record.pendingStop
-}
-
 function prepareHost(
   userDataPath: string,
   distro: string,
@@ -104,7 +94,7 @@ function prepareHost(
     {
       readRunningDistros: readConfirmedRunningWslDistros,
       isHostReady,
-      removalPending: () => hostRemovalPending(userDataPath, distro),
+      removalPending: () => wslHostRemovalPending(userDataPath, distro),
       hasHost: () => service.recordForEnvironment(environmentId) !== null,
       connect: () => service.connect(environmentId),
       add: () => service.add({ distro, startIfStopped: false })
@@ -131,7 +121,7 @@ function createOrchestrator(
     appVersion: app.getVersion(),
     autoMoveEnabled: () => process.env[WSL_MOVE_ORCHESTRATOR_AUTO_ENV] !== '0',
     prepareHost: (distro, stillWanted) => prepareHost(userDataPath, distro, stillWanted),
-    hostRemovalPending: (distro) => hostRemovalPending(userDataPath, distro),
+    hostRemovalPending: (distro) => wslHostRemovalPending(userDataPath, distro),
     hasHost: (distro) =>
       getWslHostService()?.recordForEnvironment(defaultWslOrcadEnvironmentId(distro)) != null,
     isHostReady,
@@ -200,7 +190,7 @@ function followHostReadiness(orchestrator: WslMoveOrchestrator): void {
 
 let orchestrator: WslMoveOrchestrator | null = null
 
-/** `driverDeps` is the move dialog's own factory, so both start the same driver. */
+/** `driverDeps` is the dialog's driver, but its host connect never boots a stopped distro. */
 export function registerWslMoveOrchestrator(
   store: Store,
   driverDeps: () => WslMoveDriverDeps

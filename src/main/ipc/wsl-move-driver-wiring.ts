@@ -61,6 +61,7 @@ import { getTrustedUIRendererWebContents, getTrustedUIRendererWindow } from './u
 import { registerWslMoveHandlers } from './wsl-move-handlers'
 import { registerWslMoveOrchestrator } from './wsl-move-orchestrator-wiring'
 import { createWslMoveUndoPorts } from './wsl-move-undo-wiring'
+import { connectWslMoveHostService, type WslMoveHostConnectMode } from './wsl-move-host-connect'
 import { wslMoveReloadableWindow } from './wsl-move-reloadable-window'
 import { setWslMoveReloadableWindow } from '../persistence/moving-wsl-projects/wsl-move-window-write-hold'
 import {
@@ -87,10 +88,10 @@ export function registerWslMoveWiring(store: Store, runtime: OrcaRuntimeService)
   registerWslMoveHandlers(
     () => app.getPath('userData'),
     (senderId) => getTrustedUIRendererWebContents()?.id === senderId,
-    () => createWslMoveDriverDeps(store, runtime),
+    () => createWslMoveDriverDeps(store, runtime, 'user'),
     () => createWslMoveUndoPorts(store, app.getPath('userData'))
   )
-  registerWslMoveOrchestrator(store, () => createWslMoveDriverDeps(store, runtime))
+  registerWslMoveOrchestrator(store, () => createWslMoveDriverDeps(store, runtime, 'automatic'))
 }
 
 /** Each live bridge pane's shell folder, one process read per distro. */
@@ -114,7 +115,8 @@ async function readWslMovePaneShellCwds(
 
 export function createWslMoveDriverDeps(
   store: Store,
-  runtime: OrcaRuntimeService
+  runtime: OrcaRuntimeService,
+  hostConnect: WslMoveHostConnectMode
 ): WslMoveDriverDeps {
   const userDataPath = app.getPath('userData')
   const facts: WslMoveGateFactSources = {
@@ -165,7 +167,7 @@ export function createWslMoveDriverDeps(
       folderWorkspaces: store.getFolderWorkspaces(),
       projectGroups: store.getProjectGroups()
     }),
-    connectHost: (distro) => connectWslMoveHost(userDataPath, distro),
+    connectHost: (distro) => connectWslMoveHost(userDataPath, distro, hostConnect),
     isDistroRegistered: (distro, distroGuid) => isWslDistroRegistered(distro, distroGuid),
     exportManifest: (request) => exportWslMoveManifest(store, request),
     gateInputs: (scope) => collectWslMoveGateInputs(facts, scope),
@@ -238,14 +240,14 @@ export function createWslMoveDriverDeps(
 
 async function connectWslMoveHost(
   userDataPath: string,
-  distro: string
+  distro: string,
+  mode: WslMoveHostConnectMode
 ): Promise<WslMoveHost | null> {
   const service = getWslHostService()
   const environmentId = defaultWslOrcadEnvironmentId(distro)
-  if (!service?.recordForEnvironment(environmentId)) {
+  if (!service || !(await connectWslMoveHostService(service, userDataPath, distro, mode))) {
     return null
   }
-  await service.ensureForRuntimeCall(environmentId)
   const environment = resolveEnvironment(userDataPath, environmentId)
   const status = await getRuntimeEnvironmentStatus(userDataPath, environmentId)
   if (!status.ok) {

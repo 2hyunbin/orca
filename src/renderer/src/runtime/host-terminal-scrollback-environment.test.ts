@@ -30,6 +30,9 @@ describe('which host serves a pane its stored scrollback', () => {
     expect(hostScrollbackEnvironmentId(owner('env-paired-web'), ENVIRONMENTS)).toBeNull()
     expect(hostScrollbackEnvironmentId(owner(null), ENVIRONMENTS)).toBeNull()
     expect(hostScrollbackEnvironmentId({ kind: 'ambiguous' }, ENVIRONMENTS)).toBeNull()
+    // Before the environment list loads there is nothing to hold for.
+    expect(hostScrollbackEnvironmentId(owner('env-wsl'), undefined)).toBeNull()
+    expect(hostScrollbackEnvironmentId(owner('env-wsl'), [])).toBeNull()
   })
 
   it.each(['env-ssh-orcad', 'env-paired-web'])(

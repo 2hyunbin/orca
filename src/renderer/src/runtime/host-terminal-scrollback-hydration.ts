@@ -260,13 +260,13 @@ async function fetchHostScrollback(
  */
 export function hostScrollbackEnvironmentId(
   owner: RuntimeEnvironmentOwnerMatch,
-  environments: readonly { id: string; orcadDeployment?: OrcadDeploymentLink | null }[]
+  environments: readonly { id: string; orcadDeployment?: OrcadDeploymentLink | null }[] | undefined
 ): string | null {
   if (owner.kind !== 'resolved' || owner.environmentId === null) {
     return null
   }
   const environmentId = owner.environmentId
-  const environment = environments.find((candidate) => candidate.id === environmentId)
+  const environment = environments?.find((candidate) => candidate.id === environmentId)
   return environment?.orcadDeployment?.kind === 'wsl' ? environmentId : null
 }
 

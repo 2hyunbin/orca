@@ -2,6 +2,7 @@
 import { cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
+import type { OrcadDeploymentLink } from '../../../../shared/runtime-environments'
 import { resetHostTerminalScrollbackHydrationForTests } from '@/runtime/host-terminal-scrollback-hydration'
 import { useHostTerminalScrollbackHold } from './use-host-terminal-scrollback-hold'
 import { resolveLeafScrollbackBuffers } from './leaf-scrollback-resolution'
@@ -10,12 +11,19 @@ const LEAF = '11111111-1111-4111-8111-111111111111'
 const REF = `v1-${'d'.repeat(32)}`
 
 type MountStore = {
+  runtimeEnvironments: { id: string; orcadDeployment?: OrcadDeploymentLink }[]
   terminalLayoutsByTabId: Record<string, TerminalLayoutSnapshot>
   localOnlyScrollbackByTabId: Record<string, Record<string, string> | undefined>
   setTabLocalOnlyScrollback: (tabId: string, buffers: Record<string, string> | null) => void
 }
 
+const WSL_HOST = {
+  id: 'env-wsl',
+  orcadDeployment: { kind: 'wsl', distro: 'Ubuntu', localPort: 6768, remotePort: 6768 }
+} satisfies MountStore['runtimeEnvironments'][number]
+
 const store = vi.hoisted((): MountStore => ({
+  runtimeEnvironments: [],
   terminalLayoutsByTabId: {},
   localOnlyScrollbackByTabId: {},
   setTabLocalOnlyScrollback: () => {}
@@ -44,6 +52,8 @@ function mountLayout(layout: TerminalLayoutSnapshot): void {
 
 beforeEach(() => {
   resetHostTerminalScrollbackHydrationForTests()
+  // Only a WSL host serves moved panes their history.
+  store.runtimeEnvironments = [WSL_HOST]
   store.terminalLayoutsByTabId = {}
   store.localOnlyScrollbackByTabId = {}
   store.setTabLocalOnlyScrollback = (tabId, buffers) => {
