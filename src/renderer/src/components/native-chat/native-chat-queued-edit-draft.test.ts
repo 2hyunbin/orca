@@ -68,6 +68,21 @@ describe('queued edit draft ownership', () => {
     discardNativeChatQueuedEdit(edit)
   })
 
+  it('retains distinct selected paths for repeated same-name skill tokens', () => {
+    const skills = [skill, { ...skill, path: '/other/SKILL.md' }]
+    const edit = createNativeChatQueuedEditDraft(
+      {
+        ...body,
+        blocks: [{ type: 'text', text: '$review $review' }],
+        skills
+      },
+      'bottom'
+    )
+    expect(nativeChatQueuedEditInput(edit, true, true).skills).toEqual(skills)
+    expect(nativeChatQueuedEditDirty(edit)).toBe(false)
+    discardNativeChatQueuedEdit(edit)
+  })
+
   it('normalizes repeated skill refs when deciding whether to hand a draft back', () => {
     const repeated = { ...body, skills: [skill, skill] }
     const edit = createNativeChatQueuedEditDraft(repeated, 'bottom')

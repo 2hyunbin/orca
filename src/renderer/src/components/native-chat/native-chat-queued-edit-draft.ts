@@ -34,7 +34,11 @@ import {
 } from './native-chat-composer-pasted-text-references'
 import type { NativeChatComposerDraft } from './native-chat-composer-draft-storage'
 
-function seedSkills(node: JSONContent, body: AgentJournalMessageItem): JSONContent {
+function seedSkills(
+  node: JSONContent,
+  body: AgentJournalMessageItem,
+  occurrences = new Map<string, number>()
+): JSONContent {
   if (node.type === 'text' && node.text) {
     return node
   }
@@ -42,14 +46,17 @@ function seedSkills(node: JSONContent, body: AgentJournalMessageItem): JSONConte
     ...node,
     content: node.content?.flatMap((child) => {
       if (child.type !== 'text' || !child.text) {
-        return [seedSkills(child, body)]
+        return [seedSkills(child, body, occurrences)]
       }
       const pieces: JSONContent[] = []
       const text = child.text
       let start = 0
       const pattern = /\$[\w:-]+/gu
       for (const match of text.matchAll(pattern)) {
-        const skill = body.skills?.find(({ name }) => `$${name}` === match[0])
+        const matching = body.skills?.filter(({ name }) => `$${name}` === match[0]) ?? []
+        const occurrence = occurrences.get(match[0]) ?? 0
+        const skill = matching[occurrence] ?? matching[0]
+        occurrences.set(match[0], occurrence + 1)
         if (!skill) {
           continue
         }
