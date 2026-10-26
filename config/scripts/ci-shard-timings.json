@@ -10618,7 +10618,7 @@
       "src/renderer/src/store/slices/agent-status-live-map-leak.test.ts": 2819,
       "src/renderer/src/store/slices/agent-status-main-agent-fact.test.ts": 1531,
       "src/renderer/src/store/slices/agent-status-manual-sleep-capture.test.ts": 1409,
-      "src/renderer/src/store/slices/agent-status-pane-keyed-records.test.ts": 56,
+      "src/renderer/src/store/slices/agent-status/agent-status-pane-keyed-records.test.ts": 56,
       "src/renderer/src/store/slices/agent-status-pr-refresh-handoff.test.ts": 1240,
       "src/renderer/src/store/slices/agent-status-provider-session.test.ts": 1400,
       "src/renderer/src/store/slices/agent-status-quit-capture-resumable-agents.test.ts": 1480,
