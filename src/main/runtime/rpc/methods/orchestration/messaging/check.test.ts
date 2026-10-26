@@ -690,7 +690,6 @@ describe('orchestration RPC methods', () => {
       })) as { messages: { read: number }[]; count: number }
 
       expect(result.count).toBe(2)
-      // Must not have flipped the remaining unread row
       const stillUnread = db.getUnreadMessages('b')
       expect(stillUnread).toHaveLength(1)
     })
@@ -715,7 +714,7 @@ describe('orchestration RPC methods', () => {
     it('--all returns rows with delivered_at set after push-on-idle stamped them', async () => {
       setup()
       const msg = db.insertMessage({ from: 'a', to: 'b', subject: 'hi' })
-      // Why: simulate push-on-idle stamping delivered_at without the runtime loop.
+      // Simulate push-on-idle delivered_at without starting the runtime loop.
       db.markAsDelivered([msg.id], 'b')
 
       const result = (await call('orchestration.check', {
@@ -748,7 +747,6 @@ describe('orchestration RPC methods', () => {
       })) as { count: number }
       expect(result.count).toBe(1)
 
-      // Must not have marked read
       expect(db.getUnreadMessages('b')).toHaveLength(1)
     })
 
@@ -903,7 +901,6 @@ describe('orchestration RPC methods', () => {
 
       expect(inbox.count).toBe(2)
       expect(check.count).toBe(2)
-      // Same rows in the same order — both use sequence DESC
       expect(inbox.messages.map((m) => m.id)).toEqual(check.messages.map((m) => m.id))
       expect(inbox.messages.every((m) => m.to_handle === 'b')).toBe(true)
     })

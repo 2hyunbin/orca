@@ -2,11 +2,11 @@ import {
   writeMailHold,
   mailHoldsCommitted
 } from '../native-chat/agent-session-journal/journal-mail-holds'
-import type { AgentSessionReserveResult } from './agent-session-reservation-admission'
+import type { AgentSessionReserveResult } from './agent-session/ownership/agent-session-reservation-admission'
 import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import type { JournalOperationReceipt } from '../native-chat/agent-session-journal/journal-row-writer'
 import { commitAgentSessionFounding } from './agent-session-founding-admission'
-import type { AgentSessionReserveRequest } from './agent-session-reservation-admission'
+import type { AgentSessionReserveRequest } from './agent-session/ownership/agent-session-reservation-admission'
 import { draftAgentSessionStoreState } from './agent-session-store-draft'
 import type { AgentSessionStoreTransactions } from './agent-session-store-transactions'
 

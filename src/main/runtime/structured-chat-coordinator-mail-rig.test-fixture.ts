@@ -150,7 +150,7 @@ export async function userTexts(sessionId: string): Promise<string[]> {
   )
 }
 
-/** A supervised terminal worker under the coordinator's Run, and its worker_done; its dispatch id. */
+/** Finish a supervised worker and return its dispatch id. */
 export async function finishWorker(
   taskId: string,
   worker: { handle: string; paneKey: string } = { handle: 'term_worker', paneKey: WORKER_PANE }
@@ -199,7 +199,7 @@ export async function coordinatorRunAndTask(): Promise<{ runId: string; taskId: 
   return { runId, taskId: idOf(task.task) }
 }
 
-/** `/clear` as the chat surface runs it: the same conversation gets a fresh context. */
+/** Clear context without replacing the conversation. */
 export async function clearChat(sessionId: string): Promise<string> {
   const command = 'clear' as const
   const cleared = await host.conversationCommand(
@@ -228,7 +228,6 @@ export async function clearChat(sessionId: string): Promise<string> {
   return sessionId
 }
 
-/** A cleared context starts when the user writes to the same conversation. */
 export async function startClearedContext(sessionId: string): Promise<void> {
   expect(await sendUserMessage(sessionId, 'hello')).toMatchObject({ ok: true })
   await vi.waitFor(() => expect(connectionFor(sessionId).turns).toHaveLength(1), WAIT)
@@ -257,7 +256,6 @@ function createMailHost() {
     resolveClaudeAuthPolicy: () => ({ account: 'managed' }),
     resolveEnvironment: async () => ({ PATH: '/usr/bin' }),
     ...scriptedCodexTransport(codex.openConnection),
-    // The same calls the runtime's own host install makes.
     onRequestFailure: (failure) => runtime.onStructuredRequestFailureForErrorMail(failure),
     captureSessionMail: (sessionId, records, scope) =>
       runtime.captureSessionMail(sessionId, records, scope),
@@ -276,7 +274,7 @@ export async function restartHostAndRuntime(): Promise<void> {
   await host.restoreReadableSessions([COORDINATOR])
 }
 
-/** The runtime over the shared database; a second call is what an Orca restart leaves behind. */
+/** Restart reuses the same database with a fresh runtime. */
 export function startRuntime(): OrcaRuntimeService {
   const started = new OrcaRuntimeService()
   started.setOrchestrationDb(db)
@@ -284,7 +282,7 @@ export function startRuntime(): OrcaRuntimeService {
   vi.spyOn(started, 'getTerminalPaneKey').mockImplementation((handle) =>
     handle === 'term_worker' ? WORKER_PANE : handle === 'term_worker_2' ? WORKER_2_PANE : null
   )
-  // The exact process `finishWorker` records, so a worker's report is accepted and settles.
+  // Match the process incarnation recorded by finishWorker so reports can settle dispatches.
   vi.spyOn(started, 'getTerminalProcessIncarnation').mockImplementation((handle) =>
     handle === 'term_worker' || handle === 'term_worker_2' ? `runtime_test:${handle}:1` : null
   )
@@ -309,7 +307,6 @@ export const WAIT = { timeout: 10_000, interval: 10 }
 /** The first line of what a chat is sent for one orchestration message. */
 export const MAIL = /Orchestration message from another agent, not an instruction from the user\./
 
-/** The text of a turn the fake provider received. */
 export function turnText(turn: { text: string }): string {
   const input: unknown = JSON.parse(turn.text)
   return Array.isArray(input)
@@ -317,7 +314,6 @@ export function turnText(turn: { text: string }): string {
     : ''
 }
 
-/** What an Orca restart leaves behind: a new runtime over the same database and host. */
 export function restartRuntime(): void {
   runtime = startRuntime()
   dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })

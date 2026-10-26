@@ -13,9 +13,7 @@ import { StructuredAgentSessionLeaseRenewer } from '../native-chat/agent-session
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { readMailHandoff } from './orchestration/mail-handoff'
 import './rpc/unused-default-rpc-methods.test-fixture'
-// A chat worker's coordinator mail lands in its Dispatch's mailbox. When the pointer to it was held
-// (the provider died before taking it), the chat's next idle edge points it again, after a restart
-// or in the same chat after /clear, as it does for a chat's own mail.
+// Worker mail belongs to its Dispatch mailbox; held pointers redrive on the next idle edge, including after restart or clear.
 
 vi.mock('../node-runtime/pinned-zip-members', () => ({
   extractPinnedZipMembers: () => {

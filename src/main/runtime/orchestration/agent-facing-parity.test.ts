@@ -1,9 +1,4 @@
-/**
- * A chat agent and a terminal agent run the same orchestration process: the same preamble, the
- * same pointer text and the same guide. They differ in how each is named (a terminal by its handle,
- * exactly as on main, a session by its Orca session ID) and in the preamble calling a chat a chat.
- * Orca absorbs everything else.
- */
+/** Chat and terminal agents must receive equivalent preambles, pointers and guides, apart from address and chat wording. */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
@@ -40,7 +35,7 @@ vi.mock('../rpc/methods/orchestration-structured-worker-session', () => ({
 const CHAT_SESSION = '4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37'
 const CHAT_ADDRESS = `orca_session_id:${CHAT_SESSION}`
 const TERMINAL_HANDLE = 'term_worker'
-// A structured worker's mailbox key: the handle it was minted, which its preamble never shows.
+// The structured worker's hidden mailbox handle differs from its visible session address.
 const CHAT_WORKER_HANDLE = 'structworker_1'
 
 const db = new OrchestrationDb(':memory:')
@@ -138,7 +133,6 @@ async function renderChatMail(mailbox: string): Promise<string> {
     getDb: () => db,
     getMessageWaiters: () => undefined,
     resolveStructuredTarget: () => ({ sessionId: CHAT_SESSION, dispatchId: null }),
-    // The runtime's wiring of the structured lane.
     getCliCommand: localOrchestrationCliCommand,
     senderName: () => null,
     host: {
@@ -158,7 +152,7 @@ async function renderChatMail(mailbox: string): Promise<string> {
   })
   delivery.deliverForHandle(mailbox)
   await vi.waitFor(() => expect(texts).toHaveLength(1))
-  // Read, as the agent's `check` reads it, so this mailbox's next mail is pointed too.
+  // Mark read as the agent's check does, allowing the next message pointer.
   db.markAsRead([message.id])
   return texts[0]!
 }

@@ -232,7 +232,7 @@ export const ORCHESTRATION_MESSAGE_METHODS = [
               callerEvidence: orchestrationCompatibilityEvidence,
               callerSession: orchestrationCaller
             })
-      // Why: listTasksWithDispatch adds assignee_handle + dispatch_id (NULL for non-dispatched), so legacy-shape consumers are unaffected.
+      // Add nullable assignee_handle/dispatch_id without changing legacy non-dispatched rows.
       const joined = db.listTasksWithDispatch({
         status: params.status as TaskStatus,
         ready: params.ready,
