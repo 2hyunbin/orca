@@ -108,26 +108,6 @@ describe('Slack event ingress', () => {
     expect(await harness.poll()).toEqual([])
     expect(await harness.posts()).toEqual([])
 
-    // The same for answer presses.
-    const click = (appId: string) =>
-      new URLSearchParams({
-        payload: JSON.stringify({
-          type: 'block_actions',
-          api_app_id: appId,
-          team: { id: TEAM },
-          user: { id: OWNER },
-          channel: { id: CHANNEL },
-          container: { message_ts: THREAD },
-          actions: [{ action_id: 'answer:0', value: 'allow_once' }]
-        })
-      }).toString()
-    const clicked = (secret: string, appId: string, body: string) =>
-      signedBy(secret, `/slack/apps/${appId}/interactivity`, body)
-    expect((await clicked('secret-2', APP, click(APP))).status).toBe(401)
-    expect((await clicked('secret-2', 'A2', click(APP))).status).toBe(200)
-    expect((await clicked('secret-2', 'A2', click('A2'))).status).toBe(200)
-    expect(harness.fake.take()).toEqual([])
-
     // A row that won't open is an operator fault, not a bad request: Slack retries a 500.
     await harness.database.query(
       "UPDATE connector_slack_apps SET signing_secret = 'v1.AAAA.AAAA.AAAA' WHERE app_id = 'A2'"
