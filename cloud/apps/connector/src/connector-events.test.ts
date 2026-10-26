@@ -1,4 +1,8 @@
-import { CONNECTOR_PATHS, ConnectorPollResponseSchema } from '@orca-cloud/connector-contract'
+import {
+  CONNECTOR_PATHS,
+  ConnectorHostSessionResponseSchema,
+  ConnectorPollResponseSchema
+} from '@orca-cloud/connector-contract'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   cleanupConnectorHarnesses,
@@ -20,7 +24,9 @@ async function setup() {
       externalId: conversation.externalId,
       delivery: { kind: 'start', agent: 'claude', placeId: 'pl_1', prompt: 'fix it' }
     })
-  const events = (list: unknown[]) => machine.call(CONNECTOR_PATHS.events, { v: 1, events: list })
+  let nextSeq = 0
+  const events = (list: unknown[], seq = nextSeq++) =>
+    machine.call(CONNECTOR_PATHS.events, { v: 1, seq, events: list })
   const thread = async () =>
     (
       await harness.database.query(
@@ -99,12 +105,57 @@ describe('connector turn events', () => {
     expect(await thread()).toMatchObject({ turn_state: 'unverifiable' })
   })
 
+  it('drops a batch at or below the session high-water mark', async () => {
+    const { machine, enqueue, events, thread } = await setup()
+    await enqueue(machine.hostId)
+    const prompt = { kind: 'approval', promptId: 'p1', tool: 'Bash', options: [] }
+    const promptEvent = { conversation, paneKey: 'pane-1', kind: 'prompt', prompt }
+    const ended = {
+      conversation,
+      paneKey: 'pane-1',
+      kind: 'turn-ended',
+      turnId: 100,
+      at: 160,
+      stopReason: 'end_turn'
+    }
+    // Batch 1 (the prompt) lands late, after batch 2 cleared it.
+    expect((await events([ended], 2)).status).toBe(204)
+    expect((await events([promptEvent], 1)).status).toBe(204)
+    expect(await thread()).toMatchObject({ pending_prompt: null, turn_state: 'ended' })
+    // A retry of the applied batch changes nothing either.
+    await events([promptEvent], 2)
+    expect(await thread()).toMatchObject({ pending_prompt: null })
+  })
+
+  it('restarts the high-water mark with each new session', async () => {
+    const { harness, machine, enqueue, events, thread } = await setup()
+    await enqueue(machine.hostId)
+    await events([{ conversation, paneKey: 'pane-1', kind: 'turn-started', at: 100 }], 5)
+    const { sessionToken } = ConnectorHostSessionResponseSchema.parse(
+      await (await harness.machineSession(machine.host)).json()
+    )
+    const fresh = await harness.json(
+      CONNECTOR_PATHS.events,
+      {
+        v: 1,
+        seq: 0,
+        events: [{ conversation, paneKey: 'pane-2', kind: 'turn-started', at: 200 }]
+      },
+      { authorization: `Bearer ${sessionToken}` }
+    )
+    expect(fresh.status).toBe(204)
+    expect(await thread()).toMatchObject({ pane_key: 'pane-2' })
+    // The replaced session is refused outright.
+    expect((await events([{ kind: 'snapshot', conversations: [] }], 6)).status).toBe(401)
+  })
+
   it("ignores events for another host's thread", async () => {
     const { harness, machine, enqueue, thread } = await setup()
     await enqueue(machine.hostId)
     const other = await harness.linkedMachine(machine.owner)
     await other.call(CONNECTOR_PATHS.events, {
       v: 1,
+      seq: 0,
       events: [{ conversation, paneKey: 'pane-9', kind: 'turn-started', at: 100 }]
     })
     expect(await thread()).toMatchObject({ pane_key: null, turn_state: null })

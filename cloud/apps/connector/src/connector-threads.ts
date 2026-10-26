@@ -44,11 +44,23 @@ export class ConnectorThreads {
 
   // Idempotent by each event's identity: a resend writes the same state again or matches nothing.
   // Under the host lock (MachineSession.locked), so a replaced or revoked session writes nothing.
+  // A batch applies only above the session's high-water mark: a late original or a retry of an
+  // applied batch changes nothing. False means it was dropped as stale.
   async applyEvents(
     transaction: CloudDatabase,
-    hostId: string,
+    session: { hostId: string; sessionId: string },
+    seq: number,
     events: ConnectorEvent[]
-  ): Promise<void> {
+  ): Promise<boolean> {
+    const { hostId } = session
+    const [advanced] = await transaction.query(
+      `UPDATE connector_sessions SET events_seq = ?
+       WHERE token_hash = ? AND host_fingerprint = ? AND (events_seq IS NULL OR events_seq < ?)`,
+      [seq, session.sessionId, hostId, seq]
+    )
+    if (Number(advanced?.changes ?? 0) === 0) {
+      return false
+    }
     for (const event of events) {
       if (event.kind === 'snapshot') {
         // Not working never means done: an open turn the snapshot doesn't show working (or doesn't
@@ -119,5 +131,6 @@ export class ConnectorThreads {
           break
       }
     }
+    return true
   }
 }

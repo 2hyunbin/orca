@@ -119,8 +119,14 @@ export function registerMachineRoutes(
       return context.json({ error: 'invalid_request' }, 400)
     }
     const hostId = context.get('hostId')
-    const applied = await session.locked(context, (transaction) =>
-      threads.applyEvents(transaction, hostId, body.data.events)
+    // A stale batch still answers 200: the machine has nothing to retry.
+    const applied = await session.locked(context, (transaction, current) =>
+      threads.applyEvents(
+        transaction,
+        { hostId, sessionId: current.sessionId },
+        body.data.seq,
+        body.data.events
+      )
     )
     return applied instanceof Response ? applied : context.body(null, 204)
   })

@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS connector_sessions (
   host_fingerprint TEXT NOT NULL,
   expires_at BIGINT NOT NULL,
   created_at BIGINT NOT NULL,
-  first_polled_at BIGINT
+  first_polled_at BIGINT,
+  events_seq BIGINT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS connector_sessions_host ON connector_sessions(host_fingerprint);
 CREATE INDEX IF NOT EXISTS connector_sessions_expires_at ON connector_sessions(expires_at);
