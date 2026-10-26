@@ -23,8 +23,7 @@ vi.mock('../../shared/runtime-environment-wsl-host-store', async (importOriginal
 describe('the move driver reaching its WSL host', () => {
   let userDataPath: string
 
-  async function stoppedAndParkedHost() {
-    const connector = makeConnector([UBUNTU])
+  function hostService(connector: ReturnType<typeof makeConnector>): WslHostService {
     const service = new WslHostService({
       userDataPath: () => userDataPath,
       isEnabled: () => true,
@@ -35,9 +34,20 @@ describe('the move driver reaching its WSL host', () => {
       removed: () => {}
     })
     service.attach(connector)
+    return service
+  }
+
+  async function stoppedAndParkedHost() {
+    const connector = makeConnector([UBUNTU])
+    const service = hostService(connector)
     await service.add({ distro: 'Ubuntu' })
     await connector.disconnect('Ubuntu')
     connector.distro.state = 'stopped'
+    service.handleConnectionChange('Ubuntu', null, {
+      state: 'distro-stopped',
+      terminals: 'exited',
+      recovering: false
+    })
     // A poll finding the distro stopped parks the host.
     await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toThrow('Ubuntu was stopped')
     connector.connect.mockClear()
@@ -86,5 +96,19 @@ describe('the move driver reaching its WSL host', () => {
       )
     }
     expect(connector.connect).not.toHaveBeenCalled()
+  })
+
+  it('leaves an already-connected host alone in either mode: no reconnect', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = hostService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    connector.connect.mockClear()
+    for (const mode of ['user', 'automatic'] as const) {
+      await expect(connectWslMoveHostService(service, userDataPath, 'Ubuntu', mode)).resolves.toBe(
+        true
+      )
+    }
+    expect(connector.connect).not.toHaveBeenCalled()
+    expect(connector.disconnect).not.toHaveBeenCalled()
   })
 })
