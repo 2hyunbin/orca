@@ -1,4 +1,7 @@
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
+import * as naming from '../../../native-chat/agent-session-wire/structured-agent-session-status-feed-deps'
+import { StructuredAgentSessionStatusFeed } from '../../../native-chat/agent-session-wire/structured-agent-session-status-feed'
+import { countRecordQueries, countStoreWork } from '../../agent-session-scale.test-fixture'
 import type { AgentSessionRecord } from '../../../../shared/agent-session-record'
 import {
   agentSessionLeaseFixture,
@@ -27,10 +30,11 @@ import {
 
 afterEach(clearStructuredHostStub)
 
-it('filters naming notes by the same record audience as status rows', async () => {
+it.each([10, 100])('filters cold naming notes with linear work for %i healthy rows', async (h) => {
   const rig = hostTestState()
   await abandonStructuredAgentSessionHost(rig.host)
-  const records = ['session-codex', 'session-pi', 'session-raw-only'].map(
+  const healthyIds = Array.from({ length: h - 1 }, (_, i) => `healthy-codex-${i}`)
+  const records = [...healthyIds, 'session-codex', 'session-pi', 'session-raw-only'].map(
     (sessionId): AgentSessionRecord => {
       const record = agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId }))
       return {
@@ -98,24 +102,102 @@ it('filters naming notes by the same record audience as status rows', async () =
         .listConversations()
         .map((record) => record.sessionId)
         .sort()
-    ).toEqual(['session-codex', 'session-pi'])
-    expect(rawRows.map((row) => row.session_id)).toEqual([
-      'session-codex',
-      'session-pi',
-      'session-raw-only'
-    ])
+    ).toEqual([...healthyIds, 'session-codex', 'session-pi'].sort())
+    expect(rawRows.map((row) => row.session_id)).toEqual(
+      [...healthyIds, 'session-codex', 'session-pi', 'session-raw-only'].sort()
+    )
     expect(reopened.db.prepare('SELECT session_id FROM journal_sessions').all()).toEqual([])
     expect(host.hasSession('session-codex')).toBe(false)
     expect(host.readStatusSummary('session-codex')).toBeUndefined()
-    expect(
-      await call('agentSession.subscribeStatus', null, STRUCTURED_CLIENT, {
+    const work = countStoreWork(store)
+    const queries = countRecordQueries(rig.root)
+    // Observe the actual cached loader statement even if a future caller reuses it directly.
+    reopened.db.prepare('SELECT session_id, record_json FROM agent_session_records ORDER BY rowid')
+    const names = vi.spyOn(naming, 'structuredAgentSessionNamingSnapshot')
+    const flatten = vi.spyOn(Array.prototype, 'flatMap')
+    const unsubscribe = vi.spyOn(StructuredAgentSessionStatusFeed.prototype, 'unsubscribe')
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      work.reset()
+      names.mockClear()
+      flatten.mockClear()
+      const reply = await call('agentSession.subscribeStatus', null, STRUCTURED_CLIENT, {
         registerSubscriptionCleanup: (_id: string, cleanup: () => void) => {
           closeStream = cleanup
         }
       })
-    ).toMatchObject({
-      result: { conversationNames: [{ sessionId: 'session-codex', conversationName: 'Name' }] }
-    })
+      const measured = { ...work.counts }
+      const measuredQueries = queries()
+      closeStream()
+      closeStream = (): void => {}
+      expect(unsubscribe).toHaveBeenCalledTimes(attempt)
+      expect(measured).toEqual({
+        inventories: 1,
+        keyed: h + 1,
+        views: 2 * h,
+        clones: 0,
+        cloneBytes: 0,
+        decodes: 0,
+        links: 0,
+        tabReads: 0
+      })
+      expect(measuredQueries).toEqual({ executions: 0, rows: 0 })
+      expect(names).toHaveBeenCalledTimes(1)
+      expect(names.mock.results[0]).toEqual({
+        type: 'return',
+        value: {
+          type: 'snapshot',
+          sessions: [],
+          namingActiveSessionIds: [],
+          conversationNames: [...healthyIds, 'session-pi', 'session-codex'].map((sessionId) => ({
+            sessionId,
+            conversationName: 'Name'
+          }))
+        }
+      })
+      const scans = flatten.mock.contexts.filter(
+        (rows) =>
+          Array.isArray(rows) &&
+          rows.length === 2 &&
+          rows.every(
+            (row: unknown) =>
+              typeof row === 'object' &&
+              row !== null &&
+              'raw' in row &&
+              typeof row.raw === 'object' &&
+              row.raw !== null &&
+              'sessionId' in row.raw &&
+              (row.raw.sessionId === 'session-codex' || row.raw.sessionId === 'session-raw-only')
+          )
+      )
+      expect(scans).toEqual([
+        [
+          {
+            raw: expect.objectContaining({ sessionId: 'session-codex' }),
+            conversation: expect.objectContaining({ sessionId: 'session-codex' }),
+            reason: expect.any(String)
+          },
+          {
+            raw: expect.objectContaining({ sessionId: 'session-raw-only' }),
+            reason: expect.any(String)
+          }
+        ]
+      ])
+      expect(reply).toMatchObject({
+        result: {
+          sessions: [],
+          namingActiveSessionIds: [],
+          conversationNames: [...healthyIds, 'session-codex'].map((sessionId) => ({
+            sessionId,
+            conversationName: 'Name'
+          }))
+        }
+      })
+    }
+    flatten.mockRestore()
+    expect(records.every(({ sessionId }) => !host.hasSession(sessionId))).toBe(true)
+    expect(records.every(({ sessionId }) => host.readStatusSummary(sessionId) === undefined)).toBe(
+      true
+    )
     expect(host.hasSession('session-codex')).toBe(false)
     expect(host.readStatusSummary('session-codex')).toBeUndefined()
     expect(rig.acquire).not.toHaveBeenCalled()
