@@ -84,8 +84,8 @@ export class ConnectorHostLinks {
     })
   }
 
-  async accountOf(hostId: string): Promise<string | null> {
-    const [row] = await this.database.query(
+  async accountOf(transaction: CloudDatabase, hostId: string): Promise<string | null> {
+    const [row] = await transaction.query(
       'SELECT account_id FROM connector_hosts WHERE host_id = ? AND revoked_at IS NULL',
       [hostId]
     )

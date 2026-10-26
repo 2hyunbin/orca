@@ -102,7 +102,10 @@ export function registerMachineRoutes(
   app.post(CONNECTOR_PATHS.events, limitBody, async (context) => {
     const body = ConnectorEventsRequestSchema.safeParse(await context.req.json().catch(() => null))
     if (!body.success) return context.json({ error: 'invalid_request' }, 400)
-    await threads.applyEvents(context.get('hostId'), body.data.events)
-    return context.body(null, 204)
+    const hostId = context.get('hostId')
+    const applied = await session.locked(context, (transaction) =>
+      threads.applyEvents(transaction, hostId, body.data.events)
+    )
+    return applied instanceof Response ? applied : context.body(null, 204)
   })
 }

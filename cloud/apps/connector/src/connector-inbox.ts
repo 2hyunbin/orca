@@ -5,7 +5,6 @@ import {
   type ConnectorAcksRequest,
   type ConnectorDelivery
 } from '@orca-cloud/connector-contract'
-import { lockConnectorHost } from './connector-host-handshake.js'
 
 // NOTIFY channel; the payload is the host id whose inbox changed.
 export const INBOX_CHANNEL = 'connector_inbox'
@@ -41,54 +40,50 @@ export class ConnectorInbox {
     await this.wake(transaction, hostId)
   }
 
-  async enqueue(input: {
-    hostId: string
-    externalId: string
-    deliveryId: string
-    body: DeliveryBody
-  }): Promise<EnqueueResult> {
+  // Under the host lock, after the caller checked the link and bound the thread (queueDelivery).
+  async enqueue(
+    transaction: CloudDatabase,
+    input: { hostId: string; externalId: string; deliveryId: string; body: DeliveryBody }
+  ): Promise<EnqueueResult> {
     const { hostId, externalId, deliveryId, body } = input
     const now = this.now()
-    return await this.database.transaction(async (transaction) => {
-      await lockConnectorHost(transaction, hostId)
-      if (body.kind === 'cancel') {
-        // A start the machine never received is dropped, with everything queued behind it.
-        const [dropped] = await transaction.query(
-          `UPDATE connector_inbox SET state = 'dropped', payload = NULL, settled_at = ?
-           WHERE host_id = ? AND external_id = ? AND state = 'pending'
-             AND EXISTS (SELECT 1 FROM connector_inbox s WHERE s.host_id = connector_inbox.host_id
-               AND s.external_id = connector_inbox.external_id AND s.kind = 'start'
-               AND s.state = 'pending')`,
-          [now, hostId, externalId]
-        )
-        if (Number(dropped?.changes ?? 0) > 0) return 'dropped'
-      }
-      const { kind, ...payload } = body
-      const [inserted] = await transaction.query(
-        `INSERT INTO connector_inbox
-         (host_id, delivery_id, external_id, seq, kind, payload, state, expires_at, created_at)
-         SELECT ?, ?, ?, COALESCE(MAX(seq), 0) + 1, ?, ?, 'pending', ?, ?
-         FROM connector_inbox WHERE host_id = ?
-         ON CONFLICT (host_id, delivery_id) DO NOTHING`,
-        [
-          hostId,
-          deliveryId,
-          externalId,
-          kind,
-          JSON.stringify(payload),
-          now + CONNECTOR_LIMITS.deliveryTtlMs,
-          now,
-          hostId
-        ]
+    if (body.kind === 'cancel') {
+      // A start the machine never received is dropped, with everything queued behind it.
+      const [dropped] = await transaction.query(
+        `UPDATE connector_inbox SET state = 'dropped', payload = NULL, settled_at = ?
+         WHERE host_id = ? AND external_id = ? AND state = 'pending'
+           AND EXISTS (SELECT 1 FROM connector_inbox s WHERE s.host_id = connector_inbox.host_id
+             AND s.external_id = connector_inbox.external_id AND s.kind = 'start'
+             AND s.state = 'pending')`,
+        [now, hostId, externalId]
       )
-      if (Number(inserted?.changes ?? 0) === 0) return 'duplicate'
-      await this.wake(transaction, hostId)
-      return 'queued'
-    })
+      if (Number(dropped?.changes ?? 0) > 0) return 'dropped'
+    }
+    const { kind, ...payload } = body
+    const [inserted] = await transaction.query(
+      `INSERT INTO connector_inbox
+       (host_id, delivery_id, external_id, seq, kind, payload, state, expires_at, created_at)
+       SELECT ?, ?, ?, COALESCE(MAX(seq), 0) + 1, ?, ?, 'pending', ?, ?
+       FROM connector_inbox WHERE host_id = ?
+       ON CONFLICT (host_id, delivery_id) DO NOTHING`,
+      [
+        hostId,
+        deliveryId,
+        externalId,
+        kind,
+        JSON.stringify(payload),
+        now + CONNECTOR_LIMITS.deliveryTtlMs,
+        now,
+        hostId
+      ]
+    )
+    if (Number(inserted?.changes ?? 0) === 0) return 'duplicate'
+    await this.wake(transaction, hostId)
+    return 'queued'
   }
 
   // Under the host lock (MachineSession.locked). Each conversation's head goes out; the next waits
-  // until the head is received. A cancel skips the queue once its start is received.
+  // until the head is received. A cancel skips the queue unless its start is still unreceived.
   async claim(
     transaction: CloudDatabase,
     hostId: string
@@ -102,9 +97,9 @@ export class ConnectorInbox {
            NOT EXISTS (SELECT 1 FROM connector_inbox e WHERE e.host_id = i.host_id
              AND e.external_id = i.external_id AND e.seq < i.seq
              AND e.state IN ('pending', 'leased'))
-           OR (i.kind = 'cancel' AND EXISTS (SELECT 1 FROM connector_inbox s
+           OR (i.kind = 'cancel' AND NOT EXISTS (SELECT 1 FROM connector_inbox s
              WHERE s.host_id = i.host_id AND s.external_id = i.external_id
-               AND s.kind = 'start' AND s.state IN ('received', 'done')))
+               AND s.kind = 'start' AND s.state IN ('pending', 'leased')))
          )
        ORDER BY i.seq LIMIT ?`,
       [hostId, now, now, CONNECTOR_LIMITS.maxDeliveriesPerPoll]

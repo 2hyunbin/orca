@@ -44,7 +44,19 @@ async function setup(options: Parameters<typeof createConnectorHarness>[1] = {})
   const machine = await harness.linkedMachine()
   expect((await machine.hello()).status).toBe(204)
   const enqueue = (externalId: string, deliveryId: string, body: DeliveryBody) =>
-    harness.runtime.inbox.enqueue({ hostId: machine.hostId, externalId, deliveryId, body })
+    harness.runtime.queueDelivery({
+      thread: {
+        externalId,
+        teamId: 'T1',
+        channelId: 'C1',
+        threadTs: externalId,
+        ownerUserId: 'U1',
+        hostId: machine.hostId,
+        placeId: 'pl_1'
+      },
+      deliveryId,
+      body
+    })
   const poll = async () => {
     const { status, body } = await machine.poll()
     expect(status).toBe(200)
@@ -241,6 +253,28 @@ describe('connector inbox', () => {
     await enqueue('a', 'a3', SEND)
     await expect(enqueue('a', 'a4', { kind: 'cancel' })).resolves.toBe('queued')
     expect(await ids()).toEqual(['a4'])
+  })
+
+  it('still lets a cancel skip the queue after its settled start is pruned', async () => {
+    const { harness, machine, enqueue, ids } = await setup()
+    await enqueue('a', 'a1', START)
+    await ids()
+    await machine.ack([{ deliveryId: 'a1', step: 'done', result: { outcome: 'accepted' } }])
+    // What retention leaves of a long conversation: its settled start is gone.
+    await harness.database.query("DELETE FROM connector_inbox WHERE delivery_id = 'a1'")
+    await enqueue('a', 'a2', SEND)
+    expect(await ids()).toEqual(['a2'])
+    await enqueue('a', 'a3', { kind: 'cancel' })
+    expect(await ids()).toEqual(['a3'])
+  })
+
+  it('queues nothing for a revoked machine', async () => {
+    const { machine, enqueue } = await setup()
+    const page = await (await machine.owner.get('/machines')).text()
+    await machine.owner.post(`/v1/account/hosts/${machine.hostId}/revoke`, {
+      csrf: hiddenField(page, 'csrf')
+    })
+    await expect(enqueue('a', 'a1', START)).resolves.toBe('host_not_linked')
   })
 
   it('expires pending work at its deadline and leased work 30 s after it', async () => {

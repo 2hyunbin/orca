@@ -17,6 +17,7 @@ import { createConnectorHandshake } from './connector-host-handshake.js'
 import { ConnectorInbox } from './connector-inbox.js'
 import { ConnectorThreads } from './connector-threads.js'
 import { registerDevEnqueueRoute } from './dev-enqueue-route.js'
+import { queueDelivery } from './queue-delivery.js'
 import { ConnectorHostLinks } from './host-links.js'
 import { InboxWaker } from './inbox-waker.js'
 import { registerMachineRoutes } from './machine-routes.js'
@@ -61,8 +62,10 @@ export function createConnectorServer(
   const inbox = new ConnectorInbox(database, notifications, now)
   const hostLinks = new ConnectorHostLinks(database, inbox, now)
   const signIns = new ConnectorSignInRequests(database, now)
-  const threads = new ConnectorThreads(database, now)
+  const threads = new ConnectorThreads(now)
   const waker = new InboxWaker(notifications)
+  const queue = (input: Parameters<typeof queueDelivery>[1]) =>
+    queueDelivery({ database, inbox, threads, hostLinks }, input)
   const web = new ConnectorWebSignIn(
     config,
     new SignedCookies(config.cookieSecret, now),
@@ -128,7 +131,7 @@ export function createConnectorServer(
   })
   // Local development only: a stand-in for Slack ingress until it exists.
   if (isLoopbackOrigin(config.publicUrl)) {
-    registerDevEnqueueRoute(app, { inbox, threads, hostLinks, limitBody })
+    registerDevEnqueueRoute(app, { queue, limitBody })
   }
 
   app.post(CONNECTOR_PATHS.signInStart, limitUnauthenticated, limitBody, async (context) => {
@@ -216,6 +219,7 @@ export function createConnectorServer(
     sessions,
     signIns,
     inbox,
-    waker
+    waker,
+    queueDelivery: queue
   }
 }
