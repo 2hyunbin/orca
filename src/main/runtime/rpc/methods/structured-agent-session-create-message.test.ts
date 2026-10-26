@@ -1,3 +1,4 @@
+import { WorkspaceSetupAgentStartHolds } from '../../workspace-setup-agent-start-holds'
 import '../unused-default-rpc-methods.test-fixture'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
@@ -335,3 +336,34 @@ it.each([false, true])(
     }
   }
 )
+
+it('Stop withdraws an admitted Create prompt while the actual workspace hold remains installed', async () => {
+  const holds = new WorkspaceSetupAgentStartHolds()
+  const complete = holds.hold('workspace-1')
+  rig.host.deps.setupHold = (id) => holds.pending(id)
+  const input = params(undefined, true)
+  try {
+    expect(await call('agentSession.create', input, capable)).toMatchObject({
+      ok: true,
+      result: { ok: true, value: { firstMessage: { dispatchState: 'pending' } } }
+    })
+    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    await stopCreatedChat(rig.host)
+    expect(holds.pending('workspace-1')).not.toBeNull()
+    expect(await call('agentSession.create', input, capable)).toMatchObject({
+      ok: true,
+      result: {
+        ok: true,
+        replayed: true,
+        value: { firstMessage: { dispatchState: 'rejected', rejection: { kind: 'cancelled' } } }
+      }
+    })
+    const pending = holds.pending('workspace-1')
+    complete(null)
+    await pending
+    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.dispatch).not.toHaveBeenCalled()
+  } finally {
+    complete(null)
+  }
+})

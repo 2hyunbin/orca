@@ -20,6 +20,8 @@ import { MobileNativeChatRowOverlaysHost } from './MobileNativeChatRowOverlaysHo
 import { nativeChatAskRequiresTerminal } from '../../../src/shared/native-chat-agent-support'
 
 type Props = {
+  setupAgentStartHeld?: boolean
+  setupInputHeld?: boolean
   controller: MobileNativeChatController
   activeSessionTabId?: string | null
   /** Opens a tapped file reference (worktree-relative or absolute, optional
@@ -55,6 +57,8 @@ type Props = {
  *  the chat list below it does not. */
 export function MobileNativeChatOverlay({
   controller,
+  setupAgentStartHeld = false,
+  setupInputHeld = setupAgentStartHeld,
   activeSessionTabId,
   onOpenFile,
   images,
@@ -127,6 +131,8 @@ export function MobileNativeChatOverlay({
           <MobileNativeChatItemSourceContext.Provider value={detailSource}>
             <MobileNativeChatReplyRevealsContext.Provider value={replyReveals}>
               <MobileNativeChatView
+                setupAgentStartHeld={setupAgentStartHeld}
+                setupInputHeld={setupInputHeld}
                 messages={session.messages}
                 folded={folded}
                 status={session.status}

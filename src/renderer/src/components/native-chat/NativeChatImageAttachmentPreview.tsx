@@ -24,6 +24,7 @@ type Props = {
   /** The paired server the chat runs on; a file stored there is read back through it. */
   hostEnvironmentId?: string
   onRemove: (id: string) => void
+  removeDisabled?: boolean
 }
 
 /** Thumbnail for a pending image, with an in-app full-size preview on click. */
@@ -31,7 +32,8 @@ export function NativeChatImageAttachmentPreview({
   attachment,
   hostEnvironmentId,
   number,
-  onRemove
+  onRemove,
+  removeDisabled
 }: Props): React.JSX.Element {
   if (attachment.unavailableName !== undefined) {
     return (
@@ -40,6 +42,7 @@ export function NativeChatImageAttachmentPreview({
         name={attachment.unavailableName}
         number={number}
         onRemove={onRemove}
+        removeDisabled={removeDisabled}
       />
     )
   }
@@ -49,6 +52,7 @@ export function NativeChatImageAttachmentPreview({
       hostEnvironmentId={hostEnvironmentId}
       number={number}
       onRemove={onRemove}
+      removeDisabled={removeDisabled}
     />
   )
 }
@@ -78,11 +82,18 @@ function attachmentLabel(path: string): string {
     : basename(path)
 }
 
-function RemoveAttachmentButton({ onRemove }: { onRemove: () => void }): React.JSX.Element {
+function RemoveAttachmentButton({
+  onRemove,
+  disabled
+}: {
+  onRemove: () => void
+  disabled?: boolean
+}): React.JSX.Element {
   return (
     <button
       type="button"
       onClick={onRemove}
+      disabled={disabled}
       aria-label={translate(
         'components.native-chat.composer.removeAttachment',
         'Remove attachment'
@@ -100,12 +111,14 @@ function NativeChatUnavailableImageChip({
   id,
   name,
   number,
-  onRemove
+  onRemove,
+  removeDisabled
 }: {
   id: string
   name: string
   number?: number
   onRemove: (id: string) => void
+  removeDisabled?: boolean
 }): React.JSX.Element {
   const pasted = isNativeChatPastedImagePath(name)
   const label = attachmentLabel(name)
@@ -137,7 +150,7 @@ function NativeChatUnavailableImageChip({
         </div>
         <ImageNumberBadge number={number} />
       </div>
-      <RemoveAttachmentButton onRemove={() => onRemove(id)} />
+      <RemoveAttachmentButton disabled={removeDisabled} onRemove={() => onRemove(id)} />
     </div>
   )
 }
@@ -146,7 +159,8 @@ function NativeChatImageThumbnail({
   attachment,
   hostEnvironmentId,
   number,
-  onRemove
+  onRemove,
+  removeDisabled
 }: Props): React.JSX.Element {
   const [isOpen, setIsOpen] = useState(false)
   const [isNearViewport, setIsNearViewport] = useState(false)
@@ -258,7 +272,10 @@ function NativeChatImageThumbnail({
           </span>
         ) : null}
         <ImageNumberBadge number={number} />
-        <RemoveAttachmentButton onRemove={() => onRemove(attachment.id)} />
+        <RemoveAttachmentButton
+          disabled={removeDisabled}
+          onRemove={() => onRemove(attachment.id)}
+        />
       </div>
       <PanZoomImageDialog
         open={isOpen}

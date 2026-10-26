@@ -1,6 +1,7 @@
+import { useNativeChatSetupHold } from './use-native-chat-setup-hold'
 import { useNativeChatComposerNotice } from './use-native-chat-composer-notice'
 import { useNativeChatMobileHoldNotice } from './use-native-chat-mobile-hold-notice'
-import type { NativeChatComposerInput } from './native-chat-composer-input'
+import { useNativeChatComposerEditorEvents } from './use-native-chat-composer-editor-events'
 import { forwardRef, useCallback, useState } from 'react'
 import { useNativeChatComposerInterrupt } from './use-native-chat-composer-interrupt'
 import { useNativeChatContextUsageSummary } from './use-native-chat-context-usage-summary'
@@ -79,6 +80,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     // images survive both TUI/GUI toggles and PTY replacement on reconnect.
     // Why: local, SSH, and runtime reconnects can replace or temporarily clear
     // the PTY id. Pane (or conversation) identity is the stable owner of unsent input.
+    const { inputHeld: setupHeld, readHeld: readSetupHeld } = useNativeChatSetupHold(terminalTabId)
     const imeEnterGesture = useImeEnterGestureOwnership()
     const { draft, setDraft, flushDraftAppends } = useNativeChatDraft(
       draftScopeKey,
@@ -116,8 +118,8 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
 
     // Why inputOwnedByCard: the hidden field can still hold keyboard focus for a frame.
     const [hasPty, disabled] = structuredTransport
-      ? [true, !canSend || unavailableHint !== undefined]
-      : [targetPtyId !== null, targetPtyId === null || !canSend || inputOwnedByCard]
+      ? [true, setupHeld || !canSend || unavailableHint !== undefined]
+      : [targetPtyId !== null, setupHeld || targetPtyId === null || !canSend || inputOwnedByCard]
 
     const { picker, resume } = useNativeChatComposerCommandPicker({
       agent,
@@ -257,6 +259,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       agent,
       draftScopeKey,
       imageAttachments,
+      isEditingHeld: readSetupHeld,
       structuredTransport,
       isComposing: imeEnterGesture.isComposing,
       clearSkillOrigin,
@@ -301,6 +304,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       caret,
       imageAttachments,
       disabled,
+      isEditingHeld: readSetupHeld,
       sendPty,
       sendStructured,
       consumeOrcaCommand: resume.consume,
@@ -348,15 +352,12 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       setCaret
     })
 
-    const handleDraftChange = useCallback(
-      (value: string, element: NativeChatComposerInput) => {
-        const nextCaret = element.selectionStart ?? value.length
-        setDraft(value)
-        setCaret(nextCaret)
-        handleDraftOrCaretChange(value, nextCaret)
-        setActiveSuggestion(0)
-      },
-      [handleDraftOrCaretChange, setDraft]
+    const { handleDraftChange, handleTextareaSelect } = useNativeChatComposerEditorEvents(
+      readSetupHeld,
+      setDraft,
+      setCaret,
+      handleDraftOrCaretChange,
+      setActiveSuggestion
     )
 
     return (
@@ -373,6 +374,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         activeSuggestion={activeSuggestion}
         notices={notices}
         imageAttachments={imageAttachments}
+        imageRemovalDisabled={setupHeld}
         numberImages={Boolean(structuredTransport)}
         attachmentEnvironmentId={structuredTransport?.runtimeEnvironmentId ?? undefined}
         sendButtonDisabled={sendButtonDisabled}
@@ -389,13 +391,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         isDictationHoldMode={dictation.isDictationHoldMode}
         imeEnterGesture={imeEnterGesture}
         onDraftChange={handleDraftChange}
-        onTextareaSelect={(element) => {
-          const value = element.value
-          const nextCaret = element.selectionStart ?? value.length
-          setCaret(nextCaret)
-          handleDraftOrCaretChange(value, nextCaret)
-          setActiveSuggestion(0)
-        }}
+        onTextareaSelect={handleTextareaSelect}
         onKeyDown={handleKeyDown}
         onImeSettled={(element) => {
           if (element.value !== draft) {
@@ -410,7 +406,11 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         goalMode={goalMode}
         onRetrySkills={picker.retrySkills}
         onChooseMentionFile={completeMention}
-        onRemoveImageAttachment={(id) => removeImageAttachment(id)}
+        onRemoveImageAttachment={(id) => {
+          if (!readSetupHeld()) {
+            removeImageAttachment(id)
+          }
+        }}
         onAttach={pickAttachments}
         onDictationToggle={dictation.toggleDictation}
         onDictationHoldStart={dictation.startHoldDictation}

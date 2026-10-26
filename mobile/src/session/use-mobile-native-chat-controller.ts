@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef, type MutableRefObject } from 'react'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
-import type { MobileNativeChatTab } from './mobile-native-chat-eligibility'
 import type { StructuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
 import { useMobileNativeChatAskDismiss } from './use-mobile-native-chat-ask-dismiss'
 import { useMobileNativeChatDrafts } from './use-mobile-native-chat-drafts'
@@ -22,17 +21,10 @@ import { mobileNativeChatScopeKey } from './mobile-native-chat-scope-key'
 
 export type { MobileNativeChatController } from './mobile-native-chat-controller-contract'
 
-/** Owns mobile native-chat state and teardown outside the already dense session
- *  route. The route remains responsible only for choosing and rendering the view. */
-export function useMobileNativeChatController(args: {
+type MobileNativeChatControllerArgs = Parameters<typeof useMobileNativeChatActiveResolution>[0] & {
   client: RpcClient | null
-  hostId: string
-  worktreeId: string
-  activeSessionTab: MobileNativeChatTab | null
-  activeSessionTabId: string | null
-  activeHandleRef: MutableRefObject<string | null>
   deviceTokenRef: MutableRefObject<string | null>
-  nativeChatTranscriptIsLocalReadable: boolean
+  readSetupAgentStartHeld?: () => boolean
   nativeChatInputLeaseReady: boolean
   /** Live socket state; the lease collapses on disconnect but one render later. */
   connState: ConnectionState
@@ -43,7 +35,11 @@ export function useMobileNativeChatController(args: {
   /** Retires a held failure banner. Any accepted chat write clears it — a delivered
    *  answer or permission reply must not sit under a stale "not sent". */
   onSendResolved: () => void
-}): MobileNativeChatController {
+}
+
+export function useMobileNativeChatController(
+  args: MobileNativeChatControllerArgs
+): MobileNativeChatController {
   const {
     client,
     hostId,
@@ -113,6 +109,7 @@ export function useMobileNativeChatController(args: {
     acceptSend,
     holdUnconfirmedSend
   } = useMobileNativeChatDrafts({
+    readSetupAgentStartHeld: args.readSetupAgentStartHeld,
     hostId,
     worktreeId,
     tabId: activeSessionTabId,
@@ -205,6 +202,7 @@ export function useMobileNativeChatController(args: {
     answerQuestion: legacyHandleNativeChatQuestionAnswer,
     dispatchCommand: handleNativeChatDispatchCommand
   } = useMobileNativeChatMessageSend({
+    readSetupAgentStartHeld: args.readSetupAgentStartHeld,
     client,
     enabled: inputSendable && !activeChatStructured,
     handleRef: activeHandleRef,
@@ -221,6 +219,7 @@ export function useMobileNativeChatController(args: {
   })
 
   const structuredNativeChatSend = useMobileStructuredNativeChatSendBridge({
+    readSetupAgentStartHeld: args.readSetupAgentStartHeld,
     agent: activeChatResolution?.agent,
     sendStructured: structuredNativeChat.sendWithOutcome,
     captureSendOrigin,

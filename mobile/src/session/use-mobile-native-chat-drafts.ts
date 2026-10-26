@@ -36,6 +36,7 @@ const NO_PENDING_MESSAGES: MobileNativeChatPendingMessage[] = []
 const NO_IMAGE_PREVIEWS: Record<string, string[]> = {}
 
 export function useMobileNativeChatDrafts(args: {
+  readSetupAgentStartHeld?: () => boolean
   hostId: string
   worktreeId: string
   tabId: string | null
@@ -125,18 +126,18 @@ export function useMobileNativeChatDrafts(args: {
 
   const setComposerText: Dispatch<SetStateAction<string>> = useCallback(
     (value) => {
-      if (!draftKey) {
+      if (args.readSetupAgentStartHeld?.() || !draftKey) {
         return
       }
       composerEditGenerationRef.current += 1
       editMobileNativeChatDraft(draftKey, value)
     },
-    [draftKey]
+    [args.readSetupAgentStartHeld, draftKey]
   )
   // Copied queued-card text goes after whatever is there, so newer typing is preserved.
   const appendComposerText = useCallback(
     (text: string): boolean => {
-      if (!draftKey || text.length === 0) {
+      if (args.readSetupAgentStartHeld?.() || !draftKey || text.length === 0) {
         return false
       }
       composerEditGenerationRef.current += 1
@@ -145,7 +146,7 @@ export function useMobileNativeChatDrafts(args: {
       )
       return true
     },
-    [draftKey]
+    [args.readSetupAgentStartHeld, draftKey]
   )
 
   const captureSendOrigin = useCallback(

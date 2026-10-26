@@ -238,6 +238,8 @@ export function MobileSessionActiveContent({
         />
       ))}
       <MobileNativeChatOverlay
+        setupAgentStartHeld={controller.setupAgentStartHeld}
+        setupInputHeld={controller.setupInputHeld}
         controller={nativeChatController}
         activeSessionTabId={controller.activeSessionTab?.id}
         onOpenFile={handleNativeChatFileTap}

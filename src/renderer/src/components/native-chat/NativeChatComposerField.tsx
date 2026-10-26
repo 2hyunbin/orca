@@ -42,6 +42,7 @@ export type NativeChatComposerFieldProps = {
   activeSuggestion: number
   notices: readonly NativeChatComposerNotice[]
   imageAttachments: readonly NativeChatComposerImageAttachment[]
+  imageRemovalDisabled?: boolean
   /** A structured chat numbers its images, as its chips in the prompt read. */
   numberImages?: boolean
   /** The paired server a structured chat runs on, which reads back files stored there. */
@@ -134,6 +135,7 @@ export function NativeChatComposerField({
   activeSuggestion,
   notices,
   imageAttachments,
+  imageRemovalDisabled = false,
   numberImages = false,
   attachmentEnvironmentId,
   sendButtonDisabled,
@@ -278,6 +280,7 @@ export function NativeChatComposerField({
                     hostEnvironmentId={attachmentEnvironmentId}
                     number={numberImages ? index + 1 : undefined}
                     onRemove={onRemoveImageAttachment}
+                    removeDisabled={imageRemovalDisabled}
                   />
                 ))}
               </div>

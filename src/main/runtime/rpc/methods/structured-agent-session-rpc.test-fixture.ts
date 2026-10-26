@@ -4,6 +4,7 @@ import { createPublishingAttachStub } from './structured-agent-session-attach-pu
 // repopulated per test, so a suite can read `hostCalls.close` without re-importing it.
 
 import { vi } from 'vitest'
+import { WorkspaceSetupAgentStartHolds } from '../../workspace-setup-agent-start-holds'
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
 import type { AgentSessionJournal } from '../../../native-chat/agent-session-journal/journal-store'
 import type { StructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-host'
@@ -228,6 +229,7 @@ export function dispatcher(
   })
   const runtime = {
     getRuntimeId: () => 'runtime-1',
+    workspaceSetupAgentStarts: new WorkspaceSetupAgentStartHolds(),
     getClientSettings: () => ({ experimentalNativeChat: true }),
     // The host reads saved settings privately; follow the client settings each test chose.
     requireStore: () => ({ getSettings: () => runtime.getClientSettings() }),

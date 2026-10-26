@@ -52,6 +52,7 @@ export type MobileNativeChatMessageSend = {
 /** The native-chat send seam: one write path shared by composer sends, image
  *  sends, and question answers, wired to the drafts accounting. */
 export function useMobileNativeChatMessageSend(args: {
+  readSetupAgentStartHeld?: () => boolean
   client: RpcClient | null
   enabled: boolean
   handleRef: MutableRefObject<string | null>
@@ -101,6 +102,9 @@ export function useMobileNativeChatMessageSend(args: {
       requireWriteSettlement?: true,
       sentAt?: number
     ): Promise<MobileNativeChatSendOutcome> => {
+      if (args.readSetupAgentStartHeld?.()) {
+        return 'rejected'
+      }
       // The host writes trailing whitespace verbatim onto the agent's input line,
       // where it can glue the next rapid send onto this one (#14262). Only the
       // bytes that go out are trimmed: `draftText` is what the user typed, and a
@@ -133,6 +137,9 @@ export function useMobileNativeChatMessageSend(args: {
       }
       if (!(await healMobileNativeChatStaleInput(healArgs))) {
         onSendError('Message not sent')
+        return 'rejected'
+      }
+      if (args.readSetupAgentStartHeld?.()) {
         return 'rejected'
       }
       // Why: empty the composer at send time, not on the ack — over relay the
@@ -228,6 +235,7 @@ export function useMobileNativeChatMessageSend(args: {
       return 'accepted'
     },
     [
+      args.readSetupAgentStartHeld,
       acceptSend,
       agentRef,
       captureSendOrigin,

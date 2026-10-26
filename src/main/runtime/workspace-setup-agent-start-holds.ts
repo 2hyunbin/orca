@@ -18,6 +18,27 @@ export class WorkspaceSetupAgentStartHolds {
     { released: Promise<void>; complete: (completion: WorkspaceSetupCompletion | null) => void }
   >()
 
+  private readonly listeners = new Set<() => void>()
+
+  currentWorkspaceIds(): string[] {
+    return [...this.held.keys()]
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  private changed(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener()
+      } catch {
+        this.listeners.delete(listener)
+      }
+    }
+  }
+
   /** Holds agent starts in the workspace from now; `release` names what ends the hold, if anything. */
   hold(worktreeId: string): (completion: WorkspaceSetupCompletion | null) => void {
     const ended = new AbortController()
@@ -32,6 +53,7 @@ export class WorkspaceSetupAgentStartHolds {
       clearTimeout(timer)
       if (this.held.get(worktreeId)?.released === released) {
         this.held.delete(worktreeId)
+        this.changed()
       }
     })
     const complete = (completion: WorkspaceSetupCompletion | null) => {
@@ -43,7 +65,11 @@ export class WorkspaceSetupAgentStartHolds {
         .catch(() => undefined)
         .then(() => ended.abort())
     }
+    const wasHeld = this.held.has(worktreeId)
     this.held.set(worktreeId, { released, complete })
+    if (!wasHeld) {
+      this.changed()
+    }
     return complete
   }
 

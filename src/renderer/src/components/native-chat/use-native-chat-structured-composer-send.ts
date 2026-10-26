@@ -31,6 +31,7 @@ import {
 
 export type UseNativeChatStructuredComposerSendArgs = {
   agent: AgentType
+  isEditingHeld?: () => boolean
   draftScopeKey: string
   imageAttachments: readonly NativeChatComposerImageAttachment[]
   structuredTransport?: NativeChatStructuredComposerTransport
@@ -61,6 +62,7 @@ export type NativeChatStructuredComposerSend = (
  *  once the transport accepts (the PTY path has its own sibling hook). */
 export function useNativeChatStructuredComposerSend({
   agent,
+  isEditingHeld,
   draftScopeKey,
   imageAttachments,
   structuredTransport,
@@ -71,6 +73,9 @@ export function useNativeChatStructuredComposerSend({
 }: UseNativeChatStructuredComposerSendArgs): NativeChatStructuredComposerSend {
   return useCallback<NativeChatStructuredComposerSend>(
     async (text, attachments = imageAttachments): Promise<void> => {
+      if (isEditingHeld?.()) {
+        return
+      }
       // A picked command is held like Send: it would carry attachments still uploading, pathless.
       if (!structuredTransport || attachments.some((attachment) => attachment.pending)) {
         return
@@ -172,6 +177,7 @@ export function useNativeChatStructuredComposerSend({
         })
     },
     [
+      isEditingHeld,
       agent,
       clearSkillOrigin,
       draftScopeKey,

@@ -1,3 +1,4 @@
+import { useMobileWorkspaceSetupHold } from './use-mobile-workspace-setup-hold'
 import { useState, useRef, useMemo } from 'react'
 import { Animated, type ScrollView } from 'react-native'
 import type { MobileTerminalLinkOpenMode } from '../storage/preferences'
@@ -30,6 +31,12 @@ export function useMobileSessionScreenState(scope: MobileSessionFoundationModel)
   const { worktreeId, hostId, initialCreateWarning } = scope
   const [terminals, setTerminals] = useState<Terminal[]>([])
   const terminalsRef = useRef<Terminal[]>([])
+  const setupHold = useMobileWorkspaceSetupHold(
+    scope.hostId,
+    scope.worktreeId,
+    scope.connState === 'connected',
+    scope.client
+  )
   const [sessionTabs, setSessionTabs] = useState<MobileSessionTab[]>([])
   const sessionTabsRef = useRef<MobileSessionTab[]>([])
   // Why: track the last applied (epoch, version) so a late older snapshot can't overwrite a newer one and resurrect closed tabs (session-tab-snapshot-gate).
@@ -133,6 +140,7 @@ export function useMobileSessionScreenState(scope: MobileSessionFoundationModel)
     terminals,
     setTerminals,
     terminalsRef,
+    ...setupHold,
     sessionTabs,
     setSessionTabs,
     sessionTabsRef,

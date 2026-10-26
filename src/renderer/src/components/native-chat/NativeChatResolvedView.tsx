@@ -13,6 +13,8 @@ import {
   useNativeChatRevealLatest
 } from './use-native-chat-reveal-latest'
 import { useNativeChatLaunchPromptDeliveryNotice } from './use-native-chat-launch-prompt-delivery-notice'
+import { NativeChatSetupNotice } from './NativeChatSetupNotice'
+import { useNativeChatSetupHold } from './use-native-chat-setup-hold'
 import { NativeChatComposer, type NativeChatComposerHandle } from './NativeChatComposer'
 import { useNativeChatFontSize } from './use-native-chat-font-size'
 import { useNativeChatFind } from './use-native-chat-find'
@@ -25,7 +27,7 @@ import { useNativeChatPromptCardPresentation } from './use-native-chat-prompt-ca
 import { NativeChatPromptStrip } from './NativeChatPromptCollapse'
 import { NativeChatEmptyState } from './NativeChatEmptyState'
 import { useNativeChatInteractiveSend } from './use-native-chat-interactive-send'
-import { shouldClearNativeChatWorkingSuppression } from './native-chat-working-suppression'
+import { useNativeChatWorkingSuppressionReset } from './use-native-chat-working-suppression-reset'
 import { resolveNativeChatTerminalTurn } from './native-chat-terminal-turn'
 import { useNativeChatTerminalTurnTiming } from './use-native-chat-terminal-turn-timing'
 import {
@@ -129,6 +131,11 @@ export function NativeChatResolvedView({
   const [workingInterrupted, setWorkingInterrupted] = useState(false)
   const previousWorkingEpochRef = useRef<number | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const {
+    held: setupHeld,
+    worktreeId: setupWorktreeId,
+    executionHostId: setupExecutionHostId
+  } = useNativeChatSetupHold(terminalTabId)
   const composerRef = useRef<NativeChatComposerHandle>(null)
   // The question card's free-text row; keeps Paste working while the card
   // replaces the composer.
@@ -277,24 +284,13 @@ export function NativeChatResolvedView({
   const viewState = selectNativeChatViewState(sessionWithPending)
 
   const isConversation = viewState.kind === 'ready'
-  useEffect(() => {
-    if (
-      shouldClearNativeChatWorkingSuppression({
-        working: liveWorking,
-        interrupted: workingInterrupted,
-        workingEpoch,
-        previousWorkingEpoch: previousWorkingEpochRef.current
-      })
-    ) {
-      setWorkingInterrupted(false)
-    }
-    if (liveWorking && workingEpoch != null) {
-      previousWorkingEpochRef.current = workingEpoch
-    }
-    if (!liveWorking) {
-      previousWorkingEpochRef.current = null
-    }
-  }, [liveWorking, workingInterrupted, workingEpoch])
+  useNativeChatWorkingSuppressionReset(
+    liveWorking,
+    workingInterrupted,
+    workingEpoch,
+    previousWorkingEpochRef,
+    setWorkingInterrupted
+  )
   const { isWorking, turnActive, awaitingInput } = resolveNativeChatTerminalTurn({
     isConversation,
     working: liveWorking,
@@ -369,7 +365,12 @@ export function NativeChatResolvedView({
     >
       <div className="relative flex min-h-0 flex-1 flex-col">
         {find.isOpen ? <NativeChatFindBar find={find} isVisible={isVisible} /> : null}
-        {viewState.kind === 'loading' ? (
+        {setupHeld && sessionWithPending.messages.length === 0 ? (
+          <NativeChatSetupNotice
+            worktreeId={setupWorktreeId}
+            executionHostId={setupExecutionHostId}
+          />
+        ) : viewState.kind === 'loading' ? (
           <NativeChatEmptyState kind="loading" />
         ) : viewState.kind === 'error' ? (
           <NativeChatEmptyState kind="error" message={viewState.message} />
@@ -390,6 +391,12 @@ export function NativeChatResolvedView({
           />
         )}
       </div>
+      {setupHeld && sessionWithPending.messages.length > 0 ? (
+        <NativeChatSetupNotice
+          worktreeId={setupWorktreeId}
+          executionHostId={setupExecutionHostId}
+        />
+      ) : null}
       {/* A collapsed card stays mounted but hidden, so a partly answered question survives. */}
       {mountedPromptCard ? (
         <div hidden={collapsedCard !== null} inert={collapsedCard !== null} className="contents">

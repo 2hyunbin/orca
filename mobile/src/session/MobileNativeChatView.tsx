@@ -62,6 +62,8 @@ export type MobileNativeChatInputLockReason = 'disconnected' | 'waiting'
 
 type Props = ComposerTrayProps & {
   /** Raw transcript, only for telling "still loading" from "loaded and empty". */
+  setupAgentStartHeld?: boolean
+  setupInputHeld?: boolean
   messages: NativeChatMessage[]
   /** `messages` with noise stripped and tool turns folded in, from the overlay. */
   folded: NativeChatMessage[]
@@ -166,6 +168,8 @@ type Props = ComposerTrayProps & {
 }
 
 export function MobileNativeChatView({
+  setupAgentStartHeld = false,
+  setupInputHeld = setupAgentStartHeld,
   messages,
   folded,
   status,
@@ -346,22 +350,37 @@ export function MobileNativeChatView({
   // while drafting never does; the host queues a structured send behind it.
   const expandedPromptOwnsSend =
     !structuredActivityUi && !collapsedPrompt && (ask ?? permission ?? question) != null
-  const emptyStateView = emptyState ? (
+  const setupNotice = (
     <View style={styles.center}>
-      <Text style={styles.emptyTitle}>{emptyState.title}</Text>
-      <Text style={styles.emptySubtitle}>{emptyState.subtitle}</Text>
+      <Text style={styles.emptyTitle}>Waiting for setup script to complete</Text>
     </View>
-  ) : null
+  )
+  const emptyStateView =
+    setupAgentStartHeld && !readFailedFinally ? (
+      setupNotice
+    ) : emptyState ? (
+      <View style={styles.center}>
+        <Text style={styles.emptyTitle}>{emptyState.title}</Text>
+        <Text style={styles.emptySubtitle}>{emptyState.subtitle}</Text>
+      </View>
+    ) : null
 
   // Whatever was already on screen: nothing here can act on a chat that cannot load, and its words
   // say why once, as a fresh open's do.
   if (readFailedFinally && emptyStateView) {
-    return <View style={[styles.root, { paddingBottom: bottomPad }]}>{emptyStateView}</View>
+    return (
+      <View style={[styles.root, { paddingBottom: bottomPad }]}>
+        {emptyStateView}
+        {setupAgentStartHeld ? setupNotice : null}
+      </View>
+    )
   }
 
   return (
     <View style={[styles.root, { paddingBottom: bottomPad }]}>
-      {status === 'loading' && messages.length === 0 ? (
+      {setupAgentStartHeld && messages.length === 0 ? (
+        setupNotice
+      ) : status === 'loading' && messages.length === 0 ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.textSecondary} />
         </View>
@@ -417,7 +436,10 @@ export function MobileNativeChatView({
       ) : null}
       {/* Directly on the composer, which it tucks into. */}
       {trayContent}
+      {setupAgentStartHeld && messages.length > 0 ? setupNotice : null}
       <MobileNativeChatComposer
+        setupAgentStartHeld={setupAgentStartHeld}
+        setupInputHeld={setupInputHeld}
         structured={structuredActivityUi ? structuredComposer : null}
         value={composerText}
         onChangeText={onComposerTextChange}

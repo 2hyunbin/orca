@@ -6,6 +6,7 @@ import type { MobileNativeChatSendOrigin } from './use-mobile-native-chat-drafts
 import type { StructuredMobileSendAttachment } from './use-mobile-structured-send-with-outcome'
 
 export function useMobileStructuredNativeChatSendBridge(args: {
+  readSetupAgentStartHeld?: () => boolean
   agent: StructuredAgentId | undefined
   sendStructured: (
     text: string,
@@ -41,6 +42,9 @@ export function useMobileStructuredNativeChatSendBridge(args: {
       deadline?: number,
       attachments?: readonly StructuredMobileSendAttachment[]
     ): Promise<MobileNativeChatSendOutcome> => {
+      if (args.readSetupAgentStartHeld?.()) {
+        return 'rejected'
+      }
       const origin = captureSendOrigin(text.trimEnd())
       if (!origin) {
         onSendError('Message not sent (disconnected)')
@@ -63,7 +67,15 @@ export function useMobileStructuredNativeChatSendBridge(args: {
       }
       return outcome
     },
-    [agent, captureSendOrigin, clearDraftForSend, onSendError, restoreRejectedDraft, sendStructured]
+    [
+      args.readSetupAgentStartHeld,
+      agent,
+      captureSendOrigin,
+      clearDraftForSend,
+      onSendError,
+      restoreRejectedDraft,
+      sendStructured
+    ]
   )
   const send = useCallback(
     async (

@@ -8,6 +8,7 @@ import { expect, it } from 'vitest'
 import { resolveWindowsShellLaunchArgs } from './providers/windows-shell-args'
 import { buildWindowsPowerShellSpawnAttempts } from './providers/windows-shell-fallback-chain'
 import { buildSetupRunnerCommand } from '../shared/setup-runner-command'
+import { createStrictTerminalEscapeScanner } from '../shared/terminal-escape-scanner'
 import {
   appendNativeSetupCompletion,
   createSetupCompletionScanner,
@@ -45,6 +46,7 @@ it.skipIf(process.platform !== 'win32')(
     stripNativeSetupCompletionEnvironment(env)
     const { spawn } = await import('node-pty')
     try {
+      await writeFile(join(root, '.cmd_aliases.cmd'), '', { flag: 'wx' })
       const guarded = join(root, 'space & percent% bang!')
       await mkdir(guarded)
       for (const status of [0, 17]) {
@@ -143,6 +145,17 @@ it.skipIf(process.platform !== 'win32')(
             })
             let exited = false
             let output = ''
+            let paintedOutput = ''
+            const outputLexer = createStrictTerminalEscapeScanner({
+              onText(text) {
+                paintedOutput += text
+              },
+              onControl(control, ground) {
+                if (ground && (control === '\r' || control === '\n')) {
+                  paintedOutput += control
+                }
+              }
+            })
             let sent = delivered
             let checked = false
             let code: number | undefined
@@ -159,6 +172,7 @@ it.skipIf(process.platform !== 'win32')(
               })
               proc.onData((data) => {
                 output += data
+                outputLexer.observe(data)
                 scanner?.scan(data)
                 if (!sent && (output.includes('>') || output.includes(']133;B'))) {
                   sent = true
@@ -175,7 +189,9 @@ it.skipIf(process.platform !== 'win32')(
                   proc.write('echo __ORCA_PARENT_STATUS__:%errorlevel%& echo parent-alive\r')
                 }
                 if (winningShell === cmd) {
-                  const match = output.match(/(?:^|\r?\n)__ORCA_PARENT_STATUS__:(-?\d+)\r?\n/)
+                  const match = paintedOutput.match(
+                    /(?:^|\r?\n)__ORCA_PARENT_STATUS__:(-?\d+)\r?\n/
+                  )
                   if (match) {
                     parentCode = Number(match[1])
                     if (control) {
@@ -195,7 +211,7 @@ it.skipIf(process.platform !== 'win32')(
                   checked &&
                   (winningShell === cmd
                     ? parentCode !== undefined
-                    : /(?:^|\r?\n)parent-alive\r?\n/.test(output))
+                    : /(?:^|\r?\n)parent-alive\r?\n/.test(paintedOutput))
                 ) {
                   proc.write('exit\r')
                 }

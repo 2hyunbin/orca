@@ -70,6 +70,8 @@ type Props = {
   dictationMode?: string
   onMicPressIn?: () => void
   onMicPressOut?: () => void
+  setupAgentStartHeld?: boolean
+  setupInputHeld?: boolean
   disabled?: boolean
   /** Only Send is unavailable; typing, dictation and attachments still edit the draft. */
   sendDisabled?: boolean
@@ -100,6 +102,8 @@ export function MobileNativeChatComposer({
   dictationMode = 'toggle',
   onMicPressIn,
   onMicPressOut,
+  setupAgentStartHeld = false,
+  setupInputHeld = setupAgentStartHeld,
   disabled = false,
   sendDisabled = false,
   placeholder = NATIVE_CHAT_COMPOSER_PLACEHOLDER,
@@ -119,9 +123,24 @@ export function MobileNativeChatComposer({
     setPicker({ page: request.id, refocus: false })
   }
   const files = structured?.files ?? NO_FILES
+  const setupHeldRef = useRef(setupInputHeld)
+  useLayoutEffect(() => {
+    setupHeldRef.current = setupInputHeld
+  }, [setupInputHeld])
+  const editing =
+    <TArgs extends unknown[]>(action: ((...args: TArgs) => void) | undefined) =>
+    (...args: TArgs): void => {
+      if (!setupHeldRef.current) {
+        action?.(...args)
+      }
+    }
   const menu = useMobileNativeChatComposerMenu({
     value,
-    onChangeText,
+    onChangeText: (text) => {
+      if (!setupHeldRef.current) {
+        onChangeText(text)
+      }
+    },
     agent,
     structuredCatalog: structured?.catalog,
     filePaths,
@@ -146,20 +165,23 @@ export function MobileNativeChatComposer({
   // An attachment alone is a valid send (desktop parity), so it rides even with no text.
   const canSend =
     (value.trim().length > 0 || attachmentCount > 0) &&
+    !setupInputHeld &&
     !disabled &&
     !sendDisabled &&
     !sending &&
     !isAttaching &&
     !filesUploading &&
     !sessionOptionDispatching
-  const showsStop = mobileNativeChatComposerShowsStop({
-    canStop: stop !== null,
-    sendBlocked: sendDisabled,
-    canSend,
-    editing: isAttaching || filesUploading || micActive,
-    draft: value,
-    attachmentCount
-  })
+  const showsStop =
+    (setupInputHeld && stop !== null) ||
+    mobileNativeChatComposerShowsStop({
+      canStop: stop !== null,
+      sendBlocked: sendDisabled,
+      canSend,
+      editing: isAttaching || filesUploading || micActive,
+      draft: value,
+      attachmentCount
+    })
 
   useEffect(() => {
     mountedRef.current = true
@@ -170,7 +192,7 @@ export function MobileNativeChatComposer({
   }, [])
 
   const handleSend = async (): Promise<void> => {
-    if (!canSend || sendingRef.current) {
+    if (setupHeldRef.current || !canSend || sendingRef.current) {
       return
     }
     sendingRef.current = true
@@ -206,7 +228,7 @@ export function MobileNativeChatComposer({
 
   return (
     <View>
-      {menu.rows.length > 0 ? (
+      {!setupInputHeld && menu.rows.length > 0 ? (
         <MobileNativeChatComposerMenu rows={menu.rows} onPick={menu.pick} />
       ) : null}
       <View style={styles.composerInset} testID="native-chat-composer-inset">
@@ -214,14 +236,15 @@ export function MobileNativeChatComposer({
           <MobileNativeChatComposerAttachments
             images={attachments}
             files={files}
-            onRemoveImage={onRemoveAttachment}
-            onRemoveFile={structured?.onRemoveFile}
+            onRemoveImage={editing(onRemoveAttachment)}
+            onRemoveFile={editing(structured?.onRemoveFile)}
           />
           <MobileNativeChatComposerField
             ref={fieldRef}
             value={value}
             skillToken={menu.skillToken}
-            onChangeText={menu.onFieldChange}
+            editable={!setupInputHeld}
+            onChangeText={editing(menu.onFieldChange)}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             // Controlled only transiently right after an autocomplete insert.
@@ -231,9 +254,7 @@ export function MobileNativeChatComposer({
             placeholderTextColor={colors.textMuted}
             selectionColor={colors.accentBlue}
             multiline
-            // Why: never revoke `editable` — iOS resigns first responder on a focused
-            // field, so a transient lock would yank the keyboard mid-typing (#10681).
-            // The lock gates sending; the draft survives and rides the next send.
+            // Ordinary transient locks keep iOS focus; only setup forbids editing.
             textAlignVertical="top"
           />
           <View style={styles.actionRow} testID="native-chat-composer-actions">
@@ -241,8 +262,8 @@ export function MobileNativeChatComposer({
               <Pressable
                 accessibilityLabel={attachLabel}
                 style={({ pressed }) => [styles.controlButton, pressed && styles.pressed]}
-                onPress={attachPress}
-                disabled={isAttaching || disabled}
+                onPress={editing(attachPress)}
+                disabled={setupInputHeld || isAttaching || disabled}
               >
                 {isAttaching ? (
                   <ActivityIndicator size="small" color={colors.textSecondary} />
@@ -251,7 +272,7 @@ export function MobileNativeChatComposer({
                 )}
               </Pressable>
             ) : null}
-            {sessionOptions ? (
+            {sessionOptions && !setupInputHeld ? (
               <MobileNativeChatSessionOptionPickers
                 {...sessionOptions}
                 sendInFlight={sending || isAttaching}
@@ -272,11 +293,11 @@ export function MobileNativeChatComposer({
                 accessibilityLabel={micActive ? 'Stop dictation' : 'Dictate'}
                 style={({ pressed }) => [styles.ghostButton, pressed && styles.pressed]}
                 // Hold mode is walkie-talkie (press-in/out); toggle mode taps.
-                onPress={dictationMode === 'hold' ? undefined : onMicPress}
-                onPressIn={dictationMode === 'hold' ? onMicPressIn : undefined}
+                onPress={dictationMode === 'hold' ? undefined : editing(onMicPress)}
+                onPressIn={dictationMode === 'hold' ? editing(onMicPressIn) : undefined}
                 onPressOut={dictationMode === 'hold' ? onMicPressOut : undefined}
                 onLongPress={dictationMode === 'hold' ? keepHeldPressThroughLongPress : undefined}
-                disabled={disabled && !micActive}
+                disabled={(setupInputHeld || disabled) && !micActive}
               >
                 {/* The icon swaps on press; as the page's touch target, its removal would send
                     touchend to a detached node and lose the release. */}
@@ -324,14 +345,14 @@ export function MobileNativeChatComposer({
       </View>
       {structured ? (
         <ActionSheetModal
-          visible={attachOpen}
+          visible={attachOpen && !setupInputHeld}
           onClose={() => setAttachOpen(false)}
           actions={mobileNativeChatAttachActions({
-            onPhotos: onAttachImage,
-            onFiles: structured.onAttachFiles,
-            onWorkspaceFile: menu.openFileMenu,
-            onSkills: () => menu.openSlashMenu('skill'),
-            onCommands: () => menu.openSlashMenu('command'),
+            onPhotos: editing(onAttachImage),
+            onFiles: editing(structured.onAttachFiles),
+            onWorkspaceFile: editing(menu.openFileMenu),
+            onSkills: editing(() => menu.openSlashMenu('skill')),
+            onCommands: editing(() => menu.openSlashMenu('command')),
             skillCount: menu.skillCount
           })}
         />

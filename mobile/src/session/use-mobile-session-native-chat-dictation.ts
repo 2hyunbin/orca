@@ -70,6 +70,7 @@ export function useMobileSessionNativeChatDictation(
   })
   const nativeChatController = useMobileNativeChatController({
     client,
+    readSetupAgentStartHeld: scope.readSetupAgentStartHeld,
     hostId,
     worktreeId,
     activeSessionTab,
@@ -120,13 +121,18 @@ export function useMobileSessionNativeChatDictation(
     [setShowDictationSetup, showToast]
   )
 
-  const dictationTargetReady = showNativeChat ? connState === 'connected' : canSend
+  const dictationTargetReady = showNativeChat
+    ? connState === 'connected' && !scope.setupInputHeld
+    : canSend
   const dictation = useMobileDictation({
     client,
     enabled: dictationTargetReady && dictationEnabled,
     onTranscript: (text) => {
       // Why: dictation belongs to the visible composer — native chat consumes it locally, terminal mode keeps live-input routing.
       if (showNativeChatRef.current) {
+        if (scope.readSetupAgentStartHeld()) {
+          return
+        }
         nativeChatController.setChatComposerText((current) =>
           appendBufferedDictation(current, text)
         )

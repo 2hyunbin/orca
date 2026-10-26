@@ -44,6 +44,7 @@ export function useNativeChatComposerSubmit(args: {
   draft: string
   caret: number
   imageAttachments: readonly NativeChatComposerImageAttachment[]
+  isEditingHeld?: () => boolean
   disabled: boolean
   sendPty: () => void
   sendStructured: (text: string, attachments: readonly NativeChatComposerImageAttachment[]) => void
@@ -53,7 +54,7 @@ export function useNativeChatComposerSubmit(args: {
   setCaret: (caret: number) => void
 }): { send: () => void; goalMode: NativeChatComposerGoalMode } {
   const { caret, disabled, draft, draftScopeKey, imageAttachments, sendPty, sendStructured } = args
-  const { consumeOrcaCommand, setCaret, setDraft, structuredTransport } = args
+  const { consumeOrcaCommand, isEditingHeld, setCaret, setDraft, structuredTransport } = args
   const threadGoal = structuredTransport?.threadGoal
   const [entered, setEntered] = useState(false)
   const active = entered && threadGoal !== undefined
@@ -61,6 +62,9 @@ export function useNativeChatComposerSubmit(args: {
   const interceptPick = useCallback(
     <TItem extends NativeChatPickerItem>(pick: (item: TItem) => void) =>
       (item: TItem) => {
+        if (isEditingHeld?.()) {
+          return
+        }
         if (!threadGoal || item.kind !== 'command' || item.name !== GOAL_COMMAND) {
           pick(item)
           return
@@ -72,7 +76,7 @@ export function useNativeChatComposerSubmit(args: {
         setCaret(tokenStart)
         setEntered(true)
       },
-    [caret, draft, setCaret, setDraft, threadGoal]
+    [isEditingHeld, caret, draft, setCaret, setDraft, threadGoal]
   )
 
   // Setting a goal is a host round trip; the draft is cleared only if it is still
@@ -114,6 +118,9 @@ export function useNativeChatComposerSubmit(args: {
   }, [draft, draftScopeKey, imageAttachments.length, setCaret, structuredTransport, threadGoal])
 
   const send = useCallback(() => {
+    if (isEditingHeld?.()) {
+      return
+    }
     // Before goal mode too: a navigation command must never become an objective.
     if (consumeOrcaCommand?.(draft)) {
       return
@@ -143,6 +150,7 @@ export function useNativeChatComposerSubmit(args: {
       sendStructured(draft, imageAttachments)
     }
   }, [
+    isEditingHeld,
     active,
     consumeOrcaCommand,
     disabled,
