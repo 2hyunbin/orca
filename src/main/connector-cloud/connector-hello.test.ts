@@ -4,7 +4,7 @@ import {
   CONNECTOR_CLIENT_LIMITS,
   type ConnectorProject
 } from '../../shared/connector-cloud-contract'
-import { connectorHello } from './connector-hello'
+import { CONNECTOR_DESKTOP_FEATURES, connectorHello } from './connector-hello'
 import { fakeMachine } from './fake-connector-seam.test-fixture'
 
 const longest = (unit: string): string =>
@@ -22,6 +22,16 @@ function largestProject(index: number): ConnectorProject {
 }
 
 describe('connectorHello', () => {
+  it('advertises exactly the features this build implements', () => {
+    // A new contract feature is listed here only once the desktop implements it.
+    expect(CONNECTOR_DESKTOP_FEATURES).toEqual(['answer', 'cancel', 'reply', 'turnCancel'])
+    const { body } = connectorHello(
+      fakeMachine(() => null),
+      { agents: [], projects: [] }
+    )
+    expect(body).toMatchObject({ features: CONNECTOR_DESKTOP_FEATURES })
+  })
+
   it('always fits the request cap, keeping the most recently used projects first', () => {
     const projects = Array.from({ length: CONNECTOR_CLIENT_LIMITS.maxHelloProjects }, (_, index) =>
       largestProject(index)
