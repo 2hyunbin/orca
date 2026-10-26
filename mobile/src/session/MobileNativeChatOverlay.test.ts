@@ -89,7 +89,8 @@ function overlayElement(tick: Tick): ReturnType<typeof createElement> {
     sendSurfaceId: 'tab-a',
     sessionId: null,
     getSendCompletionGeneration: () => 0,
-    keyboardInset: 0
+    keyboardInset: 0,
+    hostName: null
   })
 }
 
