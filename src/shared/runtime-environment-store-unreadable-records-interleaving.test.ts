@@ -255,5 +255,6 @@ describe('runtime environment store under interleaved writers and unreadable rec
       rmSync(sidecarPath(), { force: true })
       runSeed(seed)
     }
-  })
+    // ~1,600 store writes, each now fsynced (#18766); slow disks need more than the default.
+  }, 120_000)
 })
