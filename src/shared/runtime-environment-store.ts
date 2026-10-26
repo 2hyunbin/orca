@@ -35,7 +35,7 @@ export {
 
 export function listEnvironments(
   userDataPath: string,
-  options: { requireStoreFile?: boolean } = {}
+  options: Parameters<typeof readEnvironmentStore>[1] = {}
 ): KnownRuntimeEnvironment[] {
   return readEnvironmentStore(userDataPath, options).environments
 }

@@ -294,10 +294,9 @@ describe('runtime environment store', () => {
     const backups = readdirSync(userDataPath).filter((name) =>
       name.startsWith('orca-environments.json.corrupt-')
     )
-    expect(backups.length).toBeGreaterThan(0)
-    for (const backup of backups) {
-      expect(readFileSync(join(userDataPath, backup))).toEqual(Buffer.alloc(640))
-    }
+    // The rejected save above left no copy; only the save that replaced the file did.
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(userDataPath, backups[0]))).toEqual(Buffer.alloc(640))
   })
 
   it('registers a managed SSH server over a NUL-filled store', () => {
