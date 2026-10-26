@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { projectStructuredItemsToNativeChat } from '../../../../shared/structured-agent-session-projection'
 import type { AgentSessionFailureFact } from '../../../../shared/agent-session-failure'
 import type { AgentJournalStatusItem } from '../../../../shared/agent-session-journal-types'
+import { isAdmissibleAgentJournalItemBody } from '../../../../shared/agent-session-journal-schemas'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { MessageRow } from './NativeChatMessageRow'
 import { NativeChatNoticeRow } from './NativeChatNoticeRow'
@@ -222,12 +223,12 @@ describe('the row an Orca stop leaves', () => {
 
 describe('the row a usage limit leaves', () => {
   const resetsAt = new Date(2026, 9, 18, 15, 0).getTime()
-  const row: AgentJournalStatusItem = {
+  const row = {
     kind: 'status',
     tone: 'warning',
     text: 'Claude hit its session limit. Send a message once it resets to continue.',
     failure: { kind: 'usageLimitReached', usageLimit: { window: 'session', resetsAt } }
-  }
+  } as const
 
   it.each([
     ['future', resetsAt],
@@ -274,7 +275,7 @@ describe('the row a usage limit leaves', () => {
   it.each(['typed', 'text-only', 'unknown'] as const)(
     'renders historical usage-limit text with a %s fact',
     (fact) => {
-      const historicalRow =
+      const historicalRow: unknown =
         fact === 'text-only'
           ? { ...row, failure: undefined }
           : fact === 'unknown'
@@ -287,6 +288,12 @@ describe('the row a usage limit leaves', () => {
                 }
               }
             : row
+      if (!isAdmissibleAgentJournalItemBody(historicalRow) || historicalRow.kind !== 'status') {
+        throw new Error('Historical status fixture was not admitted')
+      }
+      if (fact === 'unknown') {
+        expect(historicalRow.failure).toEqual({ ...row.failure, futureLimit: true })
+      }
       renderStatus(historicalRow, null, false, false, 'Claude')
       if (fact === 'typed') {
         expect(
