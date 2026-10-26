@@ -59,8 +59,8 @@ export function makeConnector(distros: WslHostDistroCandidate[]) {
         stopped: true
       })
     ),
-    isDistroRegistered: vi.fn(
-      async (_distro: string, _distroId?: string): Promise<boolean | null> => true
+    resolveDistroName: vi.fn(
+      async (distro: string, _distroId?: string): Promise<string | false | null> => distro
     ),
     releaseHolder: vi.fn(async (_distro: string) => {}),
     adoptHolders: vi.fn(async (_isWanted: (distro: string) => boolean) => {}),
