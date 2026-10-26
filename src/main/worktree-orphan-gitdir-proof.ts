@@ -1,32 +1,43 @@
-import { type posix, win32 } from 'node:path'
+import type { posix } from 'node:path'
 import { resolveGitCommonDirectory } from '../shared/git-common-directory'
+import {
+  areResolvedPathsEqual,
+  canonicalOwnerPathsEqual,
+  isDirectWorktreeAdmin
+} from './worktree-owner-path-equivalence'
 
 type PathOps = typeof posix
 export type StatPath = (path: string) => Promise<unknown>
 export type ReadPath = (path: string) => Promise<unknown>
+
+// Only owning-layout discovery follows links; candidate and admin-entry proof do not.
+export type WorktreeProofAccess = {
+  statPath: StatPath
+  layoutStatPath: StatPath
+  readPath: ReadPath
+  realPath: (path: string) => Promise<string>
+}
 
 export async function gitFileProvesOrphanedWorktreeDirectory(args: {
   gitFilePath: string
   worktreePath: string
   repoPath: string
   pathOps: PathOps
-  statPath: StatPath
-  readPath: ReadPath
+  access: WorktreeProofAccess
 }): Promise<boolean> {
   try {
-    const gitEntry = await args.statPath(args.gitFilePath)
+    const gitEntry = await args.access.statPath(args.gitFilePath)
     if (!isGitFileStat(gitEntry)) {
       return false
     }
-    const gitFileContents = readFileResultToText(await args.readPath(args.gitFilePath))
+    const gitFileContents = readFileResultToText(await args.access.readPath(args.gitFilePath))
     return gitFileContents
       ? await gitFilePointsAtRepoWorktree(
           gitFileContents,
           args.worktreePath,
           args.repoPath,
           args.pathOps,
-          args.statPath,
-          args.readPath
+          args.access
         )
       : false
   } catch {
@@ -66,17 +77,10 @@ function resolveGitdirPath(gitdirPath: string, basePath: string, pathOps: PathOp
     : pathOps.resolve(basePath, gitdirPath)
 }
 
-function areResolvedPathsEqual(leftPath: string, rightPath: string, pathOps: PathOps): boolean {
-  const left = pathOps.normalize(pathOps.resolve(leftPath))
-  const right = pathOps.normalize(pathOps.resolve(rightPath))
-  return pathOps === win32 ? left.toLowerCase() === right.toLowerCase() : left === right
-}
-
 async function readProvenRepoWorktreesPath(
   repoPath: string,
   pathOps: PathOps,
-  statPath: StatPath,
-  readPath: ReadPath
+  access: WorktreeProofAccess
 ): Promise<string | null> {
   let owningGitDir: string | null = null
   const common = await resolveGitCommonDirectory(
@@ -84,7 +88,7 @@ async function readProvenRepoWorktreesPath(
     {},
     {
       statPath: async (file) => {
-        const entry = await statPath(file)
+        const entry = await access.layoutStatPath(file)
         return {
           isFile: () => isGitFileStat(entry),
           isDirectory: () => {
@@ -102,7 +106,7 @@ async function readProvenRepoWorktreesPath(
       },
       readPath: async (file) => {
         try {
-          const text = readFileResultToText(await readPath(file))
+          const text = readFileResultToText(await access.readPath(file))
           if (text === null) {
             throw new Error('Cannot read Git metadata')
           }
@@ -130,8 +134,8 @@ async function readProvenRepoWorktreesPath(
   const worktrees = pathOps.join(common, 'worktrees')
   if (
     owningGitDir &&
-    areResolvedPathsEqual(pathOps.dirname(owningGitDir), worktrees, pathOps) &&
-    !(await repoGitdirIsLinkedWorktreeAdminEntry(owningGitDir, repoPath, pathOps, readPath))
+    (await isDirectWorktreeAdmin(owningGitDir, worktrees, pathOps, access)) &&
+    !(await repoGitdirIsLinkedWorktreeAdminEntry(owningGitDir, repoPath, pathOps, access))
   ) {
     return null
   }
@@ -142,11 +146,11 @@ async function repoGitdirIsLinkedWorktreeAdminEntry(
   resolvedRepoGitdirPath: string,
   repoPath: string,
   pathOps: PathOps,
-  readPath: ReadPath
+  access: WorktreeProofAccess
 ): Promise<boolean> {
   const adminGitdirPath = pathOps.join(resolvedRepoGitdirPath, 'gitdir')
   try {
-    const adminGitdirContents = readFileResultToText(await readPath(adminGitdirPath))
+    const adminGitdirContents = readFileResultToText(await access.readPath(adminGitdirPath))
     const repoGitPath = adminGitdirContents ? parseFirstLinePath(adminGitdirContents) : null
     if (!repoGitPath) {
       return false
@@ -154,7 +158,15 @@ async function repoGitdirIsLinkedWorktreeAdminEntry(
     const resolvedRepoGitPath = resolveGitdirPath(repoGitPath, resolvedRepoGitdirPath, pathOps)
     const resolvedExpectedGitPath = pathOps.resolve(repoPath, '.git')
     // A linked parent must prove its own backlink before supplying this namespace.
-    return areResolvedPathsEqual(resolvedRepoGitPath, resolvedExpectedGitPath, pathOps)
+    return (
+      areResolvedPathsEqual(resolvedRepoGitPath, resolvedExpectedGitPath, pathOps) ||
+      (await canonicalOwnerPathsEqual(
+        resolvedRepoGitPath,
+        resolvedExpectedGitPath,
+        pathOps,
+        access
+      ))
+    )
   } catch {
     return false
   }
@@ -165,23 +177,27 @@ async function gitFilePointsAtRepoWorktree(
   worktreePath: string,
   repoPath: string,
   pathOps: PathOps,
-  statPath: StatPath,
-  readPath: ReadPath
+  access: WorktreeProofAccess
 ): Promise<boolean> {
   const gitdirPath = parseGitdirPath(contents)
   if (!gitdirPath) {
     return false
   }
   const resolvedGitdirPath = resolveGitdirPath(gitdirPath, worktreePath, pathOps)
-  const repoWorktreesPath = await readProvenRepoWorktreesPath(repoPath, pathOps, statPath, readPath)
-  if (!repoWorktreesPath || !containsPath(repoWorktreesPath, resolvedGitdirPath, pathOps)) {
+  const repoWorktreesPath = await readProvenRepoWorktreesPath(repoPath, pathOps, access)
+  if (
+    !repoWorktreesPath ||
+    !(await isDirectWorktreeAdmin(resolvedGitdirPath, repoWorktreesPath, pathOps, access))
+  ) {
     return false
   }
-  const relativeGitdirPath = pathOps.relative(repoWorktreesPath, resolvedGitdirPath)
-  if (relativeGitdirPath === '' || relativeGitdirPath.includes(pathOps.sep)) {
-    return false
-  }
-  return adminGitdirPointsAtCandidate(resolvedGitdirPath, worktreePath, pathOps, statPath, readPath)
+  return adminGitdirPointsAtCandidate(
+    resolvedGitdirPath,
+    worktreePath,
+    pathOps,
+    access.statPath,
+    access.readPath
+  )
 }
 
 async function adminGitdirPointsAtCandidate(
@@ -217,18 +233,6 @@ async function adminGitdirPointsAtCandidate(
       return isMissingPathError(statError)
     }
   }
-}
-
-function containsPath(parentPath: string, childPath: string, pathOps: PathOps): boolean {
-  const relativePath = pathOps.relative(parentPath, childPath)
-  // ..name is a child name; only .. and ../... escape.
-  return (
-    relativePath === '' ||
-    (!!relativePath &&
-      relativePath !== '..' &&
-      !relativePath.startsWith(`..${pathOps.sep}`) &&
-      !pathOps.isAbsolute(relativePath))
-  )
 }
 
 function parseGitdirPath(contents: string): string | null {

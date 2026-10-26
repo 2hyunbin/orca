@@ -16,6 +16,8 @@ import {
 } from './worktree-delete-limit'
 import { installRealWorkerThreadChildProcesses } from '../worker-thread-child-process/worker-thread-child-process-real.test-fixtures'
 import { removeTree } from '../../shared/windows-transient-lock-removal'
+import { canSafelyRemoveOrphanedWorktreeDirectory } from '../worktree-removal-safety'
+import { CLIENT_REMOVAL_HOME } from '../worktree-removal-home-guard'
 import { classifyWorktreeForceDeleteReason } from '../../shared/worktree/removal'
 import { formatWorktreeRemovalError } from '../ipc/worktree-logic'
 import { assertWorktreeCleanForRemoval, listWorktreesStrict, removeWorktree } from './worktree'
@@ -75,7 +77,7 @@ afterEach(async () => {
 })
 
 describe('worktree removal against the real Git binary', () => {
-  it.each(['ordinary', 'bare'])(
+  it.each(['ordinary', 'bare', 'link-before', 'link-after'])(
     'deletes the checkout and only its target administration from a %s parent',
     async (layout) => {
       if (layout === 'bare') {
@@ -85,10 +87,40 @@ describe('worktree removal against the real Git binary', () => {
         repoPath = bare
         await git(['worktree', 'add', '-q', worktreePath, 'feature'], repoPath)
       }
+      if (layout.startsWith('link-')) {
+        if (layout === 'link-before') {
+          await git(['worktree', 'remove', '--force', worktreePath], repoPath)
+        }
+        const metadata = join(scratchDir, 'metadata')
+        await diskFs.rename(join(repoPath, '.git'), metadata)
+        await diskFs.symlink(
+          metadata,
+          join(repoPath, '.git'),
+          process.platform === 'win32' ? 'junction' : 'dir'
+        )
+        if (layout === 'link-before') {
+          await git(['worktree', 'add', '-q', worktreePath, 'feature'], repoPath)
+        }
+        expect((await diskFs.lstat(join(repoPath, '.git'))).isSymbolicLink()).toBe(true)
+        expect((await diskFs.lstat(worktreePath)).isDirectory()).toBe(true)
+        expect((await diskFs.lstat(join(worktreePath, '.git'))).isFile()).toBe(true)
+      }
+      expect(await isRegistered(worktreePath)).toBe(true)
       const sibling = join(scratchDir, 'unrelated')
       await git(['worktree', 'add', '-q', sibling, '-b', 'sibling'], repoPath)
       await diskFs.rename(sibling, join(scratchDir, 'offline'))
-      const admin = (await readFile(join(worktreePath, '.git'), 'utf8')).trim().slice(8)
+      const marker = await readFile(join(worktreePath, '.git'), 'utf8')
+      const admin = marker.trim().slice(8)
+      const backlink = await readFile(join(admin, 'gitdir'), 'utf8')
+      const row = (await listWorktreesStrict(repoPath)).find((entry) =>
+        areWorktreePathsEqual(entry.path, worktreePath)
+      )
+      console.info('owning metadata layout', { layout, marker, backlink, row })
+      expect(row).toMatchObject({ head: (await git(['rev-parse', 'HEAD'], worktreePath)).trim() })
+      expect(row?.locked).not.toBe(true)
+      expect(
+        await canSafelyRemoveOrphanedWorktreeDirectory(worktreePath, repoPath, CLIENT_REMOVAL_HOME)
+      ).toBe(true)
 
       await removeWorktree(repoPath, worktreePath, false, { deleteBranch: false })
 

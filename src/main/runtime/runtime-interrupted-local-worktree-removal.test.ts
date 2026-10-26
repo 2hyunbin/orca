@@ -329,22 +329,23 @@ describe('finishing an interrupted worktree removal after a restart', () => {
       }
       await git(['remote', 'add', pushTarget.remoteName, pushTarget.remoteUrl])
       await git(['config', `remote.${pushTarget.remoteName}.orca-created`, 'true'])
+      const path = phase === 'child' ? join(worktreePath, 'seed.txt') : worktreePath
+      const locked = Object.assign(new Error('held path'), { code: 'EBUSY', path })
       const held =
         phase === 'child'
-          ? vi
-              .spyOn(nativeFs, 'rm')
-              .mockRejectedValue(Object.assign(new Error('held child'), { code: 'EBUSY' }))
-          : vi
-              .spyOn(nativeFs, 'rmdir')
-              .mockRejectedValue(Object.assign(new Error('held root'), { code: 'EBUSY' }))
-      const { outcome } = await finishAfterRestart({ force: true })
+          ? vi.spyOn(nativeFs, 'rm').mockRejectedValue(locked)
+          : vi.spyOn(nativeFs, 'rmdir').mockRejectedValue(locked)
+      const { outcome, records } = await finishAfterRestart({ force: true })
+      const message = `${path} is open in another program. Close that program and delete again.`
       expect(outcome.status).toBe('failed')
-      expect(await listedRows()).toMatchObject([{ removalError: expect.any(String) }])
+      expect(records).toMatchObject([{ failure: { message } }])
+      expect(await listedRows()).toMatchObject([{ removalError: message }])
       expect(await git(['remote'])).toContain(pushTarget.remoteName)
       expect(await isRegistered(worktreePath)).toBe(true)
       expect(await git(['branch', '--list', 'feature'])).not.toBe('')
       _resetPendingWorktreeRemovalsForTests()
       await loadWorktreeRemovalRecords(recordsDir)
+      expect(await listedRows()).toMatchObject([{ removalError: message }])
       const resume = vi.fn()
       resumeInterruptedWorktreeRemovals(resume)
       expect(resume).not.toHaveBeenCalled()

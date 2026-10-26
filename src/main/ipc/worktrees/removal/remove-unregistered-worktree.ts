@@ -62,8 +62,7 @@ export async function removeUnregisteredWorktree(
         toLocalWorktreeRuntimePath(worktreePath, localWorktreeGitOptions),
         toLocalWorktreeRuntimePath(repo.path, localWorktreeGitOptions),
         removalHome,
-        access.statPath,
-        access.readPath
+        access
       ))
   }
   const native = usesNativeWindowsRemoval(worktreePath, localWorktreeGitOptions)

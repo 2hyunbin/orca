@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { runProcessMock, lstatMock, readFileMock, rmMock } = vi.hoisted(() => ({
-  runProcessMock: vi.fn(),
-  lstatMock: vi.fn(),
-  readFileMock: vi.fn(),
-  rmMock: vi.fn()
-}))
+const { runProcessMock, lstatMock, statMock, realpathMock, readFileMock, rmMock } = vi.hoisted(
+  () => ({
+    runProcessMock: vi.fn(),
+    lstatMock: vi.fn(),
+    statMock: vi.fn(),
+    realpathMock: vi.fn(),
+    readFileMock: vi.fn(),
+    rmMock: vi.fn()
+  })
+)
 
 // Process-host tests own encoding, timeouts, and console hiding; assert guest commands here.
 vi.mock('@orca/process-host', () => ({
@@ -14,6 +18,8 @@ vi.mock('@orca/process-host', () => ({
 
 vi.mock('node:fs/promises', () => ({
   lstat: lstatMock,
+  stat: statMock,
+  realpath: realpathMock,
   readFile: readFileMock,
   rm: rmMock
 }))
@@ -54,6 +60,8 @@ describe('local worktree filesystem runtime access', () => {
   beforeEach(() => {
     runProcessMock.mockReset()
     lstatMock.mockReset()
+    statMock.mockReset()
+    realpathMock.mockReset()
     readFileMock.mockReset()
     rmMock.mockReset()
     completeExecFile()
@@ -65,15 +73,21 @@ describe('local worktree filesystem runtime access', () => {
   })
 
   it('uses host filesystem operations when no WSL distro is selected', async () => {
-    lstatMock.mockResolvedValue({ type: 'file' })
+    lstatMock.mockResolvedValue({ type: 'symlink' })
+    statMock.mockResolvedValue({ type: 'directory' })
+    realpathMock.mockResolvedValue('C:\\metadata')
     readFileMock.mockResolvedValue('gitdir: ../.git/worktrees/feature')
 
     const access = getLocalWorktreePathAccess()
-    await access.statPath('C:\\repo\\.git')
+    await expect(access.statPath('C:\\repo\\.git')).resolves.toEqual({ type: 'symlink' })
+    await expect(access.layoutStatPath('C:\\repo\\.git')).resolves.toEqual({ type: 'directory' })
+    await expect(access.realPath('C:\\repo\\.git')).resolves.toBe('C:\\metadata')
     await access.readPath('C:\\repo\\.git')
     await removeLocalWorktreePath('C:\\repo\\feature')
 
     expect(lstatMock).toHaveBeenCalledWith('C:\\repo\\.git')
+    expect(statMock).toHaveBeenCalledWith('C:\\repo\\.git')
+    expect(realpathMock).toHaveBeenCalledWith('C:\\repo\\.git')
     expect(readFileMock).toHaveBeenCalledWith('C:\\repo\\.git', 'utf8')
     expect(rmMock).toHaveBeenCalledWith(
       toHostRemovalPath('C:\\repo\\feature'),
@@ -170,10 +184,27 @@ describe('local worktree filesystem runtime access', () => {
 
   it('uses the selected WSL distro for stat, read, and removal on Windows', async () => {
     await withPlatform('win32', async () => {
-      completeExecFile('regular file')
+      completeExecFile('symbolic link')
       const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
-      await expect(access.statPath('/home/me/repo/.git')).resolves.toEqual({ type: 'file' })
+      await expect(access.statPath('/home/me/repo/.git')).resolves.toEqual({ type: 'symlink' })
+      completeExecFile('directory')
+      await expect(access.layoutStatPath('/home/me/repo/.git')).resolves.toEqual({
+        type: 'directory'
+      })
+      expect(runProcessMock.mock.calls.slice(0, 2).map(([request]) => request.args.at(-1))).toEqual(
+        [
+          "LC_ALL=C stat -c %F -- '/home/me/repo/.git'",
+          "LC_ALL=C stat -L -c %F -- '/home/me/repo/.git'"
+        ]
+      )
 
+      completeExecFile('/home/me/metadata with spaces \n')
+      await expect(access.realPath('/home/me/repo/.git')).resolves.toBe(
+        '/home/me/metadata with spaces '
+      )
+      expect(runProcessMock.mock.calls[2]?.[0].args.at(-1)).toBe(
+        "LC_ALL=C realpath -e -- '/home/me/repo/.git'"
+      )
       completeExecFile('gitdir: /home/me/repo/.git/worktrees/feature\n')
       await expect(access.readPath('/home/me/repo/.git')).resolves.toBe(
         'gitdir: /home/me/repo/.git/worktrees/feature\n'
@@ -182,7 +213,7 @@ describe('local worktree filesystem runtime access', () => {
       completeExecFile()
       await removeLocalWorktreePath('C:\\Users\\me\\repo feature', { wslDistro: 'Ubuntu' })
 
-      expect(runProcessMock).toHaveBeenCalledTimes(3)
+      expect(runProcessMock).toHaveBeenCalledTimes(5)
       expect(runProcessMock).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({
@@ -192,7 +223,15 @@ describe('local worktree filesystem runtime access', () => {
           cwd: expect.any(String)
         })
       )
-      const removeArgs = runProcessMock.mock.calls[2]?.[0].args as string[]
+      expect(runProcessMock).toHaveBeenNthCalledWith(
+        3,
+        expect.objectContaining({
+          program: 'wsl.exe',
+          args: expect.arrayContaining(['-d', 'Ubuntu']),
+          timeoutMs: 30_000
+        })
+      )
+      const removeArgs = runProcessMock.mock.calls[4]?.[0].args as string[]
       expect(removeArgs.at(-1)).toContain('rm -rf --')
       expect(removeArgs.at(-1)).toContain(String.raw`rm -rf -- '/mnt/c/Users/me/repo feature'`)
       expect(rmMock).not.toHaveBeenCalled()
@@ -210,6 +249,12 @@ describe('local worktree filesystem runtime access', () => {
       expect(args).not.toContain('-lc')
       expect(args).not.toContain('-ilc')
       expect(args.at(-1)).not.toContain('getent passwd')
+      await expect(
+        getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' }).layoutStatPath('/home/me/repo/.git')
+      ).resolves.toEqual({ type: 'other' })
+      await expect(
+        getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' }).realPath('/home/me/repo/.git')
+      ).rejects.toThrow('Invalid WSL canonical path')
     })
   })
 
@@ -224,9 +269,9 @@ describe('local worktree filesystem runtime access', () => {
       failExecFile(1, stderr)
       const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
 
-      await expect(access.statPath('/mnt/c/repo/missing/.git')).rejects.toMatchObject({
-        code: 'ENOENT'
-      })
+      for (const inspect of [access.statPath, access.layoutStatPath, access.realPath]) {
+        await expect(inspect('/mnt/c/repo/missing/.git')).rejects.toMatchObject({ code: 'ENOENT' })
+      }
       await expect(isWorktreePathMissing('/mnt/c/repo/missing', access.statPath)).resolves.toBe(
         true
       )
@@ -243,7 +288,9 @@ describe('local worktree filesystem runtime access', () => {
         failExecFile(1, stderr)
         const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
 
-        await expect(access.statPath('/mnt/c/repo/locked')).rejects.toThrow('Permission denied')
+        for (const inspect of [access.statPath, access.layoutStatPath, access.realPath]) {
+          await expect(inspect('/mnt/c/repo/locked')).rejects.toThrow('Permission denied')
+        }
         await expect(isWorktreePathMissing('/mnt/c/repo/locked', access.statPath)).resolves.toBe(
           false
         )
@@ -267,9 +314,9 @@ describe('local worktree filesystem runtime access', () => {
       failExecFile(1, "stat: <translated verb> '/mnt/c/repo/missing': <translated errno>\n")
       const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
 
-      await expect(access.statPath('/mnt/c/repo/missing')).rejects.not.toMatchObject({
-        code: 'ENOENT'
-      })
+      for (const inspect of [access.statPath, access.layoutStatPath, access.realPath]) {
+        await expect(inspect('/mnt/c/repo/missing')).rejects.not.toMatchObject({ code: 'ENOENT' })
+      }
       await expect(isWorktreePathMissing('/mnt/c/repo/missing', access.statPath)).resolves.toBe(
         false
       )

@@ -10,10 +10,10 @@ import type { RuntimePreservedBranchCleanup } from './runtime-preserved-branch-c
 import { listWorktreesStrict } from '../git/worktree'
 import { cleanupUnusedWorktreePushTargetRemote } from '../ipc/worktree-remote'
 import { authorizeWindowsCheckout, usesNativeWindowsRemoval } from '../git/windows-worktree-removal'
-import { removeWorktree } from '../git/worktree-removal'
 import {
   deleteBranchOfUnregisteredWorktree,
-  finishUnregisteredWorktreeRemoval
+  finishUnregisteredWorktreeRemoval,
+  removeWorktree
 } from '../git/worktree-removal'
 import { getErrorCode } from '../git/worktree-operation-options'
 import { areWorktreePathsEqual } from '../git/worktree-path-comparison'

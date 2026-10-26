@@ -16,8 +16,9 @@ export async function failureLeftByGit(
   if (!(await worktreeCheckoutExists(record.worktreePath))) {
     return undefined
   }
+  const message = error instanceof Error ? error.message : String(error)
   const failure = {
-    message: (error instanceof Error ? error.message : String(error)).replace(
+    message: message.replace(
       / Close (?:that program|any program using it) and delete again\.$/,
       () =>
         ` Close any program using it. You may need to delete the remaining folder at ${record.worktreePath} manually to finish removing this workspace.`
@@ -27,7 +28,7 @@ export async function failureLeftByGit(
   try {
     const registered = await registeredRemovalCheckout(record)
     if (registered) {
-      return isRecordedCheckout(registered, record) ? failure : undefined
+      return isRecordedCheckout(registered, record) ? { ...failure, message } : undefined
     }
     if (!(await isUnregisteredRemovalLeftover(record.repoPath, record.worktreePath))) {
       return undefined
