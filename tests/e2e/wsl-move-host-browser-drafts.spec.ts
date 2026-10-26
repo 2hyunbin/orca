@@ -37,7 +37,9 @@ test("a moved project's browser tab and draft come back on the desktop from a br
   const openFile = { filePath: notesPath, relativePath: 'notes.md' }
   const host = await launchHeadlessPairedRuntimeHost({
     pinnedServePort: true,
-    withoutBrowser: true
+    withoutBrowser: true,
+    // Stands in for the distro's orcad, the only host that serves moved panes' history.
+    extraEnv: { ORCA_E2E_WSL_MOVE_DESTINATION: '1' }
   })
   try {
     const added = await host.client.call<{ repo: { id: string } }>('repo.add', {

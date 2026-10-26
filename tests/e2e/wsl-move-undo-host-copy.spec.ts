@@ -34,7 +34,9 @@ test("undo stops the host's copy first, so the project's terminal runs in one pl
   const repoPath = realpathSync(createMovedRepo(root))
   const host = await launchHeadlessPairedRuntimeHost({
     pinnedServePort: true,
-    withoutBrowser: true
+    withoutBrowser: true,
+    // Stands in for the distro's orcad, the only host that serves moved panes' history.
+    extraEnv: { ORCA_E2E_WSL_MOVE_DESTINATION: '1' }
   })
   const session = createRestartSession(testInfo, GATE)
   let launched: Awaited<ReturnType<typeof session.launch>> | undefined

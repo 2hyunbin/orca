@@ -254,12 +254,6 @@ async function fetchHostScrollback(
 }
 
 /**
- * Starts reading a host-run tab's stored scrollback from its host when this client has no copy,
- * so the pane paints its history after a move deleted (or a web client never had) the local one.
- * Decides synchronously and holds unless the host is known not to serve the read; returns null
- * when there is nothing to fetch. The promise never rejects and settles by the hold bound.
- */
-/**
  * The host to read a pane's stored scrollback from: only a WSL host, whose moved panes keep their
  * history as host snapshots. SSH and paired-server panes paint as before, with no hold or read.
  * Null for a twin too: no single host owns the stored scrollback, so the pane paints locally.
@@ -276,6 +270,12 @@ export function hostScrollbackEnvironmentId(
   return environment?.orcadDeployment?.kind === 'wsl' ? environmentId : null
 }
 
+/**
+ * Starts reading a host-run tab's stored scrollback from its host when this client has no copy,
+ * so the pane paints its history after a move deleted (or a web client never had) the local one.
+ * Decides synchronously and holds unless the host is known not to serve the read; returns null
+ * when there is nothing to fetch. The promise never rejects and settles by the hold bound.
+ */
 export function startHostTerminalScrollbackHydration(
   tabId: string,
   worktreeId: string,

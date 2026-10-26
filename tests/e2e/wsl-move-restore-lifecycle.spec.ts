@@ -169,7 +169,9 @@ test('a moved pane shows its own history once, in its folder, across three reloa
   const marker = `MOVED-${randomUUID().slice(0, 8)}`
   const host = await launchHeadlessPairedRuntimeHost({
     pinnedServePort: true,
-    withoutBrowser: true
+    withoutBrowser: true,
+    // Stands in for the distro's orcad, the only host that serves moved panes' history.
+    extraEnv: { ORCA_E2E_WSL_MOVE_DESTINATION: '1' }
   })
   try {
     const added = await host.client.call<{ repo: { id: string } }>('repo.add', {

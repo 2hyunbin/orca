@@ -159,7 +159,11 @@ async function openImportedPane(
   const root = mkdtempSync(path.join(os.tmpdir(), 'orca-moved-import-'))
   const repoPath = createMovedRepo(root)
   // A windowless host, as the distro's orcad is: nothing there restores a pane or a browser tab itself.
-  const host = await launchHeadlessPairedRuntimeHost({ pinnedServePort: true })
+  const host = await launchHeadlessPairedRuntimeHost({
+    pinnedServePort: true,
+    // Stands in for the distro's orcad, the only host that serves moved panes' history.
+    extraEnv: { ORCA_E2E_WSL_MOVE_DESTINATION: '1' }
+  })
   try {
     const added = await host.client.call<{ repo: { id: string } }>('repo.add', {
       path: repoPath,

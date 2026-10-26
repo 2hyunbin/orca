@@ -27,6 +27,8 @@ export function createMigrationJournalDirectory<T extends { migrationId: string 
   parse: (value: unknown) => T
   unreadable: (detail: string) => Error
   onChange?: (userDataPath: string) => void
+  /** Remove other processes' writes that died before their rename (the WSL move journal only). */
+  sweepOrphanedTemporaries?: boolean
 }): MigrationJournalDirectory<T> {
   // Frequent hidden-row checks would otherwise reparse full manifests.
   const parsed = new Map<string, { key: string; records: T[] }>()
@@ -74,7 +76,7 @@ export function createMigrationJournalDirectory<T extends { migrationId: string 
       } catch (error) {
         throw options.unreadable(errorMessage(error))
       }
-      if (!swept.has(dir)) {
+      if (options.sweepOrphanedTemporaries && !swept.has(dir)) {
         swept.add(dir)
         removeOrphanedTemporaries(dir, names)
       }

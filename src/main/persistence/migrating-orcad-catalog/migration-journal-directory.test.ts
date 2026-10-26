@@ -6,16 +6,20 @@ import { createMigrationJournalDirectory } from './migration-journal-directory'
 
 type JournalRecord = { migrationId: string }
 
-const journal = createMigrationJournalDirectory<JournalRecord>({
+const journalOptions = {
   directoryName: 'journal',
   maxFileBytes: 1024,
-  parse: (value) => {
+  parse: (value: unknown): JournalRecord => {
     if (typeof value !== 'object' || value === null || !('migrationId' in value)) {
       throw new Error('not a record')
     }
     return { migrationId: String(value.migrationId) }
   },
-  unreadable: (detail) => new Error(detail)
+  unreadable: (detail: string) => new Error(detail)
+}
+const journal = createMigrationJournalDirectory<JournalRecord>({
+  ...journalOptions,
+  sweepOrphanedTemporaries: true
 })
 
 // The sweep compares a file's mtime with the clock, so both read this fixed time.
@@ -57,5 +61,12 @@ describe('migration journal directory', () => {
     expect(journal.list(userDataPath)).toEqual([])
     expect(existsSync(own)).toBe(true)
     expect(existsSync(recent)).toBe(true)
+  })
+
+  it('leaves temporaries alone in a journal that does not sweep, as SSH migration journals do', () => {
+    const orphan = temporary(process.pid + 1, 120_000)
+    const unswept = createMigrationJournalDirectory<JournalRecord>(journalOptions)
+    expect(unswept.list(userDataPath)).toEqual([])
+    expect(existsSync(orphan)).toBe(true)
   })
 })

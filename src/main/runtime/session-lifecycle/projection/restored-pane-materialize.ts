@@ -29,6 +29,7 @@ import type { NewerDaemonReopenResult } from '../../../../shared/newer-daemon-ho
 import type { WorkspaceLayoutStream } from '../../workspace-layout-stream'
 import { getDaemonHistoryDir } from '../../../daemon/daemon-launch-paths'
 import { HistoryReader } from '../../../daemon/history-reader'
+import { servesWslMovedPaneHistory } from '../../../orcad/orcad-migration-wsl-destination'
 import { movedPaneHistorySessionId } from '../../../persistence/migrating-orcad-catalog/orcad-terminal-history-installer'
 import { makePaneKey, parsePaneKey } from '../../../../shared/stable-pane-id'
 import { agentProviderSessionsEqual } from '../../../../shared/agent-session-resume'
@@ -155,6 +156,10 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
     tabId,
     leafId
   }: RestoredPane): Promise<string | undefined> {
+    // Only a WSL host installs moved panes' history; other hosts skip the scope and meta.json reads.
+    if (!servesWslMovedPaneHistory()) {
+      return undefined
+    }
     try {
       const workspace = await this.resolveTerminalWorkspaceLaunchScope(`id:${worktreeId}`)
       // Why never over SSH: only this host's own daemon holds the installed history.

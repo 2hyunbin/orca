@@ -38,6 +38,7 @@ const journals = createMigrationJournalDirectory({
   maxFileBytes: 16 * 1024 * 1024,
   parse: parseVerifiedWslMoveCutover,
   unreadable: (detail) => new WslMoveJournalUnreadableError(detail),
+  sweepOrphanedTemporaries: true,
   onChange: (userDataPath) => {
     for (const listener of changeListeners) {
       listener(userDataPath)

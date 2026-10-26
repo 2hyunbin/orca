@@ -265,11 +265,12 @@ export const ORCAD_MIGRATION_INSTALLABLE_BLOB_KINDS: readonly OrcadMigrationBlob
   'terminal-history'
 ]
 
-export function advertisedOrcadMigrationBlobCapabilities(): string[] {
+/** Moved panes' terminal history installs only on a WSL host, the one destination a WSL move has. */
+export function advertisedOrcadMigrationBlobCapabilities(host: { wslHost: boolean }): string[] {
   return [
     ORCAD_MIGRATION_BLOB_CHANNEL_RUNTIME_CAPABILITY,
-    ...ORCAD_MIGRATION_INSTALLABLE_BLOB_KINDS.map(
-      (kind) => ORCAD_MIGRATION_BLOB_KIND_CONTRACTS[kind].capability
-    )
+    ...ORCAD_MIGRATION_INSTALLABLE_BLOB_KINDS.filter(
+      (kind) => kind !== 'terminal-history' || host.wslHost
+    ).map((kind) => ORCAD_MIGRATION_BLOB_KIND_CONTRACTS[kind].capability)
   ]
 }

@@ -1,4 +1,5 @@
 // Validate blob contents before commit; install only advertised kinds after durable commit.
+import { servesWslMovedPaneHistory } from '../../orcad/orcad-migration-wsl-destination'
 import { readFileSync, rmSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { OrcadMigrationBlobKind } from '../../../shared/orcad-migration/orcad-migration-blob-transfer'
@@ -112,6 +113,10 @@ export function installOrcadMigrationReceivedBlobs(install: OrcadMigrationBlobIn
 }
 
 function installTerminalHistory(install: OrcadMigrationBlobInstall): void {
+  // Only a WSL host advertises terminal history, so no other destination should hold any.
+  if (!servesWslMovedPaneHistory()) {
+    return
+  }
   installOrcadMigrationTerminalHistory({
     migration: install.migration,
     root: install.root,
