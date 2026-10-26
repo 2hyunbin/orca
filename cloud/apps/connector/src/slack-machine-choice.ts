@@ -1,7 +1,20 @@
-import { CONNECTOR_AGENTS, type ConnectorHelloRequest } from '@orca-cloud/connector-contract'
+import type { SqlRow } from '@orca-cloud/cloud-database'
+import {
+  CONNECTOR_AGENTS,
+  ConnectorHelloRequestSchema,
+  type ConnectorHelloRequest
+} from '@orca-cloud/connector-contract'
 import type { SlackIdentity } from './slack-identities.js'
 
 export type KnownHost = { hostId: string; hostName: string; hello: ConnectorHelloRequest }
+// A connector_hosts row with its latest hello; null when the stored hello no longer parses.
+export function knownHost(row: SqlRow): KnownHost | null {
+  const hello = ConnectorHelloRequestSchema.safeParse(JSON.parse(String(row.hello)))
+  return hello.success
+    ? { hostId: String(row.host_id), hostName: String(row.host_name), hello: hello.data }
+    : null
+}
+
 export type PlaceOption = { project: string; hostName: string }
 
 export type MachineChoice =

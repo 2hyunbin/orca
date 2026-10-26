@@ -10,7 +10,7 @@ import type { SlackConfig } from './slack-config.js'
 import { mentionsBot, promptText, type SlackMessage } from './slack-events.js'
 import { findSlackIdentity } from './slack-identities.js'
 import type { SlackInstall, SlackInstalls } from './slack-installs.js'
-import { chooseMachine, type KnownHost } from './slack-machine-choice.js'
+import { chooseMachine, knownHost } from './slack-machine-choice.js'
 import type { SlackPlace, SlackPosts } from './slack-posts.js'
 import { keepTeammateContext, withTeammateContext } from './slack-teammate-context.js'
 import { slackText } from './slack-text.js'
@@ -322,11 +322,4 @@ async function hasLiveStart(
     return Number(start.expires_at) > now
   }
   return start?.state === 'leased' || start?.state === 'received'
-}
-
-function knownHost(row: SqlRow): KnownHost | null {
-  const hello = ConnectorHelloRequestSchema.safeParse(JSON.parse(String(row.hello)))
-  return hello.success
-    ? { hostId: String(row.host_id), hostName: String(row.host_name), hello: hello.data }
-    : null
 }
