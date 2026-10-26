@@ -15,7 +15,12 @@ import { OrcadHostUnsupportedError } from '../orcad/orcad-host-unavailable'
 import type { WslHostDistroCandidate } from './wsl-host-distro-list'
 import { WslHostService, type WslHostConnector } from './wsl-host-service'
 import { wakeRememberedWslHosts } from './wsl-host-early-wake'
-import { WslOrcadLaunchDeferredError } from './wsl-orcad-connection-errors'
+import {
+  WslDistroNotRunningError,
+  WslOrcadLaunchDeferredError
+} from './wsl-orcad-connection-errors'
+import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
+import { isRecoverableRemoteRuntimeConnectionError } from '../../shared/remote-runtime/remote-runtime-client-error-classification'
 import type { WslOrcadConnection } from './wsl-orcad-connection'
 
 const KEY = Buffer.alloc(32, 3).toString('base64')
@@ -510,6 +515,54 @@ describe('WslHostService', () => {
     service.focusHost('wsl:ubuntu')
     await vi.waitFor(() => expect(connector.reachability).toHaveBeenCalledTimes(1))
     expect(connector.connect).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed reconnect for open work as retryable, but a deferred update or a stopped distro as final', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    service.setVisibleWork(['wsl:ubuntu'])
+    await connector.disconnect('Ubuntu')
+
+    connector.connect.mockRejectedValueOnce(new Error('orcad exited'))
+    const failure = await service
+      .ensureForRuntimeCall('wsl:ubuntu')
+      .catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(RemoteRuntimeClientError)
+    expect(failure).toMatchObject({ code: 'remote_runtime_unavailable' })
+    expect(isRecoverableRemoteRuntimeConnectionError({ message: String(failure) })).toBe(true)
+
+    const deferred = new WslOrcadLaunchDeferredError({
+      outcome: 'deferred',
+      distro: 'Ubuntu',
+      candidateVersion: '2.0.0',
+      code: 'live-terminals',
+      reason: 'Terminals are still running.',
+      forceable: true
+    })
+    connector.connect.mockRejectedValueOnce(deferred)
+    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toBe(deferred)
+
+    // The no-boot reconnect (#34050) found the distro stopped: final, so panes don't retry a boot.
+    const notRunning = new WslDistroNotRunningError('Ubuntu')
+    connector.connect.mockRejectedValueOnce(notRunning)
+    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toBe(notRunning)
+  })
+
+  it('keeps a parked host’s refusal final, never a retryable failure', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    service.setVisibleWork(['wsl:ubuntu'])
+    await connector.disconnect('Ubuntu')
+    connector.distro.state = 'stopped'
+
+    const refusal = await service
+      .ensureForRuntimeCall('wsl:ubuntu')
+      .catch((error: unknown) => error)
+    expect(refusal).not.toBeInstanceOf(RemoteRuntimeClientError)
+    expect(String(refusal)).toContain('Ubuntu was stopped')
+    expect(isRecoverableRemoteRuntimeConnectionError({ message: String(refusal) })).toBe(false)
   })
 
   it('parks a host the moment a poll finds its distro confirmed stopped, never booting it', async () => {

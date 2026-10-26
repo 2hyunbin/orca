@@ -5,6 +5,7 @@
  */
 import { errorMessage } from '../../shared/error-message'
 import { focusReachability } from './wsl-host-focus-reachability'
+import { rethrowRetryable } from './wsl-host-connect-failure'
 import { removeWslHostEnvironment } from '../../shared/runtime-environment-wsl-host-store'
 import {
   readWslHostDeployments,
@@ -277,7 +278,7 @@ export class WslHostService {
     ) {
       throw new Error(wslHostNotConnectedMessage(record.distro))
     }
-    await connector.connect(record.distro, { noBoot: true })
+    await connector.connect(record.distro, { noBoot: true }).catch(rethrowRetryable(record.distro))
   }
 
   /**
