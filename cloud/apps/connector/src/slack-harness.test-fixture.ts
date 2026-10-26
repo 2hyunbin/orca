@@ -160,6 +160,7 @@ export async function createSlackHarness(slack: Partial<SlackConfig> = {}) {
         agents: ['claude', 'codex'],
         promptKinds: ['approval'],
         features: ['answer', 'cancel', 'reply'],
+        sources: ['slack'],
         projects
       },
       'PUT'

@@ -181,6 +181,7 @@ export async function createConnectorHarness(
             agents: ['claude'],
             promptKinds: ['approval'],
             features: ['answer', 'cancel'],
+            sources: ['slack'],
             projects: []
           },
           'PUT'

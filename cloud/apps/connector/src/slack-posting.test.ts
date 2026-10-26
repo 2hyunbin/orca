@@ -69,8 +69,18 @@ describe('Slack thread status and posts', () => {
     await harness.pass()
     expect(await (await harness.reply('r1', 'Here you go')).json()).toEqual({
       status: 'posted',
-      messageTs: expect.any(String)
+      messageId: expect.any(String)
     })
+  })
+
+  it("never posts another source's output to a Slack thread with the same id", async () => {
+    const harness = await startedThread()
+    const other = { source: 'discord', externalId: EXTERNAL_ID }
+    await harness.events(turnStarted, { ...turnEnded, conversation: other })
+    const reply = { v: 1, replyId: 'r1', conversation: other, turnId: TURN, text: 'hi' }
+    expect((await harness.machine.call(CONNECTOR_PATHS.replies, reply)).status).toBe(403)
+    expect((await harness.posts()).filter((post) => post.kind === 'message')).toEqual([])
+    expect(await harness.status()).toBe('Working on build-box…')
   })
 
   it('shows a refused start', async () => {

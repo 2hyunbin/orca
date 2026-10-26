@@ -9,6 +9,7 @@ import type { Context, Hono, MiddlewareHandler } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { every } from './connector-background.js'
 import type { ConnectorInbox, ExpiredThread } from './connector-inbox.js'
+import { isStored } from './connector-threads.js'
 import type { MachineEnv } from './machine-auth.js'
 import type { SlackConfig } from './slack-config.js'
 import { readSlackEnvelope } from './slack-events.js'
@@ -136,6 +137,9 @@ export function createSlackEdge(deps: {
       }
       const { hostId } = context.get('host')
       const { replyId, conversation, turnId, text } = body.data
+      if (!isStored(conversation)) {
+        return context.json({ error: 'not_this_hosts_thread' }, 403)
+      }
       const sent = await database.transaction((transaction) =>
         queueAgentReply(transaction, posts, hostId, {
           replyId,
@@ -149,7 +153,7 @@ export function createSlackEdge(deps: {
       }
       const response: ConnectorReplyResponse =
         sent.state === 'posted' && sent.slackTs !== null
-          ? { status: 'posted', messageTs: sent.slackTs }
+          ? { status: 'posted', messageId: sent.slackTs }
           : { status: 'queued' }
       return context.json(response)
     })

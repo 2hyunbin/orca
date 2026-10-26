@@ -13,7 +13,7 @@ import {
 import type { Context, Hono, MiddlewareHandler } from 'hono'
 import { lockConnectorHost, type ConnectorHosts } from './connector-hosts.js'
 import type { ConnectorInbox, Unsettled } from './connector-inbox.js'
-import type { ConnectorThreads } from './connector-threads.js'
+import { storedEvents, type ConnectorThreads } from './connector-threads.js'
 import type { InboxWaker } from './inbox-waker.js'
 import type { MachineEnv } from './machine-auth.js'
 import type { SlackEdge } from './slack-edge.js'
@@ -162,8 +162,9 @@ export function registerMachineRoutes(
     }
     return await onCurrentHello(context, body.data.helloRev, async (transaction, hostId) => {
       if (await hosts.advanceEventsSeq(transaction, hostId, body.data.seq)) {
-        await threads.applyEvents(transaction, hostId, body.data.events)
-        await slack?.onEvents(transaction, hostId, body.data.events)
+        const events = storedEvents(body.data.events)
+        await threads.applyEvents(transaction, hostId, events)
+        await slack?.onEvents(transaction, hostId, events)
       }
     })
   })

@@ -7,7 +7,8 @@ function host(
   hostId: string,
   hostName: string,
   projects: ConnectorProject[],
-  agents = ['claude']
+  agents = ['claude'],
+  sources = ['slack']
 ): KnownHost {
   return {
     hostId,
@@ -22,6 +23,7 @@ function host(
       agents,
       promptKinds: [],
       features: [],
+      sources,
       projects
     }
   }
@@ -100,6 +102,16 @@ describe('chooseMachine', () => {
       kind: 'no_machine'
     })
     expect(choose('fix orca', identity(), [])).toEqual({ kind: 'no_machine' })
+  })
+
+  it('passes over a machine that does not take Slack work', () => {
+    const orca = [project('orca', 'pl_3', 'stablyai/orca')]
+    const discordOnly = host('h2', 'build box', orca, ['claude'], ['discord'])
+    expect(choose('fix orca', identity(), [laptop, discordOnly])).toMatchObject({
+      kind: 'chosen',
+      hostId: 'h1'
+    })
+    expect(choose('fix orca', identity(), [discordOnly])).toEqual({ kind: 'no_machine' })
   })
 
   it('reads a repository link, and lets no default override the project the message names', () => {
