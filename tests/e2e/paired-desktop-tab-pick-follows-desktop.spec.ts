@@ -32,7 +32,7 @@ function desktopActiveTab(page: Page, worktreeId: string) {
 // A server workspace opened without the desktop's own tab groups (first open, or a saved session
 // that lost them) lands on the tab the server remembers for this device, so that must be the one
 // the desktop last showed.
-test('the server remembers the tab the desktop shows, even after its pick went stale', async ({
+test('a desktop restart brings a stale server pick back to the tab the desktop shows', async ({
   testRepoPath
 }, testInfo) => {
   test.setTimeout(300_000)
@@ -96,11 +96,42 @@ test('the server remembers the tab the desktop shows, even after its pick went s
       { environmentId, worktreeId, tabId: hostTabId(order[1]) }
     )
 
-    // The desktop keeps its own tab, and the server comes back to it.
     await expect
-      .poll(() => serverPickedTab(page, environmentId, worktreeId), { timeout: 30_000 })
+      .poll(() => serverPickedTab(page, environmentId, worktreeId))
+      .toBe(hostTabId(order[1]))
+
+    // Restart the desktop: it reopens on its own saved tab and brings the server's pick back to it.
+    const userDataDir = client.userDataDir
+    await client.quitPreservingProfile()
+    client = await launchPairedElectronClient(host.offer, testInfo, 'tab-pick', {
+      reuseUserDataDir: userDataDir
+    })
+    const relaunched = client.page
+    await expect
+      .poll(
+        () =>
+          relaunched.evaluate(
+            (id) =>
+              window.__store
+                ?.getState()
+                .allWorktrees()
+                .some((w) => w.id === id) ?? false,
+            worktreeId
+          ),
+        { timeout: 60_000 }
+      )
+      .toBe(true)
+    await relaunched.evaluate((id) => {
+      const state = window.__store!.getState()
+      state.setActiveView('terminal')
+      state.setActiveWorktree(id)
+    }, worktreeId)
+    await expect.poll(() => desktopActiveTab(relaunched, worktreeId)).toBe(order[0])
+    await expect
+      .poll(() => serverPickedTab(relaunched, client!.environmentId, worktreeId), {
+        timeout: 30_000
+      })
       .toBe(hostTabId(order[0]))
-    expect(await desktopActiveTab(page, worktreeId)).toBe(order[0])
   } finally {
     await client?.dispose()
     await host.dispose()

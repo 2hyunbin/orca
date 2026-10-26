@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 
@@ -7,8 +7,26 @@ const ENV = 'env-1'
 const T1 = toWebTerminalSurfaceTabId('host-tab-1')
 const T2 = toWebTerminalSurfaceTabId('host-tab-2')
 
-const mocks = vi.hoisted(() => ({ state: {} as Record<string, unknown>, call: vi.fn() }))
-vi.mock('../store', () => ({ useAppStore: { getState: () => mocks.state } }))
+const mocks = vi.hoisted(() => ({
+  state: {} as Record<string, unknown>,
+  call: vi.fn(),
+  owner: 'env-1' as string | null,
+  listener: null as ((state: unknown, previous: unknown) => void) | null
+}))
+vi.mock('../store', () => ({
+  useAppStore: {
+    getState: () => mocks.state,
+    subscribe: (listener: (state: unknown, previous: unknown) => void) => {
+      mocks.listener = listener
+      return () => {
+        mocks.listener = null
+      }
+    }
+  }
+}))
+vi.mock('../lib/worktree-runtime-owner', () => ({
+  runtimeEnvironmentIdOrLocalUnlessTwin: () => mocks.owner
+}))
 vi.mock('./web-session-tabs-sync/frame-drawn-server-workspaces', () => ({
   isServerFrameDrawnWorkspace: () => false
 }))
@@ -16,7 +34,8 @@ vi.mock('./web-session-tabs-sync/frame-drawn-server-workspaces', () => ({
 import { setRuntimeEnvironmentConnectionGenerationForTests } from '../store/slices/runtime-status-connection-generation'
 import {
   reportVisibleTabPickToHost,
-  resetReportedVisibleTabPicksForTests
+  resetReportedVisibleTabPicksForTests,
+  VISIBLE_TAB_PICK_SETTLE_MS
 } from './web-session-visible-tab-pick-report'
 
 function surface(hostTabId: string, status: 'ready' | 'pending-handle' = 'ready', leafId = 'leaf') {
@@ -49,11 +68,22 @@ function frame(
   }
 }
 
+function deliver(snapshot: RuntimeMobileSessionTabsResult): void {
+  reportVisibleTabPickToHost(ENV, snapshot)
+  vi.advanceTimersByTime(VISIBLE_TAB_PICK_SETTLE_MS)
+}
+
 describe('reporting the tab the desktop shows to a server that remembers picks per device', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   beforeEach(() => {
+    vi.useFakeTimers()
     resetReportedVisibleTabPicksForTests()
     mocks.call.mockReset().mockResolvedValue({ ok: true, result: {} })
     vi.stubGlobal('window', { api: { runtimeEnvironments: { call: mocks.call } } })
+    mocks.owner = ENV
     mocks.state = {
       activeWorktreeId: WT,
       activeGroupIdByWorktree: { [WT]: 'group' },
@@ -69,10 +99,10 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
   })
 
   it('moves a stale server pick back to the visible tab, once per connection', () => {
-    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
-    reportVisibleTabPickToHost(ENV, frame('host-tab-1'))
+    deliver(frame('host-tab-2'))
+    deliver(frame('host-tab-1'))
     // Another window on this device moved it again; only this desktop's own change reports anew.
-    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    deliver(frame('host-tab-2'))
 
     expect(mocks.call).toHaveBeenCalledTimes(1)
     expect(mocks.call.mock.calls[0]?.[0]).toMatchObject({
@@ -89,36 +119,59 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
   })
 
   it('reports again after the desktop moved away and back while the server agreed', () => {
-    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    deliver(frame('host-tab-2'))
     const groups = mocks.state.groupsByWorktree as Record<string, { activeTabId: string }[]>
     groups[WT]![0]!.activeTabId = 'u2'
-    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    deliver(frame('host-tab-2'))
     groups[WT]![0]!.activeTabId = 'u1'
-    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    deliver(frame('host-tab-2'))
     expect(mocks.call).toHaveBeenCalledTimes(2)
   })
 
-  it('reports nothing for a workspace that is not on screen', () => {
+  it('reports when the user opens a workspace whose latest frame went stale', () => {
     mocks.state.activeWorktreeId = 'other'
-    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    deliver(frame('host-tab-2'))
+    expect(mocks.call).not.toHaveBeenCalled()
+
+    const previous = mocks.state
+    mocks.state = { ...previous, activeWorktreeId: WT }
+    mocks.listener?.(mocks.state, previous)
+    vi.advanceTimersByTime(VISIBLE_TAB_PICK_SETTLE_MS)
+    expect(mocks.call).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports nothing for a workspace that is not on screen, or not owned by this server', () => {
+    mocks.state.activeWorktreeId = 'other'
+    deliver(frame('host-tab-2'))
+    mocks.state.activeWorktreeId = WT
+    mocks.owner = 'env-2'
+    deliver(frame('host-tab-2'))
     expect(mocks.call).not.toHaveBeenCalled()
   })
 
   it('reports again on a new connection', () => {
-    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    deliver(frame('host-tab-2'))
     setRuntimeEnvironmentConnectionGenerationForTests(ENV, 7)
-    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    deliver(frame('host-tab-2'))
     expect(mocks.call).toHaveBeenCalledTimes(2)
     setRuntimeEnvironmentConnectionGenerationForTests(ENV, 0)
   })
 
   it('retries after the server answers with an error', async () => {
     mocks.call.mockResolvedValueOnce({ ok: false, error: { code: 'busy' } })
-    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
-    await vi.waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(1))
-    await Promise.resolve()
-    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    deliver(frame('host-tab-2'))
+    expect(mocks.call).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(0)
+    deliver(frame('host-tab-2'))
     expect(mocks.call).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves a click that lands inside the settle window alone', () => {
+    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    const groups = mocks.state.groupsByWorktree as Record<string, { activeTabId: string }[]>
+    groups[WT]![0]!.activeTabId = 'u2'
+    vi.advanceTimersByTime(VISIBLE_TAB_PICK_SETTLE_MS)
+    expect(mocks.call).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -141,7 +194,7 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
       })
     ]
   ])('reports nothing when %s', (_case, snapshot) => {
-    reportVisibleTabPickToHost(ENV, snapshot)
+    deliver(snapshot)
     expect(mocks.call).not.toHaveBeenCalled()
   })
 })

@@ -5,6 +5,7 @@ import {
 import { isWebTerminalSurfaceTabId, toHostSessionTabId } from '../../../shared/terminal-surface-id'
 import { useAppStore } from '../store'
 import { getRuntimeEnvironmentConnectionGeneration } from '../store/slices/runtime-status-connection-generation'
+import { runtimeEnvironmentIdOrLocalUnlessTwin } from '../lib/worktree-runtime-owner'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import {
   captureRuntimeEnvironmentCall,
@@ -21,6 +22,44 @@ import { isServerFrameDrawnWorkspace } from './web-session-tabs-sync/frame-drawn
 /** The pane last reported per connection and workspace. Reporting again only when the desktop's own
  *  pane changes keeps two windows sharing one device id from steering the pick back and forth. */
 const reportedPaneByWorkspace = new Map<string, string>()
+/** Each workspace's latest frame, so opening a workspace can report without waiting for a new one. */
+const latestFrameByWorkspace = new Map<
+  string,
+  { environmentId: string; snapshot: RuntimeMobileSessionTabsResult }
+>()
+const pendingCheckByWorkspace = new Map<string, ReturnType<typeof setTimeout>>()
+let stopWatchingActiveWorkspace: (() => void) | null = null
+
+/** A tab click records its activation only after an async hop; settle before comparing so a
+ *  report can never race the user's own pick to the server. */
+export const VISIBLE_TAB_PICK_SETTLE_MS = 1500
+
+function scheduleCheck(frameKey: string): void {
+  clearTimeout(pendingCheckByWorkspace.get(frameKey))
+  pendingCheckByWorkspace.set(
+    frameKey,
+    setTimeout(() => {
+      pendingCheckByWorkspace.delete(frameKey)
+      const frame = latestFrameByWorkspace.get(frameKey)
+      if (frame) {
+        reportIfStale(frame.environmentId, frame.snapshot)
+      }
+    }, VISIBLE_TAB_PICK_SETTLE_MS)
+  )
+}
+
+function watchActiveWorkspace(): void {
+  stopWatchingActiveWorkspace ??= useAppStore.subscribe((state, previous) => {
+    if (!state.activeWorktreeId || state.activeWorktreeId === previous.activeWorktreeId) {
+      return
+    }
+    for (const [frameKey, frame] of latestFrameByWorkspace) {
+      if (frame.snapshot.worktree === state.activeWorktreeId) {
+        scheduleCheck(frameKey)
+      }
+    }
+  })
+}
 
 /**
  * The server remembers each device's tab per workspace and hands it back whenever the desktop has
@@ -36,6 +75,13 @@ export function reportVisibleTabPickToHost(
   if (!snapshot.publicationEpoch.endsWith(CLIENT_NAVIGATION_PUBLICATION_EPOCH_SUFFIX)) {
     return
   }
+  const frameKey = `${environmentId}\0${snapshot.worktree}`
+  latestFrameByWorkspace.set(frameKey, { environmentId, snapshot })
+  watchActiveWorkspace()
+  scheduleCheck(frameKey)
+}
+
+function reportIfStale(environmentId: string, snapshot: RuntimeMobileSessionTabsResult): void {
   const worktreeId = snapshot.worktree
   const owner = captureWebSessionIntentOwner(environmentId)
   if (
@@ -50,6 +96,8 @@ export function reportVisibleTabPickToHost(
   // the user isn't looking at. Without groups of its own the desktop shows the server's pick.
   if (
     state.activeWorktreeId !== worktreeId ||
+    // Two paired servers can publish the same workspace id; only its owner hears about it.
+    runtimeEnvironmentIdOrLocalUnlessTwin(state, worktreeId) !== environmentId ||
     (state.groupsByWorktree[worktreeId] ?? []).length === 0
   ) {
     return
@@ -120,4 +168,11 @@ export function reportVisibleTabPickToHost(
 
 export function resetReportedVisibleTabPicksForTests(): void {
   reportedPaneByWorkspace.clear()
+  latestFrameByWorkspace.clear()
+  for (const timer of pendingCheckByWorkspace.values()) {
+    clearTimeout(timer)
+  }
+  pendingCheckByWorkspace.clear()
+  stopWatchingActiveWorkspace?.()
+  stopWatchingActiveWorkspace = null
 }
