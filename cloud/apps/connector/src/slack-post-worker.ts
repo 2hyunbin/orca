@@ -6,7 +6,12 @@ import type { SlackResult, SlackWebApi } from './slack-web-api.js'
 
 const TextBodySchema = z.object({ text: z.string().min(1) })
 const ReactionBodySchema = z.object({ name: z.string().min(1), timestamp: z.string().min(1) })
-const EphemeralBodySchema = z.object({ text: z.string().min(1), user: z.string().min(1) })
+const EphemeralBodySchema = z.object({
+  text: z.string().min(1),
+  user: z.string().min(1),
+  // Present only when the message it answers was inside a thread.
+  threadTs: z.string().min(1).optional()
+})
 const BODY_SCHEMAS: Record<SlackPostKind, z.ZodType> = {
   message: TextBodySchema,
   status: TextBodySchema,
@@ -83,10 +88,12 @@ export class SlackPostWorker {
     if (post.kind === 'ephemeral') {
       // Nothing to look for afterwards, so an unclear outcome is retried; a duplicate is seen by
       // one person at most.
+      const { text, user, threadTs } = EphemeralBodySchema.parse(post.body)
       const result = await api(token, 'chat.postEphemeral', {
         channel: post.channelId,
-        thread_ts: post.threadTs,
-        ...EphemeralBodySchema.parse(post.body)
+        user,
+        text,
+        ...(threadTs === undefined ? {} : { thread_ts: threadTs })
       })
       if (result.kind === 'failed') {
         console.warn(

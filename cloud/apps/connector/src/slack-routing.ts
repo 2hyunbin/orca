@@ -268,7 +268,9 @@ async function reactSeen(
   })
 }
 
-// Meant only for the person who wrote: ephemeral in a channel; in a DM it is theirs anyway.
+// Meant only for the person who wrote: ephemeral in a channel; in a DM it is theirs anyway. Slack
+// shows a threaded ephemeral only in a thread that already exists, so a top-level mention's goes to
+// the channel.
 async function reply(
   deps: SlackRoutingDeps,
   transaction: CloudDatabase,
@@ -281,7 +283,16 @@ async function reply(
     transaction,
     message.direct
       ? { ...place, postId, kind: 'message', body: { text } }
-      : { ...place, postId, kind: 'ephemeral', body: { text, user: message.userId } }
+      : {
+          ...place,
+          postId,
+          kind: 'ephemeral',
+          body: {
+            text,
+            user: message.userId,
+            ...(message.ts === message.threadTs ? {} : { threadTs: message.threadTs })
+          }
+        }
   )
 }
 
