@@ -5,17 +5,6 @@ export const PUSH_HOST_CHALLENGE_PLAINTEXT_DOMAIN = 'orca-push-host-challenge/v1
 export const PUSH_HOST_CHALLENGE_BOX_ALGORITHM = 'Curve25519-XSalsa20-Poly1305'
 export const PUSH_HOST_PROOF_ALGORITHM = 'HMAC-SHA-256'
 
-// The layout is shared; the domains keep one service's proof from answering another's challenge.
-export type HostProofDomains = {
-  readonly transcript: string
-  readonly challengePlaintext: string
-}
-
-export const PUSH_HOST_PROOF_DOMAINS: HostProofDomains = Object.freeze({
-  transcript: PUSH_HOST_PROOF_TRANSCRIPT_DOMAIN,
-  challengePlaintext: PUSH_HOST_CHALLENGE_PLAINTEXT_DOMAIN
-})
-
 export interface PushHostProofTranscriptInput {
   gatewayOrigin: string
   gatewayEphemeralPublicKey: Uint8Array
@@ -65,18 +54,11 @@ function requireByteLength(value: Uint8Array, expected: number, name: string): v
 }
 
 export function buildPushHostProofTranscript(input: PushHostProofTranscriptInput): Uint8Array {
-  return buildHostProofTranscript(PUSH_HOST_PROOF_DOMAINS, input)
-}
-
-export function buildHostProofTranscript(
-  domains: HostProofDomains,
-  input: PushHostProofTranscriptInput
-): Uint8Array {
   requireByteLength(input.gatewayEphemeralPublicKey, 32, 'gatewayEphemeralPublicKey')
   requireByteLength(input.challengeNonce, 24, 'challengeNonce')
   requireByteLength(input.hostPublicKey, 32, 'hostPublicKey')
   return concat([
-    field('protocol', text(domains.transcript)),
+    field('protocol', text(PUSH_HOST_PROOF_TRANSCRIPT_DOMAIN)),
     field('version', new Uint8Array([1])),
     field('gatewayOrigin', text(input.gatewayOrigin)),
     field('gatewayEphemeralPublicKey', input.gatewayEphemeralPublicKey),
@@ -93,18 +75,10 @@ export function buildPushHostChallengePlaintext(
   transcript: Uint8Array,
   challengeSecret: Uint8Array
 ): Uint8Array {
-  return buildHostChallengePlaintext(PUSH_HOST_PROOF_DOMAINS, transcript, challengeSecret)
-}
-
-export function buildHostChallengePlaintext(
-  domains: HostProofDomains,
-  transcript: Uint8Array,
-  challengeSecret: Uint8Array
-): Uint8Array {
   if (challengeSecret.byteLength !== 32) throw new Error('challengeSecret must be 32 bytes')
   // Why: the encrypted random secret makes the public transcript insufficient to forge the ack.
   return concat([
-    text(`${domains.challengePlaintext}\0`),
+    text(`${PUSH_HOST_CHALLENGE_PLAINTEXT_DOMAIN}\0`),
     uint32(transcript.byteLength),
     transcript,
     challengeSecret
@@ -112,9 +86,5 @@ export function buildHostChallengePlaintext(
 }
 
 export function buildPushHostProofMacInput(transcript: Uint8Array): Uint8Array {
-  return buildHostProofMacInput(PUSH_HOST_PROOF_DOMAINS, transcript)
-}
-
-export function buildHostProofMacInput(domains: HostProofDomains, transcript: Uint8Array): Uint8Array {
-  return concat([text(`${domains.transcript}\0ack\0`), transcript])
+  return concat([text(`${PUSH_HOST_PROOF_TRANSCRIPT_DOMAIN}\0ack\0`), transcript])
 }
