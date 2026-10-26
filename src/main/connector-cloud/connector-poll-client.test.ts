@@ -602,6 +602,20 @@ describe('ConnectorPollClient', () => {
     expect([...fake.replies.values()]).toEqual([{ v: 1, ...body }])
     client.stop()
   })
+
+  it('retries a busy cloud for a reply only after its Retry-After, with the same reply id', async () => {
+    const { client } = startClient()
+    await settle()
+    fake.forced.set(CONNECTOR_PATHS.replies, { status: 429, headers: { 'retry-after': '20' } })
+    const sent = client.reply({ replyId: 'r1', conversation, turnId: 7, text: 'done' })
+    await settle(19_000)
+    expect(fake.requestsTo(CONNECTOR_PATHS.replies)).toHaveLength(1)
+    fake.forced.delete(CONNECTOR_PATHS.replies)
+    await settle(2_000)
+    await expect(sent).resolves.toMatchObject({ ok: true })
+    expect([...fake.replies.keys()]).toEqual(['r1'])
+    client.stop()
+  })
 })
 
 function isRecord(value: unknown): value is Record<string, unknown> {

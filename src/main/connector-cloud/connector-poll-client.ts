@@ -8,7 +8,7 @@ import {
   ConnectorDeliveryId,
   ConnectorPollControl,
   ConnectorPollResponse,
-  ConnectorReplyResponse,
+  type ConnectorReplyResponse,
   type ConnectorAck,
   type ConnectorConversation,
   type ConnectorDeliveryResult,
@@ -26,6 +26,7 @@ import {
 } from './connector-cloud-request'
 import { dispatchDelivery } from './connector-deliveries'
 import type { ConnectorMachine, ConnectorTransport } from './connector-machine'
+import { postConnectorReply, type ConnectorReplyBody } from './connector-replies'
 import {
   connectorRetryDelayMs,
   ConnectorSendQueue,
@@ -112,16 +113,9 @@ export class ConnectorPollClient {
     void this.run()
   }
 
-  /** Posts an agent's reply to its Slack thread; the same replyId never posts twice. */
-  reply(body: {
-    replyId: string
-    conversation: ConnectorConversation
-    turnId: number
-    text: string
-  }): Promise<ConnectorResult<ConnectorReplyResponse>> {
-    return this.transport.call(CONNECTOR_PATHS.replies, { v: 1, ...body }, ConnectorReplyResponse, {
-      signal: this.stopped.signal
-    })
+  /** Posts an agent's reply to its Slack thread while this client runs. */
+  reply(body: ConnectorReplyBody): Promise<ConnectorResult<ConnectorReplyResponse>> {
+    return postConnectorReply(this.transport, body, this.stopped.signal, this.random)
   }
 
   stop(): void {

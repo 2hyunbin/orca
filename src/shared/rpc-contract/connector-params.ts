@@ -32,7 +32,7 @@ const ConnectorConversation = {
 
 export const ConnectorPendingPrompt = z.object(ConnectorConversation)
 
-/** Why `connector.reply` refused; only connector_unavailable is worth a retry with the same replyId. */
+/** Why `connector.reply` refused; connector_unavailable comes after the host's own retries. */
 export const CONNECTOR_REPLY_ERROR_CODES = [
   'not_a_slack_conversation',
   'no_current_turn',
