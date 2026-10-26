@@ -43,7 +43,7 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
       captureHostId: ExecutionHostId
       /** Names the new pane, so a retry of one request reconciles the pane it may have started. */
       mutationId: string
-      /** Replaces the recorded Arguments, e.g. so a Slack reopen never resumes with approvals skipped. */
+      /** Replaces the recorded Arguments, e.g. so a connector reopen never resumes with approvals skipped. */
       agentArgs?: string
       signal?: AbortSignal
     }

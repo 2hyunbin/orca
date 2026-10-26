@@ -13,7 +13,6 @@ import { MANAGED_SERVER_COMMAND_SPECS } from './managed-server'
 import { AGENT_HOOK_COMMAND_SPECS } from './agent-hooks'
 import { AGENT_LAUNCH_COMMAND_SPECS } from './agent-launch'
 import { CONNECTOR_COMMAND_SPECS } from './connector'
-import { SLACK_COMMAND_SPECS } from './slack'
 import { DIAGNOSTICS_COMMAND_SPECS } from './diagnostics'
 import { SPEECH_COMMAND_SPECS } from './speech'
 import { TERMINAL_DAEMON_COMMAND_SPECS } from './terminal-daemon'
@@ -44,7 +43,6 @@ export const COMMAND_SPECS: CommandSpec[] = [
   ...AGENT_HOOK_COMMAND_SPECS,
   ...AGENT_LAUNCH_COMMAND_SPECS,
   ...CONNECTOR_COMMAND_SPECS,
-  ...SLACK_COMMAND_SPECS,
   ...DIAGNOSTICS_COMMAND_SPECS,
   ...SPEECH_COMMAND_SPECS,
   ...TERMINAL_DAEMON_COMMAND_SPECS,

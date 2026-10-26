@@ -34,14 +34,14 @@ export const ConnectorPendingPrompt = z.object(ConnectorConversation)
 
 /** Why `connector.reply` refused; connector_unavailable comes after the host's own retries. */
 export const CONNECTOR_REPLY_ERROR_CODES = [
-  'not_a_slack_conversation',
+  'not_a_cloud_conversation',
   'no_current_turn',
   'connector_not_connected',
   'not_this_hosts_thread',
   'connector_unavailable'
 ] as const
 
-/** An agent's reply to its Slack thread, from the pane it runs in; one replyId posts at most once. */
+/** An agent's reply to its conversation's thread, from the pane it runs in; one replyId posts at most once. */
 export const ConnectorReply = z.object({
   paneKey: z.string().min(1, 'Missing pane key'),
   replyId: z.string().min(1, 'Missing reply id'),

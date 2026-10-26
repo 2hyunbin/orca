@@ -94,7 +94,7 @@ export const CONNECTOR_METHODS = [
         deliveryId
       )
   }),
-  // `orca slack reply`: the calling pane names its Slack conversation and turn; Orca Cloud posts it.
+  // `orca connector reply`: the calling pane names its conversation and turn; Orca Cloud posts it.
   defineMethod({
     name: 'connector.reply',
     permission: 'workspace',
@@ -102,7 +102,7 @@ export const CONNECTOR_METHODS = [
     handler: async ({ paneKey, replyId, text }, context) => {
       const target = requireSeam(context.runtime).replyTarget(paneKey)
       if (target?.key.source !== 'slack') {
-        throw new Error('not_a_slack_conversation')
+        throw new Error('not_a_cloud_conversation')
       }
       if (target.turnId === null) {
         throw new Error('no_current_turn')

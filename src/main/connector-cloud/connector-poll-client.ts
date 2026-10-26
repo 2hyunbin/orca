@@ -115,7 +115,7 @@ export class ConnectorPollClient {
     void this.run()
   }
 
-  /** Posts an agent's reply to its Slack thread while this client runs. */
+  /** Posts an agent's reply to its conversation's thread while this client runs. */
   reply(body: ConnectorReplyBody): Promise<ConnectorResult<ConnectorReplyResponse>> {
     return postConnectorReply(this.transport, body, this.stopped.signal, this.random)
   }

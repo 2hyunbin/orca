@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CONNECTOR_PATHS } from '../../shared/connector-cloud-contract'
 import type { Delivery } from '../external-conversations/external-conversation-types'
-import { SLACK_REPLY_INSTRUCTIONS } from './connector-deliveries'
+import { connectorReplyInstructions } from './connector-deliveries'
 import { connectorProjects } from './connector-places'
 import { ConnectorPollClient } from './connector-poll-client'
 import { ConnectorAccountTransport } from './connector-transport'
@@ -111,7 +111,7 @@ describe('ConnectorPollClient', () => {
     await settle()
     expect(calls.start).toHaveBeenCalledWith(expect.anything(), conversation, 'd1', {
       agent: 'claude',
-      prompt: `fix it\n\n${SLACK_REPLY_INSTRUCTIONS}`,
+      prompt: `fix it\n\n${connectorReplyInstructions('slack')}`,
       target: expect.objectContaining({ kind: 'create-worktree' })
     })
     expect(fake.acks).toEqual([

@@ -14,7 +14,7 @@ export type ConnectorSettings = NonNullable<AgentStatusHooksSettings> &
 // Membership records mid-turn terminal input support until capability data covers it.
 export const CONNECTOR_AGENTS = ['claude', 'codex'] as const satisfies readonly ConnectorAgent[]
 
-/** Agents Slack may drive: hooks on, and no custom Command that skips approvals (Arguments cannot undo it). */
+/** Agents a connector may drive: hooks on, and no custom Command that skips approvals (Arguments cannot undo it). */
 export function admitConnectorAgent(
   settings: ConnectorSettings | null | undefined,
   agent: string
@@ -28,7 +28,7 @@ export function admitConnectorAgent(
 }
 
 /**
- * Slack text must never run without approvals: the agent's explicit Ask recipe (which also outranks a
+ * Connector text must never run without approvals: the agent's explicit Ask recipe (which also outranks a
  * bypass in the agent's own config), plus the user's own Arguments unless they set permissions themselves.
  */
 export function connectorAgentArgs(agent: ConnectorAgent, settings: ConnectorSettings): string {

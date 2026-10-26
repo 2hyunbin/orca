@@ -68,8 +68,8 @@ describe('connector RPC methods', () => {
     })
 
     it.each([
-      ['not_a_slack_conversation', null, { ok: true }],
-      ['not_a_slack_conversation', { ...slack, key: { source: 'dev', externalId: 'x' } }, {}],
+      ['not_a_cloud_conversation', null, { ok: true }],
+      ['not_a_cloud_conversation', { ...slack, key: { source: 'dev', externalId: 'x' } }, {}],
       ['no_current_turn', { ...slack, turnId: null }, {}],
       ['connector_not_connected', slack, undefined],
       ['not_this_hosts_thread', slack, { ok: false, status: 403, error: 'not_this_hosts_thread' }],
