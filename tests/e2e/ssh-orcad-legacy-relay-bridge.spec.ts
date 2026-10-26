@@ -216,7 +216,7 @@ async function verifyRunningRelayUpgrade(
       await expect
         .poll(() => managedServer(page, targetId), { timeout: 120_000 })
         .toMatchObject({ kind: 'relay', reason: 'refused', canLeaveBehind: true })
-      const move = page.getByRole('button', { name: 'Move anyway…', exact: true })
+      const move = page.locator('#root').getByRole('button', { name: 'Move anyway…', exact: true })
       await expect(move).toBeVisible()
       await page.screenshot({
         path: testInfo.outputPath('unreadable-history-recovery-offered.png')
