@@ -136,10 +136,11 @@ export function connectionFor(sessionId: string): FakeConnection {
   return connection
 }
 
-export const { settleTurn, sendUserMessage } = createChatPersonActions({
-  host: () => host,
-  connectionFor
-})
+export const { startTurn, finishTurn, settleTurn, envelope, sendUserMessage } =
+  createChatPersonActions({
+    host: () => host,
+    connectionFor
+  })
 
 export async function userTexts(sessionId: string): Promise<string[]> {
   return (await host.journalSnapshot(sessionId)).items.flatMap((item: AgentJournalRenderItem) =>

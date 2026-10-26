@@ -1,5 +1,5 @@
 import { selectTerminalMailHandoff, terminalMailHandoffCanSubmit } from './terminal-mail-settlement'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, it } from 'vitest'
 import { z } from 'zod'
 import { OrchestrationDb } from './db'
 import { readMailHandoff, type StructuredMailHandoff } from './mail-handoff'
@@ -245,91 +245,3 @@ it('claims the whole cohort atomically without taking ownership of an outer tran
     batch.messages.every((row) => db.getMessageById(row.id)?.handoff === JSON.stringify(issued))
   ).toBe(true)
 })
-
-it.each([100, 1000])(
-  'uses canonical indexed source/address debt at %i unrelated issued/held rows, including legacy contracts',
-  (count) => {
-    const db = database()
-    const reference = (sessionId: string, mailbox: string, id: string, held = false) =>
-      JSON.stringify({
-        version: 1,
-        kind: 'structured',
-        sessionId,
-        epoch: 'epoch',
-        frontier: 'frontier',
-        operationId: id,
-        authorizationId: id,
-        clientMessageId: id,
-        phase: 'reserved',
-        authority: mailbox,
-        ...(held ? { nonAdmission: 'held' } : {})
-      })
-    const update = db.db.prepare('UPDATE messages SET handoff = ? WHERE id = ?')
-    for (let index = 0; index < count; index++) {
-      for (const held of [true, false]) {
-        const row = db.insertMessage({ from: 'sender', to: 'other', subject: String(index) })
-        update.run(reference('other-session', row.to_handle, row.id, held), row.id)
-      }
-    }
-    const malformed = db.insertMessage({ from: 'sender', to: 'mine', subject: 'malformed' })
-    update.run('{bad json', malformed.id)
-    db.db.exec('DROP INDEX idx_messages_issued_session; DROP INDEX idx_messages_issued_address')
-    db.createMailboxDeliveryIndexesIfPossible() // Actual one-time construction over the populated corpus.
-    expect(db.getIssuedSessionMail(['session'], ['mine'])).toEqual([])
-    const owned = []
-    for (let index = 0; index < count; index++) {
-      const row = db.insertMessage({
-        from: 'sender',
-        to: index % 2 ? 'mine' : 'former-address',
-        subject: 'own'
-      })
-      update.run(reference('session', row.to_handle, row.id), row.id)
-      owned.push(row.id)
-    }
-    db.db
-      .prepare("UPDATE messages SET delivery_contract = 'legacy_direct' WHERE id = ?")
-      .run(owned[0])
-    const calls: {
-      sql: string
-      args: Parameters<ReturnType<typeof db.db.prepare>['all']>
-      rows: number
-    }[] = []
-    const prepare = db.db.prepare.bind(db.db)
-    const trace = vi.spyOn(db.db, 'prepare').mockImplementation((sql) => {
-      const statement = prepare(sql)
-      if (sql.includes('INDEXED BY idx_messages_issued_')) {
-        const all = statement.all.bind(statement)
-        vi.spyOn(statement, 'all').mockImplementation((...args) => {
-          const rows = all(...args)
-          calls.push({ sql, args, rows: rows.length })
-          return rows
-        })
-      }
-      return statement
-    })
-    expect(
-      db
-        .getIssuedSessionMail(['session'], ['mine'])
-        .map((row) => row.id)
-        .sort()
-    ).toEqual(owned.sort())
-    trace.mockRestore()
-    expect(calls).toHaveLength(2)
-    for (const { sql, args, rows } of calls) {
-      expect(rows).toBeLessThanOrEqual(count)
-      expect(
-        prepare(`EXPLAIN QUERY PLAN ${sql}`)
-          .all(...args)
-          .map((row) => row.detail)
-          .join(' ')
-      ).toContain('SEARCH messages USING INDEX idx_messages_issued_')
-      const opcodes = prepare(`EXPLAIN ${sql}`)
-        .all(...args)
-        .map((row) => row.opcode)
-      expect(opcodes).toContain('SeekGE')
-      expect(opcodes).not.toContain('Rewind')
-    }
-    db.markAsRead(owned)
-    expect(db.getIssuedSessionMail(['session'], ['mine'])).toEqual([])
-  }
-)

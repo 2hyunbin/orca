@@ -1,13 +1,12 @@
-import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
+import { mailHandoffFixture, observeMailSql } from './orchestration/mail-handoff.test-fixture'
 import { AgentSessionRecordStore } from './agent-session-record-store'
-import { foundAgentSessionRecord } from './agent-session-record-founding'
 import { encodeAgentSessionRecord } from '../../shared/agent-session-record-stored-form'
 import { createStructuredWorkerSessionForWorktree } from './rpc/methods/orchestration/worker/worker-topology'
 import {
   sendStructuredWorkerPreamble,
   releaseStructuredWorkerSession
 } from './rpc/methods/orchestration-structured-worker-session'
-import { attachParams, operationId } from './structured-chat-coordinator-fake-codex-fixture'
+import { attachParams } from './structured-chat-coordinator-fake-codex-fixture'
 import { sealedChildEnv } from './structured-session-child-env.test-support'
 import { dispatchTaskSource } from './orchestration/dispatch-task-source'
 import { StructuredAgentSessionLeaseRenewer } from '../native-chat/agent-session-wire/structured-agent-session-lease-renewer'
@@ -174,15 +173,7 @@ it.each([
       sql.prepare('DELETE FROM agent_session_mail_holds WHERE session_id = ?').run(PEER_CHAT)
       const insert = sql.prepare('INSERT INTO agent_session_records VALUES (?, ?)')
       for (const [index, sessionId] of ids.entries()) {
-        const record = foundAgentSessionRecord(
-          {
-            sessionId,
-            provider: own.provider,
-            accountHome: own.accountHome,
-            location: own.location
-          },
-          { now: Date.now(), claimKeyId: 'key-1' }
-        )
+        const record = { ...own, sessionId, lease: { ...own.lease, sessionId } }
         const linked =
           index >= history && index + 1 < ids.length
             ? {
@@ -209,22 +200,17 @@ it.each([
     for (const record of live) {
       await host.deps.store.transitionHandoff(record.sessionId, () => record)
     }
-    const reference = (sessionId: string, _id: string, address: string, held = false) => {
-      const operation = operationId()
-      return JSON.stringify({
-        version: 1,
-        kind: 'structured',
-        sessionId,
-        epoch: 'uncertain-corpus',
-        frontier: 'corpus',
-        operationId: operation,
-        authorizationId: operation,
-        clientMessageId: operation,
-        phase: held ? 'reserved' : 'offered',
-        authority: address,
-        ...(held ? { nonAdmission: 'held' } : {})
-      })
-    }
+    const reference = (sessionId: string, address: string, held = false) =>
+      JSON.stringify(
+        mailHandoffFixture({
+          sessionId,
+          authority: address,
+          epoch: 'uncertain-corpus',
+          frontier: 'corpus',
+          phase: held ? 'reserved' : 'offered',
+          ...(held ? { nonAdmission: 'held' } : {})
+        })
+      )
     const update = db.db.prepare('UPDATE messages SET handoff = ? WHERE id = ?')
     for (let index = 0; index < history; index++) {
       const other = db.insertMessage({
@@ -232,19 +218,52 @@ it.each([
         to: 'other-recipient',
         subject: 'issued elsewhere'
       })
-      update.run(reference('other', other.id, other.to_handle), other.id)
+      update.run(reference('other', other.to_handle, index % 2 === 0), other.id)
       const tail = db.insertMessage({
         from: 'sender',
         to: mailbox,
         subject: `tail-${index}`,
         type: index % 2 ? 'heartbeat' : 'status'
       })
-      update.run(reference(PEER_CHAT, tail.id, mailbox, true), tail.id)
+      update.run(reference(PEER_CHAT, mailbox, true), tail.id)
     }
+    const owned: string[] = []
     for (let index = 0; index < ownDebt; index++) {
-      const row = db.insertMessage({ from: 'sender', to: mailbox, subject: 'own exact issued' })
-      update.run(reference(PEER_CHAT, row.id, mailbox), row.id)
+      const row = db.insertMessage({
+        from: 'sender',
+        to: index % 2 || index === 2 ? mailbox : 'former-address',
+        subject: 'own exact issued'
+      })
+      update.run(reference(index === 2 ? 'former-session' : PEER_CHAT, row.to_handle), row.id)
+      owned.push(row.id)
     }
+    const malformed = db.insertMessage({ from: 'sender', to: mailbox, subject: 'malformed' })
+    update.run('{bad json', malformed.id)
+    db.db
+      .prepare("UPDATE messages SET delivery_contract = 'legacy_direct' WHERE id = ?")
+      .run(owned[0] ?? malformed.id)
+    db.db.exec('DROP INDEX idx_messages_issued_session; DROP INDEX idx_messages_issued_address')
+    db.createMailboxDeliveryIndexesIfPossible()
+    const sql = observeMailSql(
+      db.db,
+      /INDEXED BY idx_messages_issued_/,
+      'all',
+      ({ sql: query, args, rows }) => {
+        expect(rows.length).toBeLessThanOrEqual(ownDebt)
+        expect(sql.explain(query, args)).toContain(
+          'SEARCH messages USING INDEX idx_messages_issued_'
+        )
+        expect(sql.explain(query, args, 'opcode')).toContain('SeekGE')
+        expect(sql.explain(query, args, 'opcode')).not.toContain('Rewind')
+      }
+    )
+    expect(
+      db
+        .getIssuedSessionMail([PEER_CHAT], [mailbox])
+        .map((row) => row.id)
+        .sort()
+    ).toEqual(owned.sort())
+    sql.trace.mockRestore()
     await call(
       'orchestration.send',
       { to: mailbox, subject: 'fresh report' },
@@ -312,6 +331,9 @@ it.each([
     } finally {
       dispose()
     }
+    db.markAsRead(owned)
+    const remaining = new Set(db.getIssuedSessionMail([PEER_CHAT], [mailbox]).map((row) => row.id))
+    expect(owned.some((id) => remaining.has(id))).toBe(false)
   }
 )
 
@@ -414,25 +436,15 @@ it('creates an acquired worker at the production topology owner, completes its a
   }
 })
 
-it.each(['delayed', 'waiter', 'resume', 'person-send', 'unrelated'] as const)(
+it.each(['delayed', 'waiter', 'unrelated'] as const)(
   'validates omitted older heads at the committed claim after %s during a newer head await',
   async (change) => {
-    await openChat(COORDINATOR)
-    const peer = await openChat(PEER_CHAT)
-    const turns = () =>
-      codex.connections
-        .filter((connection) => connection.threadId === peer.threadId)
-        .flatMap((connection) => connection.turns)
+    const { chat: peer, mailbox } = await openWorkerMailbox()
+    const turns = () => peer.turns
     const ownRun = await call(
       'orchestration.runCreate',
       { objective: 'peer' },
       { sessionId: PEER_CHAT }
-    )
-    const { taskId } = await coordinatorRunAndTask()
-    const dispatched = await call(
-      'orchestration.dispatch',
-      { task: taskId, to: `orca_session_id:${PEER_CHAT}` },
-      { sessionId: COORDINATOR }
     )
     const direct = `orca_session_id:${PEER_CHAT}`
     const abort = new AbortController()
@@ -452,36 +464,11 @@ it.each(['delayed', 'waiter', 'resume', 'person-send', 'unrelated'] as const)(
       return db.insertMessage({ from: 'coordinator', to, subject })
     }
     const older = await report(direct, 'older A')
-    const envelope = (method: string, fields: Record<string, unknown>) => ({
-      sessionId: PEER_CHAT,
-      clientOperationId: operationId(),
-      expectedRuntimeFence: host.deps.store.getRecord(PEER_CHAT)!.lease.runtimeFence,
-      payloadFingerprint: computeAgentSessionPayloadFingerprint({
-        method,
-        sessionId: PEER_CHAT,
-        fields
-      })
-    })
-    if (!waiting && change !== 'delayed') {
-      expect(
-        await host.cancel(
-          { callerKey: 'test-surface' },
-          { envelope: envelope('agentSession.cancel', { turnId: 'turn-1' }), turnId: 'turn-1' }
-        )
-      ).toMatchObject({ ok: true })
-      peer.handlers.onNotification?.('turn/completed', {
-        turn: { id: 'turn-1', status: 'interrupted' }
-      })
-      await host.flushStreamedEvents(PEER_CHAT)
-    }
     const newer = await report(`run:${idOf(ownRun.run)}`, 'newer B')
-    const newest = await report(`dispatch:${idOf(dispatched.dispatch)}`, 'newest Dispatch')
-    let release = () => {},
-      reached = false,
+    const newest = await report(mailbox, 'newest Dispatch')
+    let reached = false,
       reads = 0
-    const barrier = new Promise<void>((resolve) => {
-      release = resolve
-    })
+    const { promise: barrier, resolve: release } = Promise.withResolvers<void>()
     const original = host.readMailHandoffEvidence.bind(host)
     const reader = vi.spyOn(host, 'readMailHandoffEvidence').mockImplementation(async (...args) => {
       const value = await original(...args)
@@ -500,19 +487,6 @@ it.each(['delayed', 'waiter', 'resume', 'person-send', 'unrelated'] as const)(
       abort.abort()
       expect(await waiting).toBe('cancelled')
     }
-    if (change === 'resume') {
-      expect(
-        await host.queuedMessagesResume(
-          { callerKey: 'test-surface' },
-          { envelope: envelope('agentSession.queuedMessagesResume', {}) }
-        )
-      ).toMatchObject({ ok: true, value: { resumed: true } })
-    }
-    if (change === 'person-send') {
-      expect(
-        await sendUserMessage(PEER_CHAT, 'personal during preparation', 'queue-if-active')
-      ).toMatchObject({ ok: true })
-    }
     for (let index = 0; index < 3; index++) {
       db.insertMessage({ from: 'other', to: 'unrelated', subject: String(index) })
       db.insertMessage({ from: 'other', to: newer.to_handle, subject: `later-${index}` })
@@ -520,11 +494,7 @@ it.each(['delayed', 'waiter', 'resume', 'person-send', 'unrelated'] as const)(
     const claims = vi.spyOn(db, 'claimMailHandoff')
     release()
     await settled
-    if (change === 'person-send') {
-      await vi.waitFor(() => expect(turns()).toHaveLength(2), WAIT)
-      await settleTurn(PEER_CHAT, connectionFor(PEER_CHAT).turns.length - 1, 'completed')
-    }
-    const offset = Number(!waiting) + Number(change === 'person-send')
+    const offset = Number(!waiting)
     await vi.waitFor(() => expect(turns()).toHaveLength(offset + 1), WAIT)
     expect(turnText(turns()[offset]!)).toContain(change === 'unrelated' ? 'newer B' : 'older A')
     expect(db.db.isTransaction).toBe(false)

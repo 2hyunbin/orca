@@ -6,35 +6,62 @@ export function createChatPersonActions(deps: {
   host: () => StructuredAgentSessionHost
   connectionFor: (sessionId: string) => FakeConnection
 }) {
-  /** Codex's own sequence for a turn: it starts, echoes the user message, and completes. */
-  async function settleTurn(
-    sessionId: string,
-    turnIndex: number,
-    status?: 'completed' | 'failed'
-  ): Promise<void> {
+  async function startTurn(sessionId: string, turnIndex: number, text = 'pointer') {
     const connection = deps.connectionFor(sessionId)
-    const host = deps.host()
     const turn = connection.turns[turnIndex]!
     const turnId = turn.turnId ?? `turn-${turnIndex + 1}`
-    const notify = (method: string, params: unknown) =>
-      connection.handlers.onNotification?.(method, params)
-    notify('turn/started', { turn: { id: turnId } })
-    notify('item/completed', {
+    connection.handlers.onNotification?.('turn/started', {
+      turn: { id: turnId, status: 'inProgress' }
+    })
+    connection.handlers.onNotification?.('item/completed', {
+      turnId,
       item: {
         type: 'userMessage',
         id: `echo-${turn.clientUserMessageId}`,
         clientId: turn.clientUserMessageId,
-        content: [{ type: 'text', text: 'pointer' }]
+        content: [{ type: 'text', text }]
       }
     })
-    notify('turn/completed', {
+    await deps.host().flushStreamedEvents(sessionId)
+  }
+
+  async function finishTurn(
+    sessionId: string,
+    turnIndex: number,
+    status?: 'completed' | 'failed',
+    reply = false
+  ) {
+    const connection = deps.connectionFor(sessionId)
+    const turnId = connection.turns[turnIndex]!.turnId ?? `turn-${turnIndex + 1}`
+    if (reply) {
+      connection.handlers.onNotification?.('item/completed', {
+        turnId,
+        item: { type: 'agentMessage', id: `reply-${turnIndex}`, text: `Finished ${turnIndex}` }
+      })
+      connection.handlers.onNotification?.('thread/status/changed', { status: { type: 'idle' } })
+    }
+    connection.handlers.onNotification?.('turn/completed', {
       turn: {
         id: turnId,
         ...(status ? { status } : {}),
         ...(status === 'failed' ? { error: { message: 'connection dropped' } } : {})
       }
     })
-    await host.flushStreamedEvents(sessionId)
+    await deps.host().flushStreamedEvents(sessionId)
+  }
+
+  async function settleTurn(sessionId: string, turnIndex: number, status?: 'completed' | 'failed') {
+    await startTurn(sessionId, turnIndex)
+    await finishTurn(sessionId, turnIndex, status)
+  }
+
+  function envelope(sessionId: string, method: string, fields: Record<string, unknown>) {
+    return {
+      sessionId,
+      clientOperationId: operationId(),
+      expectedRuntimeFence: deps.host().deps.store.getRecord(sessionId)!.lease.runtimeFence,
+      payloadFingerprint: computeAgentSessionPayloadFingerprint({ method, sessionId, fields })
+    }
   }
 
   /** A user message typed into the chat, as the chat surface sends it. */
@@ -48,16 +75,10 @@ export function createChatPersonActions(deps: {
     return host.send(
       { callerKey: 'test-surface' },
       {
-        envelope: {
-          sessionId,
-          clientOperationId: operationId(),
-          expectedRuntimeFence: host.deps.store.getRecord(sessionId)!.lease.runtimeFence,
-          payloadFingerprint: computeAgentSessionPayloadFingerprint({
-            method: 'agentSession.send',
-            sessionId,
-            fields: { body, ...(delivery ? { delivery } : {}) }
-          })
-        },
+        envelope: envelope(sessionId, 'agentSession.send', {
+          body,
+          ...(delivery ? { delivery } : {})
+        }),
         body,
         ...(delivery ? { delivery } : {}),
         userSend: true
@@ -65,5 +86,5 @@ export function createChatPersonActions(deps: {
     )
   }
 
-  return { settleTurn, sendUserMessage }
+  return { startTurn, finishTurn, settleTurn, envelope, sendUserMessage }
 }

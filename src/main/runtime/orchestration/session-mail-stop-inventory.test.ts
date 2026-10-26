@@ -1,3 +1,4 @@
+import { observeMailSql } from './mail-handoff.test-fixture'
 import {
   mintStructuredWorkerHandle,
   mintStructuredWorkerPaneKey,
@@ -8,7 +9,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import Database from '../../sqlite/sync-database'
-import { foundAgentSessionRecord } from '../agent-session-record-founding'
+import { agentSessionRecordFixture } from '../../native-chat/agent-session-record-test-fixture'
 import { OrchestrationDb } from './db'
 import { captureSessionMailAtStop } from './session-mail-stop-inventory'
 import { testOrcaSessionId } from '../../../shared/orca-session-address-test-fixture'
@@ -16,20 +17,7 @@ import { formatOrcaSessionAddress } from '../../../shared/orca-session-address'
 
 const id = testOrcaSessionId('4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37')
 const address = formatOrcaSessionAddress(id)
-const record = foundAgentSessionRecord(
-  {
-    sessionId: id,
-    provider: 'codex',
-    accountHome: { variable: 'CODEX_HOME', path: '/tmp/unused' },
-    location: {
-      executionHostId: 'local',
-      wslDistro: null,
-      workspaceId: 'folder',
-      workspaceKind: 'folder'
-    }
-  },
-  { claimKeyId: 'key', now: 1 }
-)
+const record = agentSessionRecordFixture({ sessionId: id })
 const roots: string[] = []
 const databases: { close: () => void }[] = []
 afterEach(() => {
@@ -49,34 +37,15 @@ function harness() {
   const peer = new Database(path)
   peer.pragma('busy_timeout = 0')
   databases.push(peer)
-  const calls: { sql: string; args: Parameters<ReturnType<typeof db.db.prepare>['get']> }[] = []
-  const seen = new WeakSet()
-  const prepare = db.db.prepare.bind(db.db)
-  vi.spyOn(db.db, 'prepare').mockImplementation((sql) => {
-    const statement = prepare(sql)
-    if (/FROM dispatch_contexts|run_coordinator_handles WHERE/.test(sql) && !seen.has(statement)) {
-      seen.add(statement)
-      const get = statement.get.bind(statement)
-      vi.spyOn(statement, 'get').mockImplementation((...args) => {
-        calls.push({ sql, args })
-        return get(...args)
-      })
+  const sql = observeMailSql(
+    db.db,
+    /FROM dispatch_contexts|run_coordinator_handles WHERE/,
+    'get',
+    (call) => {
+      expect(sql.explain(call.sql, call.args)).toContain('SEARCH')
     }
-    return statement
-  })
-  const capture = () => {
-    const result = captureSessionMailAtStop(db, id, [record], vi.fn())
-    for (const { sql, args } of calls.splice(0)) {
-      expect(
-        peer
-          .prepare(`EXPLAIN QUERY PLAN ${sql}`)
-          .all(...args)
-          .map((row) => row.detail)
-          .join(' ')
-      ).toContain('SEARCH')
-    }
-    return result
-  }
+  )
+  const capture = () => captureSessionMailAtStop(db, id, [record], vi.fn())
   return { db, peer, capture }
 }
 
@@ -91,42 +60,6 @@ it('returns UNKNOWN on busy or nested ownership without changing another transac
   expect(capture().members).toBeUndefined()
   expect(db.db.isTransaction).toBe(true)
   db.db.exec('ROLLBACK')
-})
-
-it('uses current generation ownership and pending direct routing, so later ownership acquisition is new to its recipient', () => {
-  const { db, capture } = harness()
-  const run = db.createRun({
-    objective: 'other',
-    coordinatorHandle: null,
-    coordinatorPaneKey: null,
-    coordinatorOrcaSessionId: id
-  })
-  const deferred = db.insertMessage({
-    from: 'worker',
-    to: 'old-coordinator',
-    subject: 'deferred',
-    runId: run.id
-  })
-  db.rememberRunCoordinatorHandle(run.id, 'old-coordinator')
-  const captured = capture()
-  expect(captured.members).toContain(deferred.id)
-  captured.finished?.()
-  db.db
-    .prepare('UPDATE runs SET consumer_generation = consumer_generation + 1 WHERE id = ?')
-    .run(run.id)
-  const stale = capture()
-  expect(stale.members).not.toContain(deferred.id)
-  stale.finished?.()
-  expect(db.getMessageById(deferred.id)?.to_handle).toBe('old-coordinator')
-  db.bindRun({
-    runId: run.id,
-    coordinatorHandle: null,
-    coordinatorPaneKey: null,
-    coordinatorOrcaSessionId: id
-  })
-  const acquired = capture()
-  expect(acquired.members).toContain(deferred.id)
-  acquired.finished?.()
 })
 
 it('captures worker Dispatch and foreign direct ownership from durable reminted-pane identity, independently of a live registry', () => {
@@ -189,7 +122,14 @@ it.each([100, 1000])(
       coordinatorPaneKey: null,
       coordinatorOrcaSessionId: id
     })
-    const owed = []
+    const deferred = db.insertMessage({
+      from: 'worker',
+      to: 'old-coordinator',
+      subject: 'deferred',
+      runId: run.id
+    })
+    db.rememberRunCoordinatorHandle(run.id, 'old-coordinator')
+    const owed = [deferred.id]
     for (let index = 0; index < count; index++) {
       const row = db.insertMessage({
         from: 'sender',
@@ -208,7 +148,7 @@ it.each([100, 1000])(
     const probe = vi.spyOn(db, 'findActiveDispatchForDirectMessageOwner')
     const captured = capture()
     expect(new Set(captured.members)).toEqual(new Set(owed))
-    expect(probe).toHaveBeenCalledTimes(count)
+    expect(probe).toHaveBeenCalledTimes(count + 1)
     expect(
       queries.mock.calls.filter(([sql]) =>
         sql.includes('SELECT id, run_id, to_handle FROM messages')
@@ -220,11 +160,27 @@ it.each([100, 1000])(
     expect(db.db.isTransaction).toBe(false)
     expect(db.db.pragma('busy_timeout', { simple: true })).toBe(5000)
     peer.exec('BEGIN IMMEDIATE')
-    peer.prepare('UPDATE messages SET read = 1 WHERE id = ?').run(owed[0])
+    peer.prepare('UPDATE messages SET read = 1 WHERE id = ?').run(owed[1])
     peer.exec('COMMIT')
     const next = capture()
-    expect(next.members).toHaveLength(count - 1)
+    expect(next.members).toHaveLength(count)
     next.finished?.()
+    db.db
+      .prepare('UPDATE runs SET consumer_generation = consumer_generation + 1 WHERE id = ?')
+      .run(run.id)
+    const stale = capture()
+    expect(stale.members).not.toContain(deferred.id)
+    stale.finished?.()
+    expect(db.getMessageById(deferred.id)?.to_handle).toBe('old-coordinator')
+    db.bindRun({
+      runId: run.id,
+      coordinatorHandle: null,
+      coordinatorPaneKey: null,
+      coordinatorOrcaSessionId: id
+    })
+    const acquired = capture()
+    expect(acquired.members).toContain(deferred.id)
+    acquired.finished?.()
     const fresh = db.insertMessage({ from: 'worker', to: address, subject: 'C' })
     expect(captured.members).not.toContain(fresh.id)
   }

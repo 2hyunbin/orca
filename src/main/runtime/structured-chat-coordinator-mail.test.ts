@@ -1,4 +1,3 @@
-import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import './rpc/unused-default-rpc-methods.test-fixture'
 import { join } from 'node:path'
 import { OrchestrationDb } from './orchestration/db'
@@ -13,6 +12,7 @@ vi.mock('../node-runtime/pinned-zip-members', () => ({
 
 import { describe, expect, it, vi } from 'vitest'
 import { agentJournalSubmissionKey } from '../../shared/agent-session-journal-item-key'
+import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import {
   AgentSessionAcquisitionRefusal,
   AgentSessionPreSpawnError
@@ -40,6 +40,8 @@ import {
   openChat,
   connectionFor,
   settleTurn,
+  startTurn,
+  finishTurn,
   sendUserMessage,
   userTexts,
   finishWorker,
@@ -55,8 +57,6 @@ import {
   root
 } from './structured-chat-coordinator-mail-rig.test-fixture'
 
-const edgesAnswered = (): Promise<void> => observationClock.edgesAnswered(runtime, WAIT)
-
 it('retires the exact failed capture connection, restores its mail and fences forgotten late sends', async () => {
   db.close()
   const path = join(root, 'mail.db')
@@ -66,10 +66,7 @@ it('retires the exact failed capture connection, restores its mail and fences fo
   const mailbox = `orca_session_id:${COORDINATOR}`
   const message = db.insertMessage({ from: 'sender', to: mailbox, subject: 'survives retirement' })
   const originalSend = host.send.bind(host)
-  let release = () => {}
-  const barrier = new Promise<void>((resolve) => {
-    release = resolve
-  })
+  const { promise: barrier, resolve: release } = Promise.withResolvers<void>()
   const guards: (() => void)[] = []
   const delay: typeof host.send = async (...args) => {
     if (args[1].beforeRun) {
@@ -104,7 +101,7 @@ it('retires the exact failed capture connection, restores its mail and fences fo
   await vi.waitFor(() => expect(db.getMessageById(message.id)?.read).toBe(1), WAIT)
   const saved = db.getMessageById(message.id)
   release()
-  await edgesAnswered()
+  await observationClock.edgesAnswered(runtime, WAIT)
   expect(db.getMessageById(message.id)).toEqual(saved)
   expect(chat.turns).toHaveLength(1)
   expect(sends).toHaveBeenCalledTimes(3)
@@ -152,6 +149,9 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     expect(chat.turns).toHaveLength(1)
     expect(await userTexts(COORDINATOR)).toHaveLength(1)
   })
+
+  /** Fires both edges and waits until every gate read they started has answered. */
+  const edgesAnswered = (): Promise<void> => observationClock.edgesAnswered(runtime, WAIT)
 
   /** The operation ids the coordinator's journal recorded for its pointer turns. */
   async function mailSends(): Promise<string[]> {
@@ -555,31 +555,7 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     )
     expect(await sendUserMessage(COORDINATOR, 'go')).toMatchObject({ ok: true })
     await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
-    const notify = (method: string, params: Record<string, unknown>) =>
-      chat.handlers.onNotification?.(method, { threadId: chat.threadId, ...params })
-    const startTurn = async (index: number) => {
-      notify('turn/started', { turn: { id: `turn-${index + 1}`, status: 'inProgress' } })
-      notify('item/completed', {
-        turnId: `turn-${index + 1}`,
-        item: {
-          type: 'userMessage',
-          id: `input-${index}`,
-          clientId: chat.turns[index]!.clientUserMessageId,
-          content: [{ type: 'text', text: turnText(chat.turns[index]!) }]
-        }
-      })
-      await host.flushStreamedEvents(COORDINATOR)
-    }
-    const finishTurn = async (index: number) => {
-      notify('item/completed', {
-        turnId: `turn-${index + 1}`,
-        item: { type: 'agentMessage', id: `reply-${index}`, text: `Finished ${index}` }
-      })
-      notify('thread/status/changed', { status: { type: 'idle' } })
-      notify('turn/completed', { turn: { id: `turn-${index + 1}`, status: 'completed' } })
-      await host.flushStreamedEvents(COORDINATOR)
-    }
-    await startTurn(0)
+    await startTurn(COORDINATOR, 0, turnText(chat.turns[0]!))
 
     await finishWorker(taskId)
     await finishWorker(idOf(second.task), { handle: 'term_worker_2', paneKey: WORKER_2_PANE })
@@ -594,11 +570,11 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     expect(await queuedCardTexts()).toEqual([])
     expect(chat.steers).toEqual([])
 
-    await finishTurn(0)
+    await finishTurn(COORDINATOR, 0, 'completed', true)
     await vi.waitFor(() => expect(chat.turns).toHaveLength(2), WAIT)
     expect(turnText(chat.turns[1]!)).toMatch(MAIL)
     expect(turnText(chat.turns[1]!)).toContain('**From:** `term_worker` · worker_done')
-    await startTurn(1)
+    await startTurn(COORDINATOR, 1, turnText(chat.turns[1]!))
     await edgesAnswered()
     expect(chat.turns).toHaveLength(2)
     await vi.waitFor(
@@ -612,12 +588,12 @@ describe('a worker result reaches the structured chat that coordinates it', () =
       WAIT
     )
 
-    await finishTurn(1)
+    await finishTurn(COORDINATOR, 1, 'completed', true)
     await vi.waitFor(() => expect(chat.turns).toHaveLength(3), WAIT)
     expect(turnText(chat.turns[2]!)).toMatch(MAIL)
     expect(turnText(chat.turns[2]!)).toContain('**From:** `term_worker_2` · worker_done')
-    await startTurn(2)
-    await finishTurn(2)
+    await startTurn(COORDINATOR, 2, turnText(chat.turns[2]!))
+    await finishTurn(COORDINATOR, 2, 'completed', true)
     const snapshot = await host.journalSnapshot(COORDINATOR)
     const sent = snapshot.items.flatMap((item) =>
       item.body.kind === 'message' && item.body.from ? [item.body.from] : []
@@ -661,39 +637,6 @@ describe('a worker result reaches the structured chat that coordinates it', () =
       count: 0
     })
   })
-})
-
-describe('a /clear keeps the chat its orchestration address', () => {
-  it("delivers the conversation's Run to its fresh context under the same address", async () => {
-    await openChat(COORDINATOR)
-    const { runId, taskId } = await coordinatorRunAndTask()
-    const generation = db.getRunRaw(runId)!.consumer_generation
-    const cleared = await clearChat(COORDINATOR)
-    expect(cleared).toBe(COORDINATOR)
-    const opened = codex.connections.length
-
-    // The worker's result starts the fresh context on a new thread.
-    await finishWorker(taskId)
-    await vi.waitFor(() => expect(connectionFor(cleared).turns).toHaveLength(1), WAIT)
-    const next = connectionFor(cleared)
-    expect(codex.connections.slice(opened)).toEqual([next])
-    expect(next.methods.filter((method) => method.startsWith('thread/'))).toEqual(['thread/start'])
-    expect(next.turns[0]!.text).toMatch(MAIL)
-    await settleTurn(cleared, 0)
-    await expect(
-      call('orchestration.runCurrent', {}, { sessionId: cleared })
-    ).resolves.toMatchObject({ run: { id: runId } })
-    await expect(call('orchestration.check', {}, { sessionId: cleared })).resolves.toMatchObject({
-      runId,
-      count: 1
-    })
-    // Clear preserves the original Run binding and consumer generation.
-    expect(db.getRunRaw(runId)).toMatchObject({
-      coordinator_orca_session_id: COORDINATOR,
-      consumer_generation: generation
-    })
-  })
-
   it('points mail the earlier context never took at the fresh context, without a user message', async () => {
     observationClock.start()
     await openChat(COORDINATOR)
@@ -807,6 +750,38 @@ describe('a /clear keeps the chat its orchestration address', () => {
       expect(checked).toMatchObject({ count: 1, messages: [{ subject: `ping ${index}` }] })
       await call('orchestration.check', { ack: checked.deliveryId }, { sessionId: cleared })
     }
+  })
+})
+
+describe('a /clear keeps the chat its orchestration address', () => {
+  it("delivers the conversation's Run to its fresh context under the same address", async () => {
+    await openChat(COORDINATOR)
+    const { runId, taskId } = await coordinatorRunAndTask()
+    const generation = db.getRunRaw(runId)!.consumer_generation
+    const cleared = await clearChat(COORDINATOR)
+    expect(cleared).toBe(COORDINATOR)
+    const opened = codex.connections.length
+
+    // The worker's result starts the fresh context on a new thread.
+    await finishWorker(taskId)
+    await vi.waitFor(() => expect(connectionFor(cleared).turns).toHaveLength(1), WAIT)
+    const next = connectionFor(cleared)
+    expect(codex.connections.slice(opened)).toEqual([next])
+    expect(next.methods.filter((method) => method.startsWith('thread/'))).toEqual(['thread/start'])
+    expect(next.turns[0]!.text).toMatch(MAIL)
+    await settleTurn(cleared, 0)
+    await expect(
+      call('orchestration.runCurrent', {}, { sessionId: cleared })
+    ).resolves.toMatchObject({ run: { id: runId } })
+    await expect(call('orchestration.check', {}, { sessionId: cleared })).resolves.toMatchObject({
+      runId,
+      count: 1
+    })
+    // Clear preserves the original Run binding and consumer generation.
+    expect(db.getRunRaw(runId)).toMatchObject({
+      coordinator_orca_session_id: COORDINATOR,
+      consumer_generation: generation
+    })
   })
 })
 

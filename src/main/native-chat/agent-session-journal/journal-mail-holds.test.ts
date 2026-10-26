@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { foundAgentSessionRecord } from '../../runtime/agent-session-record-founding'
+import { agentSessionRecordFixture } from '../agent-session-record-test-fixture'
 import { encodeAgentSessionRecord } from '../../../shared/agent-session-record-stored-form'
 import { OrchestrationDb } from '../../runtime/orchestration/db'
 import { captureSessionMailAtStop } from '../../runtime/orchestration/session-mail-stop-inventory'
@@ -32,20 +32,9 @@ function harness() {
   roots.push(root)
   const database = JournalHostDatabase.open(root)
   databases.push(database)
-  const record = foundAgentSessionRecord(
-    {
-      sessionId: testOrcaSessionId('4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37'),
-      provider: 'codex',
-      accountHome: { variable: 'CODEX_HOME', path: '/tmp/unused' },
-      location: {
-        executionHostId: 'local',
-        wslDistro: null,
-        workspaceId: 'folder',
-        workspaceKind: 'folder'
-      }
-    },
-    { claimKeyId: 'key', now: 100 }
-  )
+  const record = agentSessionRecordFixture({
+    sessionId: testOrcaSessionId('4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37')
+  })
   database.db
     .prepare('INSERT INTO agent_session_records VALUES (?, ?)')
     .run(record.sessionId, JSON.stringify(encodeAgentSessionRecord(record)))

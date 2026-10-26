@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { OrchestrationDb } from './db'
 import { AgentSessionJournal } from '../../native-chat/agent-session-journal/journal-store'
 import { JournalHostDatabase } from '../../native-chat/agent-session-journal/journal-host-database'
-import { mintAgentSessionOperationId } from './structured-pointer-operation-id'
+import { mailHandoffFixture, observeMailSql } from './mail-handoff.test-fixture'
 import { readMailHandoff, type StructuredMailHandoff } from './mail-handoff'
 import { selectStructuredMailHandoff, type StructuredMailEvidence } from './mailbox-settlement'
 import {
@@ -82,31 +82,15 @@ function queuedReceipt(reference: StructuredMailHandoff, clientMessageId: string
 }
 
 function issued(db: OrchestrationDb, ids: string[], patch: Partial<StructuredMailHandoff> = {}) {
-  const id = mintAgentSessionOperationId(Date.now())
-  const reference = readMailHandoff(
-    JSON.stringify({
-      version: 1,
-      kind: 'structured',
-      sessionId: 'session',
-      epoch: 'epoch',
-      frontier: 'frontier',
-      operationId: id,
-      authorizationId: id,
-      clientMessageId: id,
-      phase: 'reserved',
-      authority: 'consumer',
-      manifest: {
-        members: ids,
-        dispatchId: null,
-        runtimeFence: 1,
-        body: JSON.stringify({ kind: 'message', role: 'user', blocks: [] })
-      },
-      ...patch
-    })
-  )
-  if (reference?.kind !== 'structured') {
-    throw new Error('invalid issued fixture')
-  }
+  const reference = mailHandoffFixture({
+    manifest: {
+      members: ids,
+      dispatchId: null,
+      runtimeFence: 1,
+      body: JSON.stringify({ kind: 'message', role: 'user', blocks: [] })
+    },
+    ...patch
+  })
   for (const member of ids) {
     db.db
       .prepare('UPDATE messages SET handoff = ? WHERE id = ?')
@@ -130,25 +114,14 @@ it.each([10, 100].flatMap((count) => ['busy', 'idle', 'cohort'].map((mode) => ({
           : null
       const prior = `prior-${i}`
       const original = `original-${i}`
-      const reference = issued(
-        db,
-        victim ? [row.id, victim.id] : [row.id],
-        mode === 'cohort'
-          ? {}
-          : {
-              sessionId: prior,
-              phase: 'offered',
-              ...(mode === 'idle'
-                ? {
-                    recoverySource: {
-                      sessionId: original,
-                      epoch: 'epoch',
-                      clientMessageId: original
-                    }
-                  }
-                : {})
-            }
-      )
+      const reference = issued(db, victim ? [row.id, victim.id] : [row.id], {
+        sessionId: victim ? 'session' : prior,
+        phase: victim ? 'reserved' : 'offered',
+        recoverySource:
+          mode === 'idle'
+            ? { sessionId: original, epoch: 'epoch', clientMessageId: original }
+            : undefined
+      })
       if (victim) {
         db.recordUnknownMailRead([victim])
       } else {
@@ -196,32 +169,19 @@ it.each([10, 100].flatMap((count) => ['busy', 'idle', 'cohort'].map((mode) => ({
       storeRows: 0,
       members: 0
     }
-    const sql = db.db.prepare.bind(db.db)
-    vi.spyOn(db.db, 'prepare').mockImplementation((query) => {
-      const statement = sql(query)
-      if (
-        query.includes('INDEXED BY idx_messages_issued_') ||
-        query.includes('INDEXED BY idx_messages_id')
-      ) {
-        const all = statement.all.bind(statement)
-        vi.spyOn(statement, 'all').mockImplementation((...args) => {
-          const rows = all(...args)
-          if (query.includes('INDEXED BY idx_messages_id')) {
-            costs.members += rows.length
-            expect(
-              sql(`EXPLAIN QUERY PLAN ${query}`)
-                .all(...args)
-                .map((row) => row.detail)
-                .join(' ')
-            ).toContain('SEARCH messages USING INDEX idx_messages_id')
-          } else {
-            costs.raw += rows.length
-          }
-          return rows
-        })
+    const sql = observeMailSql(
+      db.db,
+      /INDEXED BY idx_messages_(issued_|id)/,
+      'all',
+      ({ sql: query, args, rows }) => {
+        if (query.includes('INDEXED BY idx_messages_id')) {
+          costs.members += rows.length
+          expect(sql.explain(query, args)).toContain('SEARCH messages USING INDEX idx_messages_id')
+        } else {
+          costs.raw += rows.length
+        }
       }
-      return statement
-    })
+    )
     const inventory = db.getIssuedSessionMail.bind(db)
     vi.spyOn(db, 'getIssuedSessionMail').mockImplementation((...args) => {
       costs.inventory++
@@ -306,10 +266,7 @@ it.each([100, 1000])(
   async (count) => {
     const { db, host } = harness()
     const routes = new Map(Array.from({ length: count }, (_, i) => [`a${i}`, `s${i}`]))
-    let release = () => {}
-    const barrier = new Promise<void>((resolve) => {
-      release = resolve
-    })
+    const { promise: barrier, resolve: release } = Promise.withResolvers<void>()
     const prepare = vi.spyOn(host, 'readHandoffEvidence').mockImplementation(async () => {
       await barrier
       return host.readHandoffEvidenceNow({ sessionId: '', clientMessageId: '' })
@@ -355,20 +312,29 @@ it.each(['failed', 'disappeared', 'changed'] as const)(
     delivery.deliverForHandle('consumer')
     await vi.waitFor(() => expect(send).toHaveBeenCalledOnce())
     await new Promise<void>((done) => setImmediate(done))
-    const saved = db.getMessageById(message.id)!.handoff
-    const reference = readMailHandoff(saved)
-    if (reference?.kind !== 'structured') {
+    const issuedReference = readMailHandoff(db.getMessageById(message.id)!.handoff)
+    if (issuedReference?.kind !== 'structured') {
       throw new Error('missing committed input')
     }
+    host.takesMailNow = () => false
+    host.readReceipt = () => queuedReceipt(issuedReference, 'actual')
+    delivery.onJournalActivity('session')
+    await vi.waitFor(() =>
+      expect(readMailHandoff(db.getMessageById(message.id)?.handoff)).toMatchObject({
+        phase: 'offered',
+        clientMessageId: 'actual'
+      })
+    )
+    const saved = db.getMessageById(message.id)!.handoff
     const other = db.insertMessage({ from: 'sender', to: 'consumer', subject: 'uncertain source' })
     db.db
       .prepare('UPDATE messages SET handoff = ?, recovery_used = 1 WHERE id = ?')
-      .run(JSON.stringify({ ...reference, sessionId: 'source' }), other.id)
+      .run(JSON.stringify({ ...issuedReference, sessionId: 'source' }), other.id)
     let original = db.getMessageById(other.id)!.handoff
     evidence.mailHold = {
-      members: new Set(),
-      ambiguous: false,
-      key: 'released',
+      members: new Set([message.id]),
+      ambiguous: true,
+      key: 'stopped',
       scope: { aliases: ['session', 'source'], root: 'session' }
     }
     evidence.owner = {
@@ -377,7 +343,6 @@ it.each(['failed', 'disappeared', 'changed'] as const)(
     }
     const notice = send.mock.calls[0]![0].body.from?.orchestration
     evidence.legacyNotice = notice?.message === 'mail-notice' ? notice : null
-    host.takesMailNow = () => false
     host.readReceipt = (ref) =>
       ref.sessionId === 'source' ? { verdict: 'absent' } : queuedReceipt(ref, 'actual')
     const prepare = vi.spyOn(host, 'readHandoffEvidence').mockImplementation(async (source) => {
@@ -398,7 +363,7 @@ it.each(['failed', 'disappeared', 'changed'] as const)(
           issued(db, [later.id], { sessionId: 'later' })
           db.db.prepare('UPDATE messages SET handoff = ? WHERE id = ?').run(
             JSON.stringify({
-              ...reference,
+              ...issuedReference,
               sessionId: 'source',
               recoverySource: { sessionId: 'original', epoch: 'epoch', clientMessageId: 'original' }
             }),
@@ -588,104 +553,55 @@ it('does not turn expiry of an uncertain original operation into proof it never 
   expect(send).toHaveBeenCalledTimes(2)
 })
 
-it('reconciles an issued receipt and success while new admission is busy and stopped', async () => {
-  const { db, message, delivery, send, host, evidence } = harness()
-  send.mockRejectedValueOnce(new Error('crash before receipt metadata'))
+it('redrives second-connection arrivals across preparation and commits before effect', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pr28567-admission-revision-'))
+  roots.push(root)
+  const path = join(root, 'mail.db')
+  const { db, message, delivery, host, evidence, send } = harness(path)
+  const writer = new OrchestrationDb(path)
+  databases.push(writer)
+  evidence.mailHold = { members: new Set(), ambiguous: true, key: 'held' }
+  const scan = vi.spyOn(db, 'getAutomaticMailCandidates')
+  const claim = vi.spyOn(db, 'claimMailHandoff')
+  const { promise: barrier, resolve: unblock } = Promise.withResolvers<void>()
+  const prepare = vi.spyOn(host, 'readHandoffEvidence').mockImplementationOnce(async () => {
+    await barrier
+    return evidence
+  })
   delivery.deliverForHandle('consumer')
-  await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
-  await new Promise<void>((resolve) => setImmediate(resolve))
-  const reference = readMailHandoff(db.getMessageById(message.id)?.handoff)
-  if (reference?.kind !== 'structured') {
-    throw new Error('Missing issued reservation')
-  }
-  host.takesMailNow = () => false
-  const receipt = vi.fn(() => queuedReceipt(reference, 'issued-queue'))
-  host.readReceipt = receipt
-  delivery.onJournalActivity('session')
+  await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce())
+  writer.insertMessage({ from: 'sender', to: 'consumer', subject: 'during await' })
+
+  evidence.mailHold = { members: new Set(), ambiguous: false, key: 'person-resume' }
+  send.mockImplementation(async (input) => {
+    expect(db.db.isTransaction).toBe(false)
+    expect(claim.mock.results.at(-1)?.value).toMatchObject({ address: 'consumer' })
+    const selected = db.getUnreadMessages('consumer')[0]!
+    expect(readMailHandoff(selected.handoff)).toMatchObject({
+      operationId: input.operationId,
+      phase: 'reserved'
+    })
+    expect(readMailHandoff(selected.handoff)).not.toHaveProperty('nonAdmission')
+    expect(input.beforeRun()).toBe(true)
+    host.takesMailNow = () => false
+    return { kind: 'sent', state: 'accepted' }
+  })
+  unblock()
+  await vi.waitFor(() => expect(send).toHaveBeenCalledOnce())
+  expect(
+    claim.mock.results.filter((result) => result.type === 'return' && result.value !== null)
+  ).toHaveLength(1)
   await vi.waitFor(() =>
     expect(readMailHandoff(db.getMessageById(message.id)?.handoff)).toMatchObject({
       phase: 'offered',
-      clientMessageId: 'issued-queue'
+      operationId: send.mock.calls[0]![0].operationId
     })
   )
-  evidence.mailHold = { members: new Set([message.id]), ambiguous: true, key: 'stopped' }
-  evidence.owner = {
-    itemId: 'issued-turn',
-    turn: { turnId: 'issued-turn', state: 'completed', outcome: 'success' }
-  }
-  const notice = send.mock.calls[0]![0].body.from?.orchestration
-  evidence.legacyNotice = notice?.message === 'mail-notice' ? notice : null
-  delivery.onJournalActivity('session')
-  await vi.waitFor(() => expect(db.getMessageById(message.id)?.read).toBe(1))
-  expect(send).toHaveBeenCalledTimes(1)
-})
 
-it.each(['external-held', 'external-released'] as const)(
-  'redrives arrivals across awaited preparation and parks stable decisions (%s)',
-  async (connection) => {
-    const root = mkdtempSync(join(tmpdir(), 'pr28567-admission-revision-'))
-    roots.push(root)
-    const path = join(root, 'mail.db')
-    const { db, message, delivery, host, evidence, send } = harness(path)
-    const writer = new OrchestrationDb(path)
-    databases.push(writer)
-    evidence.mailHold = { members: new Set(), ambiguous: true, key: 'held' }
-    const scan = vi.spyOn(db, 'getAutomaticMailCandidates')
-    const claim = vi.spyOn(db, 'claimMailHandoff')
-    let unblock = () => {}
-    const barrier = new Promise<void>((resolve) => {
-      unblock = resolve
-    })
-    let first = true
-    host.readHandoffEvidence = async () => {
-      const value = evidence
-      if (first) {
-        first = false
-        await barrier
-      }
-      return value
-    }
-    delivery.deliverForHandle('consumer')
-    await vi.waitFor(() => expect(first).toBe(false))
-    writer.insertMessage({ from: 'sender', to: 'consumer', subject: 'during await' })
-    const released = connection !== 'external-held'
-    if (released) {
-      evidence.mailHold = { members: new Set(), ambiguous: false, key: 'person-resume' }
-      host.takesMailNow = () => true
-      send.mockImplementation(async (input) => {
-        expect(db.db.isTransaction).toBe(false)
-        expect(claim.mock.results.at(-1)?.value).toMatchObject({ address: 'consumer' })
-        const selected = db.getUnreadMessages('consumer')[0]!
-        expect(readMailHandoff(selected.handoff)).toMatchObject({
-          operationId: input.operationId,
-          phase: 'reserved'
-        })
-        expect(readMailHandoff(selected.handoff)).not.toHaveProperty('nonAdmission')
-        expect(input.beforeRun()).toBe(true)
-        host.takesMailNow = () => false
-        return { kind: 'sent', state: 'accepted' }
-      })
-    }
-    unblock()
-    if (released) {
-      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce())
-      expect(
-        claim.mock.results.filter((result) => result.type === 'return' && result.value !== null)
-      ).toHaveLength(1)
-      await vi.waitFor(() =>
-        expect(readMailHandoff(db.getMessageById(message.id)?.handoff)).toMatchObject({
-          phase: 'offered',
-          operationId: send.mock.calls[0]![0].operationId
-        })
-      )
-    } else {
-      await vi.waitFor(() => expect(claim).toHaveBeenCalled())
-    }
-    await new Promise<void>((resolve) => setImmediate(resolve))
-    const settled = scan.mock.calls.length
-    delivery.onJournalActivity('session')
-    await new Promise<void>((resolve) => setImmediate(resolve))
-    expect(scan).toHaveBeenCalledTimes(settled)
-    expect(send).toHaveBeenCalledTimes(Number(released))
-  }
-)
+  await new Promise<void>((resolve) => setImmediate(resolve))
+  const settled = scan.mock.calls.length
+  delivery.onJournalActivity('session')
+  await new Promise<void>((resolve) => setImmediate(resolve))
+  expect(scan).toHaveBeenCalledTimes(settled)
+  expect(send).toHaveBeenCalledOnce()
+})

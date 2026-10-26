@@ -1,8 +1,6 @@
 import { selectStructuredMailHandoff } from './orchestration/mailbox-settlement'
 import './rpc/unused-default-rpc-methods.test-fixture'
 import { expect, it, vi } from 'vitest'
-import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
-import { operationId } from './structured-chat-coordinator-fake-codex-fixture'
 import {
   COORDINATOR,
   codex,
@@ -14,6 +12,8 @@ import {
   openChat,
   connectionFor,
   settleTurn,
+  startTurn,
+  envelope,
   sendUserMessage,
   finishWorker,
   coordinatorRunAndTask,
@@ -42,19 +42,7 @@ it.each([
     const { runId, taskId } = await coordinatorRunAndTask()
     await sendUserMessage(COORDINATOR, 'personal work')
     await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
-    chat.handlers.onNotification?.('turn/started', {
-      turn: { id: 'turn-1', status: 'inProgress' }
-    })
-    chat.handlers.onNotification?.('item/completed', {
-      turnId: 'turn-1',
-      item: {
-        type: 'userMessage',
-        id: 'personal-echo',
-        clientId: chat.turns[0]!.clientUserMessageId,
-        content: [{ type: 'text', text: 'personal work' }]
-      }
-    })
-    await host.flushStreamedEvents(COORDINATOR)
+    await startTurn(COORDINATOR, 0, 'personal work')
     if (card) {
       expect(
         await sendUserMessage(COORDINATOR, 'personal queued', 'queue-if-active')
@@ -84,20 +72,13 @@ it.each([
       subject: 'unreserved B'
     })
     expect(db.getMessageById(unreserved.id)?.handoff).toBeNull()
-    const envelope = (method: string, fields: Record<string, unknown>) => ({
-      sessionId: COORDINATOR,
-      clientOperationId: operationId(),
-      expectedRuntimeFence: host.deps.store.getRecord(COORDINATOR)!.lease.runtimeFence,
-      payloadFingerprint: computeAgentSessionPayloadFingerprint({
-        method,
-        sessionId: COORDINATOR,
-        fields
-      })
-    })
     expect(
       await host.cancel(
         { callerKey: 'test-surface' },
-        { envelope: envelope('agentSession.cancel', { turnId: 'turn-1' }), turnId: 'turn-1' }
+        {
+          envelope: envelope(COORDINATOR, 'agentSession.cancel', { turnId: 'turn-1' }),
+          turnId: 'turn-1'
+        }
       )
     ).toMatchObject({ ok: true })
     chat.handlers.onNotification?.('turn/completed', {
@@ -155,7 +136,7 @@ it.each([
       expect(
         await host.queuedMessagesResume(
           { callerKey: 'test-surface' },
-          { envelope: envelope('agentSession.queuedMessagesResume', {}) }
+          { envelope: envelope(COORDINATOR, 'agentSession.queuedMessagesResume', {}) }
         )
       ).toMatchObject({ ok: true, value: { resumed: true } })
       if (!card) {
