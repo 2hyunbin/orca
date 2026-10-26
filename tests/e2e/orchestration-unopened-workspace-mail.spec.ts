@@ -208,6 +208,7 @@ test.describe('orchestration for a worker whose workspace is not open', () => {
     orcaPage,
     electronApp
   }) => {
+    // Agent launch, a worktree activation and a 60 s wait budget.
     test.setTimeout(180_000)
     const worker = await startWorkerInUnopenedWorkspace(orcaPage, electronApp)
     worker.agent.setTitle(CODEX_WORKING_TITLE)

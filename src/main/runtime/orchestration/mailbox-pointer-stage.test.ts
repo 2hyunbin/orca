@@ -179,6 +179,7 @@ describe('mailbox pointer staging watermark', () => {
     })
 
     const writePty = vi.fn(() => WRITE_ACCEPTED)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture supplies only the deps delivery reads.
     const delivery = new OrchestrationMailboxPointerDelivery<never>({
       ...pointerDeps(contended, writePty),
       redriveMailbox: (handle: string) => delivery.deliver(TERMINAL, { mailboxHandle: handle })

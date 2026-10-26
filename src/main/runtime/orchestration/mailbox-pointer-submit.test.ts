@@ -356,16 +356,22 @@ describe('orchestration mailbox pointer submit', () => {
       }
     ]
 
+    const current = {
+      ptyId: 'pty-current',
+      handle: 'term-current',
+      paneKey: 'tab:leaf',
+      lastAgentStatus: 'idle' as const,
+      lastAgentStatusObservedLive: true
+    }
     const resumed = resumePendingOrchestrationMailboxPointer({
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resume reads only getDb and resolveSubmitTarget.
       deps: {
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resume calls only releaseMailboxPointerEnter here.
         getDb: () => ({ releaseMailboxPointerEnter }) as never,
-        resolveSubmitTarget: () => ({
-          terminal: { handle: 'term-current' } as never,
-          processIncarnation: 'inc-current'
-        })
+        resolveSubmitTarget: () => ({ terminal: current, processIncarnation: 'inc-current' })
       } as never,
       state: new OrchestrationMailboxPointerState(),
-      terminal: { ptyId: 'pty-current' } as never,
+      terminal: current,
       mailboxHandle: 'run:run-1',
       messages,
       settle: vi.fn(),
