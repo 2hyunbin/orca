@@ -66,7 +66,7 @@ export async function cancelConversation(
     }
     throw new Error('external_conversation_not_found')
   }
-  return stopLinkedAgent(terminal, seam, linked.link, signal)
+  return stopLinkedAgent(terminal, seam, linked.link, signal, turnId)
 }
 
 function isOpenTurn(seam: CancelSeam, key: ConversationKey, turnId: number): boolean {
@@ -79,8 +79,14 @@ async function stopLinkedAgent(
   terminal: CancelTerminal,
   { prompts, readHookRow, events }: CancelSeam,
   link: ExternalConversationLink,
-  signal: AbortSignal
+  signal: AbortSignal,
+  turnId: number | undefined
 ): Promise<Delivery> {
+  // Bound to a turn: that turn must still be the open one when the prompt or the agent is acted on.
+  const sameTurn = (): boolean => turnId === undefined || events?.openTurn(link.paneKey) === turnId
+  if (!sameTurn()) {
+    return refused('turn_not_running')
+  }
   const pane = bindPane(terminal, link.paneKey)
   // A host out of contact cannot show the agent idle; refused leaves no receipt, so a retry acts.
   if (!pane || terminal.getPtyLivenessVerdict(pane.binding.ptyId)?.status === 'unverifiable') {
@@ -99,6 +105,7 @@ async function stopLinkedAgent(
   try {
     const interrupted = await interruptWorkingAgent(terminal, readHookRow, link.paneKey, {
       beforeWrite: (ptyId) => guard.beforeWrite(ptyId),
+      sameTurn,
       signal
     })
     switch (interrupted.outcome) {
@@ -107,9 +114,10 @@ async function stopLinkedAgent(
       case 'unknown':
         return { outcome: 'unknown', reason: 'writer_failed' }
       case 'refused':
-        return interrupted.reason === 'agent_not_working'
-          ? { outcome: 'accepted' }
-          : refused('agent_not_reachable')
+        if (interrupted.reason !== 'agent_not_working') {
+          return refused('agent_not_reachable')
+        }
+        return sameTurn() ? { outcome: 'accepted' } : refused('turn_not_running')
     }
   } finally {
     guard.dispose()
