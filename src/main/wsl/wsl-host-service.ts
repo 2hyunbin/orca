@@ -6,10 +6,7 @@
 import { errorMessage } from '../../shared/error-message'
 import { focusReachability } from './wsl-host-focus-reachability'
 import { removeWslHostEnvironment } from '../../shared/runtime-environment-wsl-host-store'
-import {
-  readWslHostDeployments,
-  type WslHostDeploymentRecord
-} from '../../shared/wsl-host-deployment-store'
+import type { WslHostDeploymentRecord } from '../../shared/wsl-host-deployment-store'
 import type {
   WslHostAddResult,
   WslHostConnectIntent,
@@ -19,7 +16,11 @@ import type {
 } from '../../shared/wsl-host-types'
 import type { WslHostDistroCandidate } from './wsl-host-distro-list'
 import { wslDistroHolderKey } from './wsl-distro-holder-record'
-import { persistWslHostConnection, toWslHostStatus } from './wsl-host-connection-record'
+import {
+  persistWslHostConnection,
+  readWslHostRecordsQuietly,
+  toWslHostStatus
+} from './wsl-host-connection-record'
 import {
   sameWslDistro,
   wslHostNotConnectedMessage,
@@ -313,7 +314,7 @@ export class WslHostService {
     await this.connector.connect(record.distro)
   }
 
-  /** Whether the host's server answers now; never starts a stopped distro. */
+  /** Whether the host's server answers through this process now; never starts a stopped distro. */
   async isConnected(environmentId: string): Promise<boolean> {
     const record = this.recordForEnvironment(environmentId)
     return record && this.connector
@@ -371,12 +372,7 @@ export class WslHostService {
   }
 
   private records(): WslHostDeploymentRecord[] {
-    try {
-      return readWslHostDeployments(this.deps.userDataPath()).deployments
-    } catch (error) {
-      console.warn('[wsl-hosts] Could not read WSL host records:', error)
-      return []
-    }
+    return readWslHostRecordsQuietly(this.deps.userDataPath())
   }
 
   private recordForDistro(distro: string): WslHostDeploymentRecord | null {
