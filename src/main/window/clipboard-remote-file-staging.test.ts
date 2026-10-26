@@ -10,6 +10,10 @@ const { accessMock, lstatMock, mkdirMock, opendirMock, rmMock, writeFileMock } =
   writeFileMock: vi.fn()
 }))
 
+vi.mock('node:timers/promises', () => ({
+  setTimeout: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+}))
+
 vi.mock('node:fs/promises', () => ({
   access: accessMock,
   lstat: lstatMock,
@@ -29,7 +33,6 @@ import {
 } from './clipboard-remote-file-staging'
 
 const TTL_MS = 60 * 60 * 1000
-const RETRY_MS = 60 * 1000
 const NOW_MS = 1_760_000_000_000
 const TEMP_ROOT = resolve('fixture-temp')
 const UID_SUFFIX = typeof process.getuid === 'function' ? `-${process.getuid()}` : ''
@@ -202,6 +205,7 @@ describe('remote clipboard staging ownership', () => {
   })
 
   it('continues past Windows-style lock failures and retries on a later sweep', async () => {
+    vi.useFakeTimers()
     opendirMock.mockResolvedValue(
       openedDirectory([directoryEntry(EXPIRED_TRANSFER), directoryEntry(`1759990000000-${UUID_B}`)])
     )
@@ -211,22 +215,28 @@ describe('remote clipboard staging ownership', () => {
       }
     })
 
-    await expect(cleanupExpiredRemoteClipboardStaging(TEMP_ROOT, NOW_MS)).resolves.toBeUndefined()
-
-    expect(rmMock).toHaveBeenCalledTimes(2)
-    rmMock.mockResolvedValue(undefined)
+    const sweep = cleanupExpiredRemoteClipboardStaging(TEMP_ROOT, NOW_MS)
+    await vi.runAllTimersAsync()
+    await expect(sweep).resolves.toBeUndefined()
+    const targets = () => new Set(rmMock.mock.calls.map(([target]) => target))
+    expect(targets()).toEqual(
+      new Set([join(STAGING_ROOT, EXPIRED_TRANSFER), join(STAGING_ROOT, `1759990000000-${UUID_B}`)])
+    )
+    rmMock.mockClear().mockResolvedValue(undefined)
     await cleanupExpiredRemoteClipboardStaging(TEMP_ROOT, NOW_MS)
-    expect(rmMock).toHaveBeenCalledTimes(4)
+    expect(targets().size).toBe(2)
   })
 
   it('bounds locked-file timer retries', async () => {
     vi.useFakeTimers()
     rmMock.mockRejectedValue(Object.assign(new Error('locked'), { code: 'EPERM' }))
 
-    scheduleRemoteClipboardTransferCleanup(TEMP_ROOT, join(STAGING_ROOT, EXPIRED_TRANSFER))
-    await vi.advanceTimersByTimeAsync(TTL_MS + 4 * RETRY_MS)
+    const transferDirectory = join(STAGING_ROOT, EXPIRED_TRANSFER)
+    scheduleRemoteClipboardTransferCleanup(TEMP_ROOT, transferDirectory)
+    await vi.runAllTimersAsync()
 
-    expect(rmMock).toHaveBeenCalledTimes(4)
+    expect(lstatMock.mock.calls.filter(([target]) => target === transferDirectory)).toHaveLength(4)
+    expect(rmMock).toHaveBeenCalled()
     expect(vi.getTimerCount()).toBe(0)
   })
 
