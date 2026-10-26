@@ -195,7 +195,12 @@ function createSession(processName: () => string, rootPid = SHELL_PID): FixtureS
   })
   const session: Pick<
     Session,
-    'pid' | 'inspectTerminalInterface' | 'incarnationId' | 'isAlive' | 'getForegroundProcess'
+    | 'pid'
+    | 'inspectTerminalInterface'
+    | 'incarnationId'
+    | 'isAlive'
+    | 'getForegroundProcess'
+    | 'confirmForegroundProcess'
   > & { markDead(): void } = {
     pid: rootPid,
     inspectTerminalInterface: (
@@ -207,6 +212,7 @@ function createSession(processName: () => string, rootPid = SHELL_PID): FixtureS
     },
     getForegroundProcess: (options?: { rawFallback?: boolean }) =>
       tracker.getForegroundProcess(options),
+    confirmForegroundProcess: () => tracker.confirmForegroundProcess(),
     markDead: () => {
       dead = true
       tracker.markDead()
@@ -349,6 +355,84 @@ describe.each(['darwin', 'linux'])('daemon cheap-tier process inspection (%s)', 
       )
     }
   )
+
+  it('processes N/10N generic-null shell results without a serial fresh confirmation', async () => {
+    const { createAgentCompletionCoordinator, resetAgentCompletionCoordinatorIdentitiesForTest } =
+      await import('../../renderer/src/components/terminal-pane/agent-completion-coordinator')
+    const { resetAgentProcessInspectionQueueForTests } =
+      await import('../../renderer/src/components/terminal-pane/agent-process-inspection-queue')
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout'] })
+    const jitter = vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    try {
+      for (const size of [10, 100]) {
+        population = size
+        table = { agent: 'gone' }
+        fullReader.resetProcessTableSnapshotForTests()
+        Object.assign(forks, { full: 0, cheap: 0, narrow: 0 })
+        const confirmations = vi.fn()
+        const consumed = new Set<number>()
+        const shellObserved = vi.fn()
+        const exited = vi.fn()
+        const inspections = vi.fn()
+        const coordinators = Array.from({ length: size }, (_, index) => {
+          const session = createSession(() => 'zsh', SHELL_PID + index * 10000)
+          // Keep the removed adapter as a checked structural trap for the old monitor bytes.
+          const options = {
+            paneKey: `null-wave-${size}:${index}`,
+            getPtyId: () => `pty-${index}`,
+            getExpectedIncarnationId: () => session.incarnationId,
+            isLive: () => true,
+            inspectProcess: async () => {
+              inspections(index)
+              const { result } = await inspect(session, { steadyState: true })
+              expect(result.foregroundProcess).toBeNull()
+              expect(result.foregroundProcessEvidence).toMatchObject({
+                verdict: 'live',
+                processName: null
+              })
+              return {
+                ...result,
+                get hasChildProcesses() {
+                  consumed.add(index)
+                  return result.hasChildProcesses
+                }
+              }
+            },
+            confirmForegroundProcess: async () => {
+              confirmations(index)
+              return session.confirmForegroundProcess()
+            },
+            dispatchCompletion: vi.fn(),
+            onForegroundShellObserved: shellObserved,
+            onForegroundAgentExited: exited
+          }
+          const coordinator = createAgentCompletionCoordinator(options)
+          coordinator.observeForegroundAgentProcess({ agent: 'claude', processName: 'claude' })
+          coordinator.startProcessTracking()
+          return coordinator
+        })
+        try {
+          vi.advanceTimersByTime(750)
+          await vi.advanceTimersByTimeAsync(0)
+          expect(inspections).toHaveBeenCalledTimes(size)
+          expect(consumed.size).toBe(size)
+          expect(confirmations).not.toHaveBeenCalled()
+          expect(shellObserved).not.toHaveBeenCalled()
+          expect(exited).not.toHaveBeenCalled()
+          expect(forks).toEqual({ full: 1, cheap: 0, narrow: 0 })
+          process.stdout.write(
+            `MONITOR_NULL_CAPTURE_BOUND ${JSON.stringify({ hostPlatform, size, consumed: consumed.size, confirmations: confirmations.mock.calls.length, ...forks })}\n`
+          )
+        } finally {
+          coordinators.forEach((coordinator) => coordinator.dispose())
+          resetAgentProcessInspectionQueueForTests()
+          resetAgentCompletionCoordinatorIdentitiesForTest()
+        }
+      }
+    } finally {
+      jitter.mockRestore()
+    }
+  })
 
   it('a pane with NO recognized anchor never takes the cheap path, even when asked', async () => {
     table = { agent: 'gone' }

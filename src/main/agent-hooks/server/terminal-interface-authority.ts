@@ -185,8 +185,7 @@ export class TerminalInterfaceAuthority {
     const matches = captureTerminalInterfaceSampleCurrentness(this.entries, lease, entry)
     const current = (): boolean => this.lease === lease && matches()
     try {
-      const requestedAt = performance.now()
-      const result = await this.probes.bounded(
+      const sample = await this.probes.bounded(
         lease,
         this.probes.inspect(
           lease,
@@ -197,6 +196,7 @@ export class TerminalInterfaceAuthority {
       if (!current()) {
         return
       }
+      const { result, dispatchedAt } = sample ?? { result: null, dispatchedAt: Number.NaN }
       const evidence = result?.terminalInterface
       if (
         !evidence &&
@@ -207,8 +207,8 @@ export class TerminalInterfaceAuthority {
         entry.due = performance.now() + 750
         return
       }
-      const age = (evidence?.capturedAgeMs ?? Infinity) + performance.now() - requestedAt
-      const capturedAt = requestedAt - (evidence?.capturedAgeMs ?? Infinity)
+      const age = (evidence?.capturedAgeMs ?? Infinity) + performance.now() - dispatchedAt
+      const capturedAt = dispatchedAt - (evidence?.capturedAgeMs ?? Infinity)
       if (
         !result ||
         !evidence ||

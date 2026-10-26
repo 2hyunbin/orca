@@ -3,13 +3,18 @@ import type { TerminalInterfaceBinding } from '../../../shared/terminal-interfac
 import type { TerminalProcessInspection } from '../../../shared/terminal-process-inspection'
 import type { Entry, Lease } from './terminal-interface-contracts'
 
+type InspectionSample = {
+  result: TerminalProcessInspection | null
+  dispatchedAt: number
+}
+
 type InspectionSuccessor = {
-  promise: Promise<TerminalProcessInspection | null>
-  run: () => Promise<TerminalProcessInspection | null>
-  resolve: (result: TerminalProcessInspection | null) => void
+  promise: Promise<InspectionSample | null>
+  run: () => Promise<InspectionSample | null>
+  resolve: (result: InspectionSample | null) => void
 }
 type InspectionEntry = {
-  running: Promise<TerminalProcessInspection | null>
+  running: Promise<InspectionSample | null>
   next?: InspectionSuccessor
 }
 
@@ -69,15 +74,16 @@ export class TerminalInterfaceProbe {
     lease: Lease,
     binding: TerminalInterfaceBinding,
     steadyState: boolean
-  ): Promise<TerminalProcessInspection | null> {
+  ): Promise<InspectionSample | null> {
     const key = JSON.stringify([binding.ptyId, binding.incarnationId])
-    const run = async (): Promise<TerminalProcessInspection | null> => {
+    const run = async (): Promise<InspectionSample | null> => {
       if (lease.controller.signal.aborted) {
         return null
       }
       this.running += 1
       try {
-        return await lease.driver.inspect(binding, steadyState)
+        const dispatchedAt = performance.now()
+        return { result: await lease.driver.inspect(binding, steadyState), dispatchedAt }
       } finally {
         this.running -= 1
       }
@@ -86,7 +92,7 @@ export class TerminalInterfaceProbe {
     if (existing) {
       if (!existing.next) {
         existing.next = {
-          ...Promise.withResolvers<TerminalProcessInspection | null>(),
+          ...Promise.withResolvers<InspectionSample | null>(),
           run
         }
       }

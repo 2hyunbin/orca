@@ -1,4 +1,22 @@
 // @vitest-environment happy-dom
+import {
+  LEFT,
+  RIGHT,
+  ownershipFixture as mocks,
+  makeFixture,
+  useFixture,
+  terminalChatProcessRows
+} from './terminal-chat-ownership.test-fixture'
+import { TerminalInterfaceAuthority } from '../../../../main/agent-hooks/server/terminal-interface-authority'
+import { inspectPosixTerminalInterface } from '../../../../main/providers/terminal-interface-process-evidence'
+import { resolveRemoteForegroundEvidence } from '../../../../main/providers/agent-foreground-process'
+import {
+  updateNativeChatComposerDraft,
+  readNativeChatComposerDraft,
+  clearNativeChatComposerDraftsForTests
+} from '../native-chat/native-chat-composer-draft-store'
+import type { TerminalProcessInspection } from '../../../../shared/terminal-process-inspection'
+import type { TerminalInterfaceBinding } from '../../../../shared/terminal-interface-observation'
 import { useNativeChatToggleShortcut } from '../native-chat/use-native-chat-toggle-shortcut'
 import type { TerminalInterfaceObservation } from '../../../../shared/terminal-interface-observation'
 import {
@@ -7,216 +25,16 @@ import {
 } from '../native-chat/terminal-interface-presentation'
 import { notifyPaneStartupStateChanged } from '@/lib/pane-spawn-deferral-registry'
 import { selectTabBarAgentProjections } from '../tab-bar/tab-agent-types-by-tab-id'
-import { act, cleanup, renderHook } from '@testing-library/react'
-import { useState } from 'react'
-import type { AppState } from '@/store/types'
-import type { Tab } from '../../../../shared/tab-types'
+import { act, renderHook } from '@testing-library/react'
 import type { ConnectPanePtySession } from './pty-connection/connect-pane-pty-session'
 import { installInterruptInputIntent } from './pty-connection/interrupt-input-intent'
 import { createPane } from './pty-connection-test-pane-fixtures'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
-import { useTerminalPaneChatState } from './use-terminal-pane-chat-state'
-import { useTerminalPaneLayoutPersistence } from './use-terminal-pane-layout-persistence'
-import { useTerminalPaneProjection } from './use-terminal-pane-projection'
+import { describe, expect, it, vi } from 'vitest'
 import { createPaneForegroundAgentTracker } from './pane-foreground-agent-tracker'
 import { detachTerminalLayoutLeaf } from './terminal-layout-leaf-detach'
 import { parseWorkspaceSession } from '../../../../shared/workspace-session-schema'
-import type { RemotePaneLayoutPusher } from './remote-pane-layout-push'
 import { useAppStore } from '../../store'
-import type { PaneForegroundAgentEntry } from '../../store/slices/pane-foreground-agent'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
-
-const LEFT = '11111111-1111-4111-8111-111111111111'
-const RIGHT = '22222222-2222-4222-8222-222222222222'
-type ViewMode = NonNullable<Tab['viewMode']>
-const mocks = vi.hoisted(() => {
-  const layouts: Record<string, TerminalLayoutSnapshot> = {}
-  const foreground: Record<string, PaneForegroundAgentEntry> = {}
-  const tab: Tab = {
-    id: 'tab',
-    entityId: 'tab',
-    groupId: 'group',
-    worktreeId: 'wt',
-    contentType: 'terminal',
-    label: 'Terminal',
-    customLabel: null,
-    color: null,
-    sortOrder: 0,
-    createdAt: 0,
-    viewMode: 'chat'
-  }
-  const state = {
-    terminalLayoutsByTabId: layouts,
-    unifiedTabsByWorktree: { wt: [tab] },
-    tabsByWorktree: {},
-    settings: { experimentalNativeChat: true },
-    pendingPaneAccountRestarts: [],
-    runtimePaneTitlesByTabId: { tab: { 1: 'codex', 2: 'codex' } },
-    agentStatusByPaneKey: {},
-    paneForegroundAgentByPaneKey: foreground,
-    setTabLayout: (_id: string, layout: TerminalLayoutSnapshot) => {
-      layouts.tab = layout
-    },
-    setTabViewMode: (_id: string, mode: ViewMode) => {
-      state.unifiedTabsByWorktree = { wt: [{ ...tab, viewMode: mode }] }
-    },
-    toggleTabViewMode: (id: string): void => {
-      state.setTabViewMode(
-        id,
-        state.unifiedTabsByWorktree.wt[0].viewMode === 'chat' ? 'terminal' : 'chat'
-      )
-    }
-  }
-  return { state }
-})
-vi.mock('../../store', async () => {
-  const { create } = await import('zustand')
-  const { createAgentStatusSlice } = await import('@/store/slices/agent-status')
-  const { createTerminalTabPresentationActions } =
-    await import('@/store/terminals/terminal-tab-presentation')
-  const { terminalLayoutEqual } = await import('../../../../shared/terminal-layout-equality')
-  mocks.state.setTabLayout = (id, layout) => {
-    if (terminalLayoutEqual(mocks.state.terminalLayoutsByTabId[id], layout)) {
-      return
-    }
-    mocks.state.terminalLayoutsByTabId = { ...mocks.state.terminalLayoutsByTabId, [id]: layout }
-    useAppStore.setState({ terminalLayoutsByTabId: mocks.state.terminalLayoutsByTabId })
-  }
-  mocks.state.setTabViewMode = (_id, mode) => {
-    mocks.state.unifiedTabsByWorktree = {
-      wt: [{ ...mocks.state.unifiedTabsByWorktree.wt[0], viewMode: mode }]
-    }
-    useAppStore.setState({ unifiedTabsByWorktree: mocks.state.unifiedTabsByWorktree })
-  }
-  const useAppStore = create<AppState>()((...args) => {
-    const state = {
-      ...mocks.state,
-      ...createAgentStatusSlice(...args),
-      ...createTerminalTabPresentationActions(args[0], args[1]),
-      acknowledgedAgentsByPaneKey: {},
-      activityClearedAtByPaneKey: {},
-      manuallyUnreadTurnsByPaneKey: {},
-      sortEpoch: 0,
-      workspaceSessionReady: true,
-      repos: [],
-      worktreesByRepo: {},
-      setPaneForegroundAgent: (key: string, entry: PaneForegroundAgentEntry) =>
-        args[0]((state) => ({
-          paneForegroundAgentByPaneKey: { ...state.paneForegroundAgentByPaneKey, [key]: entry }
-        }))
-    }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: supplies the real status slice and every external field read by these mounted hooks; unrelated app services are inert.
-    return state as unknown as AppState
-  })
-  return { useAppStore }
-})
-vi.mock('@/runtime/web-runtime-terminal-buffer-actions', () => ({
-  clearWebRuntimeTerminalBuffer: vi.fn()
-}))
-
-function makeFixture(paneIds = [1, 2], remotePusher?: RemotePaneLayoutPusher) {
-  const container = document.createElement('div')
-  const split = document.createElement('div')
-  split.className = 'pane-split'
-  container.append(split)
-  const panes = [LEFT, RIGHT].map((leafId, index) => {
-    const element = document.createElement('div')
-    element.className = 'pane'
-    element.dataset.paneId = String(paneIds[index])
-    element.dataset.leafId = leafId
-    split.append(element)
-    return { id: paneIds[index], leafId, container: element }
-  })
-  const manager = {
-    getPanes: () => panes,
-    getActivePane: () => panes[0],
-    getLeafIdMap: () => new Map(panes.map((pane) => [pane.id, pane.leafId]))
-  }
-  return {
-    managerRef: { current: manager },
-    containerRef: { current: container },
-    nativeChatTranscriptIsLocalReadable: true,
-    onAgentExitedRef: { current: vi.fn() },
-    paneCount: 2,
-    tabId: 'tab',
-    worktreeId: 'wt',
-    tabWideAgentHintLeafId: null,
-    setTabWideAgentHintLeafId: vi.fn(),
-    clearedScrollbackLeafIdsRef: { current: new Set<string>() },
-    expandedPaneIdRef: { current: null },
-    paneTitles: {},
-    paneTitlesRef: { current: {} },
-    paneTransportsRef: { current: new Map() },
-    remotePaneLayoutPusherRef: { current: remotePusher ?? null },
-    removedTitleLeafIdsRef: { current: new Set<string>() },
-    setPaneTitles: vi.fn()
-  }
-}
-function useFixture(fixture: ReturnType<typeof makeFixture>, initialOwner: string | null) {
-  const [chatLeafId, setChatLeafId] = useState(initialOwner)
-  const input = { ...fixture, chatLeafId, setChatLeafId }
-  const chat = useTerminalPaneChatState(
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture supplies every field read by the chat hook.
-    input as unknown as Parameters<typeof useTerminalPaneChatState>[0]
-  )
-  const layoutInput = { ...input, ...chat, setTabLayout: mocks.state.setTabLayout }
-  const layout = useTerminalPaneLayoutPersistence(
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture supplies every field read by the persistence hook.
-    layoutInput as unknown as Parameters<typeof useTerminalPaneLayoutPersistence>[0]
-  )
-  const projectionInput = {
-    ...layoutInput,
-    contextMenu: { open: false, menuPaneId: null },
-    contextMenuLeafId: RIGHT,
-    getContextMenuLeafId: () => RIGHT,
-    settings: null,
-    isActive: true,
-    isVisible: true,
-    shouldMeasureHiddenStartup: false,
-    sshReconnectOwnsTerminalErrors: false,
-    systemPrefersDark: true,
-    terminalError: null,
-    terminalErrorsByPaneId: {},
-    setTerminalError: vi.fn(),
-    setTerminalErrorsByPaneId: vi.fn()
-  }
-  const projection = useTerminalPaneProjection(
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: supplies all fields read by the actual projection; unrelated controller actions are inert.
-    projectionInput as unknown as Parameters<typeof useTerminalPaneProjection>[0]
-  )
-  return { ...chat, ...layout, ...projection, chatLeafId, setChatLeafId }
-}
-
-beforeEach(() => {
-  useAppStore.setState({
-    paneForegroundAgentByPaneKey: {},
-    terminalInterfaceByPtyId: {},
-    agentLaunchConfigByPaneKey: {},
-    agentStatusByPaneKey: {},
-    suppressedPtyExitIds: {},
-    pendingStartupByTabId: {},
-    automaticAgentResumeClaimsByTabId: {}
-  })
-  mocks.state.settings.experimentalNativeChat = true
-  mocks.state.runtimePaneTitlesByTabId.tab = { 1: 'codex', 2: 'codex' }
-  mocks.state.setTabViewMode('tab', 'chat')
-  mocks.state.setTabLayout('tab', {
-    root: {
-      type: 'split',
-      direction: 'vertical',
-      first: { type: 'leaf', leafId: LEFT },
-      second: { type: 'leaf', leafId: RIGHT }
-    },
-    activeLeafId: LEFT,
-    expandedLeafId: null,
-    chatLeafId: RIGHT
-  })
-})
-afterEach(() => {
-  cleanup()
-  vi.useRealTimers()
-})
 
 describe('terminal chat ownership lifecycle', () => {
   it('releases suspended chat, rejects a shell sibling, and restores eligibility after fg', () => {
@@ -776,3 +594,204 @@ it.each([false, true])(
     }
   }
 )
+
+it('joins qualified producer recovery through queued successors to manual Chat and keeps stale or unknown proof refused', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] })
+  const fixture = makeFixture()
+  const paneKey = makePaneKey('tab', RIGHT)
+  mocks.state.setTabLayout('tab', {
+    ...mocks.state.terminalLayoutsByTabId.tab,
+    ptyIdsByLeafId: { [RIGHT]: 'pty' }
+  })
+  const settings = useAppStore.getState().settings
+  useAppStore.setState({
+    paneForegroundAgentByPaneKey: Object.fromEntries(
+      [LEFT, RIGHT].map((leaf) => [
+        makePaneKey('tab', leaf),
+        { agent: null, shellForeground: true }
+      ])
+    )
+  })
+  const draftScope = `pane:${paneKey}`
+  updateNativeChatComposerDraft(draftScope, { text: 'Keep this unsent' }, 'deferred')
+  const draft = readNativeChatComposerDraft(draftScope)
+  let generation = 1
+  let handle = 'handle'
+  let foreground: 'agent' | 'shell' | 'unknown' = 'unknown'
+  let capturedAgeMs = 0
+  let tailMs = 0
+  let pending: Promise<TerminalProcessInspection | null> | null = null
+  let pendingStarted = false
+  const binding = () => ({
+    ptyId: 'pty',
+    incarnationId: 'birth',
+    terminalHandle: handle,
+    paneKey,
+    worktreeId: 'wt'
+  })
+  const authority = new TerminalInterfaceAuthority()
+  let observationEpoch = 0
+  const produced = vi.fn<(result: TerminalProcessInspection) => void>()
+  const inspect = vi.fn(async (_binding: TerminalInterfaceBinding) => {
+    if (pending) {
+      pendingStarted = true
+      return await pending
+    }
+    const rows = terminalChatProcessRows(foreground)
+    const evidence = resolveRemoteForegroundEvidence(
+      { rootPid: 100, fallbackProcess: null },
+      {
+        ptyId: 'pty',
+        ptyIncarnationId: 'birth',
+        authorityGeneration: 'producer',
+        observationEpoch: ++observationEpoch,
+        capturedAgeMs,
+        platform: 'darwin'
+      },
+      rows
+    )
+    const terminalInterface = await inspectPosixTerminalInterface(100, '/bin/zsh', false, {
+      rows,
+      capturedAgeMs
+    })
+    if (tailMs) {
+      await new Promise<void>((resolve) => setTimeout(resolve, tailMs))
+    }
+    const result = {
+      foregroundProcess: evidence.verdict === 'live' ? evidence.processName : null,
+      hasChildProcesses: terminalInterface.children !== 'no-children',
+      foregroundProcessEvidence: evidence,
+      terminalInterface
+    }
+    produced(result)
+    return result
+  })
+  const events: ReturnType<typeof authority.snapshotEvent>[] = []
+  const publish = () => {
+    const event = authority.snapshotEvent()
+    events.push(event)
+    applyTerminalInterfaceSnapshot(event, null)
+  }
+  const release = registerTerminalInterfacePresentation(paneKey, {
+    ptyId: () => 'pty',
+    incarnation: () => 'birth',
+    pending: () => false,
+    cold: () => false
+  })
+  mocks.state.setTabViewMode('tab', 'terminal')
+  const hook = renderHook(() => useFixture(fixture, null))
+  const advance = async (ms: number) => {
+    await act(async () => vi.advanceTimersByTimeAsync(ms))
+  }
+  try {
+    authority.install({
+      inventory: () => [
+        { binding: binding(), generation, launchToken: null, blocked: false, local: true }
+      ],
+      inspect,
+      changed: publish
+    })
+    await advance(250)
+    expect(authority.snapshot()).toEqual([])
+    expect(hook.result.current.canToggleChatForLeaf(RIGHT)).toBe(false)
+    expect(hook.result.current.chatLeafId).toBeNull()
+    foreground = 'agent'
+    authority.input('pty', 'driving')
+    await advance(250)
+    expect(hook.result.current.canToggleChatForLeaf(RIGHT)).toBe(true)
+    act(() => hook.result.current.toggleNativeChatForLeaf(RIGHT))
+    expect(authority.read('pty', 'birth')).toMatchObject({ state: 'agent', basis: 'process' })
+    expect(hook.result.current.chatLeafId).toBe(RIGHT)
+    foreground = 'shell' // The stopped child stays alive; the producer qualifies shell foreground.
+    authority.input('pty', 'driving')
+    await advance(2250)
+    const suspended = events.at(-1)!
+    expect(authority.read('pty', 'birth')?.state).toBe('shell')
+    expect(hook.result.current.chatLeafId).toBeNull()
+    expect(hook.result.current.canToggleChatForLeaf(RIGHT)).toBe(false)
+    act(() => hook.result.current.toggleNativeChatForLeaf(RIGHT))
+    expect(mocks.state.unifiedTabsByWorktree.wt[0].viewMode).toBe('terminal')
+
+    foreground = 'unknown'
+    authority.input('pty', 'driving')
+    await advance(3250)
+    expect(events.at(-1)).toEqual(suspended)
+    expect(produced.mock.lastCall?.[0].terminalInterface?.children).toBe('unverifiable')
+    expect(hook.result.current.canToggleChatForLeaf(RIGHT)).toBe(false)
+
+    foreground = 'agent'
+    capturedAgeMs = 600
+    authority.input('pty', 'driving')
+    await advance(250) // Age is below the limit, but this cached capture precedes the input.
+    expect(produced.mock.lastCall?.[0].terminalInterface?.capturedAgeMs).toBe(600)
+    expect(authority.read('pty', 'birth')?.state).toBe('shell')
+    capturedAgeMs = 800
+    tailMs = 610 // Source age plus post-stamp delay is stale, even though max(800,610) is not.
+    authority.input('pty', 'driving')
+    await advance(1000)
+    expect(produced.mock.lastCall?.[0].terminalInterface?.capturedAgeMs).toBe(800)
+    expect(authority.read('pty', 'birth')?.state).toBe('shell')
+    expect(hook.result.current.canToggleChatForLeaf(RIGHT)).toBe(false)
+    capturedAgeMs = 0
+    tailMs = 500
+    authority.input('pty', 'driving')
+    await advance(250)
+    authority.input('pty', 'driving') // Original request currentness survives the new envelope.
+    await advance(500)
+    expect(authority.read('pty', 'birth')?.state).toBe('shell')
+
+    const orphan = Promise.withResolvers<TerminalProcessInspection | null>()
+    pending = orphan.promise
+    tailMs = 0
+    authority.input('pty', 'driving')
+    await advance(2000) // Let the prior input-fenced read finish and the owned slow run time out.
+    expect(pendingStarted).toBe(true)
+    const before = inspect.mock.calls.length
+    await advance(250) // A timed-out waiter does not end its actual provider work.
+    expect(inspect).toHaveBeenCalledTimes(before)
+    generation += 1
+    handle = 'superseded-successor'
+    act(() => {
+      authority.snapshotEvent()
+    })
+    await advance(250)
+    generation += 1
+    handle = 'current-successor'
+    const latestRequestedAt = performance.now()
+    act(() => {
+      authority.snapshotEvent()
+    })
+    await advance(250)
+    await advance(1000)
+    expect(inspect).toHaveBeenCalledTimes(before)
+    pending = null
+    capturedAgeMs = 100 // Cached sample; dispatch-age must not discard its pre-request age.
+    await act(async () => {
+      orphan.resolve(null)
+      await Promise.resolve()
+    })
+    expect(inspect).toHaveBeenCalledTimes(before + 1)
+    expect(performance.now() - (latestRequestedAt + 250) + 100).toBeGreaterThan(1000)
+    expect(inspect.mock.calls.at(-1)?.[0].terminalHandle).toBe('current-successor')
+    expect(authority.read('pty', 'birth')).toMatchObject({
+      state: 'agent',
+      terminalHandle: 'current-successor'
+    })
+    expect(hook.result.current.canToggleChatForLeaf(RIGHT)).toBe(true)
+    expect(hook.result.current.chatLeafId).toBeNull() // No automatic reselect after fg.
+    act(() => hook.result.current.toggleNativeChatForLeaf(RIGHT))
+    expect(hook.result.current.chatLeafId).toBe(RIGHT)
+    expect(mocks.state.unifiedTabsByWorktree.wt[0].viewMode).toBe('chat')
+    act(() => applyTerminalInterfaceSnapshot(suspended, null))
+    await advance(250)
+    expect(hook.result.current.chatLeafId).toBe(RIGHT)
+    expect(mocks.state.unifiedTabsByWorktree.wt[0].viewMode).toBe('chat')
+    expect(useAppStore.getState().settings).toBe(settings)
+    expect(readNativeChatComposerDraft(draftScope)).toBe(draft)
+  } finally {
+    authority.stop()
+    release()
+    hook.unmount()
+    clearNativeChatComposerDraftsForTests()
+  }
+})

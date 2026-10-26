@@ -3,10 +3,7 @@ import { makePaneKey } from '../../../../../shared/stable-pane-id'
 import { useAppStore } from '@/store'
 import { safeFit } from '@/lib/pane-manager/pane-tree-ops'
 import { bindPanePtyId, getFitOverrideForPty } from '@/lib/pane-manager/mobile-fit-overrides'
-import {
-  confirmRuntimeTerminalForegroundProcess,
-  inspectRuntimeTerminalProcess
-} from '@/runtime/runtime-terminal-inspection'
+import { inspectRuntimeTerminalProcess } from '@/runtime/runtime-terminal-inspection'
 import { isFreshNonDoneAgentStatus } from '../../../../../shared/agent-status-types'
 import { isCtrlCKeyEvent, isPlainEscapeKeyEvent } from '../agent-interrupt-inference'
 import { createAgentCompletionCoordinator } from '../agent-completion-coordinator'
@@ -185,7 +182,6 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
     isRemotePtyId: isRemoteExecutionHostPtyId,
     getExpectedIncarnationId: () => session.remotePtyIncarnationId ?? null,
     inspectProcess: inspectRuntimeTerminalProcess,
-    confirmForegroundProcess: confirmRuntimeTerminalForegroundProcess,
     dispatchHookLifecycle: (payload) =>
       dispatchAgentHookTerminalLifecycle(session.cacheKey, payload),
     titleTurnEndEvidence: (title, foregroundAgent) =>

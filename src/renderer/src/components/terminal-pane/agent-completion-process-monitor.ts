@@ -3,7 +3,6 @@ import {
   type InspectionPriority
 } from './agent-process-inspection-queue'
 import type { RecognizedAgentProcess } from '../../../../shared/agent-process-recognition'
-import { isClientOnlyUnverifiableInspection } from '../../../../shared/terminal-process-inspection'
 import type { ProcessMonitorOptions } from './agent-completion-process-types'
 import { createAgentCompletionPollScheduler } from './agent-completion-poll-scheduler'
 import { isObservationOwnerSuperseded } from './pane-foreground-agent-tracker-contract'
@@ -120,22 +119,9 @@ export function createAgentCompletionProcessMonitor({
               ? { steadyState: true }
               : {})
           }
-          let result = await (Object.keys(inspectOptions).length > 0
+          const result = await (Object.keys(inspectOptions).length > 0
             ? options.inspectProcess(ptyId, inspectOptions)
             : options.inspectProcess(ptyId))
-          if (
-            options.isRemotePtyId?.(ptyId) !== true &&
-            !isClientOnlyUnverifiableInspection(result) &&
-            state.lastForegroundAgent &&
-            result.foregroundProcess === null &&
-            result.foregroundProcessEvidence?.verdict === 'live' &&
-            result.foregroundProcessEvidence.processName === null
-          ) {
-            const confirmed = await options.confirmForegroundProcess?.(ptyId).catch(() => null)
-            if (confirmed != null) {
-              result = { ...result, foregroundProcess: confirmed }
-            }
-          }
           if (
             !state.disposed &&
             generationAtRequest === state.inspectionGeneration &&
