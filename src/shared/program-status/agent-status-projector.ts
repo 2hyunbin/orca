@@ -3,6 +3,7 @@ import type { AgentStatusState, ParsedAgentStatusPayload } from '../agent-status
 import type { AgentSubagentSnapshot, AgentSubagentState } from '../agent-status-subagent-snapshot'
 import { AGENT_SUBAGENT_ID_MAX_LENGTH } from '../agent-status-subagent-snapshot'
 import type { AgentTurnOutcome } from '../agent-turn-outcome'
+import { foldMainAgentWithRowChildWork } from '../agent-hook-row-child-work-fold'
 import { createProgramStatusOscScanner } from './osc-scanner'
 import {
   programStatusDisplayText,
@@ -182,8 +183,10 @@ export function createProgramStatusProjector(now: () => number = Date.now): Prog
     const agentType = agentTypeForProgramStatusApp(root?.app)
     const msg = programStatusDisplayText(root?.msg)
     const subagents = snapshotChildren()
+    // Why: async children outlive the root's done (pi-subagents); the row stays live while mainAgent keeps the lead's verdict.
+    const row = foldMainAgentWithRowChildWork(projection.state, { payload: { subagents } })
     const payload: ParsedAgentStatusPayload = {
-      state: projection.state,
+      state: row.stateName,
       prompt: '',
       ...(agentType ? { agentType } : {}),
       // Live work names what it is doing or waiting on; a finished turn names its result.

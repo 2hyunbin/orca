@@ -120,6 +120,24 @@ describe('createProgramStatusProjector', () => {
     expect(cleared.subagents).toBeUndefined()
   })
 
+  it("keeps the row working while a child outlives the root's done, then settles to the lead's verdict", () => {
+    const { feed } = projector()
+    feed(osc('state=working:app=pi') + osc('state=working:id=subagents/run1:app=pi-subagents'))
+    expect(feed(osc('state=done:app=pi'))).toMatchObject([
+      {
+        state: 'working',
+        mainAgent: { state: 'done', outcome: 'success' },
+        subagents: [{ id: 'subagents/run1', state: 'working' }]
+      }
+    ])
+    const [settled] = feed(osc('state=done:id=subagents/run1:app=pi-subagents'))
+    expect(settled).toMatchObject({
+      state: 'done',
+      mainAgent: { state: 'done', outcome: 'success' }
+    })
+    expect(settled.subagents).toBeUndefined()
+  })
+
   it('reads a clear during live work as the program leaving, not a cancelled turn', () => {
     const { feed } = projector()
     feed(osc('state=working:app=claude-code'))
