@@ -37,7 +37,11 @@ describe('cloud database', () => {
   it('adds a column on SQLite only while it is missing, so every boot can repeat it', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'orca-cloud-database-'))
     dirs.push(dataDir)
-    const schema = [...SCHEMA, 'ALTER TABLE items ADD COLUMN IF NOT EXISTS note TEXT']
+    const schema = [
+      ...SCHEMA,
+      'ALTER TABLE items ADD COLUMN IF NOT EXISTS note TEXT',
+      'ALTER TABLE "items" ADD COLUMN IF NOT EXISTS "Extra" TEXT'
+    ]
     for (let boot = 0; boot < 2; boot++) {
       const database = await openCloudDatabase({ service: 'sample', schemaStatements: schema, dataDir })
       await database.query('INSERT INTO items (id, value, note) VALUES (?, ?, ?)', [`${boot}`, 1, 'n'])

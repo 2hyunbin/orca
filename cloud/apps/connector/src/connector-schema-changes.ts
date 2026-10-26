@@ -15,9 +15,9 @@ ALTER TABLE connector_slack_installs ADD COLUMN IF NOT EXISTS app_id TEXT;
 CREATE INDEX IF NOT EXISTS connector_slack_installs_app ON connector_slack_installs(app_id);
 
 -- Channel order is per workspace: the same channel id in another workspace is another channel.
+-- The shipped connector_posts_container stays: the shipped list recreates it on every boot.
 CREATE INDEX IF NOT EXISTS connector_posts_channel_head
   ON connector_posts(source, workspace_id, container_id, state, queued_at);
-DROP INDEX IF EXISTS connector_posts_container;
 `
 
 export function connectorSchemaChanges(): string[] {

@@ -244,10 +244,11 @@ async function applySchema(database: CloudDatabase, statements: string[]): Promi
       await database.query(statement)
       continue
     }
-    const [present] = await database.query('SELECT 1 FROM pragma_table_info(?) WHERE name = ?', [
-      target.table,
-      target.name
-    ])
+    // SQLite names: quotes stripped, compared without case.
+    const [present] = await database.query(
+      'SELECT 1 FROM pragma_table_info(?) WHERE lower(name) = lower(?)',
+      [target.table.replace(/^"|"$/g, ''), target.name.replace(/^"|"$/g, '')]
+    )
     if (!present) {
       await database.query(statement.replace(/\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\b/i, 'ADD COLUMN'))
     }
