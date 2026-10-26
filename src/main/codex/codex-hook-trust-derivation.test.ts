@@ -260,27 +260,18 @@ describe('deriveCodexHookHashes', () => {
     expect(await probeCodexVersion('/bin/codex')).toBeNull()
   })
 
-  it.each([false, true])(
-    'isolates version probes and preserves results when cleanup fails: %s',
-    async (fails) => {
-      let versionHome = ''
-      mocks.runProcess.mockImplementation(async (spec: { env: Record<string, string> }) => {
-        versionHome = spec.env.CODEX_HOME!
-        expect(existsSync(versionHome)).toBe(true)
-        return { code: 0, stdout: 'codex-cli 0.150.1\n', stderr: '', timedOut: false }
-      })
+  it('gives `codex --version` a throwaway CODEX_HOME of its own', async () => {
+    let versionHome = ''
+    mocks.runProcess.mockImplementation(async (spec: { env: Record<string, string> }) => {
+      versionHome = spec.env.CODEX_HOME!
+      expect(existsSync(versionHome)).toBe(true)
+      return { code: 0, stdout: 'codex-cli 0.150.1\n', stderr: '', timedOut: false }
+    })
 
-      if (fails) {
-        vi.mocked(rm).mockRejectedValueOnce(new Error('cleanup I/O failure'))
-      }
-      try {
-        expect(await probeCodexVersion('/bin/codex')).toBe('codex-cli 0.150.1')
-        expect(existsSync(versionHome)).toBe(fails)
-      } finally {
-        rmSync(versionHome, { recursive: true, force: true })
-      }
-    }
-  )
+    expect(await probeCodexVersion('/bin/codex')).toBe('codex-cli 0.150.1')
+    expect(existsSync(versionHome)).toBe(false)
+    expect(rm).toHaveBeenLastCalledWith(versionHome, { recursive: true, force: true })
+  })
 })
 
 describe('readCodexHookHashes', () => {
