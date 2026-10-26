@@ -2,12 +2,12 @@
 import {
   CONNECTOR_CLIENT_LIMITS,
   CONNECTOR_CONTRACT_VERSION,
+  CONNECTOR_FEATURES,
   type ConnectorProject
 } from '../../shared/connector-cloud-contract'
 import type { ConnectorMachine } from './connector-machine'
 import { jsonBytes } from './connector-snapshot'
 
-const FEATURES = ['answer', 'cancel', 'reply']
 const PROMPT_KINDS = ['approval', 'question']
 
 export type ConnectorHelloSaid = { agents: string[]; projects: ConnectorProject[] }
@@ -26,7 +26,8 @@ export function connectorHello(
     hostName: machine.hostName,
     agents: said.agents,
     promptKinds: PROMPT_KINDS,
-    features: FEATURES
+    // Every feature, turnCancel included: a cancel naming another turn is refused (turn_not_running).
+    features: CONNECTOR_FEATURES
   }
   let bytes = jsonBytes({ ...envelope, projects: [] })
   let count = 0
