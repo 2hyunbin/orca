@@ -29,9 +29,8 @@ function SheetOverlay({
   return (
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
-      // Match DialogOverlay’s scrim/blur so it remains visible over the dark canvas.
       className={cn(
-        'fixed inset-0 z-50 bg-black/60 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0',
+        'fixed inset-0 z-50 bg-black/55 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0',
         className
       )}
       // Disable native dragging: the titlebar hit-test ignores z-index and would drag the window instead of activating sheet controls.
