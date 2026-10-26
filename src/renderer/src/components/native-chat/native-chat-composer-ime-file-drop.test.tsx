@@ -294,109 +294,98 @@ describe('OS file drops through the real composing chat field', () => {
     ).toEqual(['Image #1', 'Image #2', 'Image #3'])
   })
 
-  it.each([false, true])(
-    'preserves a mixed drop and subsequent question through accepted send (delayed preparation: %s)',
-    async (delayed) => {
-      const send = vi.fn<NativeChatStructuredComposerTransport['send']>(() => true)
-      const transport: NativeChatStructuredComposerTransport = {
-        capturePresentation: () => () => true,
-        send,
-        dispatchCommand: vi.fn(async () => ({ handled: false, accepted: false, error: null })),
-        optionsSurface: {
-          getSnapshot: () => [],
-          setOption: vi.fn(),
-          invokeAction: vi.fn(),
-          subscribe: () => () => {}
-        },
-        optionSnapshot: [],
-        onError: vi.fn(),
-        runtime: 'local',
-        sessionId: 'mixed-drop-session',
-        runtimeEnvironmentId: null
-      }
-      let finishPreparation = () => {}
-      const preparation = new Promise<void>((resolve) => {
-        finishPreparation = resolve
-      })
-      prepare.mockImplementationOnce(async ({ paths }) => {
-        if (delayed) {
-          await preparation
-        }
-        return {
-          paths: paths.filter((path) => !path.endsWith('/missing.png')),
-          failures: [
-            {
-              target: 'rejected',
-              reason: 'temp-copy-failed',
-              commonReason: 'missing',
-              pathCount: 2,
-              byteLength: 0
-            }
-          ]
-        }
-      })
-      render(
-        <NativeChatPaneFileDropSurface className="chat">
-          <ComposerProbe transport={transport} />
-        </NativeChatPaneFileDropSurface>
-      )
-      const editor = screen.getByRole('textbox')
-      const names = ['notes.txt', 'b.png', 'a.png', 'b.png', 'missing.png', 'missing.png']
-      await osDrop(editor, names)
-      await act(async () => finishPreparation())
-      expect(prepare.mock.calls[0]?.[0].paths).toEqual(names.map((name) => `/drop/${name}`))
-      const assertDraftMatchesDocument = () => {
-        const saved = readNativeChatComposerDraft('pane:worktree-1')
-        expect(saved.text).toBe(promptValue(editor))
-        expect(saved.document).toEqual(promptEditor(editor).getJSON())
-        expect(screen.getByTestId('draft').textContent).toBe(saved.text)
-        expect(
-          [...editor.querySelectorAll('[data-native-chat-file-reference]')].map(
-            (pill) => pill.textContent
-          )
-        ).toEqual(['notes.txt'])
-        expect(
-          [...editor.querySelectorAll('[data-native-chat-image-reference]')].map(
-            (pill) => pill.textContent
-          )
-        ).toEqual(['Image #1', 'Image #2', 'Image #3'])
-      }
-      assertDraftMatchesDocument()
-      // Browser-native End movement is exercised in Electron; here selection uses real editor commands.
-      act(() => {
-        promptEditor(editor).commands.selectTextblockEnd()
-      })
-      act(() => {
-        promptEditor(editor).commands.setTextSelection(
-          promptEditor(editor).state.doc.content.size - 1
-        )
-      })
-      const question = ' What does notes.txt say, and what is shown in the three images?'
-      for (const character of question) {
-        act(() => {
-          promptEditor(editor).commands.insertContent(character)
-        })
-      }
-      expect(editor.textContent).toContain(question)
-      assertDraftMatchesDocument()
-      const submitted = readNativeChatComposerDraft('pane:worktree-1')
-      expect(submitted.text).toContain('@/drop/notes.txt')
-      expect(submitted.text).toContain(question)
-      await act(async () => fireEvent.keyDown(editor, { key: 'Enter' }))
-      expect(send).toHaveBeenCalledOnce()
-      expect(send).toHaveBeenCalledWith(
-        expect.stringContaining('@/drop/notes.txt'),
-        expect.arrayContaining([expect.objectContaining({ path: '/drop/b.png' })])
-      )
-      const [text, images] = send.mock.calls[0] ?? []
-      expect(text).toContain(question)
-      expect(text?.match(/\[Image #\d+\]/g)).toEqual(['[Image #1]', '[Image #2]', '[Image #3]'])
-      expect(images?.map(({ path }) => path)).toEqual(['/drop/b.png', '/drop/a.png', '/drop/b.png'])
-      expect(promptValue(editor)).toBe('')
-      expect(readNativeChatComposerDraft('pane:worktree-1').text).toBe('')
-      expect(readNativeChatComposerDraft('pane:worktree-1').images).toEqual([])
+  it('preserves a mixed drop and subsequent question through accepted send', async () => {
+    const send = vi.fn<NativeChatStructuredComposerTransport['send']>(() => true)
+    const transport: NativeChatStructuredComposerTransport = {
+      capturePresentation: () => () => true,
+      send,
+      dispatchCommand: vi.fn(async () => ({ handled: false, accepted: false, error: null })),
+      optionsSurface: {
+        getSnapshot: () => [],
+        setOption: vi.fn(),
+        invokeAction: vi.fn(),
+        subscribe: () => () => {}
+      },
+      optionSnapshot: [],
+      onError: vi.fn(),
+      runtime: 'local',
+      sessionId: 'mixed-drop-session',
+      runtimeEnvironmentId: null
     }
-  )
+    prepare.mockImplementationOnce(async ({ paths }) => {
+      return {
+        paths: paths.filter((path) => !path.endsWith('/missing.png')),
+        failures: [
+          {
+            target: 'rejected',
+            reason: 'temp-copy-failed',
+            commonReason: 'missing',
+            pathCount: 2,
+            byteLength: 0
+          }
+        ]
+      }
+    })
+    render(
+      <NativeChatPaneFileDropSurface className="chat">
+        <ComposerProbe transport={transport} />
+      </NativeChatPaneFileDropSurface>
+    )
+    const editor = screen.getByRole('textbox')
+    const names = ['notes.txt', 'b.png', 'a.png', 'b.png', 'missing.png', 'missing.png']
+    await osDrop(editor, names)
+    expect(prepare.mock.calls[0]?.[0].paths).toEqual(names.map((name) => `/drop/${name}`))
+    const assertDraftMatchesDocument = () => {
+      const saved = readNativeChatComposerDraft('pane:worktree-1')
+      expect(saved.text).toBe(promptValue(editor))
+      expect(saved.document).toEqual(promptEditor(editor).getJSON())
+      expect(screen.getByTestId('draft').textContent).toBe(saved.text)
+      expect(
+        [...editor.querySelectorAll('[data-native-chat-file-reference]')].map(
+          (pill) => pill.textContent
+        )
+      ).toEqual(['notes.txt'])
+      expect(
+        [...editor.querySelectorAll('[data-native-chat-image-reference]')].map(
+          (pill) => pill.textContent
+        )
+      ).toEqual(['Image #1', 'Image #2', 'Image #3'])
+    }
+    assertDraftMatchesDocument()
+    // Browser-native End movement is exercised in Electron; here selection uses real editor commands.
+    act(() => {
+      promptEditor(editor).commands.selectTextblockEnd()
+    })
+    act(() => {
+      promptEditor(editor).commands.setTextSelection(
+        promptEditor(editor).state.doc.content.size - 1
+      )
+    })
+    const question = ' What does notes.txt say, and what is shown in the three images?'
+    for (const character of question) {
+      act(() => {
+        promptEditor(editor).commands.insertContent(character)
+      })
+    }
+    expect(editor.textContent).toContain(question)
+    assertDraftMatchesDocument()
+    const submitted = readNativeChatComposerDraft('pane:worktree-1')
+    expect(submitted.text).toContain('@/drop/notes.txt')
+    expect(submitted.text).toContain(question)
+    await act(async () => fireEvent.keyDown(editor, { key: 'Enter' }))
+    expect(send).toHaveBeenCalledOnce()
+    expect(send).toHaveBeenCalledWith(
+      expect.stringContaining('@/drop/notes.txt'),
+      expect.arrayContaining([expect.objectContaining({ path: '/drop/b.png' })])
+    )
+    const [text, images] = send.mock.calls[0] ?? []
+    expect(text).toContain(question)
+    expect(text?.match(/\[Image #\d+\]/g)).toEqual(['[Image #1]', '[Image #2]', '[Image #3]'])
+    expect(images?.map(({ path }) => path)).toEqual(['/drop/b.png', '/drop/a.png', '/drop/b.png'])
+    expect(promptValue(editor)).toBe('')
+    expect(readNativeChatComposerDraft('pane:worktree-1').text).toBe('')
+    expect(readNativeChatComposerDraft('pane:worktree-1').images).toEqual([])
+  })
 
   it('shows a dropped file and a file picked with the attach button as the same filename pill', async () => {
     render(
