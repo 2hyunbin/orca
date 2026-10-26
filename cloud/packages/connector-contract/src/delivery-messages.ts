@@ -30,13 +30,7 @@ export const ConnectorDeliverySchema = z.discriminatedUnion('kind', [
     promptId: OpaqueIdSchema,
     optionId: OpaqueIdSchema
   }),
-  z.object({
-    ...DeliveryBase,
-    kind: z.literal('cancel'),
-    // The turn-started `at` it targets; the machine ignores a cancel whose turnId isn't the pane's
-    // current turn. Absent: whatever turn is running.
-    turnId: EpochMsSchema.optional()
-  })
+  z.object({ ...DeliveryBase, kind: z.literal('cancel') })
 ])
 
 const absent = z.never().optional()

@@ -66,7 +66,7 @@ export function chooseMachine(input: {
 
   const capable = input.hosts.flatMap((host) => {
     const agent = host.hello.agents.find((name) => CONNECTOR_AGENTS.some((known) => known === name))
-    return agent ? [{ ...host, agent }] : []
+    return agent && host.hello.sources.includes('slack') ? [{ ...host, agent }] : []
   })
   if (capable.length === 0) {
     return { kind: 'no_machine' }
