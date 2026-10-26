@@ -80,8 +80,25 @@ describe('ConnectorCloud', () => {
     expect(fake.requestsTo(CONNECTOR_PATHS.poll)).toHaveLength(2)
   })
 
+  it('stays stopped from sign-out until the next sign-in, even if connectors are toggled meanwhile', async () => {
+    const cloud = connectorCloud()
+    cloud.connect()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(fake.requestsTo(CONNECTOR_PATHS.hello)).toHaveLength(1)
+
+    // The old account is still readable while the sign-out request runs.
+    cloud.signingOut()
+    machine.toggle()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(fake.requestsTo(CONNECTOR_PATHS.hello)).toHaveLength(1)
+
+    cloud.accountChanged()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(fake.requestsTo(CONNECTOR_PATHS.hello)).toHaveLength(2)
+  })
+
   it('keeps pending turn ends for the same account, and drops them on a switch or sign-out', async () => {
-    writeFileSync(outbox, JSON.stringify([turnEnd]))
+    writeFileSync(outbox, JSON.stringify({ account: 'ada', turnEnds: [turnEnd] }))
     fake.forced.set(CONNECTOR_PATHS.events, { status: 503 })
     const cloud = connectorCloud()
     cloud.connect()
@@ -96,16 +113,16 @@ describe('ConnectorCloud', () => {
     await vi.advanceTimersByTimeAsync(10)
     expect(fake.minted.at(-1)?.account).toBe('grace')
 
-    writeFileSync(outbox, JSON.stringify([turnEnd]))
+    writeFileSync(outbox, JSON.stringify({ account: 'grace', turnEnds: [turnEnd] }))
     const restarted = connectorCloud()
     restarted.signingOut()
     expect(existsSync(outbox)).toBe(false)
   })
 
-  it('drops turn ends left by an account that signed out while Orca was closed', () => {
-    writeFileSync(outbox, JSON.stringify([turnEnd]))
-    account = null
+  it('never sends turn ends another account left before a relaunch', async () => {
+    writeFileSync(outbox, JSON.stringify({ account: 'grace', turnEnds: [turnEnd] }))
     connectorCloud().connect()
-    expect(existsSync(outbox)).toBe(false)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(fake.events).toEqual([{ kind: 'snapshot', conversations: [] }])
   })
 })

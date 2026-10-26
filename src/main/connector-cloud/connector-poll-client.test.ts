@@ -28,7 +28,7 @@ let userDataPath: string
 let fake: FakeConnectorCloud
 
 /** `events` stands for one process's outbox; a new one models a restart. */
-function startClient(seam = fakeSeam(), events = new ConnectorTurnEvents(userDataPath)) {
+function startClient(seam = fakeSeam(), events = new ConnectorTurnEvents(userDataPath, 'ada')) {
   const machine = fakeMachine(() => seam, [project!])
   const client = new ConnectorPollClient({
     transport: new ConnectorAccountTransport(fake.origin, fake.mintFor('ada'), fake.fetch),
@@ -262,7 +262,7 @@ describe('ConnectorPollClient', () => {
       at: 5
     })
     await settle()
-    const stored = JSON.parse(readFileSync(outboxFile, 'utf8'))
+    const stored = JSON.parse(readFileSync(outboxFile, 'utf8')).turnEnds
     expect(stored).toHaveLength(1)
     // 8 KB would split a two-byte character after the leading 'x', so the cut steps back one byte.
     expect(stored[0].lastAssistantMessage).toBe(`x${'é'.repeat(4_095)}`)
@@ -403,7 +403,7 @@ describe('ConnectorPollClient', () => {
     }
     const stored = JSON.parse(
       readFileSync(join(userDataPath, 'connector-turn-outbox.json'), 'utf8')
-    )
+    ).turnEnds
     expect(stored.map((event: { turnId: number }) => event.turnId)).toEqual(
       Array.from({ length: 200 }, (_, index) => index + 51)
     )
@@ -454,4 +454,45 @@ describe('ConnectorPollClient', () => {
     })
     client.stop()
   })
+
+  it('says hello again with a snapshot once the caps dropped a live event', async () => {
+    const { client, emit } = startClient()
+    await settle()
+    fake.forced.set(CONNECTOR_PATHS.events, { status: 503 })
+    for (let index = 0; index <= 550; index++) {
+      emit({
+        kind: 'prompt',
+        conversation,
+        worktreeId: 'wt',
+        paneKey: 'tab:1',
+        prompt: { kind: 'unsupported', promptId: String(index) }
+      })
+    }
+    fake.forced.delete(CONNECTOR_PATHS.events)
+    poll([])
+    await settle(40_000)
+    expect(fake.hellos).toHaveLength(2)
+    expect(
+      fake.events.filter((event) => isRecord(event) && event.kind === 'snapshot')
+    ).toHaveLength(2)
+    client.stop()
+  })
+
+  it('settles a recovered delivery whose earlier run fails as unknown, never running it again', async () => {
+    const seam = fakeSeam()
+    seam.calls.recorded.mockRejectedValueOnce(new Error('launch_failed'))
+    const { client, calls } = startClient(seam)
+    await settle()
+    poll([], { unsettled: [{ deliveryId: 'd1', conversation }] })
+    await settle()
+    expect(fake.acks).toEqual([
+      { deliveryId: 'd1', step: 'done', result: { outcome: 'unknown', reason: 'launch_failed' } }
+    ])
+    expect(calls.send).not.toHaveBeenCalled()
+    client.stop()
+  })
 })
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}

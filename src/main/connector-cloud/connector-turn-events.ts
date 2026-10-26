@@ -18,23 +18,27 @@ import { ConnectorSendQueue, type ConnectorBatchSender } from './connector-send-
 
 const TURN_OUTBOX_FILE = 'connector-turn-outbox.json'
 const MAX_TURN_ENDS = 200
-// Live events past this are dropped oldest first; the snapshot after the next hello restates them.
+// Live events past this are dropped oldest first; a fresh hello and snapshot then restate them.
 const MAX_LIVE_EVENTS = 500
 const MAX_EVENTS_PER_REQUEST = 50
 
 type TurnEnded = Extract<ConnectorEvent, { kind: 'turn-ended' }>
 
-const StoredTurnEnds = z.array(
-  z.object({
-    kind: z.literal('turn-ended'),
-    conversation: z.object({ source: z.literal('slack'), externalId: z.string().min(1) }),
-    paneKey: z.string().min(1),
-    turnId: z.number(),
-    at: z.number(),
-    stopReason: z.string().min(1).nullable(),
-    lastAssistantMessage: z.string().optional()
-  })
-)
+// Tagged with the account that produced them, so another account never sends them after a relaunch.
+const StoredOutbox = z.object({
+  account: z.string().min(1),
+  turnEnds: z.array(
+    z.object({
+      kind: z.literal('turn-ended'),
+      conversation: z.object({ source: z.literal('slack'), externalId: z.string().min(1) }),
+      paneKey: z.string().min(1),
+      turnId: z.number(),
+      at: z.number(),
+      stopReason: z.string().min(1).nullable(),
+      lastAssistantMessage: z.string().optional()
+    })
+  )
+})
 
 const isTurnEnded = (event: ConnectorEvent): event is TurnEnded => event.kind === 'turn-ended'
 const isLive = (event: ConnectorEvent): boolean =>
@@ -127,21 +131,35 @@ function boundEvents(
 }
 
 /**
- * Events for the cloud, in order, owned once per process so a replacement client never races
- * a retired one over the file. Turn ends also wait on disk until the cloud accepts them.
+ * One account's events for the cloud, in order, owned once per process so a replacement client never
+ * races a retired one over the file. Turn ends also wait on disk until the cloud accepts them.
  */
 export class ConnectorTurnEvents {
   private readonly queue: ConnectorSendQueue<ConnectorEvent>
   private readonly filePath: string
+  // Something owed was dropped to stay within the caps; only a fresh snapshot restates it.
+  private dropped = false
 
-  constructor(userDataPath: string) {
+  constructor(
+    userDataPath: string,
+    readonly account: string
+  ) {
     this.filePath = join(userDataPath, TURN_OUTBOX_FILE)
     this.queue = new ConnectorSendQueue<ConnectorEvent>({
       maxBatch: MAX_EVENTS_PER_REQUEST,
       initial: this.readStored(),
-      bound: boundEvents,
+      bound: (events, frozen) => {
+        const kept = boundEvents(events, frozen)
+        this.dropped ||= kept.length < events.length
+        return kept
+      },
       onChange: (events) => this.store(events)
     })
+  }
+
+  /** True until the next snapshot once the caps dropped an event. */
+  get needsSnapshot(): boolean {
+    return this.dropped
   }
 
   /**
@@ -151,6 +169,7 @@ export class ConnectorTurnEvents {
   observe(event: ConversationSnapshot | ConversationEvent): void {
     const wire = toConnectorEvent(event)
     if (wire?.kind === 'snapshot') {
+      this.dropped = false
       this.queue.restart([wire], isTurnEnded)
     } else if (wire) {
       this.queue.push(wire)
@@ -175,7 +194,7 @@ export class ConnectorTurnEvents {
     rmSync(join(userDataPath, TURN_OUTBOX_FILE), { force: true })
   }
 
-  private readStored(): TurnEnded[] {
+  private readStored(): ConnectorEvent[] {
     let raw: string
     try {
       raw = readFileSync(this.filePath, 'utf8')
@@ -186,8 +205,8 @@ export class ConnectorTurnEvents {
       throw error
     }
     try {
-      const parsed = StoredTurnEnds.safeParse(JSON.parse(raw))
-      return parsed.success ? parsed.data : []
+      const parsed = StoredOutbox.safeParse(JSON.parse(raw))
+      return parsed.success && parsed.data.account === this.account ? parsed.data.turnEnds : []
     } catch {
       return []
     }
@@ -198,7 +217,7 @@ export class ConnectorTurnEvents {
     if (turnEnds.length === 0) {
       rmSync(this.filePath, { force: true })
     } else {
-      writeSecureJsonFile(this.filePath, turnEnds)
+      writeSecureJsonFile(this.filePath, { account: this.account, turnEnds })
     }
   }
 }

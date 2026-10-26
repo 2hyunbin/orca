@@ -10,6 +10,7 @@ import {
   ConnectorPollResponse,
   type ConnectorAck,
   type ConnectorConversation,
+  type ConnectorDeliveryResult,
   type ConnectorEvent,
   type ConnectorProject
 } from '../../shared/connector-cloud-contract'
@@ -132,7 +133,8 @@ export class ConnectorPollClient {
   private async cycle(): Promise<Stop | null> {
     const { machine } = this.options
     const said = { agents: machine.agents(), projects: machine.projects() }
-    if (JSON.stringify(said) !== this.helloSaid) {
+    // A hello restarts the numbered events with a snapshot, which also restates anything the caps dropped.
+    if (JSON.stringify(said) !== this.helloSaid || this.options.events.needsSnapshot) {
       const refused = await this.hello(said)
       if (refused) {
         return stopFor(refused) ?? this.backoff(refused)
@@ -243,15 +245,18 @@ export class ConnectorPollClient {
       return
     }
     this.active.add(deliveryId)
-    const recorded = await this.seam.recorded(conversation, deliveryId)
+    // A receipt still running can fail; its outcome is then unknown, and it is still never run again.
+    const result: ConnectorDeliveryResult = await this.seam.recorded(conversation, deliveryId).then(
+      (recorded) => recorded ?? { outcome: 'unknown', reason: 'no_local_record' },
+      (error: unknown) => ({
+        outcome: 'unknown',
+        reason: error instanceof Error && error.message ? error.message : 'failed'
+      })
+    )
     if (this.stopped.signal.aborted) {
       return
     }
-    this.acks.push({
-      deliveryId,
-      step: 'done',
-      result: recorded ?? { outcome: 'unknown', reason: 'no_local_record' }
-    })
+    this.acks.push({ deliveryId, step: 'done', result })
   }
 
   private async obey(raw: unknown): Promise<Stop | null> {

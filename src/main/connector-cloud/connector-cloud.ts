@@ -16,64 +16,60 @@ export type ConnectorCloudOptions = {
 }
 
 export class ConnectorCloud {
+  private connected = false
   private client: ConnectorPollClient | null = null
-  // Built on connect, so the outbox file is read once and has one owner for this process.
+  // The signed-in account's outbox: one owner per process, replaced only when another account signs in.
   private events: ConnectorTurnEvents | null = null
-  // The account the outbox and the running client belong to.
-  private account: string | null = null
+  // From sign-out until the next sign-in, so nothing restarts while the old session is still readable.
+  private suspended = false
 
   constructor(private readonly options: ConnectorCloudOptions) {}
 
   /** From now on, hold the poll whenever connectors are on and an Orca account is signed in. */
   connect(): void {
-    if (this.events) {
+    if (this.connected) {
       return
     }
-    this.account = this.options.account()
-    if (!this.account) {
-      // Turn ends left from an account that signed out while Orca was closed.
-      ConnectorTurnEvents.clearStored(this.options.userDataPath)
-    }
-    this.events = new ConnectorTurnEvents(this.options.userDataPath)
+    this.connected = true
     this.options.machine.onConnectorsToggled(() => this.reconcile())
     this.reconcile()
   }
 
   /** The desktop signed in, switched accounts or refreshed its sign-in. */
   accountChanged(): void {
+    this.suspended = false
     this.reconcile()
   }
 
   /** Just before the desktop signs out: stop now, and drop turn ends no other account can report. */
   signingOut(): void {
-    this.client?.stop()
-    this.client = null
-    this.account = null
+    this.suspended = true
+    this.stopClient()
     if (this.events) {
       this.events.clear()
+      this.events = null
     } else {
       ConnectorTurnEvents.clearStored(this.options.userDataPath)
     }
   }
 
   private reconcile(): void {
-    const { events } = this
-    if (!events) {
+    if (!this.connected) {
       return
     }
-    const account = this.options.account()
+    const account = this.suspended ? null : this.options.account()
     const seam = this.options.machine.seam()
-    const current = this.client
-    if (current && (current.seam !== seam || account !== this.account)) {
-      current.stop()
-      this.client = null
+    if (account && this.events?.account !== account) {
+      this.stopClient()
+      // Pending turn ends belong to the previous account's threads; no other account may report them.
+      this.events?.clear()
+      this.events = new ConnectorTurnEvents(this.options.userDataPath, account)
     }
-    if (account !== this.account) {
-      // Pending turn ends belong to the previous account's threads; no other account can report them.
-      events.clear()
-      this.account = account
+    if (this.client && (this.client.seam !== seam || !account)) {
+      this.stopClient()
     }
-    if (!this.client && seam && account) {
+    const { events } = this
+    if (!this.client && seam && account && events) {
       this.client = new ConnectorPollClient({
         transport: new ConnectorAccountTransport(
           this.options.origin,
@@ -86,5 +82,10 @@ export class ConnectorCloud {
       })
       this.client.start()
     }
+  }
+
+  private stopClient(): void {
+    this.client?.stop()
+    this.client = null
   }
 }
