@@ -32,9 +32,18 @@ export function grantCodexSandboxReadOnManagedHome(codexHome: string): Promise<v
 }
 
 async function runIcaclsGrant(codexHome: string): Promise<void> {
+  const icacls = getSystem32ExePath('icacls.exe')
   try {
+    // A repeat grant would re-propagate through the whole tree on every Orca start.
+    const current = await runProcess({ program: icacls, args: [codexHome], timeoutMs: 10_000 })
+    if (
+      current.code === 0 &&
+      current.stdout.includes(`\\${CODEX_SANDBOX_USERS_GROUP}:(OI)(CI)(RX)`)
+    ) {
+      return
+    }
     const result = await runProcess({
-      program: getSystem32ExePath('icacls.exe'),
+      program: icacls,
       args: [codexHome, '/grant', `${CODEX_SANDBOX_USERS_GROUP}:(OI)(CI)RX`, '/Q'],
       timeoutMs: ICACLS_TIMEOUT_MS
     })

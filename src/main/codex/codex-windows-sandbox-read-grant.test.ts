@@ -39,10 +39,23 @@ describe('grantCodexSandboxReadOnManagedHome', () => {
     await grantCodexSandboxReadOnManagedHome(home)
     await grantCodexSandboxReadOnManagedHome(home)
 
-    expect(runProcessMock).toHaveBeenCalledTimes(1)
-    expect(runProcessMock.mock.calls[0][0]).toMatchObject({
+    expect(runProcessMock).toHaveBeenCalledTimes(2)
+    expect(runProcessMock.mock.calls[1][0]).toMatchObject({
       program: expect.stringMatching(/System32[\\/]icacls\.exe$/),
       args: [home, '/grant', 'CodexSandboxUsers:(OI)(CI)RX', '/Q']
     })
+  })
+  it('skips the tree-wide grant when the home already carries the ACE', async () => {
+    mkdirSync(join(home, '.sandbox'))
+    writeFileSync(join(home, '.sandbox', 'setup_marker.json'), '{}')
+    runProcessMock.mockResolvedValueOnce({
+      code: 0,
+      signal: null,
+      stdout: `${home} PC\\CodexSandboxUsers:(OI)(CI)(RX)\n`,
+      stderr: '',
+      timedOut: false
+    })
+    await grantCodexSandboxReadOnManagedHome(home)
+    expect(runProcessMock).toHaveBeenCalledTimes(1)
   })
 })
