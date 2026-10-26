@@ -42,7 +42,7 @@ import { newestStateMtimeCommand } from './host-state/orcad-state-newest-mtime'
 import { orcadSnapshotSpaceCommand } from './host-state/orcad-state-snapshot-space'
 import { posixProcessGroupCommand } from './host-state/orcad-state-mutation-owner-record'
 import { orcadMachineClaimCommand } from './host-state/orcad-machine-claim-command'
-import { orcadMachineHomeProbeCommand } from './host-state/orcad-machine-home'
+import { orcadMachineHomeProbeCommand } from './host-state/orcad-machine-home-probe'
 import { executablePermissionsCommand } from './install/orcad-remote-install'
 import {
   orcadNodeSlotRuntimeCommand,

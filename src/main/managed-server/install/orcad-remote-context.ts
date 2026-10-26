@@ -11,12 +11,17 @@ import {
 } from '../../ssh/orcad-host-transport'
 import {
   decideOrcadMachineHome,
+  decideOrcadMachineHomeAfterClaim,
   orcadMachineDataRoot,
   orcadMachineHomeDir,
-  orcadMachineHomeProbeCommand,
-  orcadMachineOwnershipUnresolvedMessage,
-  parseOrcadMachineHomeProbe
+  orcadMachineOwnershipUnresolvedMessage
 } from '../host-state/orcad-machine-home'
+import {
+  ORCAD_MACHINE_CLAIM_FILENAME,
+  orcadMachineHomeProbeCommand,
+  orcadMachineOwnerRecord,
+  parseOrcadMachineHomeProbe
+} from '../host-state/orcad-machine-home-probe'
 import {
   orcadMachineClaimCommand,
   readOrcadMachineClaimAnswer
@@ -131,17 +136,18 @@ export async function resolveOrcadMachineHome(
       )
     )
   }
+  const hostname = probe.identity?.hostname ?? null
   if (decision.kind === 'claim') {
     const won = readOrcadMachineClaimAnswer(
-      await execOrcadRemote(remote, orcadMachineClaimCommand(host, loginHome, decision.machineKey))
+      await execOrcadRemote(
+        remote,
+        orcadMachineClaimCommand(host, loginHome, decision.machineKey, hostname)
+      )
     )
     if (won.state !== 'present') {
       throw new Error(won.message)
     }
-    decision =
-      won.machineKey === decision.machineKey
-        ? { kind: 'login-home' }
-        : { kind: 'machine-home', machineKey: decision.machineKey }
+    decision = decideOrcadMachineHomeAfterClaim(probe, won)
   }
   if (decision.kind === 'login-home') {
     return {
@@ -151,7 +157,14 @@ export async function resolveOrcadMachineHome(
     }
   }
   const orcadHome = orcadMachineHomeDir(host, loginHome, decision.machineKey)
-  await execOrcadRemote(remote, `umask 077; mkdir -p ${quotePosixShell(orcadHome)}`)
+  const owner = quotePosixShell(joinRemotePath(host, orcadHome, ORCAD_MACHINE_CLAIM_FILENAME))
+  const record = quotePosixShell(orcadMachineOwnerRecord(decision.machineKey, hostname))
+  // Best effort: an unrecorded home falls back to its data-root owners as evidence.
+  await execOrcadRemote(
+    remote,
+    `umask 077; mkdir -p ${quotePosixShell(orcadHome)} && ` +
+      `{ [ -s ${owner} ] || printf %s ${record} > ${owner}; } 2>/dev/null; true`
+  )
   return {
     loginHome,
     orcadHome,

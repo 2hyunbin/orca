@@ -498,6 +498,39 @@ describe('acquireOrcadInstanceLock', () => {
     })
   })
 
+  it('never reclaims the lock of a host cloned with this machine-id (#32918)', () => {
+    const root = makeRoot()
+    const lockPath = join(root, ORCAD_LOCK_FILE_NAME)
+    const linux = { platform: 'linux' as const }
+    writeFileSync(
+      lockPath,
+      JSON.stringify(persistedRecord({ machineIdentity: 'machine-a', host: 'dev-clone' }))
+    )
+    expect(() => acquireOrcadInstanceLock(root, hooks(linux))).toThrow(
+      expect.objectContaining({
+        code: 'orcad_instance_lock_holder_unverifiable',
+        message: expect.stringContaining('same /etc/machine-id')
+      })
+    )
+    expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
+
+    // An older clone's lock names no host; its profile-state owner record still does.
+    writeFileSync(lockPath, JSON.stringify(persistedRecord({ machineIdentity: 'machine-a' })))
+    const owners = join(root, '.profile-state-access', 'participants', 'token')
+    mkdirSync(owners, { recursive: true })
+    writeFileSync(
+      join(owners, 'token.owner'),
+      JSON.stringify({ pid: 4242, host: 'dev-clone', machineIdentity: 'machine-a' })
+    )
+    expect(() => acquireOrcadInstanceLock(root, hooks(linux))).toThrow(
+      expect.objectContaining({
+        code: 'orcad_instance_lock_holder_unverifiable',
+        message: expect.stringContaining(`delete ${join(owners, 'token.owner')}`)
+      })
+    )
+    expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
+  })
+
   it('never lets a confirmed reclaim take a lock another machine id holds', () => {
     const root = makeRoot()
     const lockPath = join(root, ORCAD_LOCK_FILE_NAME)

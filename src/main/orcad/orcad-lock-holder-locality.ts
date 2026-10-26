@@ -11,10 +11,14 @@ import {
 export function orcadLockHolderLocality(
   holder: OrcadPeerMachine,
   self: OrcadPeerMachine,
-  dataRootIsOnLocalDisk: () => boolean
+  dataRootIsOnLocalDisk: () => boolean,
+  platform: NodeJS.Platform = process.platform
 ): 'local' | 'foreign' | 'unknown' {
   if (holder.machineIdentity && self.machineIdentity) {
-    return holder.machineIdentity === self.machineIdentity ? 'local' : 'foreign'
+    if (holder.machineIdentity !== self.machineIdentity) {
+      return 'foreign'
+    }
+    return orcadPeerSharesMachineIdOnly(holder, self, platform) ? 'unknown' : 'local'
   }
   if (holder.bootId && holder.bootId === self.bootId) {
     return 'local'
@@ -22,7 +26,23 @@ export function orcadLockHolderLocality(
   return dataRootIsOnLocalDisk() ? 'local' : 'unknown'
 }
 
-export type OrcadPeerMachine = { machineIdentity?: string; bootId?: string }
+/** Linux images cloned with one /etc/machine-id differ only by hostname; macOS hostnames follow the network. */
+export function orcadPeerSharesMachineIdOnly(
+  holder: OrcadPeerMachine,
+  self: OrcadPeerMachine,
+  platform: NodeJS.Platform = process.platform
+): boolean {
+  return (
+    platform !== 'darwin' &&
+    !!holder.machineIdentity &&
+    holder.machineIdentity === self.machineIdentity &&
+    !!holder.host &&
+    !!self.host &&
+    holder.host !== self.host
+  )
+}
+
+export type OrcadPeerMachine = { machineIdentity?: string; bootId?: string; host?: string }
 
 export function currentOrcadPeerMachine(): OrcadPeerMachine {
   const machineIdentity = profileStateAccessMachineIdentity()
@@ -42,9 +62,15 @@ export function orcadPeerPidIsJudgeableHere(
   return orcadLockHolderLocality(peer, self, dataRootIsOnLocalDisk) === 'local'
 }
 
+export const SEPARATE_CLONES_HINT =
+  'To run a server on each machine, give each its own ORCA_USER_DATA, or its own machine id ' +
+  '(sudo rm /etc/machine-id && sudo systemd-machine-id-setup).'
+
 export function orcadLockHolderUnverifiableError(lock: {
   holder: string
   foreign: boolean
+  /** The holder reported this machine's machine-id from another hostname. */
+  sharedMachineId?: boolean
   dataRoot: string
   lockPath: string
   /** Managed hosts may lack launchers on PATH, so name this runtime/entry in reclaim hints. */
@@ -55,11 +81,16 @@ export function orcadLockHolderUnverifiableError(lock: {
     process.platform === 'linux'
       ? `run \`${command}\` on the machine it ran on to check and clear it, or `
       : ''
+  const where = lock.sharedMachineId
+    ? ' from another host with the same /etc/machine-id as this one (machines cloned from one image share it, so Orca cannot tell them apart)'
+    : lock.foreign
+      ? ' from another machine'
+      : ''
   return new OrcadInstanceLockError(
     'orcad_instance_lock_holder_unverifiable',
-    `${lock.holder} holds the data root ${lock.dataRoot}${lock.foreign ? ' from another machine' : ''}. ` +
+    `${lock.holder} holds the data root ${lock.dataRoot}${where}. ` +
       'Orca cannot check from here whether it is still running, because this data root may be ' +
       `shared with other machines. Stop it there. If it is not running anywhere, ${reclaim}` +
-      `delete ${lock.lockPath} once you are sure.`
+      `delete ${lock.lockPath} once you are sure.${lock.sharedMachineId ? ` ${SEPARATE_CLONES_HINT}` : ''}`
   )
 }

@@ -22,10 +22,15 @@ import {
 import { hasErrorCode, isProcessAlive } from '../daemon/daemon-process-inspection'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import { orcadDataRootIsOnLocalDisk } from './orcad-data-root-locality'
+import {
+  findSharedMachineIdProfileOwner,
+  sharedMachineIdOwnerError
+} from './orcad-shared-machine-id-owner'
 import type { OrcadReclaimHintRuntime } from '../../shared/orcad-stale-lock-reclaim'
 import {
   orcadLockHolderLocality,
-  orcadLockHolderUnverifiableError
+  orcadLockHolderUnverifiableError,
+  orcadPeerSharesMachineIdOnly
 } from './orcad-lock-holder-locality'
 import {
   MAX_ORCAD_LOCK_BYTES,
@@ -156,6 +161,12 @@ export function acquireOrcadInstanceLock(
     host: hostname()
   }
   const serialized = JSON.stringify(record)
+  // Before publishing: reclaiming the lock of a clone's older server would leave it running unlocked.
+  const platform = hooks.platform ?? process.platform
+  const sharedMachineIdOwner = findSharedMachineIdProfileOwner(dataRoot, record, platform)
+  if (sharedMachineIdOwner) {
+    throw sharedMachineIdOwnerError(dataRoot, sharedMachineIdOwner)
+  }
 
   // Stage then hard-link so canonical records are always complete.
   const publish = (): boolean => {
@@ -184,7 +195,7 @@ export function acquireOrcadInstanceLock(
   const dataRootIsLocal = (): boolean =>
     (hooks.dataRootIsOnLocalDisk ?? orcadDataRootIsOnLocalDisk)(dataRoot)
   const judgedHere = (holder: OrcadLockRecord, role: 'holder' | 'recovery-owner'): boolean => {
-    const locality = orcadLockHolderLocality(holder, record, dataRootIsLocal)
+    const locality = orcadLockHolderLocality(holder, record, dataRootIsLocal, platform)
     return (
       locality === 'local' || (locality === 'unknown' && !!hooks.reclaimConfirmed?.(holder, role))
     )
@@ -236,7 +247,8 @@ export function acquireOrcadInstanceLock(
     // Foreign/unverifiable PIDs prove neither absence nor reuse here.
     throw orcadLockHolderUnverifiableError({
       holder: `${describeLockHolder(existing)} (pid ${existing.pid}, started ${existing.acquiredAt})`,
-      foreign: orcadLockHolderLocality(existing, record, dataRootIsLocal) === 'foreign',
+      foreign: orcadLockHolderLocality(existing, record, dataRootIsLocal, platform) === 'foreign',
+      sharedMachineId: orcadPeerSharesMachineIdOnly(existing, record, platform),
       dataRoot,
       lockPath,
       hintRuntime:

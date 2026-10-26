@@ -2,7 +2,7 @@
 // Host B must not judge A’s recorded PID in its own namespace; use ORCA_E2E_ORCAD_CONVERT_TEMPLATE for linux-x64-glibc.
 import { execFileSync, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import type { ElectronApplication, Page } from '@stablyai/playwright-test'
+import type { ElectronApplication, Page, TestInfo } from '@stablyai/playwright-test'
 import { expect, test } from './helpers/orca-app'
 import { waitForSessionReady } from './helpers/store'
 import { createRestartSession } from './helpers/orca-restart'
@@ -40,6 +40,19 @@ function recordedPids(target: DockerSshHostTarget, pattern: string): string {
 
 test('machines sharing one home each run their own managed server', async (// oxlint-disable-next-line no-empty-pattern -- This test owns its isolated app and hosts.
 {}, testInfo) => {
+  await expectSeparateManagedServers(testInfo, {})
+})
+
+// #32918: VMs cloned from one image keep one /etc/machine-id, so only the hostname tells them apart.
+test('machines cloned with one machine-id each run their own managed server', async (// oxlint-disable-next-line no-empty-pattern -- This test owns its isolated app and hosts.
+{}, testInfo) => {
+  await expectSeparateManagedServers(testInfo, { machineId: randomUUID().replace(/-/g, '') })
+})
+
+async function expectSeparateManagedServers(
+  testInfo: TestInfo,
+  hostOptions: { machineId?: string }
+): Promise<void> {
   test.skip(
     HOST !== 'docker' || !TEMPLATE_SOURCE,
     `Set ${ORCAD_CONVERT_HOST_ENV}=docker and ORCA_E2E_ORCAD_CONVERT_TEMPLATE`
@@ -57,8 +70,8 @@ test('machines sharing one home each run their own managed server', async (// ox
   })
   let app: ElectronApplication | null = null
   try {
-    hostA = startDockerSshHostTarget(testInfo, { sharedHomeVolume: volume })
-    hostB = startDockerSshHostTarget(testInfo, { sharedHomeVolume: volume })
+    hostA = startDockerSshHostTarget(testInfo, { ...hostOptions, sharedHomeVolume: volume })
+    hostB = startDockerSshHostTarget(testInfo, { ...hostOptions, sharedHomeVolume: volume })
     const launched = await session.launch()
     app = launched.app
     const { page } = launched
@@ -102,7 +115,7 @@ test('machines sharing one home each run their own managed server', async (// ox
       timeout: 30_000
     })
   }
-})
+}
 
 async function connectManagedHost(
   page: Page,

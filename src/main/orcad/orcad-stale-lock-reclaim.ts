@@ -139,7 +139,12 @@ async function checkStaleLock(
   hooks: OrcadStaleLockReclaimHooks
 ): Promise<{ refusal: string } | { evidence: OrcadStaleLockEvidence }> {
   const machineIdentity = (hooks.machineIdentity ?? profileStateAccessMachineIdentity)()
-  const self = { ...(machineIdentity ? { machineIdentity } : {}), ...(bootId ? { bootId } : {}) }
+  const host = (hooks.hostname ?? hostname)()
+  const self = {
+    ...(machineIdentity ? { machineIdentity } : {}),
+    ...(bootId ? { bootId } : {}),
+    host
+  }
   const locality = orcadLockHolderLocality(holder, self, () =>
     (hooks.dataRootIsOnLocalDisk ?? orcadDataRootIsOnLocalDisk)(dataRoot)
   )
@@ -152,7 +157,6 @@ async function checkStaleLock(
   if (locality === 'foreign') {
     return { refusal: 'The lock was written by another machine (a different machine id).' }
   }
-  const host = (hooks.hostname ?? hostname)()
   if (!holder.host) {
     return {
       refusal: 'The lock does not record which host wrote it (an older orcad wrote it).'
