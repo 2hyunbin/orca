@@ -7,6 +7,8 @@ export type HostSessionStoreConfig = {
   // Advisory-lock prefix serializing one host's session swap; keep it stable across deploys.
   lockScope: string
   ttlMs: number
+  // Columns: host_id, revoked_at. When set, every lookup joins it: a session counts only while its host is linked.
+  linkTable?: string
 }
 
 export type IssuedHostSession = {
@@ -17,7 +19,10 @@ export type IssuedHostSession = {
 
 export type HostSessionLookup =
   | { ok: true; hostFingerprint: string; expiresAt: number }
-  | { ok: false; reason: 'unknown_session' | 'session_expired' }
+  | {
+      ok: false
+      reason: 'unknown_session' | 'session_expired' | 'host_not_linked' | 'host_revoked'
+    }
 
 function hashSessionToken(sessionToken: string): string {
   return createHash('sha256').update(sessionToken).digest('base64url')
@@ -50,11 +55,21 @@ export class HostSessionStore {
   }
 
   async resolve(sessionToken: string): Promise<HostSessionLookup> {
+    const { table, linkTable } = this.config
     const [row] = await this.database.query(
-      `SELECT host_fingerprint, expires_at FROM ${this.config.table} WHERE token_hash = ?`,
+      linkTable
+        ? `SELECT s.host_fingerprint, s.expires_at, l.host_id AS linked_host, l.revoked_at
+           FROM ${table} s LEFT JOIN ${linkTable} l ON l.host_id = s.host_fingerprint
+           WHERE s.token_hash = ?`
+        : `SELECT host_fingerprint, expires_at FROM ${table} WHERE token_hash = ?`,
       [hashSessionToken(sessionToken)]
     )
     if (!row) return { ok: false, reason: 'unknown_session' }
+    // Revocation outranks expiry, so the host stops instead of re-proving.
+    if (linkTable) {
+      if (row.linked_host === null) return { ok: false, reason: 'host_not_linked' }
+      if (row.revoked_at !== null) return { ok: false, reason: 'host_revoked' }
+    }
     const expiresAt = Number(row.expires_at)
     // No skew grace here: a session that just expired should be re-minted
     // through the challenge, which is cheap and already handled by the host.
