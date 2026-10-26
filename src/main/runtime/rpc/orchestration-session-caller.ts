@@ -1,7 +1,10 @@
 /** Resolve session identity before params, compatibility, receipts and dispatch branching; ids identify same-user callers, not credentials.
- * Refuse paired/SSH/WSL claims, provider ids that rotate on /clear, and non-live leases. Session identity overrides declarations and maps workers to minted handles/panes.
+ * Refuse paired/SSH/WSL claims, provider ids that rotate on /clear, and non-live leases; a released (sleeping) one may act except as NEEDS_RUNNING_AGENT lists. Session identity overrides declarations and maps workers to minted handles/panes.
  * Without session evidence, a declared orca_session_id: may resolve a worker handle; a chat address alone identifies no caller. */
-import { agentSessionLeaseAdmitsWriter } from '../../../shared/agent-session-lease-adjudication'
+import {
+  agentSessionLeaseAdmitsWriter,
+  agentSessionLeaseIsReleased
+} from '../../../shared/agent-session-lease-adjudication'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { ORCA_AGENT_SESSION_ID_ENV } from '../../../shared/agent-session-caller-env'
 import {
@@ -61,6 +64,15 @@ export type ResolvedOrchestrationRequest = {
 
 const NO_EFFECTS = { effectsApplied: false } as const
 
+/** A released (sleeping) session is still itself, so its background commands may act, except here. */
+const NEEDS_RUNNING_AGENT: ReadonlySet<string> = new Set([
+  // Each reads, or waits on and so holds back, the mail that wakes the session.
+  'orchestration.check',
+  'orchestration.ask',
+  // Answers that the session is live.
+  'orchestration.callerShow'
+])
+
 /** Detect session evidence or a declared session caller synchronously so terminal calls avoid another async hop. */
 export function needsOrchestrationCallerResolution(request: RpcRequest): boolean {
   if (!request.method.startsWith('orchestration.')) {
@@ -113,7 +125,7 @@ export async function resolveOrchestrationSessionCaller(
   }
   const sessionId = claimed
   const record = await readSessionRecord(runtime, sessionId)
-  assertSessionCanAct(sessionId, record)
+  assertSessionCanAct(sessionId, record, request.method)
   const db = runtime.getOrchestrationDb()
   const caller: OrchestrationSessionCaller = Object.freeze({
     ...resolveOrcaSessionParty(sessionId, db),
@@ -167,23 +179,24 @@ async function readSessionRecord(
   )
 }
 
-function assertSessionCanAct(sessionId: string, record: AgentSessionRecord): void {
+function assertSessionCanAct(sessionId: string, record: AgentSessionRecord, method: string): void {
   if (!structuredWorkerHostScope(record.location)) {
     throw hostBoundary(
       `Agent session ${sessionId} runs on another host, and an Orca session ID identifies a caller only on the host that runs that session.`
     )
   }
-  if (agentSessionLeaseAdmitsWriter(record.lease)) {
+  const { lease } = record
+  if (
+    agentSessionLeaseAdmitsWriter(lease) ||
+    (agentSessionLeaseIsReleased(lease) && !NEEDS_RUNNING_AGENT.has(method))
+  ) {
     return
   }
-  const { lease } = record
-  const reason =
-    lease.claimStatus === 'released'
-      ? // Released means evicted and wakeable, not ended; only live processes may act.
-        'is not running right now. A new message or user turn revives it; retry then.'
-      : lease.handoffStage !== null
-        ? 'is changing owners on this host. Retry when that finishes.'
-        : 'has no live owner on this host right now. Retry once it is running.'
+  const reason = agentSessionLeaseIsReleased(lease)
+    ? 'is not running right now. Its commands can still send; it reads its mail once new mail or a user turn wakes it.'
+    : lease.handoffStage !== null
+      ? 'is changing owners on this host. Retry when that finishes.'
+      : 'has no live owner on this host right now. Retry once it is running.'
   throw new OrchestrationError(
     CODES.notLive,
     `Agent session ${sessionId} ${reason} No effects were applied.`,
