@@ -1,8 +1,10 @@
+import { spawn as nodeSpawn, spawnSync } from 'node:child_process'
 import type * as fs from 'node:fs'
+import { realpathSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resolveAppImageRuntimeIdentity } from './appimage-runtime-identity'
 import { spawnProcess } from '@orca/process-host'
-import { installAppImageMountExit } from './appimage-mount-exit'
+import { resolveAppImageRuntimeIdentity } from './appimage-runtime-identity'
+import { installAppImageMountExit, MOUNT_KEEPALIVE_SCRIPT } from './appimage-mount-exit'
 
 vi.mock('./appimage-runtime-identity', () => ({
   resolveAppImageRuntimeIdentity: vi.fn()
@@ -14,41 +16,55 @@ vi.mock('@orca/process-host', () => ({
 
 const MOUNT = '/tmp/.mount_Orca-abc123'
 const APPIMAGE = '/home/u/orca-linux.AppImage'
-const KEEPALIVE = 'pipe:[777]'
-const PROC_LINKS: Record<string, string> = {
-  '/proc/40/exe': `${MOUNT}/chrome_crashpad_handler`,
-  '/proc/41/exe': `${MOUNT}/chrome_crashpad_handler`,
-  '/proc/42/exe': `${MOUNT}/orca-ide`,
-  '/proc/43/exe': '/tmp/.mount_Orca-zzz999/chrome_crashpad_handler',
-  '/proc/44/exe': '/chrome_crashpad_handler',
-  // A sibling launch of the same AppImage runs its own FUSE server and keepalive pipe.
-  '/proc/50/exe': APPIMAGE,
-  '/proc/50/fd/4': 'pipe:[555]',
-  // Our server outlives an in-place update that replaced the AppImage file.
-  '/proc/51/exe': `${APPIMAGE} (deleted)`,
-  '/proc/51/fd/3': APPIMAGE,
-  '/proc/51/fd/4': KEEPALIVE,
-  '/proc/60/exe': '/usr/bin/bash',
-  '/proc/self/fd/3': KEEPALIVE,
-  '/proc/self/fd/9': 'pipe:[888]'
+const SESSION = '700'
+type FakeProc = {
+  exe?: string
+  session?: string
+  fds?: Record<string, [link: string, flags: string]>
 }
-let procPids = ['40', '41', '42', '43', '44', '45', '50', '51', '60', 'self']
+const RO = '0100000'
+const WO = '0100001'
+let procs: Record<string, FakeProc> = {}
+
+function defaultProcs(): Record<string, FakeProc> {
+  return {
+    // An unrelated inherited pipe the server reads from must not be taken for the keepalive.
+    self: { session: SESSION, fds: { '3': ['pipe:[111]', RO], '4': ['pipe:[777]', RO] } },
+    '40': { exe: `${MOUNT}/chrome_crashpad_handler` },
+    '41': { exe: '/tmp/.mount_Orca-zzz999/chrome_crashpad_handler' },
+    '42': { exe: `${MOUNT}/orca-ide`, session: SESSION },
+    // Detached from main's session, like the mount-fallback daemon and provider supervisors.
+    '43': { exe: `${MOUNT}/orca-ide`, session: '900' },
+    '44': { exe: '/usr/bin/bash', session: SESSION },
+    '50': { exe: APPIMAGE, fds: { '3': ['pipe:[111]', RO], '4': ['pipe:[777]', WO] } }
+  }
+}
+
+function fail(): never {
+  throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+}
 
 vi.mock('node:fs', async (importOriginal) => ({
   ...(await importOriginal<typeof fs>()),
-  readdirSync: vi.fn((dir: string) =>
-    dir === '/proc'
-      ? procPids
-      : Object.keys(PROC_LINKS)
-          .filter((link) => link.startsWith(`${dir}/`))
-          .map((link) => link.slice(dir.length + 1))
-  ),
-  readlinkSync: vi.fn((path: string) => {
-    const link = PROC_LINKS[path]
-    if (!link) {
-      throw Object.assign(new Error('EACCES'), { code: 'EACCES' })
+  readdirSync: vi.fn((dir: string) => {
+    if (dir === '/proc') {
+      return Object.keys(procs)
     }
-    return link
+    const [, , pid] = dir.split('/')
+    return Object.keys(procs[pid]?.fds ?? fail())
+  }),
+  readlinkSync: vi.fn((path: string) => {
+    const [, , pid, kind, fd] = path.split('/')
+    const proc = procs[pid] ?? fail()
+    return (kind === 'exe' ? proc.exe : proc.fds?.[fd]?.[0]) ?? fail()
+  }),
+  readFileSync: vi.fn((path: string) => {
+    const [, , pid, kind, fd] = path.split('/')
+    const proc = procs[pid] ?? fail()
+    if (kind === 'stat') {
+      return `${pid} (orca ide) S 1 1 ${proc.session ?? fail()} 0`
+    }
+    return `pos:\t0\nflags:\t${proc.fds?.[fd]?.[1] ?? fail()}\n`
   }),
   realpathSync: vi.fn((path: string) => path),
   // Only the FUSE mount root sits on its own device.
@@ -60,7 +76,6 @@ describe('installAppImageMountExit', () => {
 
   afterEach(() => {
     process.execPath = originalExecPath
-    procPids = ['40', '41', '42', '43', '44', '45', '50', '51', '60', 'self']
     vi.mocked(spawnProcess).mockClear()
     vi.restoreAllMocks()
   })
@@ -69,6 +84,7 @@ describe('installAppImageMountExit', () => {
     isAppImage: boolean,
     execPath = `${MOUNT}/orca-ide`
   ): (() => void) | undefined {
+    procs = defaultProcs()
     process.execPath = execPath
     vi.mocked(resolveAppImageRuntimeIdentity).mockReturnValue(
       isAppImage ? { appImagePath: APPIMAGE } : null
@@ -78,40 +94,22 @@ describe('installAppImageMountExit', () => {
     return once.mock.calls.find(([event]) => event === 'exit')?.[1]
   }
 
-  it('SIGKILLs only this launch handler, surviving one that already exited', () => {
-    const kill = vi.spyOn(process, 'kill').mockImplementation((pid) => {
-      if (pid === 40) {
-        throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' })
-      }
-      return true
-    })
+  it('SIGKILLs only this launch Crashpad handler', () => {
+    const kill = vi.spyOn(process, 'kill').mockReturnValue(true)
 
     installExitHook(true)?.()
 
-    expect(kill.mock.calls).toEqual([
-      [40, 'SIGKILL'],
-      [41, 'SIGKILL']
-    ])
+    expect(kill.mock.calls).toEqual([[40, 'SIGKILL']])
   })
 
-  it('lends only our keepalive pipe to a watcher of only our on-mount helpers', () => {
+  it("lends the server's write-paired pipe to a watcher of main-session helpers only", () => {
     vi.spyOn(process, 'kill').mockReturnValue(true)
 
     installExitHook(true)?.()
 
-    expect(spawnProcess).toHaveBeenCalledTimes(1)
     const [spec] = vi.mocked(spawnProcess).mock.calls[0]
-    expect(spec.args?.slice(3)).toEqual([`42=${MOUNT}/orca-ide`])
-    expect(spec.stdio).toEqual(['ignore', 'ignore', 'ignore', 3])
-  })
-
-  it('does not start a watcher when no helper is left on the mount', () => {
-    vi.spyOn(process, 'kill').mockReturnValue(true)
-    procPids = procPids.filter((pid) => pid !== '42')
-
-    installExitHook(true)?.()
-
-    expect(spawnProcess).not.toHaveBeenCalled()
+    expect(spec.args?.slice(4)).toEqual([`42=${MOUNT}/orca-ide`])
+    expect(spec.stdio).toEqual(['ignore', 'ignore', 'ignore', 4])
   })
 
   // Installed deb/rpm handler binaries are shared across launches and must never match.
@@ -121,5 +119,34 @@ describe('installAppImageMountExit', () => {
 
   it('does not hook exit under extract-and-run, whose dir is shared across launches', () => {
     expect(installExitHook(true, '/tmp/appimage_extracted_0123abcd/orca-ide')).toBeUndefined()
+  })
+})
+
+describe.runIf(process.platform === 'linux')('MOUNT_KEEPALIVE_SCRIPT', () => {
+  const sleepPath = realpathSync('/bin/sleep')
+
+  function runWatcher(ticks: number, helpers: string[]): number {
+    const startedAt = Date.now()
+    spawnSync('/bin/sh', ['-c', MOUNT_KEEPALIVE_SCRIPT, 'watcher', String(ticks), ...helpers], {
+      env: { PATH: '/usr/bin:/bin' }
+    })
+    return Date.now() - startedAt
+  }
+
+  it('waits for a helper, then returns once it exits', () => {
+    const helper = nodeSpawn(sleepPath, ['0.5'])
+    expect(runWatcher(50, [`${helper.pid}=${sleepPath}`])).toBeGreaterThanOrEqual(400)
+  })
+
+  it('releases at the deadline without signalling the helper, and ignores a pid with another exe', () => {
+    const helper = nodeSpawn(sleepPath, ['30'])
+    try {
+      const elapsed = runWatcher(3, [`${helper.pid}=${sleepPath}`, `${process.pid}=${sleepPath}`])
+      expect(elapsed).toBeLessThan(5_000)
+      expect(process.kill(helper.pid ?? 0, 0)).toBe(true)
+      expect(runWatcher(50, [`${process.pid}=${sleepPath}`])).toBeLessThan(1_000)
+    } finally {
+      helper.kill('SIGKILL')
+    }
   })
 })
