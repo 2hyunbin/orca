@@ -7,7 +7,6 @@ import { recoverWslOrcad, type WslOrcadRecoveryReason } from './wsl-orcad-livene
 import {
   confirmsRunning,
   EXIT_SETTLE_MS,
-  failedExit,
   gatherWslLivenessEvidence
 } from './wsl-orcad-liveness-evidence'
 import {
@@ -20,6 +19,7 @@ import {
 import {
   disarmSupervised,
   isSupervisedSettling,
+  isWatchOrHolderExit,
   noteSupervisedExit,
   newSupervised,
   WSL_ORCAD_HEARTBEAT_MS,
@@ -220,7 +220,7 @@ export class WslOrcadLivenessSupervisor {
     if (entry.generation !== generation) {
       return
     }
-    if (failedExit(trigger) && confirmsRunning(running, entry.key)) {
+    if (isWatchOrHolderExit(trigger) && confirmsRunning(running, entry.key)) {
       // Stopping distros can still appear running; wait before exec accidentally boots them again.
       await new Promise<void>((resolve) => this.schedule(EXIT_SETTLE_MS, resolve))
       running = await this.deps.readRunning()

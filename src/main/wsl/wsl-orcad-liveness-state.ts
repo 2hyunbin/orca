@@ -1,4 +1,4 @@
-import { EXIT_SETTLE_MS, failedExit } from './wsl-orcad-liveness-evidence'
+import { EXIT_SETTLE_MS } from './wsl-orcad-liveness-evidence'
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import type { SystemPowerLifecycleListener } from '../system-power-lifecycle'
 import type { WslRunningDistrosRead } from '../wsl-background-distro-gate'
@@ -105,8 +105,13 @@ export function isSupervisedSettling(entry: Supervised | undefined, nowMs: numbe
   )
 }
 
+/** Any watch or holder exit, a clean one (code 0 from `wsl --shutdown`) included. */
+export function isWatchOrHolderExit(trigger: Trigger): boolean {
+  return trigger !== 'heartbeat' && trigger.source !== 'verify'
+}
+
 export function noteSupervisedExit(entry: Supervised, trigger: Trigger, nowMs: number): void {
-  if (failedExit(trigger)) {
+  if (isWatchOrHolderExit(trigger)) {
     entry.lastExitMs = nowMs
   }
 }
