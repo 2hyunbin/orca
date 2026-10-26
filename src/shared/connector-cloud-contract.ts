@@ -64,7 +64,12 @@ export const ConnectorDelivery = z.discriminatedUnion('kind', [
     promptId: z.string().min(1),
     optionId: z.string().min(1)
   }),
-  z.object({ ...DeliveryBase, kind: z.literal('cancel') })
+  z.object({
+    ...DeliveryBase,
+    kind: z.literal('cancel'),
+    // The turn it stops; absent: whatever turn is running.
+    turnId: z.number().int().nonnegative().optional()
+  })
 ])
 export type ConnectorDelivery = z.infer<typeof ConnectorDelivery>
 
