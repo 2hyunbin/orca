@@ -68,12 +68,19 @@ export class ConnectorHostLinks {
     })
   }
 
-  async unbind(hostId: string): Promise<void> {
-    await this.database.transaction(async (transaction) => {
+  // Only the session presenting the logout may delete the link: a stale one that raced a revoke
+  // and relink finds its row gone and changes nothing.
+  async unbind(hostId: string, sessionId: string): Promise<boolean> {
+    return await this.database.transaction(async (transaction) => {
       await lockConnectorHost(transaction, hostId)
+      const [ended] = await transaction.query(
+        'DELETE FROM connector_sessions WHERE token_hash = ? AND host_fingerprint = ?',
+        [sessionId, hostId]
+      )
+      if (Number(ended?.changes ?? 0) === 0) return false
       await transaction.query('DELETE FROM connector_hosts WHERE host_id = ?', [hostId])
-      await transaction.query('DELETE FROM connector_sessions WHERE host_fingerprint = ?', [hostId])
       await this.inbox.expireHost(transaction, hostId)
+      return true
     })
   }
 

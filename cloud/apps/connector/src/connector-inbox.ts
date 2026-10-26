@@ -134,11 +134,11 @@ export class ConnectorInbox {
   }
 
   // Only the first poll of a session lists what an earlier process received but never settled.
-  async firstPollUnsettled(hostId: string, sessionExpiresAt: number): Promise<Unsettled[]> {
+  async firstPollUnsettled(hostId: string, sessionId: string): Promise<Unsettled[]> {
     const [first] = await this.database.query(
       `UPDATE connector_sessions SET first_polled_at = ?
-       WHERE host_fingerprint = ? AND expires_at = ? AND first_polled_at IS NULL`,
-      [this.now(), hostId, sessionExpiresAt]
+       WHERE token_hash = ? AND host_fingerprint = ? AND first_polled_at IS NULL`,
+      [this.now(), sessionId, hostId]
     )
     if (Number(first?.changes ?? 0) === 0) return []
     const rows = await this.database.query(

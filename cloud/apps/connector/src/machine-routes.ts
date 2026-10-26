@@ -14,7 +14,7 @@ import type { ConnectorThreads } from './connector-threads.js'
 import type { ConnectorHostLinks } from './host-links.js'
 import type { InboxWaker } from './inbox-waker.js'
 
-export type MachineVariables = { hostId: string; sessionExpiresAt: number }
+export type MachineVariables = { hostId: string; sessionId: string }
 export type MachineEnv = { Variables: MachineVariables }
 
 // The machine API behind a host session: hello, the held poll, confirmations and turn events.
@@ -52,10 +52,7 @@ export function registerMachineRoutes(
       return context.json({ error: 'hello_required' }, 409)
     }
     await hostLinks.touch(hostId)
-    const unsettled = await inbox.firstPollUnsettled(
-      hostId,
-      context.get('sessionExpiresAt')
-    )
+    const unsettled = await inbox.firstPollUnsettled(hostId, context.get('sessionId'))
     const holdUntil = Date.now() + holdMs
     let deliveries: ConnectorDelivery[] = []
     for (;;) {

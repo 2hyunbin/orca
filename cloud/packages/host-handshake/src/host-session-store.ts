@@ -18,7 +18,8 @@ export type IssuedHostSession = {
 }
 
 export type HostSessionLookup =
-  | { ok: true; hostFingerprint: string; expiresAt: number }
+  // sessionId is the stored token hash: it names the session row, and is never the token.
+  | { ok: true; hostFingerprint: string; expiresAt: number; sessionId: string }
   | {
       ok: false
       reason: 'unknown_session' | 'session_expired' | 'host_not_linked' | 'host_revoked'
@@ -69,13 +70,14 @@ export class HostSessionStore {
 
   async resolve(sessionToken: string): Promise<HostSessionLookup> {
     const { table, linkTable } = this.config
+    const sessionId = hashSessionToken(sessionToken)
     const [row] = await this.database.query(
       linkTable
         ? `SELECT s.host_fingerprint, s.expires_at, l.host_id AS linked_host, l.revoked_at
            FROM ${table} s LEFT JOIN ${linkTable} l ON l.host_id = s.host_fingerprint
            WHERE s.token_hash = ?`
         : `SELECT host_fingerprint, expires_at FROM ${table} WHERE token_hash = ?`,
-      [hashSessionToken(sessionToken)]
+      [sessionId]
     )
     if (!row) return { ok: false, reason: 'unknown_session' }
     // Revocation outranks expiry, so the host stops instead of re-proving.
@@ -87,7 +89,7 @@ export class HostSessionStore {
     // No skew grace here: a session that just expired should be re-minted
     // through the challenge, which is cheap and already handled by the host.
     if (this.now() > expiresAt) return { ok: false, reason: 'session_expired' }
-    return { ok: true, hostFingerprint: String(row.host_fingerprint), expiresAt }
+    return { ok: true, hostFingerprint: String(row.host_fingerprint), expiresAt, sessionId }
   }
 
   async pruneExpired(): Promise<number> {

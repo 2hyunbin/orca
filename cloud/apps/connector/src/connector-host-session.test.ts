@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto'
 import {
   CONNECTOR_PATHS,
   ConnectorHostChallengeResponseSchema,
   ConnectorHostSessionResponseSchema
 } from '@orca-cloud/connector-contract'
 import { deriveHostFingerprint } from '@orca-cloud/host-handshake'
+import { ConnectorHostLinks } from './host-links.js'
 import { PUSH_HOST_PROOF_DOMAINS } from '@orca-cloud/push-contract'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -128,6 +130,20 @@ describe('connector machine sessions', () => {
       { authorization: `Bearer ${session.sessionToken}` }
     )
     expect(stale.status).toBe(401)
+  })
+
+  it('lets only a current session log its machine out', async () => {
+    const { harness, host, browser, session } = await linkedHarness()
+    const hostId = deriveHostFingerprint(host.publicKey)
+    const staleId = createHash('sha256').update(session.sessionToken).digest('base64url')
+    // The logout's lookup passed; then a revoke and relink land before it takes the host lock.
+    const page = await (await browser.get('/machines')).text()
+    await browser.post(`/v1/account/hosts/${hostId}/revoke`, { csrf: hiddenField(page, 'csrf') })
+    await harness.approve(browser, (await harness.startSignIn(host)).started!.userCode)
+    expect((await harness.machineSession(host)).status).toBe(200)
+    const links = new ConnectorHostLinks(harness.database, harness.runtime.inbox, harness.now)
+    await expect(links.unbind(hostId, staleId)).resolves.toBe(false)
+    expect((await harness.machineSession(host)).status).toBe(200)
   })
 
   it('ignores a revoke from an account that does not own the machine', async () => {
