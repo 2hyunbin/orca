@@ -9603,7 +9603,7 @@
       "src/renderer/src/components/tab-group/workspace-tab-close-commands.floating-reclaim.test.ts": 1321,
       "src/renderer/src/components/task-page-cache-selectors.test.ts": 76,
       "src/renderer/src/components/task-page-checks-pill.test.ts": 45,
-      "src/renderer/src/components/task-page/task-page-empty-state.test.ts": 106,
+      "src/renderer/src/components/task-page-empty-state.test.ts": 106,
       "src/renderer/src/components/task-page-jira-board-detail-integration.test.tsx": 1526,
       "src/renderer/src/components/task-page-jira-board-sections.test.ts": 1909,
       "src/renderer/src/components/task-page-jira-board-transitions.test.ts": 60,
