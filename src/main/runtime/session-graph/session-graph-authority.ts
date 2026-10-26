@@ -54,6 +54,7 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
     this.handles.clear()
     this.handleByLeafKey.clear()
     this.clearPtyIncarnationHandles()
+    this.rejectAllWaiters('terminal_handle_stale')
     this.refreshWritableFlags()
   }
 
@@ -73,6 +74,7 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
     this.handles.clear()
     this.handleByLeafKey.clear()
     this.clearPtyIncarnationHandles()
+    this.rejectAllWaiters('terminal_handle_stale')
     this.refreshWritableFlags()
     this.markSessionTabsInventoryPublished()
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {

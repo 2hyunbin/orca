@@ -51,6 +51,12 @@ export class RuntimeTerminalWaiterRegistry {
     }
   }
 
+  rejectAll(code: string): void {
+    for (const ptyId of this.byPtyId.keys()) {
+      this.rejectPty(ptyId, code)
+    }
+  }
+
   remove(waiter: TerminalWaiter): void {
     if (waiter.timeout) {
       clearTimeout(waiter.timeout)

@@ -14,7 +14,6 @@ import {
   TAB_ID,
   WORKTREE_ID
 } from './orchestration-mailbox-notification-test-harness'
-import { publishHeadlessRuntimeGraph } from './headless-runtime-graph'
 
 const RENDERER_PTY_ID = 'pty-renderer'
 const GRAPH = {
@@ -32,7 +31,7 @@ const GRAPH = {
   ]
 }
 
-describe('orchestration keeps following a terminal when its window graph goes away', () => {
+describe('Run mail follows the terminal that owns its mailbox', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -40,48 +39,6 @@ describe('orchestration keeps following a terminal when its window graph goes aw
   afterEach(() => {
     vi.useRealTimers()
   })
-
-  it.each(['renderer-failure', 'serve-promotion-cancelled'] as const)(
-    'keeps a terminal wait alive after %s',
-    async (kind) => {
-      const runtime = new OrcaRuntimeService(null)
-      runtime.setPtyController({
-        write: () => true,
-        kill: () => true,
-        getForegroundProcess: async () => null
-      })
-      runtime.registerPty(RENDERER_PTY_ID, WORKTREE_ID, null, {
-        tabId: TAB_ID,
-        leafId: LEAF_ID,
-        incarnationId: 'original'
-      })
-      runtime.registerPreAllocatedHandleForPty(RENDERER_PTY_ID, 'term_waited')
-      if (kind === 'serve-promotion-cancelled') {
-        publishHeadlessRuntimeGraph(runtime)
-      } else {
-        runtime.attachWindow(1)
-        runtime.syncWindowGraph(1, GRAPH)
-      }
-      let outcome: unknown = null
-      const wait = runtime.waitForTerminal('term_waited', { condition: 'exit' }).then(
-        (result) => (outcome = result),
-        (error: Error) => (outcome = error.message)
-      )
-      runtime.attachWindow(1)
-      runtime.markRendererReloading(1)
-      if (kind === 'renderer-failure') {
-        runtime.markGraphReloadFailed(1, 'renderer-process-gone')
-      } else {
-        runtime.markGraphUnavailable(1)
-      }
-      await vi.advanceTimersByTimeAsync(0)
-      expect(outcome).toBeNull()
-
-      runtime.onPtyExit(RENDERER_PTY_ID, 0)
-      await wait
-      expect(outcome).toMatchObject({ condition: 'exit', satisfied: true })
-    }
-  )
 
   it('does not type a stale pointer after the terminal moves to another pane mid-probe', async () => {
     const db = new OrchestrationDb(':memory:')
