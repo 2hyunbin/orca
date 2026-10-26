@@ -6,6 +6,7 @@ import {
   isGitWorktreeMutationInFlight,
   trackGitWorktreeMutation
 } from './git-worktree-mutation-state'
+import { OBJECT_MAINTENANCE_ARGS } from '../../shared/repo-object-maintenance-policy'
 
 let root = ''
 let repo = ''
@@ -37,12 +38,34 @@ describe('Git worktree mutation tracking', () => {
         cwd: root
       }),
       trackGitWorktreeMutation(['push', 'origin', 'HEAD'], { cwd: repo }),
+      trackGitWorktreeMutation(['--version'], { cwd: repo }),
+      trackGitWorktreeMutation(OBJECT_MAINTENANCE_ARGS, { cwd: repo }),
       trackGitWorktreeMutation(['merge-tree', '--write-tree', 'HEAD', 'main'], { cwd: repo })
     ]
     try {
       await expect(isGitWorktreeMutationInFlight(repo, {})).resolves.toBe(false)
     } finally {
       releases.forEach((release) => release())
+    }
+  })
+
+  it.each([
+    ['maintenance', 'run'],
+    ['maintenance', 'run', '--task=gc'],
+    ['maintenance', 'run', '--task=geometric-repack', '--task=gc'],
+    ['maintenance', 'run', '--task=geometric-repack', '--auto'],
+    ['maintenance', 'run', '--task=worktree-prune'],
+    ['maintenance', 'run', '--task=reflog-expire'],
+    ['gc'],
+    ['add', '.'],
+    ['checkout', 'main'],
+    ['unknown-command']
+  ])('keeps the non-object command %j blocking worktree recovery', async (...args) => {
+    const release = trackGitWorktreeMutation(args, { cwd: repo })
+    try {
+      await expect(isGitWorktreeMutationInFlight(repo, {})).resolves.toBe(true)
+    } finally {
+      release()
     }
   })
 

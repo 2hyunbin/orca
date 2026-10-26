@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeGitContext } from '@/runtime/runtime-git-client-context'
 import { admitSourceControlRecovery } from './source-control-recovery-admission'
 import { deferred } from './source-control-hook-test-harness'
+import {
+  isGitWorktreeMutationInFlight,
+  trackGitWorktreeMutation
+} from '../../../../main/git/git-worktree-mutation-state'
+import { OBJECT_MAINTENANCE_ARGS } from '../../../../shared/repo-object-maintenance-policy'
 
 const mocks = vi.hoisted(() => ({ probe: vi.fn(), toastError: vi.fn() }))
 vi.mock('@/runtime/runtime-git-status-client', () => ({
@@ -31,6 +36,28 @@ describe('source-control recovery admission', () => {
     mocks.probe.mockResolvedValue({ inFlight: true })
     await expect(admitSourceControlRecovery(context)).resolves.toBe(false)
     expect(mocks.toastError).toHaveBeenCalledWith('Wait for the running Git operation to finish.')
+  })
+
+  it('keeps recovery available during object maintenance and still blocks a worktree writer', async () => {
+    mocks.probe.mockImplementation(async () => ({
+      inFlight: await isGitWorktreeMutationInFlight(context.worktreePath, {})
+    }))
+    const releaseMaintenance = trackGitWorktreeMutation(OBJECT_MAINTENANCE_ARGS, {
+      cwd: context.worktreePath
+    })
+    let releaseWriter = (): void => {}
+    try {
+      await expect(admitSourceControlRecovery(context)).resolves.toBe(true)
+      expect(mocks.toastError).not.toHaveBeenCalled()
+      releaseWriter = trackGitWorktreeMutation(['rebase', '--continue'], {
+        cwd: context.worktreePath
+      })
+      await expect(admitSourceControlRecovery(context)).resolves.toBe(false)
+      expect(mocks.toastError).toHaveBeenCalledWith('Wait for the running Git operation to finish.')
+    } finally {
+      releaseWriter()
+      releaseMaintenance()
+    }
   })
 
   it('keeps recovery available on hosts that predate the check', async () => {

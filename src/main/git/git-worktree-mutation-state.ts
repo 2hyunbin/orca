@@ -12,13 +12,27 @@ const WORKTREE_NEUTRAL_SUBCOMMANDS = new Set(['fetch', 'push', 'ls-remote', 'mer
 
 const pending = new Set<{ path: string; gitDir?: string; wslDistro?: string }>()
 
+function isObjectOnlyMaintenance(args: readonly string[], subcommandIndex: number): boolean {
+  if (args[subcommandIndex] !== 'maintenance' || args[subcommandIndex + 1] !== 'run') {
+    return false
+  }
+  const tasks = args.slice(subcommandIndex + 2)
+  return (
+    tasks.includes('--task=geometric-repack') &&
+    tasks.every((arg) => arg === '--task=geometric-repack' || arg === '--quiet')
+  )
+}
+
 export function trackGitWorktreeMutation(
   args: readonly string[],
   options: GitRuntimeOptions & { cwd: string }
 ): () => void {
+  const subcommandIndex = findGitSubcommandIndex(args)
   if (
     classifyGitCommand(args) === 'read' ||
-    WORKTREE_NEUTRAL_SUBCOMMANDS.has(args[findGitSubcommandIndex(args)] ?? '')
+    (args.length === 1 && args[0] === '--version') ||
+    WORKTREE_NEUTRAL_SUBCOMMANDS.has(args[subcommandIndex] ?? '') ||
+    isObjectOnlyMaintenance(args, subcommandIndex)
   ) {
     return () => {}
   }

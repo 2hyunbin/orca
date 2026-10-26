@@ -216,6 +216,17 @@ export abstract class AgentHookServerListeners extends AgentHookServerState {
     return this.combinedStatusEntries().map(toAgentStatusIpcPayload)
   }
 
+  hasWorkingAgent(): boolean {
+    for (const entry of this.state.lastStatusByPaneKey.values()) {
+      if (entry.payload.state === 'working') {
+        return true
+      }
+    }
+    return this.canonicalStatusStore
+      .getParents()
+      .some((parent) => !isTmuxInnerSubject(parent.subject) && parent.status?.state === 'working')
+  }
+
   /** Include metadata-only provider identities. */
   getProviderSessionIdentities(): AgentHookProviderSessionIdentity[] {
     return this.buildStatusChangeNotification().providerSessions

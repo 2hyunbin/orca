@@ -25,6 +25,7 @@ vi.mock('../observability/instrumentation', () => ({
 
 import { maintainRepoObjects } from './repo-object-maintenance'
 import { OBJECT_MAINTENANCE_ARGS } from '../../shared/repo-object-maintenance-policy'
+import { isGitWorktreeMutationInFlight } from './git-worktree-mutation-state'
 import {
   GENERAL_CAP,
   GitAdmissionScheduler,
@@ -70,6 +71,7 @@ describe('object maintenance admission', () => {
     try {
       const pending = maintainRepoObjects(args(new AbortController(), () => !busy))
       await vi.waitFor(() => expect(_gitAdmissionSnapshotForTests().queued).toBe(1))
+      expect(await isGitWorktreeMutationInFlight(root, {})).toBe(false)
       busy = true
       blockers.forEach((blocker) => blocker.release())
       expect(await pending).toBe('deferred')
@@ -91,6 +93,7 @@ describe('object maintenance admission', () => {
     const pending = maintainRepoObjects(args(controller))
     try {
       await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+      expect(await isGitWorktreeMutationInFlight(root, {})).toBe(false)
       controller.abort()
       expect(capture.mock.calls[0]?.[2].signal).toBeUndefined()
       expect(capture.mock.calls[0]?.[2].lowPriority).toBe(true)

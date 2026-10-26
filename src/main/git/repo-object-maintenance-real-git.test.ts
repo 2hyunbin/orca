@@ -1,8 +1,10 @@
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { deflateSync } from 'node:zlib'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   OBJECT_PACK_COUNT_THRESHOLD,
@@ -20,6 +22,15 @@ function git(cwd: string, args: string[], input?: string): string {
     input,
     stdio: ['pipe', 'pipe', 'pipe']
   }).trim()
+}
+
+async function writeLooseBlob(repoPath: string, content: string): Promise<string> {
+  const object = Buffer.from(`blob ${Buffer.byteLength(content)}\0${content}`)
+  const oid = createHash('sha1').update(object).digest('hex')
+  const directory = join(repoPath, '.git', 'objects', oid.slice(0, 2))
+  await mkdir(directory, { recursive: true })
+  await writeFile(join(directory, oid.slice(2)), deflateSync(object))
+  return oid
 }
 
 async function packCount(repoPath: string): Promise<number> {
@@ -59,6 +70,70 @@ describe('pack count trigger', () => {
 })
 
 describe.skipIf(!supported)('idle object maintenance against real Git', () => {
+  it.each([true, false])(
+    'retains old unreachable objects during a full-repack fallback with cruft packs %s',
+    async (cruftPacks) => {
+      const repo = join(root, `unreachable-${cruftPacks}`)
+      git(root, ['init', '--quiet', '--object-format=sha1', repo])
+      git(repo, ['config', 'user.email', 'test@example.com'])
+      git(repo, ['config', 'user.name', 'Test User'])
+      git(repo, ['config', 'gc.pruneExpire', 'now'])
+      git(repo, ['config', 'gc.cruftPacks', String(cruftPacks)])
+      await writeFile(join(repo, 'reachable.txt'), 'reachable content')
+      git(repo, ['add', '.'])
+      git(repo, ['commit', '--quiet', '-m', 'initial'])
+      const reachable = git(repo, ['rev-list', '--objects', '--all'])
+        .split('\n')
+        .map((line) => line.split(' ')[0])
+      const unreachable = await Promise.all(
+        reachable.map((_, index) => writeLooseBlob(repo, `unreachable packed blob ${index}`))
+      )
+      // Equal object counts force geometric maintenance's full-repack fallback.
+      for (const objects of [reachable, unreachable]) {
+        git(repo, ['pack-objects', '.git/objects/pack/pack'], `${objects.join('\n')}\n`)
+      }
+      git(repo, ['prune-packed'])
+      const packs = join(repo, '.git', 'objects', 'pack')
+      const old = new Date(Date.UTC(2020, 0, 1))
+      for (const name of await readdir(packs)) {
+        await utimes(join(packs, name), old, old)
+      }
+      let sampled = 0
+      for (let index = 0; sampled < 27; index += 1) {
+        const content = `sampled loose blob ${index}`
+        const oid = createHash('sha1')
+          .update(`blob ${Buffer.byteLength(content)}\0${content}`)
+          .digest('hex')
+        if (oid.startsWith('17')) {
+          await writeLooseBlob(repo, content)
+          sampled += 1
+        }
+      }
+      expect(await packCount(repo)).toBe(2)
+      const outcome = await maintainRepoObjects({
+        repoPath: repo,
+        commonDir: join(repo, '.git'),
+        signal: new AbortController().signal,
+        span: { setAttribute: () => {} },
+        canWrite: () => true
+      })
+      expect(outcome).toBe('ran')
+      expect(
+        git(repo, ['cat-file', '--batch-check'], `${unreachable.join('\n')}\n`)
+          .split('\n')
+          .map((line) => line.split(' ')[1])
+      ).toEqual(unreachable.map(() => 'blob'))
+      for (const oid of unreachable) {
+        await expect(
+          stat(join(repo, '.git', 'objects', oid.slice(0, 2), oid.slice(2)))
+        ).rejects.toMatchObject({ code: 'ENOENT' })
+      }
+      expect(git(repo, ['config', '--get', 'gc.pruneExpire'])).toBe('now')
+      expect(git(repo, ['config', '--get', 'gc.cruftPacks'])).toBe(String(cruftPacks))
+    },
+    120_000
+  )
+
   // Builds a source repo, a partial clone and 60 lazy fetches, each its own git process.
   it('compacts promisor packs without pruning a worktree', async () => {
     const source = join(root, 'source')
@@ -136,5 +211,5 @@ describe.skipIf(!supported)('idle object maintenance against real Git', () => {
         .join('')
         .trim()
     )
-  }, 60_000)
+  }, 120_000)
 })

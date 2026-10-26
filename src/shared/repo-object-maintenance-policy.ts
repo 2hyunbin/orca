@@ -18,10 +18,15 @@ export const OBJECT_MAINTENANCE_FAILURE_COOLDOWN_MS = 6 * 60 * 60_000
  * unmounted volume must not be pruned. `maintenance run` takes `objects/maintenance.lock`,
  * which keeps this exclusive with Git's own maintenance. Geometric repacking also packs
  * loose objects, and only merges promisor packs correctly from Git 2.53.
+ * Its full-repack fallback must retain unreachable objects in packs without expiration.
  */
 export const OBJECT_MAINTENANCE_ARGS = [
   '-c',
   'maintenance.autoDetach=false',
+  '-c',
+  'gc.pruneExpire=never',
+  '-c',
+  'gc.cruftPacks=true',
   '-c',
   'pack.threads=1',
   '-c',

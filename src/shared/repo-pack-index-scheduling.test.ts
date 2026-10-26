@@ -3,7 +3,11 @@ import {
   PACK_INDEX_MAINTENANCE_COOLDOWN_MS,
   PACK_INDEX_MAINTENANCE_FAILURE_COOLDOWN_MS
 } from './repo-pack-index-maintenance-policy'
-import { OBJECT_MAINTENANCE_COOLDOWN_MS } from './repo-object-maintenance-policy'
+import {
+  OBJECT_MAINTENANCE_COOLDOWN_MS,
+  OBJECT_MAINTENANCE_FAILURE_COOLDOWN_MS
+} from './repo-object-maintenance-policy'
+import { RepoMaintenanceSchedule } from './repo-maintenance-schedule'
 import { RepoRefMaintenance } from './repo-ref-maintenance'
 import {
   REF_MAINTENANCE_ATTEMPT_DEADLINE_MS,
@@ -157,6 +161,66 @@ describe('independent idle pack-index scheduling', () => {
 })
 
 describe('idle object maintenance scheduling', () => {
+  it.each(['attempt deadline', 'resumed activity'] as const)(
+    'preserves a failed writer cooldown after %s closes admission',
+    async (reason) => {
+      let now = 1000
+      let eligible = true
+      const controller = new AbortController()
+      const schedule = new RepoMaintenanceSchedule(() => now)
+      const { target } = fixture()
+      const maintainObjects = vi
+        .fn<NonNullable<RepoRefMaintenanceTarget['maintainObjects']>>()
+        .mockImplementationOnce(async () => {
+          if (reason === 'attempt deadline') {
+            controller.abort()
+          } else {
+            eligible = false
+          }
+          return 'failed'
+        })
+        .mockResolvedValue('below_threshold')
+      target.maintainObjects = maintainObjects
+      const span = { setAttribute: () => {} }
+      expect(await schedule.maintainObjects(target, controller.signal, span, () => eligible)).toBe(
+        'failed'
+      )
+      eligible = true
+      const signal = new AbortController().signal
+      expect(await schedule.maintainObjects(target, signal, span, () => eligible)).toBeUndefined()
+      now += OBJECT_MAINTENANCE_FAILURE_COOLDOWN_MS - 1
+      expect(await schedule.maintainObjects(target, signal, span, () => eligible)).toBeUndefined()
+      expect(maintainObjects).toHaveBeenCalledTimes(1)
+      now += 1
+      expect(await schedule.maintainObjects(target, signal, span, () => eligible)).toBe(
+        'below_threshold'
+      )
+      expect(maintainObjects).toHaveBeenCalledTimes(2)
+    }
+  )
+
+  it('keeps prelaunch cancellation eligible for a fresh attempt', async () => {
+    const controller = new AbortController()
+    const schedule = new RepoMaintenanceSchedule(() => 1000)
+    const { target } = fixture()
+    const maintainObjects = vi
+      .fn<NonNullable<RepoRefMaintenanceTarget['maintainObjects']>>()
+      .mockImplementationOnce(async () => {
+        controller.abort()
+        return 'deferred'
+      })
+      .mockResolvedValue('below_threshold')
+    target.maintainObjects = maintainObjects
+    const span = { setAttribute: () => {} }
+    expect(await schedule.maintainObjects(target, controller.signal, span, () => true)).toBe(
+      'deferred'
+    )
+    expect(
+      await schedule.maintainObjects(target, new AbortController().signal, span, () => true)
+    ).toBe('below_threshold')
+    expect(maintainObjects).toHaveBeenCalledTimes(2)
+  })
+
   it('lets a repack outlive the attempt deadline and finishes refs on a fresh attempt', async () => {
     countLooseRefsMock.mockResolvedValue({ count: 20, saturated: true })
     const { maintenance, target, packRefs, maintainPackIndex } = fixture()

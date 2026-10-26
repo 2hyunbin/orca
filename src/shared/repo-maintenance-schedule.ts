@@ -120,7 +120,10 @@ export class RepoMaintenanceSchedule {
     }
     const outcome = await target.maintainObjects(signal, span, canWrite)
     span.setAttribute('git.object_maintenance_outcome', outcome)
-    if (outcome === 'deferred' || (outcome !== 'ran' && (signal.aborted || !canWrite()))) {
+    if (
+      outcome === 'deferred' ||
+      (outcome !== 'ran' && outcome !== 'failed' && (signal.aborted || !canWrite()))
+    ) {
       return 'deferred'
     }
     const cooldown =
