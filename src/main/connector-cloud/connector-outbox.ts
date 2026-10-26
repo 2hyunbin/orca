@@ -32,7 +32,8 @@ export class ConnectorOutbox<T> {
 
   constructor(
     private readonly options: {
-      maxBatch: number
+      /** How many of the first items one request carries; at least one. */
+      headSize: (items: readonly T[]) => number
       initial?: T[]
       /** Trims what is owed, never the first `sent` items, so everything owed stays within bounds. */
       bound?: (items: T[], sent: number) => T[]
@@ -67,7 +68,7 @@ export class ConnectorOutbox<T> {
       stamp = this.stamp = {
         helloRev,
         seq: stamp?.helloRev === helloRev ? stamp.seq + 1 : 0,
-        size: Math.min(this.options.maxBatch, this.items.length)
+        size: Math.max(1, Math.min(this.options.headSize(this.items), this.items.length))
       }
     }
     return { stamp, batch: this.items.slice(0, stamp.size) }
@@ -84,6 +85,24 @@ export class ConnectorOutbox<T> {
     this.options.onAccepted?.(batch)
   }
 
+  /**
+   * The cloud refused `stamp`'s head as too large or malformed, which no retry fixes: it goes again as its
+   * first half, same number. A single item is dropped instead; returns it so the caller can say so.
+   */
+  refused(stamp: ConnectorStamp): T | null {
+    if (this.stamp !== stamp) {
+      return null
+    }
+    if (stamp.size > 1) {
+      this.stamp = { ...stamp, size: Math.ceil(stamp.size / 2) }
+      return null
+    }
+    const [dropped] = this.items.splice(0, 1)
+    this.stamp = { ...stamp, size: 0 }
+    this.notify()
+    return dropped ?? null
+  }
+
   private replace(items: T[]): void {
     this.items = this.options.bound ? this.options.bound(items, this.stamp?.size ?? 0) : items
     this.notify()
@@ -93,6 +112,10 @@ export class ConnectorOutbox<T> {
     this.options.onChange?.(this.items)
   }
 }
+
+// Too large, or not the contract: the same request can never succeed.
+const isRefusedAsSent = (failure: ConnectorFailure): boolean =>
+  failure.status === 413 || failure.status === 400
 
 /** Sends a head; null when the cloud answered 204. */
 export type ConnectorBatchSender<T> = (
@@ -107,11 +130,12 @@ export type ConnectorBatchSender<T> = (
  */
 export class ConnectorOutboxSender<T> {
   private sending = false
+  private warned = false
   private failures = 0
   private retry: ReturnType<typeof setTimeout> | null = null
 
   constructor(
-    private readonly outbox: Pick<ConnectorOutbox<T>, 'next' | 'accepted'>,
+    private readonly outbox: Pick<ConnectorOutbox<T>, 'next' | 'accepted' | 'refused'>,
     private readonly send: ConnectorBatchSender<T>,
     private readonly helloRev: () => number | null,
     private readonly random: () => number
@@ -153,6 +177,10 @@ export class ConnectorOutboxSender<T> {
         if (this.helloRev() !== helloRev) {
           continue
         }
+        if (failure && isRefusedAsSent(failure)) {
+          this.dropped(this.outbox.refused(head.stamp))
+          continue
+        }
         if (failure) {
           this.scheduleRetry(failure)
           return
@@ -162,6 +190,13 @@ export class ConnectorOutboxSender<T> {
       }
     } finally {
       this.sending = false
+    }
+  }
+
+  private dropped(item: T | null): void {
+    if (item !== null && !this.warned) {
+      this.warned = true
+      console.warn('[connector] Orca Cloud refused an item that cannot be sent; dropped it')
     }
   }
 

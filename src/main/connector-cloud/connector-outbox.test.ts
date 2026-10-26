@@ -32,7 +32,7 @@ afterEach(() => {
 
 describe('ConnectorOutbox', () => {
   it('sends nothing without an accepted hello', async () => {
-    const outbox = new ConnectorOutbox<string>({ maxBatch: 10 })
+    const outbox = new ConnectorOutbox<string>({ headSize: () => 10 })
     const { sender, sent } = recordingSender(
       outbox,
       () => null,
@@ -45,7 +45,7 @@ describe('ConnectorOutbox', () => {
   })
 
   it('never lets a later item overtake a refused one: the retry resends the same batch and number', async () => {
-    const outbox = new ConnectorOutbox<string>({ maxBatch: 2 })
+    const outbox = new ConnectorOutbox<string>({ headSize: () => 2 })
     const answers: (ConnectorFailure | null)[] = [TOO_MANY, null, null]
     const { sender, sent } = recordingSender(
       outbox,
@@ -66,7 +66,7 @@ describe('ConnectorOutbox', () => {
   })
 
   it('keeps an item whose 204 lands after a newer hello went out, and sends it under that hello', async () => {
-    const outbox = new ConnectorOutbox<string>({ maxBatch: 10 })
+    const outbox = new ConnectorOutbox<string>({ headSize: () => 10 })
     let rev: number | null = 1
     const held = Promise.withResolvers<ConnectorFailure | null>()
     const answers = [held.promise]
@@ -90,7 +90,7 @@ describe('ConnectorOutbox', () => {
   })
 
   it('a new hello sends at once, past the last one’s backoff', async () => {
-    const outbox = new ConnectorOutbox<string>({ maxBatch: 10 })
+    const outbox = new ConnectorOutbox<string>({ headSize: () => 10 })
     let rev = 1
     const answers: (ConnectorFailure | null)[] = [TOO_MANY]
     const { sender, sent } = recordingSender(
@@ -108,7 +108,7 @@ describe('ConnectorOutbox', () => {
   })
 
   it('restarts numbering with its first items in front, keeping only what is still wanted', () => {
-    const outbox = new ConnectorOutbox<string>({ maxBatch: 10 })
+    const outbox = new ConnectorOutbox<string>({ headSize: () => 10 })
     outbox.push('turn end', 'prompt')
     expect(outbox.next(1)?.stamp.seq).toBe(0)
     outbox.restart(['snapshot'], (item) => item === 'turn end')
@@ -118,7 +118,7 @@ describe('ConnectorOutbox', () => {
   })
 
   it('ignores a superseded stamp', () => {
-    const outbox = new ConnectorOutbox<string>({ maxBatch: 10 })
+    const outbox = new ConnectorOutbox<string>({ headSize: () => 10 })
     outbox.push('a')
     const old = outbox.next(1)
     outbox.restart([], () => true)
@@ -126,5 +126,30 @@ describe('ConnectorOutbox', () => {
       outbox.accepted(old.stamp)
     }
     expect(outbox.next(2)?.batch).toEqual(['a'])
+  })
+
+  it('splits a head the cloud refuses as too large, same number, and drops a lone item once', async () => {
+    const outbox = new ConnectorOutbox<string>({ headSize: () => 4 })
+    const TOO_LARGE: ConnectorFailure = { ok: false, status: 413, error: null, retryAfterMs: null }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { sender, sent } = recordingSender(
+      outbox,
+      () => 1,
+      async () => (sent.at(-1)?.batch.includes('huge') ? TOO_LARGE : null)
+    )
+    outbox.push('a', 'huge', 'b', 'c')
+    sender.flush()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sent.map(({ batch, seq }) => [batch, seq])).toEqual([
+      [['a', 'huge', 'b', 'c'], 0],
+      [['a', 'huge'], 0],
+      [['a'], 0],
+      [['huge', 'b', 'c'], 1],
+      [['huge', 'b'], 1],
+      [['huge'], 1],
+      [['b', 'c'], 2]
+    ])
+    expect(warn).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
   })
 })

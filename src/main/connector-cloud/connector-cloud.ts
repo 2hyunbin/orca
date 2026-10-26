@@ -1,5 +1,4 @@
 // This desktop's link to the Orca Cloud connector, as whichever Orca account it is signed in to.
-import { nextConnectorHelloRev } from './connector-hello-rev'
 import { ConnectorPollClient } from './connector-poll-client'
 import type { ConnectorMachine } from './connector-machine'
 import { ConnectorAccountTransport, type ConnectorTokenMint } from './connector-transport'
@@ -91,8 +90,7 @@ export class ConnectorCloud {
         ),
         events,
         seam,
-        machine: this.options.machine,
-        nextHelloRev: () => nextConnectorHelloRev(this.options.userDataPath)
+        machine: this.options.machine
       })
       this.client.start()
     }

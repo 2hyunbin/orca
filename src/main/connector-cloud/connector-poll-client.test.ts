@@ -2,10 +2,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { z } from 'zod'
 import { CONNECTOR_PATHS } from '../../shared/connector-cloud-contract'
 import type { Delivery } from '../external-conversations/external-conversation-types'
-import { nextConnectorHelloRev } from './connector-hello-rev'
 import { connectorProjects } from './connector-places'
 import { ConnectorPollClient } from './connector-poll-client'
 import { ConnectorAccountTransport } from './connector-transport'
@@ -36,7 +34,6 @@ function startClient(seam = fakeSeam(), events = new ConnectorTurnEvents(userDat
     events,
     seam: seam.seam,
     machine,
-    nextHelloRev: () => nextConnectorHelloRev(userDataPath),
     random: () => 0.5
   })
   client.start()
@@ -439,18 +436,14 @@ describe('ConnectorPollClient', () => {
       { kind: 'turn-started' }
     ])
 
-    const helloRevs = () =>
-      fake.hellos.map((hello) => z.object({ helloRev: z.number() }).parse(hello).helloRev)
-    expect(fake.requestsTo(CONNECTOR_PATHS.events)[0]?.body).toMatchObject({
-      helloRev: helloRevs()[0]
-    })
+    // Each hello names the revision the cloud gave it.
+    expect(fake.requestsTo(CONNECTOR_PATHS.events)[0]?.body).toMatchObject({ helloRev: 1 })
     fake.forgetHello()
     poll([])
     await settle()
     const renewed = fake.requestsTo(CONNECTOR_PATHS.events).at(-1)?.body
-    expect(helloRevs()[1]).toBeGreaterThan(helloRevs()[0]!)
     expect(renewed).toMatchObject({
-      helloRev: helloRevs()[1],
+      helloRev: 2,
       seq: 0,
       events: [{ kind: 'snapshot' }]
     })
@@ -586,6 +579,71 @@ describe('ConnectorPollClient', () => {
     })
     await settle(30_000)
     expect(fake.events).toContainEqual(expect.objectContaining({ kind: 'turn-ended', turnId: 4 }))
+    client.stop()
+  })
+
+  it('says hello again after a poll fails, so the cloud lists unsettled deliveries again', async () => {
+    const { client } = startClient()
+    await settle()
+    fake.answerPoll({ status: 503 })
+    await settle(5_000)
+    expect(fake.hellos).toHaveLength(2)
+    client.stop()
+  })
+
+  it('counts only the contract’s success: a 200 that is not one keeps the turn end', async () => {
+    const { client, emit } = startClient()
+    await settle()
+    fake.forced.set(CONNECTOR_PATHS.events, { status: 200, body: '<html>proxy</html>' })
+    emit({
+      kind: 'turn-ended',
+      conversation,
+      worktreeId: 'wt',
+      paneKey: 'tab:1',
+      turnId: 4,
+      stopReason: 'success',
+      at: 9
+    })
+    await settle()
+    fake.forced.delete(CONNECTOR_PATHS.events)
+    await settle(5_000)
+    expect(fake.events).toContainEqual(expect.objectContaining({ kind: 'turn-ended', turnId: 4 }))
+    client.stop()
+  })
+
+  it('never takes a hello whose answer is not the contract', async () => {
+    const { client } = startClient()
+    fake.forced.set(CONNECTOR_PATHS.hello, { status: 204 })
+    await settle(5_000)
+    expect(fake.requestsTo(CONNECTOR_PATHS.poll)).toHaveLength(0)
+    fake.forced.delete(CONNECTOR_PATHS.hello)
+    await settle(30_000)
+    expect(fake.requestsTo(CONNECTOR_PATHS.poll).length).toBeGreaterThan(0)
+    client.stop()
+  })
+
+  it('fills event requests by bytes, so a backlog of long turn ends never meets a 413', async () => {
+    const { client, emit } = startClient()
+    fake.forced.set(CONNECTOR_PATHS.events, { status: 503 })
+    for (let turnId = 1; turnId <= 60; turnId++) {
+      emit({
+        kind: 'turn-ended',
+        conversation,
+        worktreeId: 'wt',
+        paneKey: 'tab:1',
+        turnId,
+        stopReason: 'success',
+        lastAssistantMessage: 'x'.repeat(8 * 1024),
+        at: turnId
+      })
+    }
+    await settle()
+    fake.forced.delete(CONNECTOR_PATHS.events)
+    await settle(30_000)
+    expect(
+      fake.events.filter((event) => isRecord(event) && event.kind === 'turn-ended')
+    ).toHaveLength(60)
+    expect(fake.requestsTo(CONNECTOR_PATHS.events).length).toBeGreaterThan(2)
     client.stop()
   })
 })

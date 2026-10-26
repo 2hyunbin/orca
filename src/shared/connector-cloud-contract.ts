@@ -18,11 +18,18 @@ export const CONNECTOR_FEATURES = ['answer', 'cancel', 'reply'] as const
 export const CONNECTOR_CLIENT_LIMITS = {
   pollTimeoutMs: 70_000,
   minDeadlineLeftMs: 10_000,
-  maxLastAssistantMessageBytes: 8 * 1024
+  maxLastAssistantMessageBytes: 8 * 1024,
+  // The cloud refuses a larger request body with 413.
+  maxRequestBytes: 256 * 1024,
+  // One event's JSON, so any single event fits in an events request.
+  maxEventBytes: 192 * 1024
 } as const
 
 // Machine-side readers: they keep what this Orca uses and ignore fields a newer cloud adds.
 export const ConnectorErrorResponse = z.object({ error: z.string().min(1) })
+
+// Each hello gets a revision above every earlier one for this machine; polls, acks and events carry it.
+export const ConnectorHelloResponse = z.object({ helloRev: z.number().int().positive() })
 
 const ConnectorConversation = z.object({
   source: z.literal('slack'),
@@ -112,5 +119,7 @@ export type ConnectorEvent =
         agent: string
         working: boolean
         prompt: PendingPrompt | null
+        // The pane's latest turn; a turn end older than it changes nothing.
+        turnId?: number
       })[]
     }

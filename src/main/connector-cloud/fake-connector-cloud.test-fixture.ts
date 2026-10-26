@@ -1,6 +1,6 @@
 // An in-process Orca Cloud connector speaking the real wire shapes, with tokens minted per account.
 import { randomBytes } from 'node:crypto'
-import { CONNECTOR_PATHS } from '../../shared/connector-cloud-contract'
+import { CONNECTOR_CLIENT_LIMITS, CONNECTOR_PATHS } from '../../shared/connector-cloud-contract'
 import type { ConnectorResult } from './connector-cloud-request'
 import type { ConnectorToken, ConnectorTokenMint } from './connector-transport'
 
@@ -30,6 +30,8 @@ export class FakeConnectorCloud {
   private readonly tokens = new Map<string, { account: string; expiresAt: number }>()
   // The hello the cloud keeps, and the highest event batch applied under it.
   private hello: { rev: number; seq: number } | null = null
+  // The last revision handed out; it outlives a lost hello, as the host row does.
+  private lastRev = 0
   /** Every hello, ack and event the machine sent, in order. */
   readonly hellos: unknown[] = []
   readonly acks: unknown[] = []
@@ -47,6 +49,9 @@ export class FakeConnectorCloud {
     }
     const url = new URL(String(input))
     const path = url.pathname
+    if (Buffer.byteLength(String(init?.body ?? '')) > CONNECTOR_CLIENT_LIMITS.maxRequestBytes) {
+      return Response.json({ error: 'request_too_large' }, { status: 413 })
+    }
     const body: unknown = init?.body ? JSON.parse(String(init.body)) : undefined
     const auth = new Headers(init?.headers).get('authorization')
     const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null
@@ -146,11 +151,9 @@ export class FakeConnectorCloud {
     const rev = typeof fields.helloRev === 'number' ? fields.helloRev : -1
     if (path === CONNECTOR_PATHS.hello) {
       this.hellos.push(body)
-      // An older hello is ignored; repeating the current one keeps its event mark.
-      if (!this.hello || rev > this.hello.rev) {
-        this.hello = { rev, seq: -1 }
-      }
-      return { status: 204 }
+      // Every hello gets the next revision and a fresh event mark.
+      this.hello = { rev: ++this.lastRev, seq: -1 }
+      return { status: 200, body: { helloRev: this.hello.rev } }
     }
     const { hello } = this
     // Acks and events from an older hello are ignored; the next first poll lists what is unsettled.
