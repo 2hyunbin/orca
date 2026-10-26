@@ -117,9 +117,11 @@ describe('the line under each of the chat own messages', () => {
       )?.detail
     ).toBeUndefined()
     // A refusal's sentence already quotes the provider's words.
-    const refused = row('b', 'rejected', {
-      rejection: { kind: 'providerRejected', detail: { text: 'Too long', audience: 'person' } }
-    })
+    const rejected: AgentSessionFailureFact = {
+      kind: 'providerRejected',
+      detail: { text: 'Too long', audience: 'person' }
+    }
+    const refused = row('b', 'rejected', { rejection: rejected })
     expect(notices({ submissions: [refused] }).get(agentJournalSubmissionKey('b'))?.detail).toBe(
       undefined
     )
