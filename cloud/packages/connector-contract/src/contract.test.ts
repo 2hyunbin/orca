@@ -4,7 +4,11 @@ import {
   ConnectorPollResponseSchema,
   ConnectorAcksRequestSchema
 } from './delivery-messages.js'
-import { ConnectorEventSchema, ConnectorReplyResponseSchema } from './event-messages.js'
+import {
+  ConnectorEventSchema,
+  ConnectorPendingPromptSchema,
+  ConnectorReplyResponseSchema
+} from './event-messages.js'
 import { ConnectorHelloRequestSchema } from './hello-messages.js'
 import { ConnectorHostSessionResponseSchema } from './host-auth-messages.js'
 import { CONNECTOR_LIMITS } from './connector-limits.js'
@@ -56,6 +60,7 @@ describe('poll response', () => {
       stop: 'host_revoked'
     })
     expect(poll([], { control: { pausedForMs: 0 } }).success).toBe(false)
+    expect(poll([], { control: { stop: 'host_revoked', reconnect: true } }).success).toBe(false)
   })
 
   it('bounds the batch and the hold', () => {
@@ -133,6 +138,16 @@ describe('events', () => {
         ]
       }).success
     ).toBe(true)
+  })
+
+  it('carries a question the agent left without text, as the seam reports it', () => {
+    const prompt = {
+      kind: 'question',
+      promptId: 'p2',
+      question: '',
+      options: [{ id: '1', label: '' }]
+    }
+    expect(ConnectorPendingPromptSchema.safeParse(prompt).success).toBe(true)
   })
 })
 

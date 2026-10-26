@@ -5,7 +5,8 @@ import { ConnectorConversationSchema } from './connector-wire-scalars.js'
 
 const PromptOptionSchema = z.object({
   id: OpaqueIdSchema,
-  label: z.string().min(1),
+  // The seam keeps an agent's blank option labels and question text as they are.
+  label: z.string(),
   description: z.string().min(1).optional()
 })
 
@@ -20,7 +21,7 @@ export const ConnectorPendingPromptSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('question'),
     promptId: OpaqueIdSchema,
-    question: z.string().min(1),
+    question: z.string(),
     header: z.string().min(1).optional(),
     options: z.array(PromptOptionSchema)
   }),
