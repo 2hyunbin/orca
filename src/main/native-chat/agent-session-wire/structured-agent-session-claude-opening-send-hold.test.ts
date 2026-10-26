@@ -3,7 +3,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, assert, beforeEach, expect, it, vi } from 'vitest'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import { agentSessionSendSubmission } from '../../../shared/agent-session-wire'
@@ -554,7 +554,8 @@ it.each([10, 100])(
   async (n) => {
     const { journal, child } = session()
     expect(adapter.liveTurnId(SESSION)).toBeNull()
-    const fence = child!.fence
+    const { fence, generation } = child!
+    assert(typeof generation === 'string')
     const turn = (id: string, ownFence = fence, agentId?: string) =>
       journal.appendItem(
         { provider: 'claude', sessionId: PROVIDER_SESSION_ID, uuid: id },
@@ -574,7 +575,7 @@ it.each([10, 100])(
           role: 'assistant',
           blocks: [{ type: 'text', text: `Earlier reply ${i}` }]
         },
-        { fence }
+        { fence, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
       )
     }
     const stale = await turn('imported-root')
@@ -620,13 +621,7 @@ it.each([10, 100])(
     // Count the actual startup scan, independently of pre-existing current-work reads.
     expect(visits - before).toBe(n + 4)
     const reconcile = (liveId: string | null | undefined) =>
-      unheld.settleUnheldStructuredAgentSessionTurns(
-        journal,
-        SESSION,
-        fence,
-        child!.generation,
-        liveId
-      )
+      unheld.settleUnheldStructuredAgentSessionTurns(journal, SESSION, fence, generation, liveId)
     const scanned = visits
     const cursor = journal.cursor()
     await reconcile(undefined)

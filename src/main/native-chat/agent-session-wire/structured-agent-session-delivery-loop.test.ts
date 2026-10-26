@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
 import {
   acceptedDispatch,
@@ -194,9 +195,9 @@ describe('delivery iteration settlement and ownership', () => {
           try {
             // Dispatch itself writes, before the serialized resolver exists.
             await ctx.journal.appendItem(
-              { provider: 'codex', threadId: 'thread', turnId: 'settled', itemId: 'settled' },
+              { provider: 'codex', threadId: 'thread', turnId: 'settled', ordinal: 0 },
               { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'settled' }] },
-              { fence: ctx.fence }
+              { fence: ctx.fence, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
             )
             entered.resolve()
             await held.promise
