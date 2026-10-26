@@ -52,7 +52,7 @@ export class DaemonClient {
   private connectingPromise: Promise<void> | null = null
   private connectionAttemptGeneration = 0
   private daemonIdentity: DaemonEndpointIdentity | null = null
-  private daemonResizeModel: string | null = null
+  private daemonResizeModel: string | null | undefined
   private observedAuthenticatedDisconnect = false
 
   private pendingRequests = new DaemonPendingRequests()
@@ -75,9 +75,12 @@ export class DaemonClient {
     return this.daemonIdentity ? { ...this.daemonIdentity } : null
   }
 
-  /** The connected daemon's resize model; null for an older daemon or while disconnected. */
-  getDaemonResizeModel(): string | null {
-    return this.connected ? this.daemonResizeModel : null
+  /**
+   * The last daemon's resize model, kept through a disconnect (the next hello replaces it): null is
+   * an older daemon, undefined that no daemon has answered yet.
+   */
+  getDaemonResizeModel(): string | null | undefined {
+    return this.daemonResizeModel
   }
 
   hasObservedAuthenticatedDisconnect(): boolean {
@@ -273,7 +276,6 @@ export class DaemonClient {
     this.connectionAttemptGeneration++
     this.connected = false
     this.daemonIdentity = null
-    this.daemonResizeModel = null
     this.disconnectArmed = false
     this.cleanupActiveSocketListeners()
 

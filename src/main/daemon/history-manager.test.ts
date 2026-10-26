@@ -249,7 +249,10 @@ describe('HistoryManager', () => {
 
     it("stamps the hosting daemon's resize model on open and restamps it at each checkpoint", async () => {
       let hosting: string | null = null
-      const stamping = new HistoryManager(dir, { resizeModel: () => hosting })
+      let unknown = false
+      const stamping = new HistoryManager(dir, {
+        resizeModel: () => (unknown ? undefined : hosting)
+      })
       const metaPath = sessionPath(dir, 'sess-r', 'meta.json')
       const stamp = (): unknown => JSON.parse(readFileSync(metaPath, 'utf-8')).resizeModel
       await stamping.openSession('sess-r', { cwd: '/tmp', cols: 80, rows: 24 })
@@ -258,6 +261,11 @@ describe('HistoryManager', () => {
       hosting = 'conpty-viewport-v1'
       await stamping.checkpoint('sess-r', makeSnapshot())
       expect(stamp()).toBe('conpty-viewport-v1')
+      // Unknown (no daemon has answered) keeps the stamp rather than reading as an older daemon.
+      unknown = true
+      await stamping.checkpoint('sess-r', makeSnapshot())
+      expect(stamp()).toBe('conpty-viewport-v1')
+      unknown = false
       hosting = null
       await stamping.checkpoint('sess-r', makeSnapshot())
       expect(stamp()).toBeUndefined()

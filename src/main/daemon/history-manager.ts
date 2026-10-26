@@ -45,7 +45,7 @@ export class HistoryManager {
   private readonly recoveryFreezes: TerminalHistoryRecoveryFreezes
   private onWriteError?: (sessionId: string, error: Error) => void
   private checkpointMaxBytes: number
-  private resizeModel: () => string | null
+  private resizeModel: () => string | null | undefined
 
   constructor(
     private readonly basePath: string,
@@ -79,7 +79,7 @@ export class HistoryManager {
       this.recoveryFreezes.release(sessionId)
       ensurePrivateDir(dir)
 
-      writeTerminalHistoryMeta(dir, newTerminalHistoryMeta(opts, this.resizeModel()))
+      writeTerminalHistoryMeta(dir, newTerminalHistoryMeta(opts, this.resizeModel() ?? null))
 
       if (!opts.quarantineUnreadableRecovery) {
         clearReplayableTerminalHistorySessionFiles(dir)
@@ -238,9 +238,10 @@ export class HistoryManager {
     try {
       // Write asynchronously to avoid stalling IPC; per-session serialization protects the fixed temporary path.
       const checkpoint = await writer.checkpoint(snapshot, opts)
-      if (checkpoint.result === 'committed') {
-        // The fresh log is recorded against the daemon hosting the session now.
-        stampTerminalHistoryResizeModel(writer.dir, this.resizeModel())
+      const resizeModel = this.resizeModel()
+      // The fresh log is recorded against the daemon hosting the session now; unknown keeps the stamp.
+      if (checkpoint.result === 'committed' && resizeModel !== undefined) {
+        stampTerminalHistoryResizeModel(writer.dir, resizeModel)
       }
       if (checkpoint.result === 'retryable') {
         this.onWriteError?.(sessionId, checkpoint.error)

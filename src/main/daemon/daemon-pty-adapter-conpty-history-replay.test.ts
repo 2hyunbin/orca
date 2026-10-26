@@ -106,6 +106,30 @@ class SavingDaemonPtyAdapter extends DaemonPtyAdapter {
   saveFinally(sessionIds: string[]): Promise<unknown> {
     return this.checkpointSessions(sessionIds, { final: true })
   }
+
+  /** Drops the daemon connection while the next checkpoint commits. */
+  disconnectDuringNextCommit(): void {
+    const manager = this.historyManager
+    if (!manager) {
+      throw new Error('no history')
+    }
+    const commit = manager.checkpoint.bind(manager)
+    manager.checkpoint = (...args) => {
+      manager.checkpoint = commit
+      this.client.disconnect()
+      return commit(...args)
+    }
+  }
+
+  reconnect(): Promise<void> {
+    return this.client.ensureConnected()
+  }
+
+  /** A fresh hello, as after the daemon was replaced. */
+  async reconnectToNewDaemon(): Promise<void> {
+    this.client.disconnect()
+    await this.client.ensureConnected()
+  }
 }
 
 describe('daemon history of a ConPTY session through a resize', () => {
@@ -219,5 +243,51 @@ describe('daemon history of a ConPTY session through a resize', () => {
     expect(await restoredLabels({ from: [40, 10], to: [120, 10], olderDaemon: true })).toEqual(
       EVERY_ROW_ONCE.filter((label) => !overwritten.includes(label))
     )
+  })
+
+  function resizeStamp(historyDir: string, sessionId: string): unknown {
+    const metaPath = join(historyDir, getHistorySessionDirName(sessionId), 'meta.json')
+    return JSON.parse(readFileSync(metaPath, 'utf8')).resizeModel
+  }
+
+  it('keeps the stamp through a disconnect mid-commit: unknown is not an older daemon', async () => {
+    const historyDir = join(dir, 'history')
+    const sessionId = 'wt-1::/project@@disconnect1'
+    const history = new SavingDaemonPtyAdapter({ socketPath, tokenPath, historyPath: historyDir })
+    await history.spawn({ cols: 40, rows: 10, cwd: '/project', sessionId })
+    lastSubprocess._simulateData('$ ')
+    history.disconnectDuringNextCommit()
+    await history.saveFinally([sessionId])
+    expect(resizeStamp(historyDir, sessionId)).toBe('conpty-viewport-v1')
+    await history.reconnect()
+    lastSubprocess._simulateData('echo hi\r\nhi\r\n$ ')
+    await history.saveFinally([sessionId])
+    expect(resizeStamp(historyDir, sessionId)).toBe('conpty-viewport-v1')
+    history.dispose()
+  })
+
+  // Window 1: a Sleep cache wake on a newer daemon restamps with the first checkpoint (#34060).
+  it("restamps a session woken from the Sleep cache onto a newer daemon with that daemon's model", async () => {
+    const historyDir = join(dir, 'history')
+    const sessionId = 'wt-1::/project@@wake-upgrade1'
+    olderDaemon.hosting = true
+    try {
+      const history = new SavingDaemonPtyAdapter({ socketPath, tokenPath, historyPath: historyDir })
+      await history.spawn({ cols: 40, rows: 10, cwd: '/project', sessionId })
+      lastSubprocess._simulateData('$ echo before\r\nbefore\r\n$ ')
+      await history.shutdown(sessionId, { immediate: true, keepHistory: true })
+      expect(resizeStamp(historyDir, sessionId)).toBeUndefined()
+      // The daemon is replaced by a newer one before the wake.
+      olderDaemon.hosting = false
+      await history.reconnectToNewDaemon()
+      await history.spawn({ cols: 40, rows: 10, cwd: '/project', sessionId })
+      history.ackColdRestore(sessionId)
+      lastSubprocess._simulateData('$ echo after\r\nafter\r\n$ ')
+      await history.savePeriodically([sessionId])
+      expect(resizeStamp(historyDir, sessionId)).toBe('conpty-viewport-v1')
+      history.dispose()
+    } finally {
+      olderDaemon.hosting = false
+    }
   })
 })
