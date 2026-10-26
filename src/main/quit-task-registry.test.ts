@@ -59,3 +59,24 @@ it('finishes later cleanup after both synchronous throws and asynchronous reject
     report.mockRestore()
   }
 })
+
+it('fences an unused phase synchronously without replaying late registrations', async () => {
+  const registry = new QuitTaskRegistry()
+  const drain = Promise.withResolvers<void>()
+  registry.register('ssh', 'detach', () => {
+    expect(registry.hasStarted('ssh')).toBe(true)
+    return drain.promise
+  })
+  expect(registry.hasStarted('ssh')).toBe(false)
+  const pending = registry.run('ssh', context)
+  expect(registry.hasStarted('ssh')).toBe(true)
+  expect(registry.hasStarted('browser-client-hosts')).toBe(false)
+  await registry.run('browser-client-hosts', context)
+  expect(registry.hasStarted('browser-client-hosts')).toBe(true)
+  const late = vi.fn()
+  registry.register('browser-client-hosts', 'late-owner', late)
+  expect(late).not.toHaveBeenCalled()
+  drain.resolve()
+  await pending
+  expect(registry.hasStarted('ssh')).toBe(true)
+})

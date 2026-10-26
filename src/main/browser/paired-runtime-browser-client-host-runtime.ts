@@ -1,4 +1,4 @@
-import { registerQuitTask } from '../quit-task-registry'
+import { hasQuitTaskPhaseStarted, registerQuitTask } from '../quit-task-registry'
 import { BROWSER_CLIENT_PROFILE_SWITCH_CAPABILITY } from '../../shared/browser-client-profile-switch-protocol'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
@@ -154,6 +154,9 @@ export async function startPairedRuntimeBrowserClientHost(options: {
   environment: KnownRuntimeEnvironment
   authorityRuntimeId: string
 }): Promise<BrowserClientHostLeaseAuthority> {
+  if (hasQuitTaskPhaseStarted('browser-client-hosts')) {
+    throw new Error('paired_runtime_browser_client_host_registry_closed')
+  }
   registerQuitTask(
     'browser-client-hosts',
     'paired-runtime-browser-client-hosts',
