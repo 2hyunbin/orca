@@ -98,7 +98,7 @@ export function buildTerminalCreateWindow(args: {
         onPublishAgentLaunchTab: () => () => {},
         onRevealTerminalPane: () => () => {},
         onAgentLaunchPaneVerdict: () => () => {},
-        onAgentLaunchConfig: () => () => {},
+        onLaunchRecipe: () => () => {},
         onSplitTerminal: () => () => {},
         onRenameTerminal: () => () => {},
         onFocusTerminal: (

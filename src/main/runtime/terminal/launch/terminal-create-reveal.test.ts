@@ -2,13 +2,29 @@ import { describe, expect, it, vi } from 'vitest'
 import { revealCreatedTerminal } from './terminal-create-reveal'
 
 const launchConfig = { agentArgs: '--dangerously-skip-permissions', agentEnv: {} }
+const recipe = {
+  tabId: 'tab',
+  leafId: 'leaf',
+  launchConfig,
+  launchToken: 'token',
+  launchAgent: 'claude'
+}
 
-function reveal(presentation: 'background' | 'focused') {
+async function reveal(args: {
+  presentation: 'background' | 'focused'
+  revealFails?: boolean
+  adoptedStablePane?: boolean
+}) {
   const notifier = {
-    revealTerminalSession: vi.fn(async () => ({ tabId: 'tab' })),
-    rememberAgentLaunchConfig: vi.fn()
+    revealTerminalSession: vi.fn(async () => {
+      if (args.revealFails) {
+        throw new Error('Terminal reveal timed out')
+      }
+      return { tabId: 'tab' }
+    }),
+    rememberLaunchRecipe: vi.fn()
   }
-  const result = revealCreatedTerminal({
+  const result = await revealCreatedTerminal({
     notifier,
     workspace: { id: 'wt', path: '/repo' },
     ptyId: 'pty',
@@ -17,37 +33,29 @@ function reveal(presentation: 'background' | 'focused') {
     launchOpts: { launchAgent: 'claude' },
     effectiveLaunchConfig: launchConfig,
     launchToken: 'token',
-    presentation,
+    adoptedStablePane: args.adoptedStablePane ?? false,
+    presentation: args.presentation,
     opts: {},
     tabId: 'tab',
     leafId: 'leaf'
   })
-  return { notifier, result }
+  return { notifier, surface: result.surface }
 }
 
 describe('revealCreatedTerminal launch recipe', () => {
-  it('tells the window the recipe of a background launch it does not reveal', () => {
-    const { notifier } = reveal('background')
+  it.each([
+    { name: 'a background launch', presentation: 'background' as const },
+    { name: 'a launch whose reveal failed', presentation: 'focused' as const, revealFails: true }
+  ])('tells the window the recipe of $name', async (args) => {
+    const { notifier, surface } = await reveal(args)
 
-    expect(notifier.revealTerminalSession).not.toHaveBeenCalled()
-    expect(notifier.rememberAgentLaunchConfig).toHaveBeenCalledWith({
-      worktreeId: 'wt',
-      tabId: 'tab',
-      leafId: 'leaf',
-      launchConfig,
-      launchToken: 'token',
-      launchAgent: 'claude'
-    })
+    expect(surface).toBe('background')
+    expect(notifier.rememberLaunchRecipe).toHaveBeenCalledWith(recipe)
   })
 
-  it('leaves the recipe to the reveal of a shown launch', async () => {
-    const { notifier, result } = reveal('focused')
-    await result
+  it('never re-registers an adopted pane, whose launch token is already spent', async () => {
+    const { notifier } = await reveal({ presentation: 'background', adoptedStablePane: true })
 
-    expect(notifier.revealTerminalSession).toHaveBeenCalledWith(
-      'wt',
-      expect.objectContaining({ launchConfig, launchToken: 'token' })
-    )
-    expect(notifier.rememberAgentLaunchConfig).not.toHaveBeenCalled()
+    expect(notifier.rememberLaunchRecipe).not.toHaveBeenCalled()
   })
 })

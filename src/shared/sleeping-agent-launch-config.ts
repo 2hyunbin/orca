@@ -1,15 +1,4 @@
 import type { SleepingAgentLaunchConfig } from './agent-session-resume'
-import type { TuiAgent } from './tui-agent'
-
-/** The recipe of a pane main launched without revealing it; resume replays only recorded recipes. */
-export type PaneAgentLaunchConfig = {
-  worktreeId: string
-  tabId: string
-  leafId: string
-  launchConfig: SleepingAgentLaunchConfig
-  launchToken?: string
-  launchAgent?: TuiAgent
-}
 
 export function buildSleepingAgentLaunchConfig(args: {
   agentCommand?: string | null
