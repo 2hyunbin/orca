@@ -29,7 +29,6 @@ import { parseTaskDeps } from './task-deps-argument'
 import { assertExplicitWorkerUsable } from './explicit-worker-terminal-validation'
 import { resolveDispatchAssigneeParty } from '../../../../orchestration/orchestration-party'
 import { CHAT_WORKER_AUTHORITY, chatWorkerMode } from '../chat-assignee-admission'
-import { chatAssigneeSessionId } from '../../../../orchestration/chat-assignee'
 import { recordCreatedWorkerTerminalCustody } from './created-worker-terminal-custody'
 import { releaseRetriedWorkerTerminal } from './retried-worker-terminal-release'
 import { requireWorkerAuthority, type WorkerEffect } from './worker-topology'
@@ -232,7 +231,7 @@ export async function startLocalWorker(args: {
           timeoutMs: Math.max(0, readinessDeadline - Date.now())
         })
       : session
-        ? // A chat takes its task as a queued send whatever it is doing, so nothing is waited on.
+        ? // An agent session takes its task as a queued send whatever it is doing, so nothing is waited on.
           null
         : await waitForWorkerAgentReady(runtime, terminalHandle, {
             agent,
@@ -255,9 +254,10 @@ export async function startLocalWorker(args: {
       }
     }
     // A chat has no pane or process; its Dispatch names it by its Orca session ID alone.
-    const terminalAuthority = chatAssigneeSessionId(terminalHandle)
-      ? CHAT_WORKER_AUTHORITY
-      : requireWorkerAuthority(runtime, terminalHandle)
+    const terminalAuthority =
+      terminal && terminal.terminalHandle === null
+        ? CHAT_WORKER_AUTHORITY
+        : requireWorkerAuthority(runtime, terminalHandle)
     db.prepareStartingWorkerAuthority({
       dispatchId: started.dispatch.id,
       handle: terminalHandle,
@@ -276,6 +276,7 @@ export async function startLocalWorker(args: {
       dispatchId: started.dispatch.id,
       dispatchDepth: started.dispatch.depth,
       structuredSession,
+      session,
       terminalHandle,
       coordinatorHandle: params.from,
       devMode: params.devMode,

@@ -1,7 +1,7 @@
 import { defineMethod } from '../../../core'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
 import type { OrchestrationCompatibilityEvidence } from '../../../../../../shared/orchestration-compatibility-evidence'
-import { isEquivalentPaneKey } from '../../../../orchestration/db/pane-key-match'
+import { evidenceCallerTerminal, liveTerminal } from './evidence-caller-terminal'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { CheckParams } from '../schemas'
 import { parseMessageTypes } from '../routing'
@@ -38,7 +38,7 @@ export const ORCHESTRATION_CHECK_METHODS = [
       const handle = params.terminal ?? 'unknown'
       const typeFilter = parseMessageTypes(params.types)
       const consumingCheck = params.peek !== true && params.all !== true && params.unread !== false
-      if (consumingCheck && !orchestrationCaller) {
+      if ((consumingCheck || params.ack !== undefined) && !orchestrationCaller) {
         assertCallerOwnsMailbox(runtime, handle, orchestrationCompatibilityEvidence)
       }
 
@@ -119,19 +119,21 @@ export const ORCHESTRATION_CHECK_METHODS = [
   })
 ]
 
-/** A consuming check opens or acks the mailbox's Delivery, so a caller whose own live pane is another terminal's may only peek. */
+/** Guards against accidental consumption, not a proof of ownership: a request that opens, consumes or acks mail
+ * is refused only when the caller's env names a live terminal other than the mailbox's live terminal.
+ * Absent, stale, scrubbed or foreign evidence and an exited mailbox keep the old behaviour.
+ * Accepted limit: tmux inherits its starting pane's env, so a worker in another terminal's tmux server must peek. */
 function assertCallerOwnsMailbox(
   runtime: OrcaRuntimeService,
   handle: string,
   evidence: OrchestrationCompatibilityEvidence | undefined
 ): void {
-  const own = evidence?.terminalHandle
-  const ownPane = own ? runtime.getTerminalPaneKey(own) : null
-  const mailboxPane = runtime.getTerminalPaneKey(handle)
-  if (ownPane && mailboxPane && !isEquivalentPaneKey(ownPane, mailboxPane)) {
+  const caller = evidenceCallerTerminal(runtime, evidence)
+  const mailbox = liveTerminal(runtime, handle)?.processIncarnation
+  if (caller?.processIncarnation && mailbox && caller.processIncarnation !== mailbox) {
     throw new OrchestrationError(
       'consumer_fenced',
-      `This terminal is ${own} and cannot consume the mail of ${handle}. Read it with --peek or --all, which leave it unread. No effects were applied.`,
+      `This terminal is ${caller.handle} and cannot consume or acknowledge the mail of ${handle}. Read it with --peek or --all, which leave it unread. No effects were applied.`,
       { effectsApplied: false }
     )
   }

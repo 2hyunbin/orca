@@ -9,6 +9,7 @@ import type { WorkerStartModeReceipt } from '../orchestration-worker-start-mode'
 import { observeChatAssignee } from '../../../orchestration/chat-assignee'
 import type { OrchestrationDb } from '../../../orchestration/db'
 import { OrchestrationError } from '../../../orchestration/orchestration-error'
+import type { OrchestrationParty } from '../../../orchestration/orchestration-party'
 import { readAgentSessionRecordStore } from '../../../orchestration/structured-session-lineage'
 import { refuseUndeliverableSessionRecipient } from './messaging/session-recipient'
 
@@ -16,6 +17,11 @@ const NO_EFFECTS = 'No effects were applied.'
 
 /** A chat has no pane or process; its Dispatch names it by its Orca session ID alone. */
 export const CHAT_WORKER_AUTHORITY = { paneKey: null, processIncarnation: null } as const
+
+/** The chat a Dispatch assignee party names; null for a terminal or a structured worker. */
+export function chatAssigneeOf(party: OrchestrationParty): OrcaSessionId | null {
+  return party.terminalHandle === null ? party.orcaSessionId : null
+}
 
 /** Use the same reach rules as mail before creating anything; return the assignee's currently running session. */
 export async function admitChatAssignee(
@@ -60,15 +66,15 @@ export function refuseChatSelfAssignment(args: {
   }
 }
 
-/** A chat adopted as a worker is given the task, not launched; the decided mode stands. */
+/** An agent session adopted as a worker is given the task, not launched; the decided mode stands. */
 export function chatWorkerMode(
   mode: WorkerStartModeReceipt,
-  chat: OrcaSessionId | null
+  session: OrcaSessionId | null
 ): WorkerStartModeReceipt {
-  return chat
+  return session
     ? {
         ...mode,
-        detail: `--terminal names the chat ${formatOrcaSessionAddress(chat)}; its task goes to that chat and no agent is launched.`
+        detail: `--terminal names the agent session ${formatOrcaSessionAddress(session)}; its task goes to that session and no agent is launched.`
       }
     : mode
 }
