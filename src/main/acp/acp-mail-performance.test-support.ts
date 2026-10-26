@@ -118,7 +118,7 @@ export async function measureMailDeliveryWork(input: {
   const folded = () =>
     folds.mock.calls.map(([id, before, after]) => [id, before?.revision, after?.revision])
   await input.checking()
-  console.info('mail live folds before history', folded())
+  console.info('mail live folds before history', JSON.stringify(folded()))
   folds.mockClear()
   indexOperations = 0
   indexScans = 0
@@ -134,7 +134,7 @@ export async function measureMailDeliveryWork(input: {
   await f.host.flushStreamedEvents(SESSION)
   await journal.readInOrder(() => undefined)
   await new Promise<void>((resolve) => setImmediate(resolve))
-  console.info('mail history folds', folded())
+  console.info('mail history folds', JSON.stringify(folded()))
   expect(folds).toHaveBeenCalledTimes(performance.population)
   expect(new Set(history.map((row) => row.itemId)).size).toBe(performance.population)
   expect(folded()).toEqual(history.map((row) => [row.itemId, undefined, row.revision]))
@@ -204,18 +204,21 @@ export async function measureMailDeliveryWork(input: {
     )
     await f.rig.settle()
     const observed = evidence.mock.calls.slice(calls)
-    console.info('mail completed busy trigger', {
-      population: performance.population,
-      trigger,
-      issued: debt.length,
-      inventoryRows: inventory.mock.results.map((r) =>
-        r.type === 'return' ? r.value.map((row) => row.id) : r.type
-      ),
-      inventory: argumentsOf(inventory.mock.calls),
-      preparation: argumentsOf(preparation.mock.calls),
-      receipts: argumentsOf(receipts.mock.calls),
-      evidence: argumentsOf(observed)
-    })
+    console.info(
+      'mail completed busy trigger',
+      JSON.stringify({
+        population: performance.population,
+        trigger,
+        issued: debt.length,
+        inventoryRows: inventory.mock.results.map((r) =>
+          r.type === 'return' ? r.value.map((row) => row.id) : r.type
+        ),
+        inventory: argumentsOf(inventory.mock.calls),
+        preparation: argumentsOf(preparation.mock.calls),
+        receipts: argumentsOf(receipts.mock.calls),
+        evidence: argumentsOf(observed)
+      })
+    )
     expect(inventory.mock.calls.length).toBeLessThanOrEqual(2)
     expect(
       inventory.mock.results.every((r) => r.type === 'return' && r.value.length === debt.length)
