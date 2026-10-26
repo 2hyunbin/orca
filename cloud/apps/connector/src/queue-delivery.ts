@@ -18,7 +18,7 @@ export async function queueDelivery(
     thread: Omit<NewThread, 'accountId'>
     deliveryId: string
     body: DeliveryBody
-    receivedAt?: number
+    held?: boolean
   }
 ): Promise<QueueResult> {
   const { hostId, externalId } = input.thread
@@ -36,7 +36,7 @@ export async function queueDelivery(
       externalId,
       deliveryId: input.deliveryId,
       body: input.body,
-      ...(input.receivedAt === undefined ? {} : { receivedAt: input.receivedAt })
+      held: input.held ?? false
     })
   })
 }

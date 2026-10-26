@@ -319,6 +319,8 @@ describe('Slack event ingress', () => {
     ])
 
     await harness.message({ text: 'try again', ts: '1800000000.000500', thread_ts: THREAD })
+    harness.fake.respond('conversations.replies', Response.json({ ok: true, messages: [] }))
+    await harness.edge.starts.buildDue()
     const [retry] = await harness.poll()
     expect(retry).toMatchObject({ kind: 'start', placeId: 'pl_orca', prompt: 'try again' })
   })
@@ -422,37 +424,25 @@ describe('Slack event ingress', () => {
     expect(send?.kind === 'send' ? send.text : '').toMatch(/\[Bob\] it is the cache\n\ngo$/)
   })
 
-  it('drops an expired held follow-up between live ones, leaving the teammate context for the next', async () => {
+  it('expires the owner’s follow-up with a held start that never went out, and says so once', async () => {
     const harness = await linkedOwner()
     await harness.message({
       text: `<@${BOT}> fix this`,
       ts: '1800000000.000400',
       thread_ts: THREAD
     })
-    await harness.message({
-      user: TEAMMATE,
-      text: 'it is the cache',
-      ts: '1800000000.000500',
-      thread_ts: THREAD
-    })
-    await harness.edge.members.checkContextAuthors()
-    // Routed by an instance whose clock puts it at its deadline already.
-    harness.advance(-5 * 60_000)
-    await harness.message({ text: 'stale', ts: '1800000000.000600', thread_ts: THREAD })
-    harness.advance(5 * 60_000)
-    await harness.message({ text: 'go', ts: '1800000000.000700', thread_ts: THREAD })
-    harness.fake.respond('conversations.replies', Response.json({ ok: true, messages: [] }))
-    await harness.edge.starts.buildDue()
-    const [start] = await harness.poll()
-    expect(start).toMatchObject({ kind: 'start', prompt: 'fix this' })
-    await harness.machine.ack([{ deliveryId: start?.deliveryId, step: 'received' }])
-    expect(await harness.poll()).toEqual([
-      expect.objectContaining({
-        kind: 'send',
-        deliveryId: `${TEAM}:${CHANNEL}:1800000000.000700`,
-        text: expect.stringMatching(/\[Bob\] it is the cache\n\ngo$/)
-      })
+    await harness.message({ text: 'go', ts: '1800000000.000500', thread_ts: THREAD })
+    harness.advance(5 * 60_000 + 1)
+    await harness.runtime.inbox.expireDue(harness.edge.onExpired)
+    expect(await harness.poll()).toEqual([])
+    expect(
+      await harness.database.query('SELECT kind, state FROM connector_inbox ORDER BY seq')
+    ).toEqual([
+      { kind: 'start', state: 'expired' },
+      { kind: 'send', state: 'expired' }
     ])
+    const status = (await harness.posts()).find((post) => post.post_id === `status:${EXTERNAL_ID}`)
+    expect(JSON.parse(String(status?.body)).text).toMatch(/^Couldn’t reach/)
   })
 
   it('reads a long thread page by page, keeping the first and the latest messages', async () => {
@@ -502,8 +492,37 @@ describe('Slack event ingress', () => {
     harness.advance(5 * 60_000 + 1)
     await harness.message({ text: 'try again', ts: '1800000000.000500', thread_ts: THREAD })
     await harness.runtime.inbox.expireDue(harness.edge.onExpired)
+    harness.fake.respond('conversations.replies', Response.json({ ok: true, messages: [] }))
+    await harness.edge.starts.buildDue()
     const [retry] = await harness.poll()
     expect(retry).toMatchObject({ kind: 'start', prompt: 'try again' })
+  })
+
+  it('a retry that reads the thread carries teammates’ kept messages in it, not again after it', async () => {
+    const harness = await linkedOwner()
+    await harness.message(mention())
+    harness.advance(5 * 60_000 + 1)
+    await harness.runtime.inbox.expireDue(harness.edge.onExpired)
+    const TEAMMATE_TS = '1800000000.000500'
+    await harness.message({
+      user: TEAMMATE,
+      text: 'see the logs',
+      ts: TEAMMATE_TS,
+      thread_ts: THREAD
+    })
+    await harness.edge.members.checkContextAuthors()
+    await harness.message({ text: 'retry', ts: '1800000000.000600', thread_ts: THREAD })
+    expect(await harness.database.query('SELECT * FROM connector_thread_context')).toEqual([])
+    harness.fake.respond(
+      'conversations.replies',
+      Response.json({
+        ok: true,
+        messages: [{ ts: TEAMMATE_TS, user: TEAMMATE, text: 'see the logs' }]
+      })
+    )
+    await harness.edge.starts.buildDue()
+    const [retry] = await harness.poll()
+    expect(retry?.kind === 'start' ? retry.prompt : '').toContain('[Bob] see the logs')
   })
 
   it('keeps teammates’ context when the owner only gets an update notice', async () => {
@@ -567,7 +586,7 @@ describe('Slack event ingress', () => {
     expect(second?.kind === 'start' ? second.prompt : '').toContain('couldn’t be read')
   })
 
-  it('a held start that expired while the worker lagged hands over to the owner’s later message', async () => {
+  it('a held start that expired unread gives way to the owner’s retry, a fresh start on the same machine and project that reads the thread', async () => {
     const harness = await linkedOwner()
     await harness.message({
       text: `<@${BOT}> fix this`,
@@ -591,6 +610,11 @@ describe('Slack event ingress', () => {
         prompt: 'retry now'
       })
     ])
-    expect(await harness.database.query('SELECT * FROM connector_slack_pending')).toEqual([])
+    expect(
+      await harness.database.query('SELECT delivery_id, state FROM connector_inbox ORDER BY seq')
+    ).toEqual([
+      { delivery_id: `${TEAM}:${CHANNEL}:1800000000.000400`, state: 'expired' },
+      { delivery_id: `${TEAM}:${CHANNEL}:1800000300.000100`, state: 'leased' }
+    ])
   })
 })

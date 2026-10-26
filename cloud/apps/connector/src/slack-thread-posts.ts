@@ -129,7 +129,7 @@ function statusText(thread: SqlRow, latest: SqlRow | undefined, hostName: string
   if (thread.turn_state === 'working') {
     return slackText.status.working(hostName)
   }
-  if (latest?.state === 'pending' || latest?.state === 'leased') {
+  if (latest?.state === 'pending' || latest?.state === 'held' || latest?.state === 'leased') {
     return slackText.status.waiting(hostName)
   }
   switch (result?.outcome) {

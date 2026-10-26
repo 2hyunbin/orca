@@ -57,7 +57,13 @@ export function createConnectorServer(
   const queueInTransaction: QueueInTransaction = (transaction, input) =>
     queueDelivery({ database: transaction, inbox, threads, hosts }, input)
   const slack = config.slack
-    ? createSlackEdge({ config: config.slack, database, queue: queueInTransaction, now })
+    ? createSlackEdge({
+        config: config.slack,
+        database,
+        inbox,
+        queue: queueInTransaction,
+        now
+      })
     : undefined
   const limitUnauthenticated = limitByClientIp(
     new RateLimiter(UNAUTHENTICATED_PER_MINUTE_PER_IP, now),

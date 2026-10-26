@@ -8,7 +8,7 @@ import {
 import type { Hono, MiddlewareHandler } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { every } from './connector-background.js'
-import type { ExpiredThread } from './connector-inbox.js'
+import type { ConnectorInbox, ExpiredThread } from './connector-inbox.js'
 import type { MachineEnv } from './machine-auth.js'
 import type { SlackConfig } from './slack-config.js'
 import { readSlackEnvelope } from './slack-events.js'
@@ -41,6 +41,7 @@ export type SlackEdge = ReturnType<typeof createSlackEdge>
 export function createSlackEdge(deps: {
   config: SlackConfig
   database: CloudDatabase
+  inbox: ConnectorInbox
   queue: QueueInTransaction
   now: () => number
   api?: SlackWebApi
@@ -51,15 +52,7 @@ export function createSlackEdge(deps: {
   const api = deps.api ?? createSlackWebApi()
   const worker = new SlackPostWorker({ database, posts, installs, api })
   const members = new SlackMembers({ database, installs, api, now })
-  const starts = new SlackThreadStarts({
-    database,
-    installs,
-    members,
-    posts,
-    queue: deps.queue,
-    api,
-    now
-  })
+  const starts = new SlackThreadStarts({ database, inbox: deps.inbox, installs, members, api, now })
   const refresh = async (
     transaction: CloudDatabase,
     hostId: string,

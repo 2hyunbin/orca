@@ -8,7 +8,11 @@ import { findSlackIdentity } from './slack-identities.js'
 import type { SlackInstalls } from './slack-installs.js'
 import { chooseMachine, knownHost } from './slack-machine-choice.js'
 import type { SlackPlace, SlackPosts } from './slack-posts.js'
-import { keepTeammateContext, withTeammateContext } from './slack-teammate-context.js'
+import {
+  dropTeammateContextBefore,
+  keepTeammateContext,
+  withTeammateContext
+} from './slack-teammate-context.js'
 import { slackText } from './slack-text.js'
 import { reactSeen, replyToWriter } from './slack-writer-replies.js'
 import { refreshSlackStatus } from './slack-thread-posts.js'
@@ -65,21 +69,10 @@ export async function routeSlackMessage(
     const threads = await threadsIn(transaction, { teamId, channelId, threadTs })
     const own = threads.find((thread) => thread.ownerUserId === userId)
     const externalId = `${teamId}:${channelId}:${threadTs}:${userId}`
-    // Conversations still waiting on their thread read are conversations here too, just not bound.
-    const held = await transaction.query(
-      `SELECT DISTINCT external_id, owner_user_id, host_id, place_id, agent
-       FROM connector_slack_pending WHERE team_id = ? AND channel_id = ? AND thread_ts = ?`,
-      [teamId, channelId, threadTs]
-    )
-    const pending = held.find((row) => row.owner_user_id === userId)
-    const othersConversations = [
-      ...threads
-        .filter((thread) => thread.ownerUserId !== userId)
-        .map((thread) => thread.externalId),
-      ...held.filter((row) => row.owner_user_id !== userId).map((row) => String(row.external_id))
-    ]
-    const addressed =
-      own || pending || message.direct || mentionsBot(message.text, install.botUserId)
+    const othersConversations = threads
+      .filter((thread) => thread.ownerUserId !== userId)
+      .map((thread) => thread.externalId)
+    const addressed = own || message.direct || mentionsBot(message.text, install.botUserId)
     if (!addressed && othersConversations.length === 0) {
       return
     }
@@ -111,13 +104,6 @@ export async function routeSlackMessage(
     const route = { deps, transaction, message, messageKey, place, text, externalId }
     if (own) {
       await continueConversation(route, own)
-    } else if (pending) {
-      // Held with the rest; the release decides which held message is the start.
-      await holdForThreadStart(route, {
-        hostId: String(pending.host_id),
-        placeId: String(pending.place_id),
-        agent: String(pending.agent)
-      })
     } else {
       await startConversation(route)
     }
@@ -177,46 +163,15 @@ async function startConversation(route: Route): Promise<void> {
     )
     return
   }
-  // Partway through a thread, the start carries the thread so far; the start worker reads it.
-  if (message.ts !== message.threadTs) {
-    await holdForThreadStart(route, choice)
-    return
-  }
+  // Partway through a thread, the start carries the thread so far: held until the start worker
+  // reads it.
   await deliver(route, {
     externalId: route.externalId,
     hostId: choice.hostId,
     placeId: choice.placeId,
-    body: { kind: 'start', agent: choice.agent, placeId: choice.placeId, prompt: route.text }
+    body: { kind: 'start', agent: choice.agent, placeId: choice.placeId, prompt: route.text },
+    held: message.ts !== message.threadTs
   })
-}
-
-// Held until the start worker has read the thread; the 5-minute expiry still runs from now.
-async function holdForThreadStart(
-  route: Route,
-  held: { hostId: string; placeId: string; agent: string }
-): Promise<void> {
-  const { deps, transaction, message, messageKey, place } = route
-  await transaction.query(
-    `INSERT INTO connector_slack_pending
-     (message_key, external_id, team_id, channel_id, thread_ts, ts, owner_user_id, host_id,
-      place_id, agent, text, received_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      messageKey,
-      route.externalId,
-      place.teamId,
-      place.channelId,
-      place.threadTs,
-      message.ts,
-      message.userId,
-      held.hostId,
-      held.placeId,
-      held.agent,
-      route.text,
-      deps.now()
-    ]
-  )
-  await reactSeen(deps.posts, transaction, place, messageKey, message.ts)
 }
 
 // The owner's next message is a follow-up, or a fresh start on the same machine and project when
@@ -246,15 +201,32 @@ async function continueConversation(route: Route, thread: ThreadRow): Promise<vo
     )
     return
   }
+  // Like any start partway through a thread, it carries the thread, kept context included.
+  const held = message.ts !== message.threadTs
+  if (held) {
+    await dropTeammateContextBefore(transaction, thread.externalId, message.ts)
+  }
   await deliver(route, {
     ...thread,
-    body: { kind: 'start', agent, placeId: thread.placeId, prompt: await prompt() }
+    body: {
+      kind: 'start',
+      agent,
+      placeId: thread.placeId,
+      prompt: held ? route.text : await prompt()
+    },
+    held
   })
 }
 
 async function deliver(
   route: Route,
-  target: { externalId: string; hostId: string; placeId: string; body: DeliveryBody }
+  target: {
+    externalId: string
+    hostId: string
+    placeId: string
+    body: DeliveryBody
+    held?: boolean
+  }
 ): Promise<void> {
   const { deps, transaction, message, messageKey, place } = route
   const queued = await deps.queue(transaction, {
@@ -266,7 +238,8 @@ async function deliver(
       placeId: target.placeId
     },
     deliveryId: messageKey,
-    body: target.body
+    body: target.body,
+    held: target.held ?? false
   })
   if (queued !== 'queued') {
     return
@@ -310,8 +283,8 @@ async function hasLiveStart(
       'accepted'
     )
   }
-  // A pending start past its deadline will never go out, swept yet or not.
-  if (start?.state === 'pending') {
+  // A pending or held start past its deadline will never go out, swept yet or not.
+  if (start?.state === 'pending' || start?.state === 'held') {
     return Number(start.expires_at) > now
   }
   return start?.state === 'leased' || start?.state === 'received'

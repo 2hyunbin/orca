@@ -46,3 +46,15 @@ export async function withTeammateContext(
     ownerText
   )
 }
+
+// A start that reads the thread up to its message already carries what was kept before it.
+export async function dropTeammateContextBefore(
+  transaction: CloudDatabase,
+  externalId: string,
+  ts: string
+): Promise<void> {
+  await transaction.query('DELETE FROM connector_thread_context WHERE external_id = ? AND ts < ?', [
+    externalId,
+    ts
+  ])
+}
