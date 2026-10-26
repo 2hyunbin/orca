@@ -279,6 +279,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           },
           effectiveLaunchConfig: pty?.launchConfig ?? undefined,
           launchToken: pty?.launchToken ?? undefined,
+          adoptedStablePane: launch.adoptedStablePane,
           presentation,
           opts,
           tabId,
