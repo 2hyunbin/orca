@@ -274,16 +274,6 @@ export class ConversationEvents {
     })
   }
 
-  /** The pane's turn still running or waiting on the user, by the id its turn events carry; null when none. */
-  openTurn(paneKey: string): number | null {
-    // Unwatched, the hook row still names the turn, the same way turn events fall back to it.
-    const row = this.deps.readHookRow(paneKey)
-    if (!row || hookRowAgentPhase(row) === 'done' || hookRowAgentPhase(row) === 'rest') {
-      return null
-    }
-    return this.turnStartedAt.get(paneKey) ?? row.turnStartedAt ?? row.stateStartedAt
-  }
-
   private takeTurnId(paneKey: string, row: AgentStatusIpcPayload): number | null {
     const turnId = this.turnStartedAt.get(paneKey) ?? row.turnStartedAt ?? null
     this.turnStartedAt.delete(paneKey)
