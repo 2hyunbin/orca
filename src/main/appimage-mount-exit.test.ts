@@ -1,15 +1,15 @@
-import { spawn } from 'node:child_process'
 import type * as fs from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { resolveAppImageRuntimeIdentity } from './appimage-runtime-identity'
+import { spawnProcess } from '@orca/process-host'
 import { installAppImageMountExit } from './appimage-mount-exit'
 
 vi.mock('./appimage-runtime-identity', () => ({
   resolveAppImageRuntimeIdentity: vi.fn()
 }))
 
-vi.mock('node:child_process', () => ({
-  spawn: vi.fn(() => ({ unref: vi.fn() }))
+vi.mock('@orca/process-host', () => ({
+  spawnProcess: vi.fn(() => ({ unref: vi.fn() }))
 }))
 
 const MOUNT = '/tmp/.mount_Orca-abc123'
@@ -61,7 +61,7 @@ describe('installAppImageMountExit', () => {
   afterEach(() => {
     process.execPath = originalExecPath
     procPids = ['40', '41', '42', '43', '44', '45', '50', '51', '60', 'self']
-    vi.mocked(spawn).mockClear()
+    vi.mocked(spawnProcess).mockClear()
     vi.restoreAllMocks()
   })
 
@@ -99,10 +99,10 @@ describe('installAppImageMountExit', () => {
 
     installExitHook(true)?.()
 
-    expect(spawn).toHaveBeenCalledTimes(1)
-    const [, args, options] = vi.mocked(spawn).mock.calls[0]
-    expect(args?.slice(3)).toEqual([`42=${MOUNT}/orca-ide`])
-    expect(options?.stdio).toEqual(['ignore', 'ignore', 'ignore', 3])
+    expect(spawnProcess).toHaveBeenCalledTimes(1)
+    const [spec] = vi.mocked(spawnProcess).mock.calls[0]
+    expect(spec.args?.slice(3)).toEqual([`42=${MOUNT}/orca-ide`])
+    expect(spec.stdio).toEqual(['ignore', 'ignore', 'ignore', 3])
   })
 
   it('does not start a watcher when no helper is left on the mount', () => {
@@ -111,7 +111,7 @@ describe('installAppImageMountExit', () => {
 
     installExitHook(true)?.()
 
-    expect(spawn).not.toHaveBeenCalled()
+    expect(spawnProcess).not.toHaveBeenCalled()
   })
 
   // Installed deb/rpm handler binaries are shared across launches and must never match.

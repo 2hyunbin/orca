@@ -2,10 +2,10 @@
 // still exiting after main then SIGBUS. Kill Crashpad, and lend the pipe to an off-mount watcher.
 // Main-process crashes bypass exit hooks, so the handler may still fault after writing the dump.
 
-import { spawn } from 'node:child_process'
 import { readdirSync, readlinkSync, realpathSync, statSync } from 'node:fs'
 // posix: /proc paths are Linux-only, and tests run this matcher on every host.
 import { posix } from 'node:path'
+import { spawnProcess } from '@orca/process-host'
 import { resolveAppImageRuntimeIdentity } from './appimage-runtime-identity'
 
 const HELPER_EXIT_GRACE_TICKS = 50
@@ -106,17 +106,15 @@ export function installAppImageMountExit(): void {
       return
     }
     try {
-      spawn(
-        '/bin/sh',
-        ['-c', MOUNT_KEEPALIVE_SCRIPT, 'orca-appimage-mount-keepalive', ...helpers],
-        {
-          cwd: '/',
-          // AppRun points PATH and LD_LIBRARY_PATH into the mount this watcher must not depend on.
-          env: { PATH: '/usr/bin:/bin' },
-          detached: true,
-          stdio: ['ignore', 'ignore', 'ignore', keepaliveFd]
-        }
-      ).unref()
+      spawnProcess({
+        program: '/bin/sh',
+        args: ['-c', MOUNT_KEEPALIVE_SCRIPT, 'orca-appimage-mount-keepalive', ...helpers],
+        cwd: '/',
+        // AppRun points PATH and LD_LIBRARY_PATH into the mount this watcher must not depend on.
+        env: { PATH: '/usr/bin:/bin' },
+        detached: true,
+        stdio: ['ignore', 'ignore', 'ignore', keepaliveFd]
+      }).unref()
     } catch {
       // Without a watcher the runtime unmounts when main exits, as before.
     }
