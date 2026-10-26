@@ -46,8 +46,12 @@ describe('EmulatorSessionRegistry managed-session liveness', () => {
     )
     return registry
   }
+  const stopped: string[] = []
   const census = (running: string[] | null) => () => ({
-    listRunningDeviceIds: async () => running
+    listRunningDeviceIds: async () => running,
+    stopHelperForDevice: async (deviceId: string) => {
+      stopped.push(deviceId)
+    }
   })
 
   it('drops a managed device that stopped outside Orca and keeps the running one', async () => {
@@ -56,6 +60,7 @@ describe('EmulatorSessionRegistry managed-session liveness', () => {
     expect(registry.getActiveForWorktree('wt0')?.deviceUdid).toBe('emulator-5554')
     expect(registry.getSession('emulator-5556')).toBeUndefined()
     expect(registry.getActiveForWorktree('wt1')).toBeNull()
+    expect(stopped).toContain('emulator-5556')
   })
 
   it('reads no managed devices once every one is gone', async () => {
@@ -72,7 +77,8 @@ describe('EmulatorSessionRegistry managed-session liveness', () => {
 
   it('keeps the records of a backend with no census', async () => {
     const registry = registryWith('emulator-5554')
-    expect(await registry.pruneGoneManagedSessions(() => ({}))).toBe(true)
+    const noCensus = () => ({ stopHelperForDevice: async () => {} })
+    expect(await registry.pruneGoneManagedSessions(noCensus)).toBe(true)
     expect(registry.getSession('emulator-5554')).toBeDefined()
   })
 })

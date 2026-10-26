@@ -79,19 +79,23 @@ export class EmulatorSessionRegistry {
   async pruneGoneManagedSessions(
     backendForKind: (
       kind: EmulatorBackendKind
-    ) => Pick<EmulatorBackend, 'listRunningDeviceIds'> | null
+    ) => Pick<EmulatorBackend, 'listRunningDeviceIds' | 'stopHelperForDevice'> | null
   ): Promise<boolean> {
     const managed = this.listSessions().filter((session) => session.managed)
     let live = false
     for (const kind of new Set(managed.map((session) => session.backend))) {
-      const census = backendForKind(kind)?.listRunningDeviceIds?.()
+      const backend = backendForKind(kind)
+      const census = backend?.listRunningDeviceIds?.()
       // A backend without a census, or one that failed or timed out, proves nothing; keep its records.
       const running = census ? await withTimeout(census, DEVICE_LISTING_BUDGET_MS, null) : null
       for (const session of managed.filter((candidate) => candidate.backend === kind)) {
-        if (running === null || running.includes(session.deviceUdid)) {
-          live = true
+        // A reattach during the census replaced this record; the census predates it.
+        const replaced = this.sessions.get(session.deviceUdid) !== session
+        if (running === null || replaced || running.includes(session.deviceUdid)) {
+          live = live || this.sessions.has(session.deviceUdid)
         } else {
           this.clearSessionAndWorktrees(session.deviceUdid)
+          void backend?.stopHelperForDevice(session.deviceUdid).catch(() => {})
         }
       }
     }
