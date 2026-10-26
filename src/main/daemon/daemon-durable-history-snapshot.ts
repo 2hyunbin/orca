@@ -1,5 +1,6 @@
 import { ColdRestoreReplayWriter } from './cold-restore-replay-writer'
 import { DAEMON_RESTORE_SCROLLBACK_ROWS } from './daemon-restore-scrollback-depth'
+import { daemonHistoryReplayWindowsPty } from './daemon-history-replay-pty'
 import {
   DurableHistoryReplayEmulator,
   type NormalBufferHead
@@ -40,7 +41,8 @@ export async function buildDurableCheckpointSnapshot(opts: {
   const emulator = new DurableHistoryReplayEmulator({
     cols: restoreInfo?.cols ?? liveSnapshot.cols,
     rows: restoreInfo?.rows ?? liveSnapshot.rows,
-    scrollback: DAEMON_RESTORE_SCROLLBACK_ROWS
+    scrollback: DAEMON_RESTORE_SCROLLBACK_ROWS,
+    windowsPty: daemonHistoryReplayWindowsPty()
   })
   const replay = new ColdRestoreReplayWriter(emulator)
   try {

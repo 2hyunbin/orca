@@ -233,7 +233,8 @@ export class HeadlessEmulator {
       return
     }
     this.restoredOscLinks = []
-    resizeLikeOwnPty(this.terminal, cols, rows, (data) => this.writeSync(data))
+    const writeSync = this.partialEscapeTail ? null : (data: string) => void this.writeSync(data)
+    resizeLikeOwnPty(this.terminal, cols, rows, writeSync)
   }
 
   // Report applied dimensions so the renderer can detect a dropped resize.
