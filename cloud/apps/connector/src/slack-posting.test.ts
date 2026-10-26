@@ -279,6 +279,14 @@ describe('Slack thread status and posts', () => {
     expect((await states())[`reply:${harness.machine.hostId}:r2`]).toBe('uncertain')
   })
 
+  it('a second worker, as another role runs, claims nothing while the first holds the lease', async () => {
+    const harness = await startedThread()
+    const api = new ConnectorPosts(harness.database, harness.now, 'slack')
+    const gateway = new ConnectorPosts(harness.database, harness.now, 'slack')
+    expect(await api.claim()).not.toEqual([])
+    expect(await gateway.claim()).toEqual([])
+  })
+
   it('a sender whose lease ran out changes nothing', async () => {
     const harness = await startedThread()
     const posts = new ConnectorPosts(harness.database, harness.now, 'slack')
