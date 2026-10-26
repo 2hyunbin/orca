@@ -103,7 +103,8 @@ vi.mock('../../codex/codex-pane-account-registry', () =>
 )
 // Model an OpenCode v2 install with the selected model without running its binary.
 vi.mock('../../managed-data-accounts/launch-environment', () => ({
-  applyManagedDataAccountEnvironment: vi.fn()
+  applyManagedDataAccountEnvironment: vi.fn(),
+  managedAccountLaunchEnvironment: () => ({})
 }))
 vi.mock('../../opencode/opencode-launch-capabilities', () => ({
   probeOpenCodeLaunchCapabilities: vi.fn()

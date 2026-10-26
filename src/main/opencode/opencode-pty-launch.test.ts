@@ -52,16 +52,45 @@ vi.mock('./opencode-startup-prompt-installer', () => ({
   installOpenCodeStartupPromptForLaunch: install
 }))
 vi.mock('./opencode-launch-capabilities', () => ({ probeOpenCodeLaunchCapabilities: probe }))
+const managedAccounts = vi.hoisted(() => {
+  const state: { active: Record<string, string> } = { active: {} }
+  return state
+})
+vi.mock('../managed-data-accounts/service', () => ({
+  getManagedDataAccountService: () => ({
+    launchEnvironment: () => managedAccounts.active,
+    environmentForAccount: () => managedAccounts.active
+  })
+}))
 
 beforeEach(() => {
   probe.mockReset()
   reserve.mockReset().mockReturnValue(true)
   install.mockReset()
   hookServer.endpointFilePath = '/private/endpoint.env'
+  managedAccounts.active = {}
 })
 afterEach(() => vi.unstubAllEnvs())
 
 describe('execution-host OpenCode launch preparation', () => {
+  it('gives managed OpenCode 2 accounts a private server instead of the one-port background service', async () => {
+    const launch = async (version: string, command: string) => {
+      probe.mockResolvedValue(getOpenCodeCliCapabilities(version))
+      const options = { env: {}, envToDelete: [], isFreshLaunch: true, shell: 'posix' as const }
+      return (await prepareOpenCodePtyLaunch({ ...options, command })).command
+    }
+    expect(await launch('2.0.16', 'opencode --session ses_1')).toBe('opencode --session ses_1')
+    managedAccounts.active = { XDG_DATA_HOME: '/accounts/b/data' }
+    expect(await launch('2.0.16', 'opencode --session ses_1')).toBe(
+      'opencode --standalone --session ses_1'
+    )
+    expect(await launch('2.0.16', "opencode run 'task'")).toBe("opencode run --standalone 'task'")
+    expect(await launch('2.0.16', 'opencode --server http://h:1')).toBe(
+      'opencode --server http://h:1'
+    )
+    expect(await launch('2.0.16', 'opencode session list')).toBe('opencode session list')
+    expect(await launch('1.18.32', 'opencode')).toBe('opencode')
+  })
   it('retains fresh owned source provenance through the final provider deletion pass', async () => {
     probe.mockResolvedValue(getOpenCodeCliCapabilities('2.0.16'))
     install.mockImplementation((env) => {
