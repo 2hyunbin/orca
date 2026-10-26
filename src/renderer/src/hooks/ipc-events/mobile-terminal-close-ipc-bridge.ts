@@ -175,7 +175,7 @@ export function registerMobileAndTerminalCloseIpcBridge(
               }
               const failures: unknown[] = []
               try {
-                retireTerminalPresentation(originalSurface)
+                retireTerminalPresentation(originalSurface, force === true)
               } catch (error) {
                 failures.push(error)
               }

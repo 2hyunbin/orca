@@ -129,6 +129,7 @@ export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs exten
       }
       await this.notifier.closeTerminalTab(target.tabId, {
         localPtyTeardownOwnedExternally: true,
+        ...(options.force ? { force: true } : {}),
         originalSurface: options.originalPresentation.identity
       })
     }

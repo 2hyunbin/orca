@@ -13,7 +13,8 @@ import { collapseParkedTerminalLeaf } from './terminal-parked-pty-watcher'
 /** Admission and disposal share one synchronous owner action. */
 export function removeTerminalPresentation(
   original: TerminalSurfaceCloseIdentity,
-  dispose: (failures: unknown[]) => void
+  dispose: (failures: unknown[]) => void,
+  force = false
 ): void {
   const state = useAppStore.getState()
   const current = captureTerminalSurfaceIdentity(
@@ -28,6 +29,7 @@ export function removeTerminalPresentation(
   const layout = state.terminalLayoutsByTabId[original.tabId]
   const split = detachTerminalLayoutLeaf(layout, original.leafId)
   if (
+    !force &&
     current?.hasLeaf &&
     !split &&
     (isUnifiedTabPinned(state, original.worktreeId, original.tabId) ||
@@ -72,18 +74,22 @@ export function removeTerminalPresentation(
   }
 }
 
-export function retireTerminalPresentation(original: TerminalSurfaceCloseIdentity): void {
+export function retireTerminalPresentation(
+  original: TerminalSurfaceCloseIdentity,
+  force = false
+): void {
   const mounted = findRegisteredTerminalTab(original.tabId, original.worktreeId)?.tab
   if (mounted) {
     if (!mounted.retirePresentation) {
       throw new Error('runtime_unavailable')
     }
-    mounted.retirePresentation(original)
+    mounted.retirePresentation(original, force)
     return
   }
-  removeTerminalPresentation(original, () => {
+  const dispose = () => {
     const state = useAppStore.getState()
     state.retireAgentPaneAuthority(`${original.tabId}:${original.leafId}`)
     collapseParkedTerminalLeaf(original.tabId, original.leafId, original.ptyId ?? undefined)
-  })
+  }
+  removeTerminalPresentation(original, dispose, force)
 }

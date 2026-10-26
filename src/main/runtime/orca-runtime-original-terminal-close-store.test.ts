@@ -1,6 +1,8 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
 import { capturedPinnedTerminalCloseRequest } from '../../shared/__fixtures__/captured-pinned-terminal-close.test-fixture'
 import { expect, it, vi } from 'vitest'
+import type { RuntimeNotifier } from './runtime-notifier-contract'
+import type { RuntimeTerminalResolvePane } from '../../shared/runtime-types'
 import { join } from 'node:path'
 import { Store } from '../persistence/loading-store/store'
 import { ProfileStateSqliteAuthority } from '../persistence/profile-state/profile-state-sqlite-authority'
@@ -30,7 +32,18 @@ vi.mock('../../shared/layout-owner-switch', () => ({
   }
 }))
 
-async function confirmedPinnedClose(main: boolean) {
+export async function confirmedPinnedClose(
+  main: boolean,
+  boundary?: {
+    notify: NonNullable<RuntimeNotifier['closeTerminalTab']>
+    onExit: () => void
+    run: (host: {
+      source: RuntimeTerminalResolvePane
+      dispatch: (input: unknown) => Promise<unknown>
+      resolve: () => RuntimeTerminalResolvePane
+    }) => Promise<unknown>
+  }
+) {
   layoutOwner.main = main
   const { store, readState, directory, path } = await fixture()
   store.addRepo({
@@ -44,7 +57,9 @@ async function confirmedPinnedClose(main: boolean) {
   await store.flushPendingOrThrowAsync()
   const runtime = new TerminalCloseRuntime(store)
   const kill = vi.fn(() => true)
-  const closeTerminalTab = vi.fn(async () => {})
+  const closeTerminalTab = vi.fn<NonNullable<RuntimeNotifier['closeTerminalTab']>>(
+    async (...args) => boundary?.notify(...args)
+  )
   runtime.setNotifier({
     worktreesChanged: vi.fn(),
     reposChanged: vi.fn(),
@@ -60,7 +75,9 @@ async function confirmedPinnedClose(main: boolean) {
   })
   const stopAndWait = vi.fn(async () => {
     await runtime.onPtyExit(PTY_ID, 0, INCARNATION_ID, { hostExitConfirmed: true })
+    expect(runtime.getPtyLivenessVerdict(PTY_ID)?.status).toBe('exited')
     expect(store.getWorkspaceSession().terminalLayoutsByTabId[TAB_ID]).toBeDefined()
+    boundary?.onExit()
     return true
   })
   runtime.setPtyController({
@@ -134,7 +151,13 @@ async function confirmedPinnedClose(main: boolean) {
     dispatch({ ...params, expectedIncarnationId: 'successor', force: true })
   ).resolves.toMatchObject({ ok: false })
   expect(stopAndWait).not.toHaveBeenCalled()
-  const hostResult = dispatch(TerminalClose.parse(request))
+  const hostResult = boundary
+    ? boundary.run({
+        source,
+        dispatch,
+        resolve: () => runtime.resolveTerminalPane(`${TAB_ID}:${LEAF_ID}`, WORKTREE_ID)
+      })
+    : dispatch(TerminalClose.parse(request))
   await expect(hostResult).resolves.toMatchObject({
     ok: true,
     result: { close: { ptyKilled: true } }
@@ -150,6 +173,7 @@ async function confirmedPinnedClose(main: boolean) {
   expect(kill).not.toHaveBeenCalled()
   expect(closeTerminalTab).toHaveBeenCalledExactlyOnceWith(TAB_ID, {
     localPtyTeardownOwnedExternally: true,
+    force: true,
     originalSurface: TerminalClose.parse(params).originalPresentation?.identity
   })
   expect(store.getWorkspaceSession().tabsByWorktree[WORKTREE_ID]).toEqual([])
@@ -172,5 +196,5 @@ async function confirmedPinnedClose(main: boolean) {
 
 it.each([false, true])(
   'confirmed pinned captured close retires and reloads through real Store, main=%s',
-  confirmedPinnedClose
+  (main) => confirmedPinnedClose(main)
 )

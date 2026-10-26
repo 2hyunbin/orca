@@ -143,7 +143,7 @@ describe('direct permanent presentation owner', () => {
     }
   )
 
-  it('refuses a replacement or a newly pinned final tab before disposal', () => {
+  it('consent bypasses only pin policy, never a replacement identity', () => {
     const identity = prepare(false)
     const owner = mountedOwner(false)
     try {
@@ -155,7 +155,9 @@ describe('direct permanent presentation owner', () => {
           }
         }
       })
-      expect(() => retireTerminalPresentation(identity)).toThrow('terminal_pane_owner_changed')
+      expect(() => retireTerminalPresentation(identity, true)).toThrow(
+        'terminal_pane_owner_changed'
+      )
       expect(owner.source.terminal.dispose).not.toHaveBeenCalled()
       useAppStore.setState({
         terminalLayoutsByTabId: {
@@ -170,6 +172,9 @@ describe('direct permanent presentation owner', () => {
       })
       expect(() => retireTerminalPresentation(identity)).toThrow('terminal_tab_pinned')
       expect(owner.source.terminal.dispose).not.toHaveBeenCalled()
+      retireTerminalPresentation(identity, true)
+      expect(owner.source.terminal.dispose).toHaveBeenCalledOnce()
+      expect(useAppStore.getState().tabsByWorktree['wt-1']).toEqual([])
     } finally {
       owner.unregister()
     }

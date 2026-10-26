@@ -11,7 +11,7 @@ export function registerTerminalPaneMount(
   const { deps } = context
   let ownedManager: PaneManager | null = null
   const unregisterRuntimeTab = registerRuntimeTerminalTab({
-    retirePresentation: (original) => {
+    retirePresentation: (original, force) => {
       const manager = ownedManager
       const pane = manager?.getPanes().find((candidate) => candidate.leafId === original.leafId)
       const transport = pane ? deps.paneTransportsRef.current.get(pane.id) : null
@@ -26,7 +26,7 @@ export function registerTerminalPaneMount(
       ) {
         throw new Error('terminal_pane_owner_unavailable')
       }
-      removeTerminalPresentation(original, (failures) => {
+      const dispose = (failures: unknown[]) => {
         if (pane && manager) {
           const structuralFailures: unknown[] = []
           try {
@@ -57,7 +57,8 @@ export function registerTerminalPaneMount(
             throw new AggregateError(structuralFailures, 'terminal_tab_close_failed')
           }
         }
-      })
+      }
+      removeTerminalPresentation(original, dispose, force)
     },
     tabId: deps.tabId,
     worktreeId: deps.worktreeId,

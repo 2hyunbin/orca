@@ -8,7 +8,7 @@ import { resolveLeafIdForManager } from '@/lib/pane-manager/pane-key-resolution'
 import type { TerminalSurfaceCloseIdentity } from '../../../shared/terminal-tab-close'
 
 export type RegisteredTerminalTab = {
-  retirePresentation?: (original: TerminalSurfaceCloseIdentity) => void
+  retirePresentation?: (original: TerminalSurfaceCloseIdentity, force?: boolean) => void
   tabId: string
   worktreeId: string
   getManager: () => PaneManager | null
