@@ -14,7 +14,10 @@ import * as selection from '../../../../shared/source-control-launch-agent-selec
 import * as lifts from '../../../../shared/source-control-action-permission-lift'
 import * as shell from '../../../../shared/tui-agent-startup-shell'
 import { TooltipProvider } from '../ui/tooltip'
-import { normalizeSourceControlAiSettings } from '../../../../shared/source-control-ai'
+import {
+  getDefaultSourceControlAiSettings,
+  normalizeSourceControlAiSettings
+} from '../../../../shared/source-control-ai'
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }))
 
@@ -124,6 +127,7 @@ it('global owner: bounded controlled edits, failed/same selection and no-op save
     settings: {
       ...settings,
       sourceControlAi: normalizeSourceControlAiSettings({
+        ...getDefaultSourceControlAiSettings(),
         enabled: true,
         actions: {
           fixChecks: {

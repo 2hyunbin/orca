@@ -6,7 +6,10 @@ import * as lifts from '../../../../shared/source-control-action-permission-lift
 import * as shell from '../../../../shared/tui-agent-startup-shell'
 import { expect, it, vi } from 'vitest'
 import './__fixtures__/settings-persistence-test-fixture'
-import { normalizeSourceControlAiSettings } from '../../../../shared/source-control-ai'
+import {
+  getDefaultSourceControlAiSettings,
+  normalizeSourceControlAiSettings
+} from '../../../../shared/source-control-ai'
 import type { RepoSourceControlAiOverrides } from '../../../../shared/source-control-ai-types'
 import { liftActionPermissionArgs } from '../../../../shared/source-control-action-permission-lift'
 import { sourceControlActionAgentArgs } from '../../../../shared/source-control-action-launch-preferences'
@@ -17,6 +20,7 @@ import { TooltipProvider } from '../ui/tooltip'
 
 const model = { agentId: 'claude', model: 'sonnet', options: { effort: 'high' } } as const
 const initial = normalizeSourceControlAiSettings({
+  ...getDefaultSourceControlAiSettings(),
   enabled: true,
   actions: { fixChecks: { agentId: 'claude', agentArgs: '', launchPreferences: model } }
 })

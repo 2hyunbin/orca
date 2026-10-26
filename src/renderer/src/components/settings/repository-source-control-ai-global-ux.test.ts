@@ -97,7 +97,9 @@ describe('useRepositorySourceControlAiGlobalUx', () => {
     async (edit) => {
       const old = { agentId: 'claude', model: 'sonnet', permissionMode: 'ask' } as const
       const finishes: ((ok: boolean) => void)[] = []
-      const updateRepo = vi.fn(() => new Promise<boolean>((resolve) => finishes.push(resolve)))
+      const updateRepo = vi.fn<
+        (repoId: string, updates: SourceControlAiRepoUpdate) => Promise<boolean>
+      >(() => new Promise<boolean>((resolve) => finishes.push(resolve)))
       const { result } = setup(
         { actionOverrides: { fixChecks: { agentId: 'claude' } } },
         updateRepo
@@ -369,7 +371,7 @@ describe('editing one repository action', () => {
       }
     }
     const sibling = { ...global, commandInputTemplate: 'sibling' }
-    const legacy = {
+    const legacy: RepoSourceControlAiOverrides = {
       actionOverrides: {
         fixCommitFailure: { agentArgs: '--verbose' },
         fixPushFailure: sibling

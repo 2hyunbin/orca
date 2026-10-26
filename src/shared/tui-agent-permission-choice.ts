@@ -90,7 +90,7 @@ function supportsChoice(agent: TuiAgent, choice: AgentPermissionChoice): boolean
   return (
     choice === 'own' ||
     agentPermissionHasTerminalChoice(agent, choice) ||
-    (choice !== 'own' && agentChatPermissionModes(agent)?.modes.includes(choice) === true)
+    agentChatPermissionModes(agent)?.modes.includes(choice) === true
   )
 }
 

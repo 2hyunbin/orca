@@ -1,37 +1,37 @@
-import { tokenizeStartupCommand } from '../../../shared/tui-agent-startup-shell'
-import * as startupInputs from '../../../shared/agent-startup-plan-inputs'
-import { resolveBaselineAgentStartupPlanInputs } from '../../../shared/agent-startup-plan-inputs-baseline-test-fixture'
+import { tokenizeStartupCommand } from '../../../src/shared/tui-agent-startup-shell'
+import * as startupInputs from '../../../src/shared/agent-startup-plan-inputs'
+import { resolveBaselineAgentStartupPlanInputs } from '../../../src/shared/agent-startup-plan-inputs-baseline-test-fixture'
 import {
   OrcaRuntimeService,
   getDefaultWorkspaceSession
-} from '../../../main/runtime/orca-runtime-test-mocks.spec'
-import '../../../main/runtime/orca-runtime-test-lifecycle.spec'
+} from '../../../src/main/runtime/orca-runtime-test-mocks.spec'
+import '../../../src/main/runtime/orca-runtime-test-lifecycle.spec'
 import {
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
   makeRuntimeStoreWithWorkspaceSession
-} from '../../../main/runtime/orca-runtime-test-fixtures.spec'
-import { committingSpawn } from '../../../main/runtime/bind-first-pane.test-fixture'
-import type { RuntimePtyController } from '../../../main/runtime/runtime-pty-controller-contract'
-import { RpcDispatcher } from '../../../main/runtime/rpc/dispatcher'
-import { SESSION_TAB_METHODS } from '../../../main/runtime/rpc/methods/session-tabs'
-import { TERMINAL_LIFECYCLE_METHODS } from '../../../main/runtime/rpc/methods/terminal/terminal-lifecycle-methods'
-import { AGENT_SESSION_METHODS } from '../../../main/runtime/rpc/methods/agent-session'
-import { YOLO_TUI_AGENT_ENV } from '../../../shared/tui-agent-permissions'
-import { createRuntimeAgentBackgroundTerminal } from '../lib/runtime-agent-background-create'
+} from '../../../src/main/runtime/orca-runtime-test-fixtures.spec'
+import { committingSpawn } from '../../../src/main/runtime/bind-first-pane.test-fixture'
+import type { RuntimePtyController } from '../../../src/main/runtime/runtime-pty-controller-contract'
+import { RpcDispatcher } from '../../../src/main/runtime/rpc/dispatcher'
+import { SESSION_TAB_METHODS } from '../../../src/main/runtime/rpc/methods/session-tabs'
+import { TERMINAL_LIFECYCLE_METHODS } from '../../../src/main/runtime/rpc/methods/terminal/terminal-lifecycle-methods'
+import { AGENT_SESSION_METHODS } from '../../../src/main/runtime/rpc/methods/agent-session'
+import { YOLO_TUI_AGENT_ENV } from '../../../src/shared/tui-agent-permissions'
+import { createRuntimeAgentBackgroundTerminal } from '../../../src/renderer/src/lib/runtime-agent-background-create'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { launchAgentInWebHostTab } from '../lib/launch-agent-web-host-tab'
-import { buildAgentStartupPlan } from '../../../shared/tui-agent-startup'
-import { createWebRuntimeSessionTerminal } from './web-runtime-terminal-creation'
-import { resetWebSessionCloseIntentForTests } from './web-session-close-intent'
+import { launchAgentInWebHostTab } from '../../../src/renderer/src/lib/launch-agent-web-host-tab'
+import { buildAgentStartupPlan } from '../../../src/shared/tui-agent-startup'
+import { createWebRuntimeSessionTerminal } from '../../../src/renderer/src/runtime/web-runtime-terminal-creation'
+import { resetWebSessionCloseIntentForTests } from '../../../src/renderer/src/runtime/web-session-close-intent'
 import {
   ENVIRONMENT_ID,
   WORKTREE_ID,
   makeSnapshot,
   resetTerminalCreateEnvironment,
   stubTerminalCreateEnvironment
-} from './web-runtime-session-test-harness'
-import { stubRuntimeEnvironmentBridge } from './runtime-environment-bridge-fixture'
+} from '../../../src/renderer/src/runtime/web-runtime-session-test-harness'
+import { stubRuntimeEnvironmentBridge } from '../../../src/renderer/src/runtime/runtime-environment-bridge-fixture'
 
 const mocks = vi.hoisted(() => ({
   getState: vi.fn(),
@@ -54,7 +54,7 @@ const mocks = vi.hoisted(() => ({
   hasMaterializedWebRuntimeBrowserPage: vi.fn()
 }))
 
-vi.mock('../store', () => ({
+vi.mock('../../../src/renderer/src/store', () => ({
   useAppStore: {
     getState: mocks.getState,
     setState: mocks.setState,
@@ -62,23 +62,23 @@ vi.mock('../store', () => ({
   }
 }))
 
-vi.mock('./web-session-tabs-sync/tracking-lifecycle', () => ({
+vi.mock('../../../src/renderer/src/runtime/web-session-tabs-sync/tracking-lifecycle', () => ({
   acceptReplayedWebSessionTabsSnapshot: mocks.acceptReplayedWebSessionTabsSnapshot,
   getWebSessionTabsTrackingGeneration: mocks.getWebSessionTabsTrackingGeneration
 }))
-vi.mock('./web-session-tabs-sync/snapshot-api', () => ({
+vi.mock('../../../src/renderer/src/runtime/web-session-tabs-sync/snapshot-api', () => ({
   applyWebSessionTabsSnapshot: mocks.applyWebSessionTabsSnapshot
 }))
-vi.mock('./web-session-tabs-sync/tracking-decisions', () => ({
+vi.mock('../../../src/renderer/src/runtime/web-session-tabs-sync/tracking-decisions', () => ({
   decideWebSessionTabsSnapshot: mocks.decideWebSessionTabsSnapshot
 }))
-vi.mock('./web-session-tabs-sync/store-patch', () => ({
+vi.mock('../../../src/renderer/src/runtime/web-session-tabs-sync/store-patch', () => ({
   applyWebSessionTabsStorePatch: (buildPatch: (state: unknown) => unknown) => {
     mocks.setState(buildPatch)
     return () => {}
   }
 }))
-vi.mock('./web-session-tabs-sync/tracking-mappings', () => ({
+vi.mock('../../../src/renderer/src/runtime/web-session-tabs-sync/tracking-mappings', () => ({
   resolveHostSessionTabIdForWebSessionTab: mocks.resolveHostSessionTabIdForWebSessionTab
 }))
 
@@ -91,7 +91,7 @@ vi.mock('@/lib/agent-launch-prompt-delivery', () => ({
   seedNativeChatLaunchDraftForAgentTab: mocks.seedNativeChatLaunchDraftForAgentTab
 }))
 
-vi.mock('./web-runtime-browser-materialization', () => ({
+vi.mock('../../../src/renderer/src/runtime/web-runtime-browser-materialization', () => ({
   hasMaterializedWebRuntimeBrowserPage: mocks.hasMaterializedWebRuntimeBrowserPage
 }))
 
@@ -282,6 +282,9 @@ describe('createWebRuntimeSessionTerminal', () => {
     expect(final.env).toMatchObject(plan.env ?? {})
     expect(final.env?.GOOSE_MODE).toBe(plan.env?.GOOSE_MODE)
     const expected = tokenizeStartupCommand(plan.launchCommand, 'posix')
+    if (final.command === undefined) {
+      throw new Error('Missing final command')
+    }
     const actual = tokenizeStartupCommand(final.command, 'posix')
     if (!expected.ok || !actual.ok) {
       throw new Error('Invalid final command')

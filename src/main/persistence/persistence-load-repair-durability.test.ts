@@ -124,9 +124,10 @@ describe('load-time normalization durability', () => {
       }
       settled.repos = Array.from({ length: n }, (_, i) => ({
         id: `recipe-${i}`,
-        name: 'recipe',
+        displayName: 'recipe',
+        badgeColor: '',
+        addedAt: 0,
         path: '/tmp/recipe',
-        worktreesPath: '/tmp',
         sourceControlAi: {
           actionOverrides: {
             fixChecks: {
