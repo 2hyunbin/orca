@@ -7,7 +7,10 @@ import type { MobileQueuedMessageCard } from './mobile-structured-queued-message
 import { mobileQueuedMessageCards } from './mobile-structured-queued-message-cards'
 import { useMobileQueuedMessageComposerActions } from './use-mobile-queued-message-composer-actions'
 import type { MobileStructuredAgentMutate } from './use-mobile-structured-agent-mutation'
-import type { AgentSessionQueuedMessage } from '../../../src/shared/agent-session-wire'
+import type {
+  AgentSessionQueuedMessage,
+  AgentSessionQueuedMessageMoveResult
+} from '../../../src/shared/agent-session-wire'
 import type { StructuredAgentSessionMutationResult } from './mobile-structured-agent-session-rpc'
 
 let fontScale = 1
@@ -756,10 +759,11 @@ describe('MobileNativeChatQueuedMessages', () => {
         body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: messageId }] }
       })
     )
-    const first = Promise.withResolvers<StructuredAgentSessionMutationResult<unknown>>()
-    const second = Promise.withResolvers<StructuredAgentSessionMutationResult<unknown>>()
+    type MoveReply = StructuredAgentSessionMutationResult<AgentSessionQueuedMessageMoveResult>
+    const first = Promise.withResolvers<MoveReply>()
+    const second = Promise.withResolvers<MoveReply>()
     const mutate = vi
-      .fn<MobileStructuredAgentMutate>()
+      .fn<(...args: Parameters<MobileStructuredAgentMutate>) => Promise<MoveReply>>()
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise)
     const send = vi.fn(async () => true)
@@ -770,7 +774,8 @@ describe('MobileNativeChatQueuedMessages', () => {
         sessionKey: 's',
         reorderCapable: true,
         enabled: true,
-        mutate,
+        // SAFETY: this hook only requests queuedMessageMove; both deferred replies use its checked result type.
+        mutate: mutate as MobileStructuredAgentMutate,
         onSendError: () => {}
       })
       return createElement(MobileNativeChatQueuedMessages, {

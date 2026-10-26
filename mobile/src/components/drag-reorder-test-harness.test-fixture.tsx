@@ -314,4 +314,4 @@ function positions() {
   )!.value
 }
 
-export { probe, publishLayout, mounted, positions }
+export { probe, publishLayout, mounted, positions, measurementFrames }

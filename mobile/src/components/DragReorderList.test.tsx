@@ -1,4 +1,10 @@
-import { probe, publishLayout, mounted, positions } from './drag-reorder-test-harness.test-fixture'
+import {
+  probe,
+  publishLayout,
+  mounted,
+  positions,
+  measurementFrames
+} from './drag-reorder-test-harness.test-fixture'
 import { createElement } from 'react'
 import { act, create } from 'react-test-renderer'
 import Animated, { useAnimatedRef, useSharedValue } from 'react-native-reanimated'
