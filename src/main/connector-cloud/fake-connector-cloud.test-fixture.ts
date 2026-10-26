@@ -12,7 +12,7 @@ export type FakeSignInAnswer =
   | { status: 'pending' | 'slow_down' | 'denied' | 'expired'; interval?: number }
   | { status: 'authorized'; email: string; hostId?: string }
 
-type Reply = { status: number; body?: unknown; headers?: Record<string, string> }
+export type Reply = { status: number; body?: unknown; headers?: Record<string, string> }
 
 export class FakeConnectorCloud {
   readonly origin = 'https://connector.test'
@@ -22,6 +22,8 @@ export class FakeConnectorCloud {
   /** Forces a status on every request to these paths, e.g. 404 from an older cloud. */
   readonly forced = new Map<string, Reply>()
   online = true
+  /** How long a poll answer takes to arrive once it is ready. */
+  pollReplyDelayMs = 0
   /** Requests never answer, as on a stalled network. */
   hang = false
   readonly linked = new Map<string, string>()
@@ -30,6 +32,14 @@ export class FakeConnectorCloud {
   private polls = 0
   private readonly proofs = new Map<string, { proof: string; hostId: string }>()
   private readonly sessions = new Map<string, string>()
+  private readonly helloed = new Set<string>()
+  /** Every hello, ack and event the machine sent, in order. */
+  readonly hellos: unknown[] = []
+  readonly acks: unknown[] = []
+  readonly events: unknown[] = []
+  /** Poll answers in order; a poll with none queued is held until one is queued. */
+  private readonly pollReplies: Reply[] = []
+  private heldPoll: (() => void) | null = null
 
   readonly fetch: typeof globalThis.fetch = async (input, init) => {
     if (!this.online) {
@@ -44,7 +54,7 @@ export class FakeConnectorCloud {
     const auth = new Headers(init?.headers).get('authorization')
     const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null
     this.requests.push({ path, body, token })
-    const reply = this.forced.get(path) ?? this.route(path, body, token)
+    const reply = this.forced.get(path) ?? (await this.route(path, body, token, init?.signal))
     return new Response(reply.body === undefined ? null : JSON.stringify(reply.body), {
       status: reply.status,
       headers: { 'content-type': 'application/json', ...reply.headers }
@@ -60,7 +70,24 @@ export class FakeConnectorCloud {
     return token ? (this.sessions.get(token) ?? null) : null
   }
 
-  protected route(path: string, body: unknown, token: string | null): Reply {
+  /** Answers the next poll; `status` other than 200 is an error reply. */
+  answerPoll(reply: Reply): void {
+    this.pollReplies.push(reply)
+    this.heldPoll?.()
+  }
+
+  /** Ends the current session, as an hour passing would. */
+  expireSessions(): void {
+    this.sessions.clear()
+    this.helloed.clear()
+  }
+
+  private async route(
+    path: string,
+    body: unknown,
+    token: string | null,
+    signal: AbortSignal | null | undefined
+  ): Promise<Reply> {
     const fields = isRecord(body) ? body : {}
     switch (path) {
       case CONNECTOR_PATHS.signInStart:
@@ -90,9 +117,59 @@ export class FakeConnectorCloud {
         this.linked.delete(hostId)
         return { status: 204 }
       }
+      case CONNECTOR_PATHS.hello:
+      case CONNECTOR_PATHS.poll:
+      case CONNECTOR_PATHS.acks:
+      case CONNECTOR_PATHS.events:
+        return this.machineCall(path, body, token, signal)
       default:
         return { status: 404, body: { error: 'not_found' } }
     }
+  }
+
+  private async machineCall(
+    path: string,
+    body: unknown,
+    token: string | null,
+    signal: AbortSignal | null | undefined
+  ): Promise<Reply> {
+    const hostId = this.sessionHost(token)
+    if (!hostId) {
+      return { status: 401, body: { error: 'session_expired' } }
+    }
+    if (!this.linked.has(hostId)) {
+      return { status: 403, body: { error: 'host_revoked' } }
+    }
+    if (path === CONNECTOR_PATHS.hello) {
+      this.hellos.push(body)
+      this.helloed.add(token ?? '')
+      return { status: 204 }
+    }
+    if (path === CONNECTOR_PATHS.acks) {
+      this.acks.push(...(isRecord(body) && Array.isArray(body.acks) ? body.acks : []))
+      return { status: 204 }
+    }
+    if (path === CONNECTOR_PATHS.events) {
+      this.events.push(...(isRecord(body) && Array.isArray(body.events) ? body.events : []))
+      return { status: 204 }
+    }
+    if (!this.helloed.has(token ?? '')) {
+      return { status: 409, body: { error: 'hello_required' } }
+    }
+    while (this.pollReplies.length === 0) {
+      await new Promise<void>((resolve, reject) => {
+        this.heldPoll = resolve
+        signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), {
+          once: true
+        })
+      })
+      this.heldPoll = null
+    }
+    const reply = this.pollReplies.shift() ?? { status: 500 }
+    if (this.pollReplyDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.pollReplyDelayMs))
+    }
+    return reply
   }
 
   private answerSignInPoll(): Reply {

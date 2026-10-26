@@ -1,5 +1,8 @@
 import { getAppEnvironment } from '../../shared/app-environment'
-import { installConnectorCloud } from '../connector-cloud/connector-cloud-install'
+import {
+  installConnectorCloud,
+  type ConnectorCloudStore
+} from '../connector-cloud/connector-cloud-install'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { DesktopPushService } from '../runtime/push/desktop-push-service'
 import { resolvePushGatewayOrigin } from '../runtime/push/push-gateway-origin'
@@ -9,9 +12,11 @@ import type { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
 export function startOrcadCloudServices(
   runtime: OrcaRuntimeService,
   rpc: OrcaRuntimeRpcServer,
+  store: ConnectorCloudStore,
   userDataPath: string
 ): void {
-  installConnectorCloud(runtime, userDataPath, 'serve')
+  installConnectorCloud(runtime, store, userDataPath, 'serve')
+  runtime.getConnectorCloud()?.connect()
   const pushService = DesktopPushService.create({
     runtime,
     runtimeRpc: rpc,

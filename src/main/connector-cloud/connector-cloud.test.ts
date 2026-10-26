@@ -6,18 +6,19 @@ import { CONNECTOR_PATHS } from '../../shared/connector-cloud-contract'
 import { ConnectorCloud, type ConnectorSignInPrompt } from './connector-cloud'
 import { readConnectorHostIdentity } from './connector-host-identity'
 import { FakeConnectorCloud } from './fake-connector-cloud.test-fixture'
+import { fakeMachine, fakeSeam, type FakeSeam } from './fake-connector-seam.test-fixture'
 
 let userDataPath: string
 let fake: FakeConnectorCloud
 let enabled: boolean
+let seam: FakeSeam
+let machine: ReturnType<typeof fakeMachine>
 
 function connectorCloud(): ConnectorCloud {
   return new ConnectorCloud({
     userDataPath,
     origin: fake.origin,
-    runtime: 'serve',
-    orcaVersion: '1.4.250',
-    connectorsEnabled: () => enabled,
+    machine,
     fetchImpl: fake.fetch
   })
 }
@@ -39,6 +40,8 @@ beforeEach(() => {
   userDataPath = mkdtempSync(join(tmpdir(), 'orca-connector-cloud-'))
   fake = new FakeConnectorCloud()
   enabled = true
+  seam = fakeSeam()
+  machine = fakeMachine(() => (enabled ? seam : null))
 })
 
 afterEach(() => {
@@ -81,7 +84,7 @@ describe('ConnectorCloud sign-in', () => {
     expect(fake.requestsTo(CONNECTOR_PATHS.signInPoll)).toHaveLength(3)
     const identity = readConnectorHostIdentity(userDataPath)
     expect(identity?.keypair.publicKeyB64).toBe(fake.signInPublicKeyB64)
-    expect(cloud.status()).toEqual({ enabled: true, link: identity?.link })
+    expect(cloud.status()).toEqual({ enabled: true, link: identity?.link, revoked: false })
     await expect(cloud.beginSignIn()).rejects.toThrow('Already connected as ada@example.com')
   })
 
@@ -231,5 +234,50 @@ describe('host identity file', () => {
     expect(Object.keys(stored).sort()).toEqual(
       ['email', 'hostId', 'hostName', 'linkedAt', 'secretKeyB64', 'v'].sort()
     )
+  })
+})
+
+describe('ConnectorCloud connection', () => {
+  async function signedIn(cloud: ConnectorCloud): Promise<void> {
+    fake.signInAnswers = [{ status: 'authorized', email: 'ada@example.com' }]
+    expect(await finish(cloud, await cloud.beginSignIn())).toMatchObject({ ok: true })
+  }
+
+  it('holds the poll only while linked and on, and stops on disable and logout', async () => {
+    const cloud = connectorCloud()
+    cloud.connect()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fake.requestsTo(CONNECTOR_PATHS.hello)).toHaveLength(0)
+
+    await signedIn(cloud)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(fake.requestsTo(CONNECTOR_PATHS.hello)).toHaveLength(1)
+    expect(fake.requestsTo(CONNECTOR_PATHS.poll)).toHaveLength(1)
+
+    enabled = false
+    seam.disable()
+    machine.toggle()
+    enabled = true
+    seam = fakeSeam()
+    machine.toggle()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(fake.requestsTo(CONNECTOR_PATHS.hello)).toHaveLength(2)
+
+    expect(await cloud.signOut()).toEqual({ signedOut: true })
+    fake.answerPoll({ status: 200, body: { v: 1, serverNow: 1, holdMs: 0, deliveries: [] } })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(fake.requestsTo(CONNECTOR_PATHS.poll)).toHaveLength(2)
+  })
+
+  it('forgets a key the cloud revoked and says so', async () => {
+    const cloud = connectorCloud()
+    cloud.connect()
+    await signedIn(cloud)
+    await vi.advanceTimersByTimeAsync(10)
+    fake.linked.clear()
+    fake.answerPoll({ status: 200, body: { v: 1, serverNow: 1, holdMs: 0, deliveries: [] } })
+    await vi.advanceTimersByTimeAsync(100)
+    expect(cloud.status()).toEqual({ enabled: true, link: null, revoked: true })
+    expect(readConnectorHostIdentity(userDataPath)).toBeNull()
   })
 })

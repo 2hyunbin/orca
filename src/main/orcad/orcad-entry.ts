@@ -292,7 +292,7 @@ async function startOrcadRuntime(
   registerCleanup(() => rpc.stop())
   await rpc.start()
   startOrcadAutomations(runtime, profileStore, registerCleanup)
-  startOrcadCloudServices(runtime, rpc, runtimeUserDataPath)
+  startOrcadCloudServices(runtime, rpc, profileStore, runtimeUserDataPath)
   console.error(`[orcad] ${describeOrcadBindExposure(bindHost)}`)
 
   const readiness = await buildOrcadServeReadiness({

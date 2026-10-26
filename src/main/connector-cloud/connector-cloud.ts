@@ -19,16 +19,18 @@ import {
   type ConnectorHostLink
 } from './connector-host-identity'
 import { ConnectorHostSession } from './connector-host-session'
+import { ConnectorPollClient, type ConnectorMachine } from './connector-poll-client'
+import { ConnectorTurnEvents } from './connector-turn-events'
 import type { E2EEKeypair } from '../runtime/e2ee-keypair'
 
 // Sign-out still succeeds offline: once the key is gone nobody can act as this machine.
 const SIGN_OUT_UNBIND_TIMEOUT_MS = 5_000
 
-export type ConnectorHostRuntime = 'serve' | 'desktop'
-
 export type ConnectorCloudStatus = {
   enabled: boolean
   link: ConnectorHostLink | null
+  /** Orca Cloud revoked this machine since this Orca started. */
+  revoked: boolean
 }
 
 export type ConnectorSignInPrompt = {
@@ -55,15 +57,16 @@ const CANCELLED = 'Sign-in was cancelled.'
 export type ConnectorCloudOptions = {
   userDataPath: string
   origin: string
-  runtime: ConnectorHostRuntime
-  orcaVersion: string
-  connectorsEnabled: () => boolean
+  machine: ConnectorMachine
   fetchImpl?: typeof globalThis.fetch
   now?: () => number
 }
 
 export class ConnectorCloud {
   private flow: SignInFlow | null = null
+  private client: ConnectorPollClient | null = null
+  private connecting = false
+  private revoked = false
   private readonly fetchImpl: typeof globalThis.fetch
   private readonly now: () => number
 
@@ -74,9 +77,53 @@ export class ConnectorCloud {
 
   status(): ConnectorCloudStatus {
     return {
-      enabled: this.options.connectorsEnabled(),
-      link: readConnectorHostIdentity(this.options.userDataPath)?.link ?? null
+      enabled: this.options.machine.seam() !== null,
+      link: readConnectorHostIdentity(this.options.userDataPath)?.link ?? null,
+      revoked: this.revoked
     }
+  }
+
+  /** From now on, hold the poll whenever connectors are on and this machine is linked. */
+  connect(): void {
+    if (this.connecting) {
+      return
+    }
+    this.connecting = true
+    this.options.machine.onConnectorsToggled(() => this.reconcile())
+    this.reconcile()
+  }
+
+  private reconcile(): void {
+    if (!this.connecting) {
+      return
+    }
+    const seam = this.options.machine.seam()
+    const identity = seam ? readConnectorHostIdentity(this.options.userDataPath) : null
+    if (this.client && (this.client.seam !== seam || !identity)) {
+      this.client.stop()
+      this.client = null
+    }
+    if (!this.client && seam && identity) {
+      this.client = new ConnectorPollClient({
+        origin: this.options.origin,
+        userDataPath: this.options.userDataPath,
+        identity,
+        seam,
+        machine: this.options.machine,
+        onRevoked: () => this.forget({ revoked: true }),
+        fetchImpl: this.fetchImpl
+      })
+      this.client.start()
+    }
+  }
+
+  /** Stops the client and deletes the key and pending turn ends, which no other key can send. */
+  private forget({ revoked }: { revoked: boolean }): void {
+    this.client?.stop()
+    this.client = null
+    deleteConnectorHostIdentity(this.options.userDataPath)
+    ConnectorTurnEvents.forget(this.options.userDataPath)
+    this.revoked = revoked
   }
 
   /** Starts a sign-in the person approves in a browser by typing the code; a newer one replaces it. */
@@ -114,7 +161,7 @@ export class ConnectorCloud {
   }
 
   private requireSignInAllowed(): void {
-    if (!this.options.connectorsEnabled()) {
+    if (!this.options.machine.seam()) {
       throw new Error('connectors_disabled')
     }
     const linked = readConnectorHostIdentity(this.options.userDataPath)?.link
@@ -154,8 +201,8 @@ export class ConnectorCloud {
           hostPublicKeyB64: keypair.publicKeyB64,
           hostName,
           platform: process.platform,
-          runtime: this.options.runtime,
-          orcaVersion: this.options.orcaVersion
+          runtime: this.options.machine.runtime,
+          orcaVersion: this.options.machine.orcaVersion
         },
         signal: ended
       },
@@ -227,6 +274,8 @@ export class ConnectorCloud {
           linkedAt: this.now()
         }
         writeConnectorHostIdentity(this.options.userDataPath, { keypair: flow.keypair, link })
+        this.revoked = false
+        this.reconcile()
         return link
       }
     }
@@ -241,6 +290,9 @@ export class ConnectorCloud {
     if (!identity) {
       return { signedOut: false }
     }
+    // A running client would read its own unlink as a revoke.
+    this.client?.stop()
+    this.client = null
     const session = new ConnectorHostSession(
       this.options.origin,
       identity.keypair,
@@ -256,7 +308,7 @@ export class ConnectorCloud {
     if (
       readConnectorHostIdentity(this.options.userDataPath)?.link.hostId === identity.link.hostId
     ) {
-      deleteConnectorHostIdentity(this.options.userDataPath)
+      this.forget({ revoked: false })
     }
     return { signedOut: true }
   }

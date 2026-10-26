@@ -103,7 +103,12 @@ function installRuntimeRpc(
   })
   state.runtimeRpc = runtimeRpc
   // Before any transport starts, so the first `orca cloud` call finds it.
-  installConnectorCloud(runtime, getCanonicalUserDataPath(), serveOptions ? 'serve' : 'desktop')
+  installConnectorCloud(
+    runtime,
+    state.store!,
+    getCanonicalUserDataPath(),
+    serveOptions ? 'serve' : 'desktop'
+  )
   runtimeRpc.setMobileDesktopRelayHosts(createRuntimeEnvironmentMobileRelayHosts())
   registerMobileHandlers(runtimeRpc, {
     getRelayStatus: getDesktopRelayStatus,
@@ -181,6 +186,7 @@ async function launchServeMode(
   scheduleAgentLaunchRecordWarmup(null)
   // Headless phones still register/unregister tokens, though this host dispatches no push notifications.
   startDesktopPushService(runtimeRpc)
+  runtime.getConnectorCloud()?.connect()
   settleDesktopActivation()
   installServeQuitHandling()
   await registerCliForHeadlessServe()
@@ -233,8 +239,9 @@ async function launchDesktopMode(
   startDesktopRelayService(runtimeRpc)
   // Create the window before awaiting proxy readiness; the request guard already fences fetches.
   await state.initialProxyApplicationReady
-  // Apply persisted proxy before the push gateway's first request.
+  // Apply persisted proxy before the push gateway's or the connector's first request.
   startDesktopPushService(runtimeRpc)
+  state.runtime?.getConnectorCloud()?.connect()
   // Request macOS notification permission after reveal or the maximized window can hide it.
   win.once('show', () => {
     // Initialization failure can leave no Store; do not throw inside Electron listeners.

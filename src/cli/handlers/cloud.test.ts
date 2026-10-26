@@ -80,6 +80,9 @@ describe('orca cloud', () => {
     expect(formatCloudStatus({ enabled: false, link: null })).toBe(
       'Signed out\nConnectors are off on this Orca.'
     )
+    expect(formatCloudStatus({ enabled: true, link: null, revoked: true })).toBe(
+      'Signed out (revoked in Orca Cloud)'
+    )
     expect(
       formatCloudStatus({
         enabled: true,

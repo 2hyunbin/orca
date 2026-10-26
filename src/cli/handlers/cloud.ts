@@ -6,7 +6,7 @@ import { RuntimeClientError } from '../runtime-client'
 import { callConnector } from './connector'
 
 type CloudLink = { hostId: string; email: string; hostName: string; linkedAt: number }
-type CloudStatus = { enabled: boolean; link: CloudLink | null }
+type CloudStatus = { enabled: boolean; link: CloudLink | null; revoked?: boolean }
 type CloudSignInPrompt = {
   flowId: string
   userCode: string
@@ -40,7 +40,11 @@ export function formatCloudLink(link: CloudLink): string {
 
 export function formatCloudStatus(status: CloudStatus): string {
   return [
-    status.link ? formatCloudLink(status.link) : 'Signed out',
+    status.link
+      ? formatCloudLink(status.link)
+      : status.revoked
+        ? 'Signed out (revoked in Orca Cloud)'
+        : 'Signed out',
     ...(status.enabled ? [] : ['Connectors are off on this Orca.'])
   ].join('\n')
 }
