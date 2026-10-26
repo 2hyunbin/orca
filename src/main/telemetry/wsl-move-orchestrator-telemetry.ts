@@ -25,7 +25,12 @@ function transition(record: WslMoveOrchestratorRecord): Props['transition'] {
       return 'distro_gone'
     case 'restore-offered':
       return 'restore_offered'
-    default:
+    case 'idle':
+    case 'pending':
+    case 'deferred':
+    case 'backoff':
+    case 'parked':
+    case 'done':
       return record.state.kind
   }
 }
