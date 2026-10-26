@@ -570,6 +570,9 @@
         "extraArgs": "Extra CLI arguments",
         "launchOptions": "Model and permissions",
         "savedLaunchOptions": "Saved options: {{value0}}. Older servers use their own permission settings."
+      },
+      "actionPermissions": {
+        "sameAsAgent": "Same as {{agent}}"
       }
     }
   },

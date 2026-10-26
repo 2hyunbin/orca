@@ -3513,6 +3513,9 @@
     "sourceControl": {
       "actionModel": {
         "permissionsDefaultHint": "Terminals use Agent Permissions unless this action sets its own CLI arguments."
+      },
+      "actionPermissions": {
+        "sameAsAgent": "Same as {{agent}}"
       }
     }
   },
