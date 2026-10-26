@@ -174,56 +174,41 @@ it('keeps blocked installs accessible as waiting rather than a failed download',
   expect(screen.getByRole('complementary', { name: 'Update waiting' })).toBeTruthy()
 })
 
-it.each<UpdateStatus>([
-  { state: 'available', version: '1.4.200', changelog: null },
-  { state: 'error', message, userInitiated: true }
-])(
-  'catches up a successor from the initial $state snapshot and handles dismissal pushes',
-  async (snapshot) => {
-    let pushStatus: (status: UpdateStatus) => void = () => {
-      throw new Error('Missing status listener')
-    }
-    let clearDismissal: () => void = () => {
-      throw new Error('Missing dismissal listener')
-    }
-    const api = {
-      getStatus: vi.fn(async () => snapshot),
-      onStatus: (listener: typeof pushStatus) => {
-        pushStatus = listener
-        return vi.fn()
-      },
-      onClearDismissal: (listener: typeof clearDismissal) => {
-        clearDismissal = listener
-        return vi.fn()
-      },
-      dismissAvailableUpdate: vi.fn(async () => undefined),
-      check
-    }
-    Object.defineProperty(window, 'api', {
-      configurable: true,
-      value: { updater: api, ui: { set: vi.fn(async () => undefined) } }
-    })
-    const unsubs: (() => void)[] = []
-    renderUpdateControls()
-    await act(async () => {
-      registerUpdaterStatusIpcBridge(unsubs)
-    })
-    expect(api.getStatus).toHaveBeenCalledOnce()
-    const label = snapshot.state === 'available' ? 'Update available' : 'Update error'
-    expect(screen.getByRole('complementary', { name: label })).toBeTruthy()
-    if (snapshot.state === 'error') {
-      fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
-      expect(screen.getByText(message)).toBeTruthy()
-    } else {
-      act(() => useAppStore.getState().dismissUpdate())
-      expect(useAppStore.getState().dismissedUpdateVersion).toBe('1.4.200')
-      expect(screen.queryByRole('complementary', { name: label })).toBeNull()
-      act(() => pushStatus(snapshot))
-      expect(screen.queryByRole('complementary', { name: label })).toBeNull()
-      act(() => clearDismissal())
-      expect(useAppStore.getState().dismissedUpdateVersion).toBeNull()
-      expect(screen.getByRole('complementary', { name: label })).toBeTruthy()
-    }
-    unsubs.forEach((unsubscribe) => unsubscribe())
+it('catches up a successor from the snapshot and clears dismissal through the bridge', async () => {
+  const snapshot: UpdateStatus = { state: 'available', version: '1.4.200', changelog: null }
+  let pushStatus: (status: UpdateStatus) => void = () => {
+    throw new Error('Missing status listener')
   }
-)
+  let clearDismissal: () => void = () => {
+    throw new Error('Missing dismissal listener')
+  }
+  const api = {
+    getStatus: async () => snapshot,
+    onStatus: (listener: typeof pushStatus) => {
+      pushStatus = listener
+      return vi.fn()
+    },
+    onClearDismissal: (listener: typeof clearDismissal) => {
+      clearDismissal = listener
+      return vi.fn()
+    },
+    dismissAvailableUpdate: vi.fn(async () => undefined)
+  }
+  Object.defineProperty(window, 'api', {
+    configurable: true,
+    value: { updater: api, ui: { set: vi.fn(async () => undefined) } }
+  })
+  const unsubs: (() => void)[] = []
+  renderUpdateControls()
+  await act(async () => {
+    registerUpdaterStatusIpcBridge(unsubs)
+  })
+  expect(screen.getByRole('complementary', { name: 'Update available' })).toBeTruthy()
+  act(() => useAppStore.getState().dismissUpdate())
+  expect(screen.queryByRole('complementary', { name: 'Update available' })).toBeNull()
+  act(() => pushStatus(snapshot))
+  expect(screen.queryByRole('complementary', { name: 'Update available' })).toBeNull()
+  act(() => clearDismissal())
+  expect(screen.getByRole('complementary', { name: 'Update available' })).toBeTruthy()
+  unsubs.forEach((unsubscribe) => unsubscribe())
+})

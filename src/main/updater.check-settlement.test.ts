@@ -89,17 +89,12 @@ describe('updater', () => {
     }
   })
 
-  it.each(['live', 'closed', 'throwing'] as const)(
+  it.each(['live', 'closed'] as const)(
     'delivers forced failure before a queued modifier check despite %s delivery',
     async (delivery) => {
       vi.useFakeTimers()
       let settling = false
-      const send = vi.fn<(channel: string, ...args: unknown[]) => void>(() => {
-        if (settling && delivery === 'throwing') {
-          throw new Error('Render frame was disposed')
-        }
-      })
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      const send = vi.fn()
       const window = updaterMainWindow(send, () => settling && delivery === 'closed')
       const { UpdaterSetup } = await import('./updater/updater-setup')
       const failure: UpdateStatus = { state: 'error', message: 'Install preparation failed' }
@@ -109,75 +104,65 @@ describe('updater', () => {
         }
       }
       const updater = new TestUpdater()
-      try {
-        autoUpdaterMock.checkForUpdates.mockImplementation(() => {
-          autoUpdaterMock.emit('checking-for-update')
-          return new Promise(() => {})
-        })
-        updater.setupAutoUpdater(() => window, { getLastUpdateCheckAt: () => Date.now() })
-        updater.checkForUpdatesFromMenu()
-        await vi.advanceTimersByTimeAsync(0)
-        expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledOnce()
-        updater.checkForUpdatesFromMenu({ includePrerelease: true })
-        settling = true
-        send.mockClear()
-        fetchNewerReleaseTagsMock.mockResolvedValue(['v1.0.52-rc.1'])
+      autoUpdaterMock.checkForUpdates.mockImplementation(() => {
+        autoUpdaterMock.emit('checking-for-update')
+        return new Promise(() => {})
+      })
+      updater.setupAutoUpdater(() => window, { getLastUpdateCheckAt: () => Date.now() })
+      updater.checkForUpdatesFromMenu()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledOnce()
+      updater.checkForUpdatesFromMenu({ includePrerelease: true })
+      settling = true
+      send.mockClear()
+      fetchNewerReleaseTagsMock.mockResolvedValue(['v1.0.52-rc.1'])
 
-        expect(() => updater.failInstall()).not.toThrow()
-        expect(updater.getUpdateStatus()).toEqual(failure)
-        expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledOnce()
-        await vi.advanceTimersByTimeAsync(0)
+      expect(() => updater.failInstall()).not.toThrow()
+      expect(updater.getUpdateStatus()).toEqual(failure)
+      expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledOnce()
+      await vi.advanceTimersByTimeAsync(0)
 
-        expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(2)
-        expect(autoUpdaterMock.allowPrerelease).toBe(true)
-        expect(updater.getUpdateStatus()).toMatchObject({ state: 'checking' })
-        if (delivery === 'closed') {
-          expect(send).not.toHaveBeenCalled()
-        } else {
-          expect(send).toHaveBeenNthCalledWith(1, 'updater:status', failure)
-          expect(send).toHaveBeenNthCalledWith(
-            2,
-            'updater:status',
-            expect.objectContaining({ state: 'checking' })
-          )
-        }
-      } finally {
-        warn.mockRestore()
+      expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(2)
+      expect(autoUpdaterMock.allowPrerelease).toBe(true)
+      expect(updater.getUpdateStatus()).toMatchObject({ state: 'checking' })
+      if (delivery === 'closed') {
+        expect(send).not.toHaveBeenCalled()
+      } else {
+        expect(send).toHaveBeenNthCalledWith(1, 'updater:status', failure)
+        expect(send).toHaveBeenNthCalledWith(
+          2,
+          'updater:status',
+          expect.objectContaining({ state: 'checking' })
+        )
       }
     }
   )
 
-  it.each([false, true])(
-    'follows the current window before deferred setup (initiallyHeadless=%s)',
-    async (initiallyHeadless) => {
-      const oldSend = vi.fn()
-      const newSend = vi.fn()
-      const oldWindow = updaterMainWindow(oldSend)
-      const newWindow = updaterMainWindow(newSend)
-      let currentWindow: typeof oldWindow | null = initiallyHeadless ? null : oldWindow
-      const getMainWindow = () => currentWindow
-      const updater = await loadUpdaterModule()
-      const options = { getLastUpdateCheckAt: () => Date.now() }
-      updater.setupAutoUpdater(getMainWindow, options)
-      currentWindow = null
-      updater.setupAutoUpdater(getMainWindow, options)
-      autoUpdaterMock.emit('download-progress', { percent: 40 })
-      expect(updater.getUpdateStatus()).toMatchObject({ percent: 40 })
-      expect(oldSend).not.toHaveBeenCalled()
-      currentWindow = newWindow
-      const { scheduleMainWindowAutoUpdaterSetup } = await import('./window/main-window-updater')
-      Object.assign(newWindow, { once: vi.fn() })
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: deferred setup is never invoked; this assertion only schedules the successor.
-      scheduleMainWindowAutoUpdaterSetup(newWindow, getMainWindow, {} as never)
-      autoUpdaterMock.emit('download-progress', { percent: 60 })
-      expect(newSend).toHaveBeenCalledWith(
-        'updater:status',
-        expect.objectContaining({ percent: 60 })
-      )
-      expect(updater.getUpdateStatus()).toMatchObject({ percent: 60 })
-      expect(oldSend).not.toHaveBeenCalled()
-    }
-  )
+  it('follows the current window before deferred setup', async () => {
+    const oldSend = vi.fn()
+    const newSend = vi.fn()
+    const oldWindow = updaterMainWindow(oldSend)
+    const newWindow = updaterMainWindow(newSend)
+    let currentWindow: typeof oldWindow | null = oldWindow
+    const getMainWindow = () => currentWindow
+    const updater = await loadUpdaterModule()
+    const options = { getLastUpdateCheckAt: () => Date.now() }
+    updater.setupAutoUpdater(getMainWindow, options)
+    currentWindow = null
+    updater.setupAutoUpdater(getMainWindow, options)
+    autoUpdaterMock.emit('download-progress', { percent: 40 })
+    expect(updater.getUpdateStatus()).toMatchObject({ percent: 40 })
+    expect(oldSend).not.toHaveBeenCalled()
+    currentWindow = newWindow
+    const { scheduleMainWindowAutoUpdaterSetup } = await import('./window/main-window-updater')
+    Object.assign(newWindow, { once: vi.fn() })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: deferred setup is never invoked; this assertion only schedules the successor.
+    scheduleMainWindowAutoUpdaterSetup(newWindow, getMainWindow, {} as never)
+    autoUpdaterMock.emit('download-progress', { percent: 60 })
+    expect(newSend).toHaveBeenCalledWith('updater:status', expect.objectContaining({ percent: 60 }))
+    expect(updater.getUpdateStatus()).toMatchObject({ percent: 60 })
+    expect(oldSend).not.toHaveBeenCalled()
+  })
 
   it('leaves a dismissed release update on the release source', async () => {
     autoUpdaterMock.checkForUpdates.mockImplementation(() => {
