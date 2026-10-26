@@ -1,6 +1,7 @@
 // verify-15a parity: a host whose daemon restarted resumed nothing and replayed the pane's launch.
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { partialRuntimeStore } from './runtime-store-partial-fixture'
 
 // Preserve side-effect order: mocks, lifecycle, fixtures.
@@ -32,12 +33,23 @@ function codexRow(fields: Partial<AgentStatusIpcPayload> = {}): AgentStatusIpcPa
   }
 }
 
-function makeRuntime(rows: AgentStatusIpcPayload[], launchAgent?: 'codex') {
+function makeRuntime(
+  rows: AgentStatusIpcPayload[],
+  launchAgent?: 'codex',
+  {
+    session: overrides = {},
+    presence = 'exited'
+  }: {
+    session?: Partial<WorkspaceSessionState>
+    presence?: 'live' | 'exited'
+  } = {}
+) {
   const session = makeWorkspaceSessionWithHeadlessTerminal()
   const [tab] = session.tabsByWorktree[TEST_WORKTREE_ID] ?? []
   const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession({
     ...session,
-    tabsByWorktree: { [TEST_WORKTREE_ID]: [{ ...tab!, ...(launchAgent ? { launchAgent } : {}) }] }
+    tabsByWorktree: { [TEST_WORKTREE_ID]: [{ ...tab!, ...(launchAgent ? { launchAgent } : {}) }] },
+    ...overrides
   })
   const spawn = vi.fn(
     async (_args: { worktreeId?: string; tabId?: string; leafId?: string; command?: string }) => ({
@@ -48,7 +60,7 @@ function makeRuntime(rows: AgentStatusIpcPayload[], launchAgent?: 'codex') {
     getAgentProviderSessionSnapshot: () => rows,
     getAgentProviderSessionRowsForPane: (paneKey: string) =>
       rows.filter((row) => row.paneKey === paneKey),
-    checkHookAgentPresence: async () => 'exited'
+    checkHookAgentPresence: async () => presence
   })
   runtime.setPtyController({
     spawn: committingSpawn(runtime, spawn),
@@ -92,5 +104,76 @@ describe('restoring a pane its host recorded an agent in', () => {
     const { runtime, spawn } = makeRuntime([codexRow({ connectionId: 'ssh-1' })])
     await restore(runtime)
     expect(spawn.mock.calls[0]![0].command ?? '').not.toContain('resume')
+  })
+
+  it('ignores a row from another worktree, and launches the tab’s agent fresh', async () => {
+    const { runtime, spawn } = makeRuntime(
+      [codexRow({ worktreeId: 'other-repo::/other' })],
+      'codex'
+    )
+    await restore(runtime)
+    const { command } = spawn.mock.calls[0]![0]
+    expect(command ?? '').not.toMatch(RESUMES)
+    expect(command).toContain('codex')
+  })
+
+  it('opens a plain shell when the pane’s own rows name two conversations', async () => {
+    const { runtime, spawn } = makeRuntime(
+      [
+        codexRow({ receivedAt: 2 }),
+        codexRow({ providerSession: { key: 'session_id', id: 'another-session' }, receivedAt: 1 })
+      ],
+      'codex'
+    )
+    await restore(runtime)
+    expect(spawn.mock.calls[0]![0].command).toBeUndefined()
+  })
+
+  it('opens a plain shell when another pane’s stored record holds the same conversation', async () => {
+    const otherPaneKey = 'other-tab:44444444-4444-4444-8444-444444444444'
+    const { runtime, spawn } = makeRuntime([codexRow()], 'codex', {
+      session: {
+        sleepingAgentSessionsByPaneKey: {
+          [otherPaneKey]: {
+            paneKey: otherPaneKey,
+            worktreeId: TEST_WORKTREE_ID,
+            tabId: 'other-tab',
+            agent: 'codex',
+            providerSession: { key: 'session_id', id: SESSION_ID },
+            state: 'done',
+            prompt: '',
+            capturedAt: 1,
+            updatedAt: 1,
+            origin: 'live'
+          }
+        }
+      }
+    })
+    await restore(runtime)
+    expect(spawn.mock.calls[0]![0].command).toBeUndefined()
+  })
+
+  it('opens a plain shell when another pane holds the conversation live', async () => {
+    const otherPaneKey = 'other-tab:44444444-4444-4444-8444-444444444444'
+    const { runtime, spawn } = makeRuntime(
+      [codexRow(), codexRow({ paneKey: otherPaneKey })],
+      'codex',
+      { presence: 'live' }
+    )
+    vi.spyOn(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime's protected paneHoldsSession; the other pane stands in for a bound live terminal.
+      runtime as unknown as { paneHoldsSession: (paneKey: string) => boolean },
+      'paneHoldsSession'
+    ).mockImplementation((paneKey) => paneKey === otherPaneKey)
+    await restore(runtime)
+    expect(spawn.mock.calls[0]![0].command).toBeUndefined()
+  })
+
+  it('falls back to the tab’s agent launch when the newest row is a structured host’s', async () => {
+    const { runtime, spawn } = makeRuntime([codexRow({ structuredHost: 'owned' })], 'codex')
+    await restore(runtime)
+    const { command } = spawn.mock.calls[0]![0]
+    expect(command ?? '').not.toMatch(RESUMES)
+    expect(command).toContain('codex')
   })
 })
