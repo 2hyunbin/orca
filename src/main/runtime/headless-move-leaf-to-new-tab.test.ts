@@ -225,6 +225,58 @@ describe('moveMobileSessionLeafToNewTab on a headless host', () => {
       [newer.id, ['host-new-tab', 'other-tab', 'host-tab']]
     ])
   })
+  it('names the live terminal, so a session copy an SSH respawn left stale cannot refuse it', async () => {
+    const { runtime, getSession, commit, move } = await setup()
+    runtime.registerPty('sibling-pty', TEST_WORKTREE_ID, null, {
+      tabId: 'host-tab',
+      leafId: SIBLING_LEAF_ID
+    })
+    const staleCopy: WorkspaceSessionState = {
+      ...getSession(),
+      terminalLayoutsByTabId: {
+        ...getSession().terminalLayoutsByTabId,
+        'host-tab': {
+          ...getSession().terminalLayoutsByTabId['host-tab']!,
+          ptyIdsByLeafId: { [HEADLESS_LEAF_ID]: 'persisted-pty', [SIBLING_LEAF_ID]: 'old-pty' }
+        }
+      }
+    }
+    commit.mockImplementationOnce(async (request) => {
+      const plan = planTerminalLeafMove(
+        [
+          { hostId: 'local', session: getSession() },
+          { hostId: 'ssh:respawned', session: staleCopy }
+        ],
+        request
+      )
+      return plan.result
+    })
+    await expect(move()).resolves.toEqual({ status: 'moved', ptyId: 'sibling-pty' })
+  })
+  it('refuses a move that would empty its source, which no headless cleanup retires', async () => {
+    const { runtime, getSession, published, move } = await setup(undefined, (session) => ({
+      ...session,
+      terminalLayoutsByTabId: {
+        ...session.terminalLayoutsByTabId,
+        'host-tab': {
+          root: { type: 'leaf', leafId: SIBLING_LEAF_ID },
+          activeLeafId: SIBLING_LEAF_ID,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [SIBLING_LEAF_ID]: 'sibling-pty' }
+        }
+      }
+    }))
+    await expect(move()).resolves.toEqual({ status: 'refused', reason: 'last_pane' })
+    expect(getSession().terminalLayoutsByTabId['host-tab']?.root).toEqual({
+      type: 'leaf',
+      leafId: SIBLING_LEAF_ID
+    })
+    expect(published).toHaveLength(0)
+    const { tabs } = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    expect(tabs.some((tab) => tab.type === 'terminal' && tab.parentTabId === 'host-new-tab')).toBe(
+      false
+    )
+  })
   it('refuses a target tab id a pane key cannot carry, leaving the session alone', async () => {
     const { getSession, published, commit, move } = await setup()
     const before = getSession()

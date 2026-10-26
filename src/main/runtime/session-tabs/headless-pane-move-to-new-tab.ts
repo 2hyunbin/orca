@@ -34,8 +34,16 @@ export abstract class OrcaRuntimeWithHeadlessPaneMoveToNewTab extends OrcaRuntim
       return { status: 'not_held' }
     }
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
-    // Why: the client's pty id mirrors a host handle; the host names its own bound pty.
-    const move = { ...args, worktreeId, ptyId: null }
+    // Why: the client's pty id mirrors a host handle, so the host names its own live pty; an SSH
+    // respawn can leave an old id in one session copy. Headless cleanup can't retire an emptied source.
+    const sourcePaneKey = makePaneKey(args.sourceTabId, args.leafId)
+    let livePtyId: string | null = null
+    for (const pty of this.ptysById.values()) {
+      if (pty.connected && this.paneOfPty(pty).paneKey === sourcePaneKey) {
+        livePtyId = pty.ptyId
+      }
+    }
+    const move = { ...args, worktreeId, ptyId: livePtyId, keepsSourcePane: true as const }
     if (!isValidHostTerminalTabId(move.targetTabId) || !isTerminalLeafMoveRequest(move)) {
       return { status: 'refused', reason: 'invalid_request' }
     }
