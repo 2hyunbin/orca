@@ -180,9 +180,12 @@ async function idleReleasePhase(): Promise<void> {
   process.env[ORCAD_E2E_IDLE_TIMEOUT_ENV] = String(IDLE_TIMEOUT_MS)
   receipt.vmBeforeLaunchKiB = await vmWorkingSetKiB()
   let connection = await manager.ensure(PLAIN)
+  // The release hunt: a zombie `cat` under a session init kept the distro up; find which step leaves it.
+  const zombies =
+    'cat /proc/uptime; for p in $(ps -eo pid=,stat= | awk \'$2 ~ /^Z/ {print $1}\'); do echo "Z $p $(cut -d" " -f4-8,22 /proc/$p/stat)"; done; ps -eo pid,ppid,sid,stat,args'
+  receipt.processesAfterEnsure = await guest(zombies)
   await rpc(connection, 'status.get')
-  // The release hunt: a zombie low-pid `cat` under a session init kept the distro up; name its parent.
-  receipt.processesAfterLaunch = await guest('ps -eo pid,ppid,sid,stat,args')
+  receipt.processesAfterLaunch = await guest(zombies)
   const repoPath = (await guest('cd "$HOME/wsl-orcad-lane-repo" && pwd')).trim()
   const created = await rpc<{ terminal: { handle: string } }>(connection, 'terminal.create', {
     worktree: `path:${repoPath}`
