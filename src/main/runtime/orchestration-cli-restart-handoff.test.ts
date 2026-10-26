@@ -30,7 +30,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-it('retains CLI work and mail across restart, refuses takeover, and completes a separate Run handoff', async () => {
+// Sequential source-CLI subprocesses and a disk-backed runtime restart exceed the default test budget.
+it("retains CLI work and mail across restart, refuses a worker's own Run, and completes a separate Run handoff", async () => {
   const home = mkdtempSync(join(tmpdir(), 'orca-cli-restart-handoff-'))
   for (const name of [
     'HOME',

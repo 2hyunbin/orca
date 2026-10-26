@@ -125,8 +125,7 @@ export function bindRun(
         'Legacy takeover is only available for the automatically adopted Run.'
       )
     }
-    // Why: only LIVE legacy work needs the flag — settled work has no competing authority left, and
-    // fencing it would strand the recovered graph behind an attestation the caller may not have.
+    // Only live legacy work requires takeover attestation; settled work has no competing authority.
     if (activeLegacyAssignment && !sameBinding && !provenLegacyBinding && !params.takeoverLegacy) {
       if (decision.worker) {
         throw new OrchestrationError(
@@ -178,7 +177,6 @@ export function bindRun(
       acceptRunHandover(this, params.runId)
     }
     this.unbindOtherRunsForCoordinator(coordinator, params.runId)
-    // The mailbox address of the coordinator being replaced and of the one binding now.
     for (const address of new Set([
       mailboxAddressOf(runCoordinatorKey(run)),
       mailboxAddressOf(coordinator)
@@ -225,7 +223,7 @@ export function bindRun(
         this.promoteLegacyCoordinatorMailForTakeover(params.runId, retainedCoordinatorHandle)
       }
     } else if (runCoordinatorKey(run).orcaSessionId !== coordinator.orcaSessionId) {
-      // Same coordinator, so no new consumer: correct an Orca session id a writer without the column left.
+      // Same consumer: backfill the session id omitted by an older writer.
       this.db
         .prepare(
           `UPDATE runs SET coordinator_orca_session_id = ?,

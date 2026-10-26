@@ -36,11 +36,7 @@ export type RunningStructuredSession = {
   readonly lineage: readonly string[]
 }
 
-/**
- * Where the session running a `/clear` lineage is now. `lineage` lists every session walked, from
- * the one asked about to the running one. `unverifiable` is not being able to look — no record
- * store, a successor with no record, a corrupt chain — and never evidence the conversation ended.
- */
+/** Walked lineage and its live location; unreadable stores, missing successors and corrupt chains never prove the conversation ended. */
 export type LineageRunningSession =
   | ({ kind: 'here' } & RunningStructuredSession)
   | ({ kind: 'other-host' } & RunningStructuredSession)

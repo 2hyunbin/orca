@@ -1,3 +1,4 @@
+import { bindAfterProbe } from './run-coordinator-liveness'
 import { RUN_HANDOVER_METHOD } from './run-handover-method'
 import { resolveRunCallerKey } from './run-caller-key'
 import { defineMethod } from '../../../core'
@@ -7,7 +8,6 @@ import { getRunAuthority } from '../../../../orchestration/db/runs/run-authority
 import { exposeRunOwnership, exposeRun } from './run-receipt'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
 import type { OrchestrationCallerIdentity } from '../../../../orchestration/orchestration-caller-identity'
-import { bindAfterProbe } from './run-coordinator-liveness'
 import { currentDispatchAssigneeRun } from '../messaging/recipient-routing'
 import {
   RunCreateParams,
