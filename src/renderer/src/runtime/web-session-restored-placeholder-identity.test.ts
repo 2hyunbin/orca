@@ -112,6 +112,8 @@ describe('restored placeholders retire only by their own identity', () => {
       ...base
     } = restoredRow('client-d', 3)
     const clientMinted: TerminalTab = { ...base, ptyId: 'remote:web-env-1@@gone-d' }
+    const unbound = restoredRow('restored-e', 4)
+    const revived: TerminalTab = { ...base, id: 'client-g', ptyId: 'remote:web-env-1@@gone-g' }
     const retired = (parentTabId: string, leafId: string, terminal: string) => ({
       parentTabId,
       leafId,
@@ -121,7 +123,7 @@ describe('restored placeholders retire only by their own identity', () => {
 
     const patch: Partial<WebSessionTabsSyncState> = applyWebSessionTabsSnapshot(
       makeState({
-        tabsByWorktree: { [WT]: [closed, open, split, clientMinted] },
+        tabsByWorktree: { [WT]: [closed, open, split, clientMinted, unbound, revived] },
         terminalLayoutsByTabId: {
           [closed.id]: restoredLayout(SECOND_LEAF_ID, 'remote:web-env-1@@gone-a'),
           [open.id]: restoredLayout(THIRD_LEAF_ID, 'remote:web-env-1@@gone-b'),
@@ -138,16 +140,46 @@ describe('restored placeholders retire only by their own identity', () => {
               [SECOND_LEAF_ID]: 'remote:web-env-1@@gone-c1',
               [THIRD_LEAF_ID]: 'remote:web-env-1@@gone-c2'
             }
+          },
+          [revived.id]: {
+            root: {
+              type: 'split' as const,
+              direction: 'vertical' as const,
+              first: { type: 'leaf' as const, leafId: SECOND_LEAF_ID },
+              second: { type: 'leaf' as const, leafId: THIRD_LEAF_ID }
+            },
+            activeLeafId: SECOND_LEAF_ID,
+            expandedLeafId: null,
+            ptyIdsByLeafId: {
+              [SECOND_LEAF_ID]: 'remote:web-env-1@@gone-g',
+              [THIRD_LEAF_ID]: 'remote:web-env-1@@revived-h'
+            }
           }
         }
       }),
-      makeSnapshot([unrelatedReadySurface], {
-        retiredTerminalSurfaces: [
-          retired(closed.id, SECOND_LEAF_ID, 'gone-a'),
-          retired(split.id, SECOND_LEAF_ID, 'gone-c1'),
-          retired('host-tab-d', LEAF_ID, 'gone-d')
-        ]
-      }),
+      makeSnapshot(
+        [
+          unrelatedReadySurface,
+          // A handle survives its PTY's re-incarnation, so a live one outranks an older close record.
+          {
+            ...unrelatedReadySurface,
+            id: 'host-surface-h',
+            parentTabId: 'host-tab-h',
+            isActive: false,
+            terminal: 'revived-h'
+          }
+        ],
+        {
+          retiredTerminalSurfaces: [
+            retired(closed.id, SECOND_LEAF_ID, 'gone-a'),
+            retired(split.id, SECOND_LEAF_ID, 'gone-c1'),
+            retired('host-tab-d', LEAF_ID, 'gone-d'),
+            retired(unbound.id, LEAF_ID, 'gone-e'),
+            retired('host-tab-g', SECOND_LEAF_ID, 'gone-g'),
+            retired('host-tab-g', THIRD_LEAF_ID, 'revived-h')
+          ]
+        }
+      ),
       ENV,
       NOW
     )
@@ -155,6 +187,8 @@ describe('restored placeholders retire only by their own identity', () => {
     const ids = patch.tabsByWorktree?.[WT]?.map((tab) => tab.id) ?? []
     expect(ids).not.toContain(closed.id)
     expect(ids).not.toContain(clientMinted.id)
+    expect(ids).not.toContain(unbound.id)
+    expect(ids).toContain(revived.id)
     expect(ids).toContain(open.id)
     expect(ids).toContain(split.id)
   })

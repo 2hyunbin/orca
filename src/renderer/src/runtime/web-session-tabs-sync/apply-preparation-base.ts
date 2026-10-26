@@ -29,7 +29,10 @@ import {
   shouldReplaceTerminalTab
 } from './terminal-surfaces'
 import { buildMirroredTerminalTabs } from './terminal-build'
-import { isTerminalRowRetiredByHost } from './host-retired-terminal-rows'
+import {
+  collectHostRetiredTerminals,
+  isTerminalRowRetiredByHost
+} from './host-retired-terminal-rows'
 import { hostSnapshotAffirmsWorktreeContents } from '../host-session-snapshot-authority'
 
 export function prepareWebSessionTabsSnapshotBase(
@@ -138,6 +141,7 @@ export function prepareWebSessionTabsSnapshotBase(
     }
   }
   const exactProvisionalHandoffs = new Set(provisionalHandoffHostTabIds.keys())
+  const hostRetiredTerminals = collectHostRetiredTerminals(snapshot, environmentId)
   const retainedTerminalTabs = reconcilesNonAgentTabs
     ? currentTerminalTabs.filter(
         (tab) =>
@@ -153,8 +157,7 @@ export function prepareWebSessionTabsSnapshotBase(
           !isTerminalRowRetiredByHost(
             tab,
             state.terminalLayoutsByTabId[tab.id],
-            snapshot.retiredTerminalSurfaces,
-            environmentId
+            hostRetiredTerminals
           )
       )
     : currentTerminalTabs
