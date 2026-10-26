@@ -7,7 +7,6 @@ import { MobileNativeChatView } from './MobileNativeChatView'
 import {
   scrollToEnd,
   scrollToOffset,
-  platform,
   pageScroller
 } from './MobileNativeChatView.render-stubs.test-fixture'
 
@@ -177,4 +176,9 @@ export async function scrollAwayFromTail(): Promise<void> {
   })
 }
 
-export { scrollToEnd, scrollToOffset, platform, pageScroller }
+export {
+  scrollToEnd,
+  scrollToOffset,
+  platform,
+  pageScroller
+} from './MobileNativeChatView.render-stubs.test-fixture'
