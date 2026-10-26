@@ -365,7 +365,9 @@ describe('NativeChatQueuedMessageList', () => {
         returnedReason: 'host_restarted_before_delivery'
       })
     ])
+    owner.reorder = { scope: 'test', pending: false, move: vi.fn(async () => {}) }
     renderList(owner)
+    expect(screen.getByText('Your message was not sent.').querySelector('svg')).not.toBeNull()
     expect(screen.getByRole('listitem').textContent).toContain('Your message was not sent.')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(owner.steer).toHaveBeenCalledWith('refused')

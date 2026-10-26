@@ -188,6 +188,7 @@ export function NativeChatQueuedMessageCard({
   const caption = queuedMessageCardCaption(card, agentName, statedFailures)
   const line = queuedMessageCardLine(card)
   const returned = card.state === 'returned'
+  const attention = returned || card.pausedReason === QUEUED_MESSAGE_PAUSED_SEND_FAILED
   const sendNow = queuedMessageCardSendNow(card)
   const busy = pending !== null
   const isMac = isMacPlatform()
@@ -229,12 +230,21 @@ export function NativeChatQueuedMessageCard({
         />
       ) : null}
       <div className="flex items-center gap-1">
-        {drag?.grip}
-        {returned || card.pausedReason === QUEUED_MESSAGE_PAUSED_SEND_FAILED ? (
-          <AlertCircle className="size-3.5 shrink-0 text-destructive" aria-hidden />
-        ) : (
-          <ListEnd className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-        )}
+        <span className="relative flex size-3.5 shrink-0 items-center justify-center">
+          {attention && !drag?.grip ? (
+            <AlertCircle className="size-3.5 text-destructive" aria-hidden />
+          ) : (
+            <ListEnd
+              className={cn(
+                'size-3.5 text-muted-foreground',
+                drag?.grip &&
+                  'group-hover/queued:opacity-0 group-focus-within/queued:opacity-0 [@media(hover:none)]:opacity-0'
+              )}
+              aria-hidden
+            />
+          )}
+          {drag?.grip}
+        </span>
         <div className="min-w-0 flex-1">
           {sender}
           {expanded ? null : (
@@ -250,6 +260,12 @@ export function NativeChatQueuedMessageCard({
                   : 'truncate text-xs text-muted-foreground'
               }
             >
+              {attention && drag?.grip ? (
+                <AlertCircle
+                  className="mr-1 inline size-3.5 align-text-bottom text-destructive"
+                  aria-hidden
+                />
+              ) : null}
               {caption}
             </p>
           ) : null}

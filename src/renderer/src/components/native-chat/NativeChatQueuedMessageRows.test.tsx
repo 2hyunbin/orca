@@ -150,6 +150,8 @@ it('keeps actual sortable metadata stable across unchanged visible and collapsed
       }
       const instruction = document.getElementById(grip.getAttribute('aria-describedby')!)
       expect(instruction?.textContent).toBe('Drag to reorder, or use the Up and Down arrow keys.')
+      grip.focus()
+      expect(document.activeElement).toBe(grip)
       fireEvent.keyDown(grip, { key: ' ', code: 'Space' })
       expect(move).not.toHaveBeenCalled()
       fireEvent.keyDown(grip, { key: 'ArrowDown' })
@@ -179,6 +181,9 @@ it('keeps actual sortable metadata stable across unchanged visible and collapsed
           />
         </ul>
       )
+      expect(mounted.container.querySelector('button')).toBe(grip)
+      expect(document.activeElement).toBe(grip)
+      expect(grip.getAttribute('aria-disabled')).toBe('true')
       fireEvent.keyDown(grip, { key: 'ArrowDown' })
       expect(move).toHaveBeenCalledTimes(1)
       expect(latestMove).toHaveBeenCalledTimes(1)
