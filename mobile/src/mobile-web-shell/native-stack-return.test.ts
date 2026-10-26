@@ -15,7 +15,6 @@ function hostStack(...routes: Route[]): Route {
   return { name: 'h', state: stack('host-stack', routes) }
 }
 
-// The root layout is a screen of expo-router's own navigator, so the walk starts one level up.
 function rootStack(...routes: Route[]): NativeStackState {
   return stack('expo-root', [{ name: '__root', state: stack('root-stack', routes) }])
 }
@@ -67,18 +66,4 @@ describe('nativeStackReturn', () => {
     const state = rootStack(HOME, hostStack(HOST, SESSION))
     expect(nativeStackReturn(state, '/h/mac%2F1/session/wt-a')).toBe('current')
   })
-})
-
-it('opens a new workspace above A and resolves Back to A after that native push', () => {
-  const b = { ...SESSION, params: { ...SESSION.params, worktreeId: 'wt-b' } }
-  const aHref = '/h/mac%2F1/session/wt-a'
-  const bHref = '/h/mac%2F1/session/wt-b'
-  expect(nativeStackReturn(rootStack(HOME, hostStack(HOST, SESSION)), bHref)).toBeNull()
-  const afterPush = rootStack(HOME, hostStack(HOST, SESSION, b))
-  expect(nativeStackReturn(afterPush, aHref)).toEqual({
-    target: 'host-stack',
-    source: 'host-stack/2',
-    count: 1
-  })
-  expect(nativeStackReturn(afterPush, bHref)).toBe('current')
 })

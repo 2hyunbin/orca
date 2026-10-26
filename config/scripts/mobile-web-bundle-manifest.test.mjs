@@ -11,7 +11,6 @@ import {
   sha256Hex,
   writeMobileWebBundleTree
 } from './mobile-web-bundle-manifest.mjs'
-import { MOBILE_WEB_PAGE_ROUTES } from './mobile-web-page-routes.mjs'
 import {
   MOBILE_WEB_PAGE_VERSION,
   MobileWebBundleManifestSchema
@@ -61,8 +60,7 @@ describe('hashedAsset', () => {
   })
 
   it('refuses an extension with no registered content type', () => {
-    // A type the phone has no rule for would otherwise reach the manifest and be served as
-    // whatever the shell guessed, which is the one thing a content-addressed tree cannot allow.
+    // Unknown content type must fail rather than leave phone guessing how to serve addressed bytes.
     expect(() => hashedAsset(Buffer.from('body'), 'wasm')).toThrow(/no content type registered/)
   })
 })
@@ -82,15 +80,12 @@ describe('writeMobileWebBundleTree', () => {
       await writeMobileWebBundleTree({
         outDir,
         written: [entry],
-        routes: MOBILE_WEB_PAGE_ROUTES,
         desktopVersion: '1.0.0',
         protocolWindow: { runtimeProtocolVersion: 3, minCompatibleRuntimeProtocolVersion: 3 }
       })
       const manifest = JSON.parse(await readFile(join(outDir, 'manifest.json'), 'utf8'))
       expect(manifest.pageVersion).toBe(MOBILE_WEB_PAGE_VERSION)
-      const parsed = MobileWebBundleManifestSchema.parse(manifest)
-      expect(parsed.pageVersion).toBe(manifest.pageVersion)
-      expect(parsed.routes).toEqual(MOBILE_WEB_PAGE_ROUTES)
+      expect(MobileWebBundleManifestSchema.parse(manifest).pageVersion).toBe(manifest.pageVersion)
     } finally {
       await rm(outDir, { recursive: true, force: true })
     }

@@ -1,14 +1,7 @@
-// Host-held drafts as this pane acts on them: the card list, Send-now (Steer),
-// Delete, Edit, the Cmd/Ctrl+Enter steer chord, and a held queue's Resume and Clear all.
-// Everything durable lives on the host; an open editor holds only its own typing.
+// Host owns durable queued drafts; this pane routes card/header actions and holds only open-edit typing.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { extractQueuedMessageToComposer } from './structured-agent-session-queued-extract'
-import {
-  useStructuredAgentSessionQueuedReorder,
-  type QueuedMessageReorder
-} from './use-structured-agent-session-queued-reorder'
 import { translate } from '@/i18n/i18n'
 import type { AgentJournalSubmission } from '../../../../shared/agent-session-journal-types'
 import { mapSettledWithConcurrency } from '../../../../shared/map-with-concurrency'
@@ -41,14 +34,11 @@ import type {
 
 export type StructuredAgentSessionQueuedMessagesController = {
   cards: QueuedMessageCard[]
-  /** The host queues sends. Without it a card can still show — a message the host kept unsent —
-   *  but queueing settings and the steer chord would do nothing. */
+  /** Cards can show unsent messages without host queue support; queue settings/steer then have no effect. */
   queueCapable: boolean
-  /** No card is still sending or has its own action in flight: Clear all waits those out
-   *  rather than clear fewer cards than it shows. */
+  /** Clear all waits for sends/actions so it cannot silently clear fewer cards than shown. */
   clearCapable: boolean
-  /** Why the queue holds cards Resume would send: the header row above them. A string reason: a
-   *  newer host may name one this build does not know. */
+  /** Host pause reason for sendable cards; accept future reason strings from newer hosts. */
   pause: { reason: string } | null
   /** Whether the host lifted the pause; a failure is a toast, and Resume is the retry. */
   resume: () => Promise<boolean>
@@ -56,27 +46,20 @@ export type StructuredAgentSessionQueuedMessagesController = {
   clear: () => Promise<boolean>
   /** Resume or Clear all on its way: both header actions grey, and the pressed one spins. */
   queuePending: QueuedMessagesPendingAction | null
-  /** The card's own action, or the Clear deleting it, in flight: the card greys, and the
-   *  pressed button spins. */
+  /** Card action or enclosing Clear in flight; disable the card and spin the pressed control. */
   pending: (messageId: string) => QueuedMessagesPendingAction | null
   /** Send-now into the running turn; the transcript shows it at delivery position. */
   steer: (messageId: string) => Promise<void>
   remove: (messageId: string) => Promise<void>
   /** The host edits cards in place; without it a card offers no Edit. */
   editCapable: boolean
-  editReturnsToComposer?: boolean
-  editDisabledReason?: string
-  reorder?: QueuedMessageReorder
-  /** The card being edited in this pane, at most one. */
   editor: QueuedMessageInlineEditor | undefined
-  /** Opens the card's inline editor. */
   edit: (messageId: string) => Promise<void>
   /** Cmd/Ctrl+Enter: Send-now the newest card. False when there is none to steer. */
   steerNewest: () => boolean
 }
 
-/** Which control is on its way, so the button that was pressed is the one that spins. */
-export type QueuedMessagesPendingAction = 'send' | 'delete' | 'resume' | 'clear' | 'edit'
+export type QueuedMessagesPendingAction = 'send' | 'delete' | 'resume' | 'clear'
 
 const NO_SENDS: readonly StructuredAgentSessionPendingSend[] = []
 const CLEAR_DELETE_CONCURRENCY = 8
@@ -128,14 +111,12 @@ export function useStructuredAgentSessionQueuedMessages(args: {
     ],
     [isWorking, sending, queuePause, queuedMessages, submissions]
   )
-  const reordered = useStructuredAgentSessionQueuedReorder(cards, args.editTransport)
   const cardsRef = useRef(cards)
   useEffect(() => {
     cardsRef.current = cards
   }, [cards])
 
-  // One action per control at a time, drawn as busy until it settles. The ref closes the
-  // same-frame double click or chord repeat the disabled state cannot.
+  // Refs close same-frame double-click/chord races before disabled state renders.
   const inFlightRef = useRef(new Map<string, QueuedMessagesPendingAction>())
   const [inFlight, setInFlight] = useState<ReadonlyMap<string, QueuedMessagesPendingAction>>(
     () => new Map()
@@ -193,36 +174,13 @@ export function useStructuredAgentSessionQueuedMessages(args: {
   )
 
   const editing = useStructuredAgentSessionQueuedEdit({
-    transport: {
-      ...args.editTransport,
-      capable: args.editTransport.capable && !args.editTransport.copyDeleteCapable
-    },
+    transport: args.editTransport,
     messages: queuedMessages,
     cards,
     submissions,
     composerScopeKey,
     promptOpen: hasPendingPrompt
   })
-
-  const beginLegacyEdit = editing.begin
-  const edit = useCallback(
-    async (messageId: string): Promise<void> => {
-      if (hasPendingPrompt) {
-        return
-      }
-      if (!args.editTransport.copyDeleteCapable) {
-        return beginLegacyEdit(messageId)
-      }
-      await run([messageId], 'edit', () =>
-        extractQueuedMessageToComposer(
-          args.editTransport,
-          composerScopeKey,
-          queuedMessages?.find((message) => message.messageId === messageId)
-        )
-      )
-    },
-    [args.editTransport, composerScopeKey, beginLegacyEdit, hasPendingPrompt, queuedMessages, run]
-  )
 
   const steerNewest = useCallback((): boolean => {
     if (!enabled) {
@@ -302,8 +260,7 @@ export function useStructuredAgentSessionQueuedMessages(args: {
   }, [admit, capturePresentation, clearCapable, run])
 
   return {
-    cards: reordered.cards,
-    reorder: reordered.reorder,
+    cards,
     queueCapable: enabled,
     clearCapable,
     pause,
@@ -313,17 +270,8 @@ export function useStructuredAgentSessionQueuedMessages(args: {
     pending: (messageId) => inFlight.get(messageId) ?? null,
     steer,
     remove,
-    edit,
-    editReturnsToComposer: args.editTransport.copyDeleteCapable === true,
-    editCapable: args.editTransport.copyDeleteCapable === true || editing.capable,
-    ...(hasPendingPrompt
-      ? {
-          editDisabledReason: translate(
-            'components.native-chat.queuedMessages.editWaitForAnswer',
-            'Answer the agent’s question or approval before editing.'
-          )
-        }
-      : {}),
+    edit: editing.begin,
+    editCapable: editing.capable,
     editor: editing.editor,
     steerNewest
   }

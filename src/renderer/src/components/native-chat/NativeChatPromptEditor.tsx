@@ -3,8 +3,7 @@ import { resolveNativeChatPastedText } from './native-chat-composer-pasted-text-
 import { NativeChatPastedTextScopeProvider } from './native-chat-pasted-text-state'
 import {
   readNativeChatDraftDocument,
-  writeNativeChatDraftDocument,
-  type NativeChatDraftCommit
+  writeNativeChatDraftDocument
 } from './native-chat-draft-cache'
 import {
   subscribeToNativeChatComposerDraft,
@@ -45,7 +44,6 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'onSelect'> & {
   initialValue: string
   disabled: boolean
   placeholder: string
-  onCommit?: NativeChatDraftCommit
   onChange: (input: NativeChatComposerInput) => void
   onSelect: (input: NativeChatComposerInput) => void
 }
@@ -60,7 +58,6 @@ export function NativeChatPromptEditor({
   disabled,
   placeholder,
   onChange,
-  onCommit,
   onSelect,
   className,
   ...events
@@ -137,22 +134,19 @@ export function NativeChatPromptEditor({
         const pastedTextFiles = transaction.docChanged
           ? historyPaths(current.state.doc, transaction.docs)
           : undefined
-        // Why: a value set from the store with no change of this window behind it (another
-        // window's draft, a late load) is already saved; saving it back would make it one. A
-        // value this window just set keeps its document, skill chips included.
+        // Remote/late draft adoption is already saved; only this window’s edits should persist their document and skill chips.
         if (
           scopeKey &&
           transaction.docChanged &&
           (!transaction.getMeta('preventUpdate') ||
             hasUnsavedNativeChatComposerDraftChange(scopeKey))
         ) {
-          const text = promptText(current.state.doc)
-          const document = current.getJSON()
-          if (onCommit) {
-            onCommit({ text, document, pastedTextFiles })
-          } else {
-            writeNativeChatDraftDocument(scopeKey, text, document, pastedTextFiles)
-          }
+          writeNativeChatDraftDocument(
+            scopeKey,
+            promptText(current.state.doc),
+            current.getJSON(),
+            pastedTextFiles
+          )
         }
       },
       onUpdate: () => {
@@ -250,8 +244,7 @@ export function NativeChatPromptEditor({
               return promptTextOffset(editor.state.doc, editor.state.selection.to)
             },
             focus: () => {
-              // Why: a blurred editor never writes its caret to the page, so focusing the element
-              // alone would bring back the stale one and undo a caret moved by an insertion.
+              // Focus the editor view so an inserted caret replaces the stale DOM selection.
               editor.view.focus()
               if (!editor.isEditable) {
                 editor.view.dom.focus()

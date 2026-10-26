@@ -1,13 +1,10 @@
-// How two copies of a composer draft compare, such as the draft now against the one that was sent.
-
 import type { JSONContent } from '@tiptap/react'
 import type {
   NativeChatComposerDraft,
   NativeChatComposerDraftImage
 } from './native-chat-composer-draft-storage'
 
-/** Equal documents count as unchanged even as new objects: an editor applying the stored draft
- *  produces its own copy, which must not read as a change to save. */
+/** Compare document values so adopting an equal editor copy cannot create a new unsaved change. */
 export function sameNativeChatComposerDraftDocument(
   left: JSONContent | undefined,
   right: JSONContent | undefined
@@ -28,21 +25,13 @@ export function sameNativeChatComposerDraftImages(
       (image, index) =>
         image.id === right[index].id &&
         image.path === right[index].path &&
-        image.reference?.path === right[index].reference?.path &&
-        image.reference?.url === right[index].reference?.url &&
-        image.reference?.alt === right[index].reference?.alt &&
         image.connectionId === right[index].connectionId &&
         image.unavailableName === right[index].unavailableName
     )
   )
 }
 
-/**
- * What a draft keeps once its send is accepted: anything added since, meaning text inserted into
- * the sent text (typing or a composition begun before the send settled) and images attached
- * meanwhile. Null when the draft was otherwise changed since (replaced, or edited inside the sent
- * text), which is then left as it is.
- */
+/** After acceptance, keep inserted text and newly attached images; return null for other edits so the current draft stays intact. */
 export function nativeChatComposerDraftLeftAfterSend(
   current: NativeChatComposerDraft,
   sent: NativeChatComposerDraft

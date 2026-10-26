@@ -2,12 +2,8 @@ import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
-import {
-  hydrateMobileNativeChatDraft,
-  resetMobileNativeChatDraftStoreForTests
-} from './mobile-native-chat-draft-store'
-import { resetMobileNativeChatStaleInputForTests } from './mobile-native-chat-stale-input'
-import { resetMobileNativeChatTerminalWritesForTests } from './mobile-native-chat-terminal-write-lock'
+import { resetMobileNativeChatStaleInputForTests } from './native-chat/mobile-native-chat-stale-input'
+import { resetMobileNativeChatTerminalWritesForTests } from './native-chat/mobile-native-chat-terminal-write-lock'
 import { useMobileSessionImageAttachments } from './use-mobile-session-image-attachments'
 
 vi.mock('../platform/media-picker', () => ({
@@ -71,7 +67,6 @@ describe('useMobileSessionImageAttachments', () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
-    resetMobileNativeChatDraftStoreForTests()
     resetMobileNativeChatStaleInputForTests()
     resetMobileNativeChatTerminalWritesForTests()
   })
@@ -83,9 +78,6 @@ describe('useMobileSessionImageAttachments', () => {
   })
 
   async function renderWithImage(args: HookArgs): Promise<void> {
-    if (args.nativeChatScopeKey) {
-      await hydrateMobileNativeChatDraft(args.nativeChatScopeKey)
-    }
     act(() => {
       renderer = create(createElement(Harness, { args }))
     })
@@ -93,7 +85,7 @@ describe('useMobileSessionImageAttachments', () => {
       await hook.nativeChatImages.attachImage('library')
     })
     expect(hook.nativeChatImages.attachments).toEqual([
-      { id: expect.stringMatching(/^img-.+-1$/), path: '/tmp/a.png', previewUri: 'file:///a.jpg' }
+      { id: 'img-1', path: '/tmp/a.png', previewUri: 'file:///a.jpg' }
     ])
   }
 
@@ -111,13 +103,12 @@ describe('useMobileSessionImageAttachments', () => {
     const args = baseArgs({ activeHandle: null, activeHandleRef: { current: null } })
     await renderWithImage(args)
 
-    const submittedImages = [...hook.nativeChatImages.attachments]
     expect(await send()).toBe(true)
     expect(args.nativeChatBaseSend).toHaveBeenCalledWith(
       'look',
       ['file:///a.jpg'],
       expect.any(Number),
-      submittedImages
+      [{ id: 'img-1', path: '/tmp/a.png', previewUri: 'file:///a.jpg' }]
     )
     expect(args.client.sendRequest.mock.calls.map(([method]) => method)).toEqual([
       'clipboard.startImageUpload',

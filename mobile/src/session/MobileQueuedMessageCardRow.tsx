@@ -1,30 +1,22 @@
-import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { Pressable, Text, View, type LayoutRectangle } from 'react-native'
 import {
   AlertCircle,
   CornerDownRight,
-  Image as ImageIcon,
   ListEnd,
   MoreHorizontal,
   Send,
   Trash2
 } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
-import {
-  mobileQueuedMessageCardLine,
-  type MobileQueuedMessageCard
-} from './mobile-structured-queued-message-cards'
+import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
 import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
 import { MobileNativeChatQueuedMessageEditor } from './MobileNativeChatQueuedMessageEditor'
 import { MobileQueuedCardText } from './MobileQueuedCardText'
 import { queuedMessageStyles as styles } from './mobile-native-chat-queued-message-styles'
 
 type QueuedMessageCardRowProps = {
-  dragHandle?: ReactNode
-  editDisabledReason?: string
   card: MobileQueuedMessageCard
-  /** Set only on the card being edited. */
   editor?: MobileQueuedMessageInlineEditor
   busy: boolean
   editBlocked: boolean
@@ -32,11 +24,9 @@ type QueuedMessageCardRowProps = {
   onSend: () => void
   onDelete: () => void
   onMore: () => void
-  /** The edited row's place in the list, so the list can keep it in view. */
   onEditorLayout: (row: LayoutRectangle) => void
 }
 
-/** One queued card: its text and actions, or, while it is edited, the editor in their place. */
 export function MobileQueuedMessageCardRow({
   card,
   editor,
@@ -44,7 +34,6 @@ export function MobileQueuedMessageCardRow({
   ...actions
 }: QueuedMessageCardRowProps): React.JSX.Element {
   if (editor) {
-    // The editor replaces the icon, the text, the actions and the caption.
     return (
       <View
         testID="queued-card-row"
@@ -65,22 +54,14 @@ function QueuedMessageCardContents({
   steerHeld,
   onSend,
   onDelete,
-  onMore,
-  dragHandle,
-  editDisabledReason
+  onMore
 }: Omit<QueuedMessageCardRowProps, 'editor' | 'onEditorLayout'>): React.JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const returned = card.state === 'returned'
-  // "Steer" submits beside the running turn, the paused queue's cards too; a card whose own send
-  // failed, or a returned one, is sent again.
   const steers = !returned && !card.paused && !card.command
-  const line = mobileQueuedMessageCardLine(card)
-  // Its menu holds only Edit, which a command does not take.
-  const menu = !card.command
   return (
     <View testID="queued-card-row" style={[styles.card, styles.divided]}>
       <View style={styles.row}>
-        {dragHandle}
         {card.needsAttention ? (
           <AlertCircle size={14} color={colors.statusRed} strokeWidth={2} />
         ) : (
@@ -93,7 +74,7 @@ function QueuedMessageCardContents({
             </Text>
           ) : null}
           <MobileQueuedCardText
-            text={line}
+            text={card.text}
             expanded={expanded}
             onToggle={() => setExpanded(!expanded)}
           />
@@ -104,17 +85,7 @@ function QueuedMessageCardContents({
           ) : null}
         </View>
         <View style={styles.actions}>
-          {card.images ? (
-            <View
-              style={styles.imageCount}
-              accessible
-              accessibilityLabel={`${card.images.length} ${card.images.length === 1 ? 'image' : 'images'}`}
-            >
-              <ImageIcon size={12} color={colors.textMuted} strokeWidth={2} />
-              <Text style={styles.caption}>{card.images.length}</Text>
-            </View>
-          ) : null}
-          {/* A command never steers: its Send shows only while the agent is idle. */}
+          {}
           {card.waitsForAgent ? null : (
             <Pressable
               accessibilityRole="button"
@@ -148,7 +119,7 @@ function QueuedMessageCardContents({
             accessibilityLabel="Delete this queued message"
             style={({ pressed }) => [
               styles.iconAction,
-              !menu && styles.lastIconAction,
+              card.command && styles.lastIconAction,
               pressed && styles.pressed,
               busy && styles.disabled
             ]}
@@ -157,12 +128,12 @@ function QueuedMessageCardContents({
           >
             <Trash2 size={14} color={colors.textPrimary} strokeWidth={2} />
           </Pressable>
-          {menu ? (
+          {}
+          {card.command ? null : (
             <Pressable
               accessibilityRole="button"
               accessibilityState={{ disabled: editBlocked }}
               accessibilityLabel="More actions"
-              accessibilityHint={editDisabledReason}
               style={({ pressed }) => [
                 styles.iconAction,
                 styles.lastIconAction,
@@ -174,7 +145,7 @@ function QueuedMessageCardContents({
             >
               <MoreHorizontal size={14} color={colors.textPrimary} strokeWidth={2} />
             </Pressable>
-          ) : null}
+          )}
         </View>
       </View>
       {expanded || (returned && card.caption) ? (
@@ -186,7 +157,7 @@ function QueuedMessageCardContents({
               accessibilityHint="Shows less of the message"
               onPress={() => setExpanded(false)}
             >
-              <Text style={styles.bodyText}>{line}</Text>
+              <Text style={styles.bodyText}>{card.text}</Text>
             </Pressable>
           ) : null}
           {returned && card.caption ? (

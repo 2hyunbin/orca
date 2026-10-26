@@ -6,6 +6,7 @@ import {
   type AgentSessionQueuedMessagePausedReason,
   type AgentSessionQueuePause
 } from '../../../shared/agent-session-wire'
+import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import {
   queuePauseLiftOnItsWay,
@@ -22,8 +23,6 @@ import {
 } from './structured-agent-session-host-current-work'
 
 export type QueuePublication = {
-  /** Set only by the per-reader projection. */
-  queuedImageCards?: boolean
   queuedMessages: AgentSessionQueuedMessage[]
   queuePause: AgentSessionQueuePause | null
   /** Bridge the turn-end/handoff gap with the drain’s next card. */
@@ -33,7 +32,9 @@ export type QueuePublication = {
 export type QueueSendGate = (journal: AgentSessionJournal) => StructuredQueueGateInput
 
 export function structuredQueueSendGate(
-  host: StructuredAgentSessionCurrentWorkHost,
+  host: StructuredAgentSessionCurrentWorkHost & {
+    store: Pick<AgentSessionRecordStore, 'getRecord'>
+  },
   sessionId: string
 ): QueueSendGate {
   return (journal) => ({

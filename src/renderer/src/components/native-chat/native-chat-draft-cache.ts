@@ -1,16 +1,10 @@
-import type { NativeChatComposerDraftAddition } from './native-chat-composer-draft-addition'
 import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
 import type { JSONContent } from '@tiptap/react'
 import type {
-  NativeChatComposerDraft,
   NativeChatComposerDraftImage,
   NativeChatComposerDraftOwner
 } from './native-chat-composer-draft-storage'
-// The composer's in-progress draft text and its editor document, keyed by the same stable pane
-// scope as image attachments. The composer unmounts when the pane toggles back to the hosted
-// terminal, so without this the typed-but-unsent draft would be lost on every TUI/GUI round-trip.
-// A view of native-chat-composer-draft-store, which owns the whole draft and keeps it across a
-// reload or quit.
+// Expose text/document views of the durable whole-draft store so TUI switches and reloads retain unsent input.
 
 import {
   appendToNativeChatComposerDraft,
@@ -42,45 +36,31 @@ export function writeNativeChatDraftCache(
 }
 
 // Why: a composer mid-IME-composition keeps showing what it had, so it is told what was appended.
-type AppendListener = (
-  addition: NativeChatComposerDraftAddition,
-  previous: NativeChatComposerDraft
-) => void
-const appendListeners = new Map<string, Set<AppendListener>>()
-export type NativeChatDraftCommit = (
-  change: Pick<NativeChatComposerDraft, 'text' | 'document' | 'pastedTextFiles'>
-) => void
+const appendListeners = new Map<string, Set<(text: string, previous: string) => void>>()
 
-/** Puts text back after whatever is typed, and tells a mounted composer to show it. True once it
- *  is durable, so the copy it came from may go. */
+/** Append returned text and notify mounted composers; true means durable hand-back so its source copy may go. */
 export function appendNativeChatDraftCache(
   scopeKey: string,
   text: string,
   owner?: NativeChatComposerDraftOwner,
   /** A returned message's images, saved in the same step as the text whose chips name them. */
-  images?: readonly NativeChatComposerDraftImage[],
-  options?: Pick<NativeChatComposerDraftAddition, 'document' | 'textPolicy'> & {
-    acknowledge?: (saved: Promise<boolean>) => void
-  }
+  images?: readonly NativeChatComposerDraftImage[]
 ): boolean {
   if (text === '' && !images?.length) {
     return true
   }
-  // Durable now: the copy it came from (a send handed back, a queued card) goes right after this.
-  const { acknowledge, ...addition } = options ?? {}
-  return appendToNativeChatComposerDraft(
-    scopeKey,
-    { text, images, ...addition },
-    owner,
-    acknowledge,
-    (effective, previous) =>
-      appendListeners.get(scopeKey)?.forEach((listener) => listener(effective, previous))
-  )
+  const previous = readNativeChatDraftCache(scopeKey)
+  const durable = appendToNativeChatComposerDraft(scopeKey, { text, images }, owner)
+  // Why: an addition the draft already held adds nothing, so a composer must not show it again.
+  if (readNativeChatDraftCache(scopeKey) !== previous) {
+    appendListeners.get(scopeKey)?.forEach((listener) => listener(text, previous))
+  }
+  return durable
 }
 
 export function subscribeToNativeChatDraftAppend(
   scopeKey: string,
-  listener: AppendListener
+  listener: (text: string, previous: string) => void
 ): () => void {
   const listeners = appendListeners.get(scopeKey) ?? new Set()
   appendListeners.set(scopeKey, listeners)
@@ -124,9 +104,7 @@ export function readNativeChatAttachmentCache(
   return readNativeChatComposerDraft(scopeKey).images.map((image) => ({ ...image }))
 }
 
-/** Adds settled images after the ones the draft holds now, durably at once: when Stop gives images
- *  back, the copy they came from goes right after this. Only an image the user attaches
- *  (`fromUser`) takes the place of a placeholder with its file name, as a re-pick does. */
+/** Persist returned images immediately; only explicit user reattachment replaces same-named unavailable placeholders. */
 export function appendNativeChatAttachmentCache(
   scopeKey: string,
   appended: readonly NativeChatComposerImageAttachment[],
@@ -137,10 +115,9 @@ export function appendNativeChatAttachmentCache(
   }
   // Preview URLs can retain the full clipboard Blob, so only the path is kept.
   appendToNativeChatComposerDraft(scopeKey, {
-    images: appended.map(({ id, path, connectionId, reference }) => ({
+    images: appended.map(({ id, path, connectionId }) => ({
       id,
       path,
-      ...(reference ? { reference } : {}),
       ...(connectionId ? { connectionId } : {})
     })),
     ...(options?.fromUser ? { fromUser: true } : {})

@@ -1,7 +1,5 @@
 import '../unused-default-rpc-methods.test-fixture'
-// The two in-place edit methods on the wire: registered and advertised apart from the dark
-// mid-turn queue, the caller taken from the authenticated transport, strict params, and a lease
-// release that cleanup admission always lets through.
+// Check independent edit capabilities, authenticated caller, strict params and unconditional cleanup lease release.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -39,7 +37,6 @@ const acquire = {
 }
 beforeEach(() => {
   installStructuredHostStub()
-  hostCalls.queuedMessageDelete = vi.fn(async () => ({ ok: true, value: { deleted: true } }))
   hostCalls.queuedMessageUpdate = vi.fn(async () => ({ ok: true, value: { status: 'updated' } }))
   hostCalls.queuedMessageEditHold = vi.fn(async () => ({ status: 'held' }))
 })
@@ -59,19 +56,7 @@ describe('queued edit methods', () => {
       'queuedMessageUpdate',
       { queuedImageCards: false }
     ],
-    ['agentSession.queuedMessageEditHold', acquire, 'queuedMessageEditHold', {}],
-    [
-      'agentSession.queuedMessageDelete',
-      { envelope: envelope(), messageId: 'card', expectedBodyFingerprint: 'a'.repeat(64) },
-      'queuedMessageDelete',
-      {}
-    ],
-    [
-      'agentSession.queuedMessageMove',
-      { envelope: envelope(), messageId: 'card', afterMessageId: 'neighbor' },
-      'queuedMessageMove',
-      {}
-    ]
+    ['agentSession.queuedMessageEditHold', acquire, 'queuedMessageEditHold', {}]
   ] as const)(
     '%s reaches the host as the authenticated caller',
     async (method, params, name, hostOnly) => {

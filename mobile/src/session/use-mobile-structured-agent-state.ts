@@ -34,7 +34,6 @@ import { useMobileOlderPageLoader, type OlderPagePhase } from './use-mobile-olde
 type QueuedFeed = {
   messages: MobileQueuedMessageFeed
   pause: MobileQueuePause
-  queuedImageCards?: boolean
 }
 const NO_QUEUED_FEED: QueuedFeed = { messages: null, pause: null }
 
@@ -45,23 +44,18 @@ export function useMobileStructuredAgentState(args: {
   sessionId: string | null
   sessionKey: string | null
   enabled: boolean
-  /** Live transport only. The hold dies with the connection and has to be retaken,
-   *  but the transcript must survive the outage rather than blank out with it. */
+  // Reacquire holds after transport loss while keeping the transcript visible through the outage.
   connected: boolean
 }): {
   state: StructuredAgentSessionState
   stateRef: { readonly current: StructuredAgentSessionState }
-  /** Host-held queued drafts from the live stream; null until the host claims any. */
   queuedMessages: MobileQueuedMessageFeed
-  queuedImageCards?: boolean
-  /** The whole queue's pause, published with the drafts. */
   queuePause: MobileQueuePause
   olderPages: OlderPagePhase
   loadEarlier: () => void
 } {
   const { client, connected, enabled, sessionId, sessionKey } = args
-  // Keep a bounded cache so offline tab switches select the right transcript
-  // synchronously without growing for the lifetime of the app.
+  // Bound synchronous per-session retention so offline tab switches cannot grow memory indefinitely.
   const [sessionStates, setSessionStates] = useState<Map<string, StructuredAgentSessionState>>(
     () => new Map()
   )
@@ -114,20 +108,12 @@ export function useMobileStructuredAgentState(args: {
         const previous = current.get(sessionKey) ?? NO_QUEUED_FEED
         const messages = reduceMobileQueuedMessageFeed(previous.messages, event)
         const pause = reduceMobileQueuePause(previous.pause, event)
-        const queuedImageCards =
-          event.type === 'end' || event.queuedMessages === undefined
-            ? previous.queuedImageCards
-            : event.queuedImageCards === true
-        if (
-          messages === previous.messages &&
-          pause === previous.pause &&
-          queuedImageCards === previous.queuedImageCards
-        ) {
+        if (messages === previous.messages && pause === previous.pause) {
           return current
         }
         const updated = new Map(current)
         updated.delete(sessionKey)
-        updated.set(sessionKey, { messages, pause, queuedImageCards })
+        updated.set(sessionKey, { messages, pause })
         while (updated.size > MAX_RETAINED_SESSION_STATES) {
           const oldest = updated.keys().next().value
           if (oldest === undefined) {
@@ -147,8 +133,6 @@ export function useMobileStructuredAgentState(args: {
       return
     }
     if (!connected) {
-      // The cleanup above drops the dead hold and stream; keyed state keeps this
-      // session's transcript visible while another tab can be selected.
       return
     }
     apply({ type: 'loading' })
@@ -165,7 +149,6 @@ export function useMobileStructuredAgentState(args: {
         applyQueued(event)
       },
       applyError: (message, refusal) => {
-        // As on desktop: a loaded transcript stays as it is while the read reopens; a refusal is shown.
         if (stateRef.current.epoch !== null && refusal === undefined) {
           return
         }
@@ -177,13 +160,11 @@ export function useMobileStructuredAgentState(args: {
       },
       getCursor: () => stateRef.current.cursor,
       onContactLost: () => {},
-      // A replaced window, reopen or teardown ends an older read that was for the old one.
       onHistoryReadInvalidated: supersede,
       readCurrentRequests: (request) =>
         callAgentSession(client, 'agentSession.currentRequests', request),
       sessionId,
       subscribe: subscribeTranscriptAfterHold(client, held, () => ended),
-      // The app coming back (or a new network) cuts a grown reopen wait short.
       subscribeRetryNow: subscribeConnectionRevival
     })
     return () => {
@@ -212,9 +193,7 @@ export function useMobileStructuredAgentState(args: {
       return
     }
     let cursor = start
-    // Every head this tap produced. Any other head means a live batch trimmed the window mid-tap,
-    // and the reducer drops a page that no longer abuts it, so the read restarts from that head.
-    // Holding them all keeps the check right while `stateRef` lags a commit behind a landed page.
+    // Track all heads produced during this tap while refs lag commits; any other head proves live trimming and restarts paging from the new boundary.
     let heads = new Set([start.sequence])
     const intact = (): boolean => {
       const head = oldestStructuredAgentSessionCursor(stateRef.current)
@@ -246,7 +225,6 @@ export function useMobileStructuredAgentState(args: {
         return 'end'
       }
       if (!result.ok) {
-        // Every reset reason makes the subscription reload a fresh window, which replaces this one.
         return 'end'
       }
       if (!intact()) {
@@ -260,15 +238,12 @@ export function useMobileStructuredAgentState(args: {
       }
       heads.add(oldest.sequence)
       cursor = page.window.nextCursor
-      // Mobile draws only the session's own rows, so a page of a subagent's rows alone lands as
-      // nothing; the loader reads on until a page adds a row the reader can see.
+      // Subagent-only pages add no visible rows; keep paging until the reader has content or history ends.
       return page.items.some(isRootAgentJournalItem) ? 'drew' : 'drew-nothing'
     })
   }, [apply, client, loadOlderPages, sessionId, sessionKey])
 
-  // A window of only a subagent's rows draws nothing, and an empty list cannot be scrolled
-  // to ask for more, so it reads back once from each such head. A first page can be one: an
-  // older host's for any burst, a current host's when a burst fills its byte bound.
+  // Auto-page once per invisible head: subagent-only windows cannot scroll to request earlier history, including byte-capped first pages.
   const drawsNothingFrom =
     state.status === 'ready' && state.hasOlder && !state.items.some(isRootAgentJournalItem)
       ? `${sessionKey}:${state.epoch}:${state.items[0]?.sequence}`
@@ -287,13 +262,5 @@ export function useMobileStructuredAgentState(args: {
     loadEarlier()
   }, [drawsNothingFrom, loadEarlier, loadingEarlier])
 
-  return {
-    state,
-    stateRef,
-    queuedMessages,
-    queuedImageCards: queued.queuedImageCards,
-    queuePause: queued.pause,
-    olderPages,
-    loadEarlier
-  }
+  return { state, stateRef, queuedMessages, queuePause: queued.pause, olderPages, loadEarlier }
 }

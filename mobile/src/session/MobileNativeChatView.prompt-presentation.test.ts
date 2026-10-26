@@ -1,4 +1,3 @@
-import './MobileNativeChatView.harness.test-fixture'
 import { createElement, type ComponentProps } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { Pressable } from 'react-native'
@@ -68,7 +67,7 @@ vi.mock('./MobileNativeChatQuestion', () => ({ MobileNativeChatQuestion: 'ChatQu
 vi.mock('./MobileNativeChatSessionOptionPickers', () => ({
   MobileNativeChatSessionOptionPickers: 'SessionOptions'
 }))
-vi.mock('./MobileNativeChatComposerMenu', () => ({
+vi.mock('./native-chat/composer/MobileNativeChatComposerMenu', () => ({
   MobileNativeChatComposerMenu: 'Suggestions',
   composerMenuInsertText: () => ''
 }))

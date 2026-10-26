@@ -34,7 +34,7 @@ type HistoryFrame = Exclude<AgentSessionSubscribeEvent, { type: 'end' }>
 type BatchFrame = Extract<AgentSessionSubscribeEvent, { type: 'batch' }>
 type SideFields = Pick<
   BatchFrame,
-  'queuedMessages' | 'queuedImageCards' | 'queuePause' | 'nextQueuedMessageId' | 'backgroundTasks'
+  'queuedMessages' | 'queuePause' | 'nextQueuedMessageId' | 'backgroundTasks'
 >
 
 function within(value: unknown, maxBytes: number): boolean {

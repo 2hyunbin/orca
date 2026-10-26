@@ -1,4 +1,4 @@
-import { createElement, useRef } from 'react'
+import { createElement, useRef, useState } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -11,13 +11,6 @@ import type { MobileSessionFeedbackCapabilitiesModel } from './use-mobile-sessio
 import type { MobileSessionTab } from './mobile-session-route-types'
 import type { ConnectionState } from '../transport/types'
 import { structuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
-import type { useMobileNativeChatController } from './use-mobile-native-chat-controller'
-import { useMobileNativeChatDrafts } from './use-mobile-native-chat-drafts'
-import {
-  hydrateMobileNativeChatDraft,
-  resetMobileNativeChatDraftStoreForTests,
-  setMobileNativeChatDraftText
-} from './mobile-native-chat-draft-store'
 
 const device = vi.hoisted(() => ({ opens: 0, recording: false }))
 vi.mock('react-native', () => ({
@@ -46,7 +39,7 @@ vi.mock('../platform/haptics', () => ({ triggerError: () => {} }))
 vi.mock('./use-mobile-native-chat-readability', () => ({
   useMobileNativeChatReadability: () => true
 }))
-vi.mock('./use-mobile-native-chat-input-lease', () => ({
+vi.mock('./native-chat/use-mobile-native-chat-input-lease', () => ({
   useMobileNativeChatInputLease: () => ({
     ready: true,
     readyRef: { current: true },
@@ -67,23 +60,17 @@ vi.mock('./use-mobile-native-chat-controller', async () => {
   const { useMobileNativeChatActiveResolution } =
     await import('./use-mobile-native-chat-active-resolution')
   return {
-    useMobileNativeChatController: (args: Parameters<typeof useMobileNativeChatController>[0]) => {
+    useMobileNativeChatController: (
+      args: Parameters<typeof useMobileNativeChatActiveResolution>[0]
+    ) => {
       const resolution = useMobileNativeChatActiveResolution(args)
-      const drafts = useMobileNativeChatDrafts({
-        hostId: args.hostId,
-        worktreeId: args.worktreeId,
-        tabId: args.activeSessionTabId,
-        sessionId: resolution.activeChatSessionId,
-        messages: [],
-        transcriptSettled: true
-      })
+      const [chatComposerText, setChatComposerText] = useState('Draft')
       return {
         ...resolution,
         nativeChatSession: { messages: [] },
         nativeChatCommandRefusalCauses: null,
-        chatComposerText: drafts.composerText,
-        draftAuthoringReady: drafts.draftAuthoringReady,
-        setChatComposerText: drafts.setComposerText
+        chatComposerText,
+        setChatComposerText
       }
     }
   }
@@ -226,13 +213,7 @@ async function start(rpc: FakeRpcClient): Promise<void> {
   expect(device.recording).toBe(true)
 }
 
-beforeEach(async () => {
-  resetMobileNativeChatDraftStoreForTests()
-  for (const tab of [agentTab, terminalTab]) {
-    const scope = `h1\0w1\0${tab.id}`
-    await hydrateMobileNativeChatDraft(scope)
-    setMobileNativeChatDraftText(scope, 'Draft')
-  }
+beforeEach(() => {
   current = null
   device.opens = 0
   device.recording = false
@@ -241,7 +222,6 @@ beforeEach(async () => {
 afterEach(async () => {
   await act(async () => renderer?.unmount())
   renderer = null
-  resetMobileNativeChatDraftStoreForTests()
 })
 
 describe('dictation uses the active composer readiness', () => {

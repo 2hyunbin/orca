@@ -1,12 +1,9 @@
-import {
-  QueuedMessageImageCount,
-  queuedMessageImageCount
-} from './NativeChatQueuedMessageImageCount'
 import { useId, useState } from 'react'
 import {
   AlertCircle,
   ChevronDown,
   CornerDownRight,
+  Image as ImageIcon,
   ListEnd,
   MoreHorizontal,
   Pencil,
@@ -44,7 +41,6 @@ import { agentSessionWriteNotDoneParts } from '../../../../shared/agent-session-
 import { NativeChatQueuedMessageEditor } from './NativeChatQueuedMessageEditor'
 import type { QueuedEditAttachTarget } from './use-native-chat-queued-edit-image-intake'
 import type { QueuedMessageInlineEditor } from './use-structured-agent-session-queued-edit'
-import type { QueuedMessageDragPresentation } from './NativeChatQueuedMessageRows'
 import { nativeChatImageLabel } from './native-chat-image-label'
 
 /** The visible caption under the text; the default waiting hold needs none. */
@@ -60,8 +56,7 @@ export function queuedMessageCardCaption(
       if (agentSessionFailureStatedByStartRow(card.returnedRejection, statedFailures)) {
         return agentSessionWriteNoticeText(agentSessionWriteNotDoneParts('send'))
       }
-      // A consumed draft whose submission a Stop withdrew is not a failure of the
-      // message — say what happened rather than "not sent".
+      // A Stop-withdrawn draft was not a send failure; describe its withdrawal.
       if (
         classifyDispatchRejection({ reason, rejection: card.returnedRejection }).category ===
         'withdrawn'
@@ -81,8 +76,7 @@ export function queuedMessageCardCaption(
       )
     }
     case 'paused':
-      // A card's own hold; the queue's pause is the list's header. Markers localize, and an absent
-      // or unknown one (newer host) is a plain pause, never shown raw.
+      // Localize known pause markers; unknown newer-host markers fall back to a plain pause.
       if (card.pausedReason === QUEUED_MESSAGE_PAUSED_SEND_FAILED) {
         // Its Send shows only while the agent is idle; the words match what is on the card.
         return card.waitsForAgent
@@ -108,6 +102,12 @@ export function queuedMessageCardCaption(
       // Plainly queued; a paused queue's header row carries the why.
       return null
   }
+}
+
+function queuedMessageImageCount(count: number): string {
+  return translate('components.native-chat.queuedMessages.imageCount', '{{count}} images', {
+    count
+  })
 }
 
 /** The card's line: its text, or for a card of images alone, the image's name or their count. */
@@ -159,8 +159,6 @@ export function NativeChatQueuedMessageCard({
   editor,
   editAttachTo,
   editDisabled = false,
-  editDisabledReason,
-  drag,
   onTurnOffQueueing
 }: {
   card: QueuedMessageCard
@@ -172,8 +170,7 @@ export function NativeChatQueuedMessageCard({
   showsSteerShortcut: boolean
   /** The chat reads Stopping: the card waits for the stop (`NativeChatQueuedMessageList`). */
   steerHeld?: boolean
-  /** Its own action, or a Clear all deleting it, still on its way to the host: the card greys,
-   *  and the button that was pressed spins. */
+  /** Disable the card during its own action or Clear all; spin only the pressed action. */
   pending?: QueuedMessagesPendingAction | null
   onSteer: () => void
   onDelete: () => void
@@ -185,8 +182,6 @@ export function NativeChatQueuedMessageCard({
   editAttachTo?: QueuedEditAttachTarget
   /** Another card in this pane is being edited. */
   editDisabled?: boolean
-  editDisabledReason?: string
-  drag?: QueuedMessageDragPresentation
   /** Absent when the host does not queue sends, so there is nothing to turn off. */
   onTurnOffQueueing?: () => void
 }): React.JSX.Element {
@@ -196,17 +191,14 @@ export function NativeChatQueuedMessageCard({
   const sendNow = queuedMessageCardSendNow(card)
   const busy = pending !== null
   const isMac = isMacPlatform()
-  // A clipped line opens below the row, at the card's full width: a card can hold text the person
-  // never typed (another agent's message), and Steer or Delete must not be a blind choice.
+  // Allow inspecting clipped text before acting; another agent may have authored the card.
   const [expanded, setExpanded] = useState(false)
   const [clipped, measureLine] = useNativeChatClippedLine(false)
   const textId = useId()
-  const editExplanationId = useId()
   const sender = card.from ? (
     <NativeChatAgentMessageSenders from={card.from} chatWorktreeId={chatWorktreeId} queued />
   ) : null
   if (editor) {
-    // The editor's own header stands in for the icon, the actions and the caption.
     return (
       // The editor fills the row, so a drop anywhere on the card reaches it.
       <li data-queued-message-id={card.messageId} data-queued-message-state={card.state}>
@@ -221,23 +213,11 @@ export function NativeChatQueuedMessageCard({
   }
   return (
     <li
-      ref={drag?.rowRef}
-      style={drag?.rowStyle}
       data-queued-message-id={card.messageId}
       data-queued-message-state={card.state}
-      className="group/queued relative px-2.5 py-1.5"
+      className="px-2.5 py-1.5"
     >
-      {drag?.insertion ? (
-        <span
-          aria-hidden
-          className={cn(
-            'pointer-events-none absolute inset-x-0 h-0.5 bg-primary',
-            drag.insertion === 'before' ? 'top-0' : 'bottom-0'
-          )}
-        />
-      ) : null}
       <div className="flex items-center gap-2">
-        {drag?.grip}
         {returned || card.pausedReason === QUEUED_MESSAGE_PAUSED_SEND_FAILED ? (
           <AlertCircle className="size-3.5 shrink-0 text-destructive" aria-hidden />
         ) : (
@@ -342,11 +322,7 @@ export function NativeChatQueuedMessageCard({
                 <DropdownMenuContent align="end">
                   {/* A command's text is not a draft: edited, it would become a message. */}
                   {card.command || !onEdit ? null : (
-                    <DropdownMenuItem
-                      disabled={editDisabled || !!editDisabledReason}
-                      aria-describedby={editDisabledReason ? editExplanationId : undefined}
-                      onSelect={onEdit}
-                    >
+                    <DropdownMenuItem disabled={editDisabled} onSelect={onEdit}>
                       <Pencil />
                       {translate(
                         'components.native-chat.queuedMessages.editMessage',
@@ -354,14 +330,6 @@ export function NativeChatQueuedMessageCard({
                       )}
                     </DropdownMenuItem>
                   )}
-                  {editDisabledReason && onEdit && !card.command ? (
-                    <p
-                      id={editExplanationId}
-                      className="max-w-64 px-2 py-1 text-xs text-muted-foreground"
-                    >
-                      {editDisabledReason}
-                    </p>
-                  ) : null}
                   {onTurnOffQueueing ? (
                     <DropdownMenuItem onSelect={onTurnOffQueueing}>
                       {translate(
@@ -377,7 +345,6 @@ export function NativeChatQueuedMessageCard({
         )}
       </div>
       {expanded ? (
-        // Indented to the text, past the icon slot and its gap.
         <p
           id={textId}
           className="scrollbar-sleek mt-1 max-h-60 overflow-y-auto whitespace-pre-wrap break-words pl-5.5 text-sm"
@@ -386,6 +353,32 @@ export function NativeChatQueuedMessageCard({
         </p>
       ) : null}
     </li>
+  )
+}
+
+/** Images are named in the tooltip, not drawn: the row stays one line. */
+function QueuedMessageImageCount({
+  images
+}: {
+  images: NonNullable<QueuedMessageCard['images']>
+}): React.JSX.Element {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="img"
+          tabIndex={0}
+          aria-label={queuedMessageImageCount(images.length)}
+          className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ImageIcon className="size-3.5" aria-hidden />
+          <span aria-hidden>{images.length}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={4}>
+        {images.map(nativeChatImageLabel).join(', ')}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 

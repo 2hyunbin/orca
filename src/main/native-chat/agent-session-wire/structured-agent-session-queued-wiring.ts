@@ -17,7 +17,6 @@ import {
   republish,
   updateQueuedStructuredAgentMessage
 } from './structured-agent-session-queued-edit'
-import { moveQueuedStructuredAgentMessage } from './structured-agent-session-queued-move'
 
 /** Read host context lazily during field initialization; session touch renews idle activity. */
 export function wireStructuredAgentSessionQueuedMessages(
@@ -82,10 +81,6 @@ export function wireStructuredAgentSessionQueuedMessages(
       caller: StructuredAgentSessionCaller,
       params: Parameters<typeof deleteQueuedStructuredAgentMessage>[2]
     ) => deleteQueuedStructuredAgentMessage(context(), caller, params),
-    queuedMessageMove: (
-      caller: StructuredAgentSessionCaller,
-      params: Parameters<typeof moveQueuedStructuredAgentMessage>[2]
-    ) => moveQueuedStructuredAgentMessage(context(), caller, params),
     queuedMessagesResume: (
       caller: StructuredAgentSessionCaller,
       params: Parameters<typeof resumeStructuredAgentQueue>[2]

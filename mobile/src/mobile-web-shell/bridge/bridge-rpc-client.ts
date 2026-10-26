@@ -1,7 +1,5 @@
-import type { BridgeRpcClient, BridgeRpcClientOptions } from './bridge-rpc-client-contract'
-export type { BridgeRpcClient, BridgeRpcClientOptions } from './bridge-rpc-client-contract'
-import type { SendRequestOptions } from '../../transport/rpc-client'
-import type { ConnectionState, RpcResponse } from '../../transport/types'
+import type { RpcClient, SendRequestOptions } from '../../transport/rpc-client'
+import type { ConnectionState, RpcResponse, RpcSuccess } from '../../transport/types'
 import {
   BRIDGE_MAX_PENDING_REQUESTS,
   BRIDGE_MAX_SUBSCRIPTIONS,
@@ -11,6 +9,7 @@ import {
 import { BridgeConnectionCache } from './bridge-client-connection-cache'
 import type { BridgeRpcClientDiagnostic } from './bridge-client-diagnostics'
 import { createBridgeClientShellSession } from './bridge-client-shell-session'
+import type { BridgeShellSession } from './bridge-client-session'
 import { createBridgeInitHandshake, createPageReadyFrame } from './bridge-client-init-handshake'
 import {
   BridgeClientCapExceededError,
@@ -21,19 +20,22 @@ import {
   BridgeSendFailedError,
   BridgeShellReplacedError
 } from './bridge-client-errors'
+import type { BridgeHapticsKind } from './bridge-haptics-notify'
 import { createBridgeInboundFrameReader } from './bridge-client-inbound-frames'
 import { createBridgeClientNotifications } from './bridge-client-notifications'
-import { createPageBackConsumers } from './page-back-consumers'
+import type { BridgeSafeAreaInsets } from './bridge-safe-area-insets'
+import { createPageBackConsumers, type PageBackConsumer } from './page-back-consumers'
 import { BridgeClientRequests } from './bridge-client-requests'
 import { readBridgeRequestFrameOptions, readBridgeRpcEnvelope } from './bridge-client-rpc-envelope'
 import { BridgeClientSubscriptions } from './bridge-client-subscriptions'
-import { isBridgeNativeMethod } from './bridge-native-verbs'
-import { BRIDGE_ROUTE_PARAM_CLEAR } from './bridge-route-update'
+import { isBridgeNativeMethod, type BridgeNativeVerb } from './bridge-native-verbs'
+import { BRIDGE_ROUTE_PARAM_CLEAR, type BridgeClearableRouteParam } from './bridge-route-update'
 import {
   BRIDGE_PROTOCOL_VERSION,
   BRIDGE_RPC_ENVELOPE_GRANT,
   type BridgeClientMessage,
-  type BridgeConnectionSnapshot
+  type BridgeConnectionSnapshot,
+  type BridgeInitRoute
 } from './bridge-envelope'
 
 export type { BridgeShellSession } from './bridge-client-session'
@@ -50,31 +52,48 @@ export {
   BridgeShellReplacedError
 } from './bridge-client-errors'
 
-/** Base64url, and the length the envelope's id pattern requires. Base36 digits are a subset of it. */
 const BRIDGE_ID_CHARS = 22
 
 export type { BridgeRpcClientDiagnostic } from './bridge-client-diagnostics'
 
-/**
- * The page's `RpcClient`, which is a bridge and not a socket.
- *
- * Every member of the native contract is here, so `runRpcOperation` and the screens above it never
- * learn which one they hold. Two properties make that honest. The getters are synchronous reads of a
- * cache primed by `init`, because screens read them during render and an async read changes what the
- * first render sees. And `close` never closes the shell's client: that one is shared with the native
- * screens and the host catalog, so the page settles what it owns and says goodbye.
- *
- * Nothing may be called before `init`. The alternative is a stub answering `connecting` to a screen
- * that then records the wrong first render, so a call arriving early throws instead. After `close`
- * the opposite rule holds: every member goes inert and the getters keep answering the snapshot the
- * page last held, marked `disconnected`, because an unmounting screen calls into a path with no
- * catch on it. A stream the shell refuses or ends is not thrown anywhere either; it arrives as a
- * diagnostic, which is the only channel `subscribe` leaves open once it has handed back a dispose.
- */
+export type BridgeRpcClientOptions = {
+  send: (json: string) => void
+  onMessage: (handler: (json: string) => void) => () => void
+  onDiagnostic?: (diagnostic: BridgeRpcClientDiagnostic) => void
+}
+
+export type BridgeRpcClient = RpcClient & {
+  onReady: (listener: () => void) => () => void
+  // Publish changed params only, never initial/repeated init. Clear consumed one-shot params so repeat taps to the same pane still appear as real changes.
+  onRouteUpdate: (listener: (route: BridgeInitRoute | null) => void) => () => void
+  onSafeAreaInsetsUpdate: (listener: (insets: BridgeSafeAreaInsets) => void) => () => void
+  onKeyboardInsetUpdate: (listener: (height: number) => void) => () => void
+  getShellSession: () => BridgeShellSession | null
+  // False without navigate lets tap handlers fall back safely instead of throwing into uncaught UI callbacks.
+  notifyNavigate: (href: string) => boolean
+  // The page owns no native history; ask the shell to pop. Missing grant returns false; older shells may also drop the new notify, so callers retain their router fallback.
+  notifyNavigateBack: () => boolean
+  // False means missing externalLink grant or refused URL; callers must offer another outcome for the tap.
+  notifyExternalLink: (url: string) => boolean
+  // Use the existing request/id/cap lane but keep native methods inside the bridge’s typed surface; they are device verbs, not catalogued desktop RPCs.
+  callNativeVerb: (verb: BridgeNativeVerb, params: unknown) => Promise<RpcSuccess>
+  // Only the page can report a painted tree; WebView commit and ready happen before that proof exists.
+  notifyPagePainted: () => void
+  // Claim Back until disposal; invoke consumers newest-first with false fallthrough. Return unhandled presses to the shell so a race with sheet closure cannot swallow navigation.
+  claimBack: (consumer: PageBackConsumer) => () => void
+  notifyStorageWrite: (key: string, value: string | null) => boolean
+  notifyHaptics: (kind: BridgeHapticsKind) => boolean
+  // Never throw from error-boundary reporting. False means no frame left; shell load recovery covers reports that cannot be sent, without retrying this fault.
+  notifyPageFault: (error: unknown) => boolean
+  // After applying a one-shot param, ask its holder to clear that value (ruling 34). A failed clear is repaired when init delivers the still-held request again.
+  clearRouteParam: (param: BridgeClearableRouteParam, value: string) => boolean
+}
+
+// Expose synchronous RpcClient getters from init-primed state so first renders match native clients. Page close settles its own work, never the native client shared by other screens.
+// Ungated calls before init throw for mount-order bugs; after close, teardown calls are inert and getters retain a disconnected snapshot. Stream failures notify listeners.
 export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRpcClient {
   const requests = new BridgeClientRequests()
   const cache = new BridgeConnectionCache()
-  const retirementListeners = new Set<(closed: boolean) => void>()
   let closed = false
   let idCounter = 0
 
@@ -82,26 +101,13 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     options.onDiagnostic?.(diagnostic)
   }
 
-  /**
-   * Posts one frame, or says why it did not leave. Never throws, which is the contract every caller
-   * below depends on: a throw escaping here skips the id bookkeeping that follows the call, and the
-   * slot it leaves open is one of sixty-four for the life of the page.
-   *
-   * `oversized` is refused here rather than by the shell, under the shell reader's own predicate:
-   * the reader drops a frame over the cap and answers nothing, which would leave a request pending
-   * for the life of the page.
-   *
-   * Serialization is inside the `try` and not before it. Every value in a page frame is one the
-   * caller handed in, so `JSON.stringify` can throw on one — a `BigInt`, a cycle, a `toJSON` of its
-   * own — and that throw is a send that failed, not an exception for a tap handler to discover.
-   */
+  // Never throw: serialization/transport failure must return control to request-id cleanup. Keep JSON.stringify inside try for cycles, BigInt and throwing toJSON.
+  // Refuse oversize using the shell’s exact predicate before posting, or the receiver drops it and leaves the caller waiting forever.
   function sendFrame(frame: BridgeClientMessage): 'sent' | 'oversized' | 'port-failed' {
     try {
       const json = JSON.stringify(frame)
       if (!isBridgeFrameWithinCap(json)) {
-        // UTF-8 bytes, because that is the unit both shells count: `json.utf8.count` on iOS and
-        // `json.toByteArray(Charsets.UTF_8).size` on Android. A code-unit count under the same name
-        // understates every non-ASCII frame — a diff of CJK text is three bytes a unit.
+        // Count UTF-8 bytes like Swift utf8.count and Kotlin UTF_8 size; JS code units undercount non-ASCII requests.
         report({ kind: 'send-oversized', bytes: utf8ByteLength(json) })
         return 'oversized'
       }
@@ -115,12 +121,9 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
 
   const hasGrant = (name: string) => shellSession.current()?.grants.native.includes(name) === true
 
-  /** For the members whose contract is a boolean: a frame that did not leave is a false, whichever
-   *  of the two reasons it was. */
   const posted = (frame: BridgeClientMessage): boolean => sendFrame(frame) === 'sent'
 
-  // Counted rather than random: a recorded run replays the same ids, and one page holds one client,
-  // so a counter is already unique across everything the shell is asked to keep in flight.
+  // Use a deterministic counter for recorded replay; one page/client makes it unique across active exchanges.
   function nextId(): string {
     idCounter += 1
     return idCounter.toString(36).padStart(BRIDGE_ID_CHARS, '0')
@@ -137,19 +140,13 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     sendFrame(createPageReadyFrame())
   })
 
-  /**
-   * A call before `init` is a mount-order bug and throws. A call after `close` is not: an unmounting
-   * screen posts one more nudge on its way out, and the native clients answer those inertly rather
-   * than throwing into a teardown path nobody wrote a catch for. Each member below says what inert
-   * means for its own return type.
-   */
+  // Before-init calls expose mount-order bugs; after-close calls stay inert because teardown callers generally have no catch.
   function requireSession(): void {
     if (shellSession.current() === null && !closed) {
       throw new BridgeClientNotReadyError()
     }
   }
 
-  // Answers after `close` as well: what it holds is then the last snapshot, marked `disconnected`.
   function snapshot(): BridgeConnectionSnapshot {
     const held = cache.read()
     if (held === null) {
@@ -158,22 +155,9 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     return held
   }
 
-  /**
-   * A second `init` is ordinary: the shell answers every `ready`, and a page that re-asked hears
-   * its own session again. A different id is not, and nothing the page held survives it.
-   *
-   * For the same id it is a route update and nothing else (ruling 33.1). The screen is the one
-   * already mounted, so every request in flight, every subscription, the storage snapshot the page
-   * booted from and the generation stay exactly as they are, and only `route` moves — which is how
-   * a notification tap for another pane of this session reaches a page that is already on it. The
-   * session object is rebuilt only when the id changes, so the identity of what the page holds is
-   * itself the assertion that nothing was replaced.
-   */
+  // Repeated init for the same session updates route/insets/cache while preserving exchanges and the original storage snapshot. A different session id invalidates prior work.
   const shellSession = createBridgeClientShellSession({
     onReplaced: () => {
-      for (const listener of retirementListeners) {
-        listener(false)
-      }
       const replaced = new BridgeShellReplacedError()
       requests.closeAll(replaced)
       subscriptions.failAll(replaced.message)
@@ -183,7 +167,6 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     }
   })
 
-  /** A shell rebuilt under the page: what the cache holds is for a client that is already gone. */
   function acceptState(snapshotFromShell: BridgeConnectionSnapshot): void {
     if (cache.apply(snapshotFromShell) !== 'stale') {
       return
@@ -204,8 +187,7 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     requests,
     subscriptions,
     report,
-    // Declared here rather than beside the others: the re-assert has to run after the session has
-    // taken this frame.
+    // Reassert only after the new init has been applied to the session.
     acceptInit: (message) => {
       handshake.stop()
       shellSession.accept(message)
@@ -215,7 +197,6 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     acceptBack: back.press
   })
 
-  /** After `close` the page is not the document the shell is answering any more. */
   function receive(json: string): void {
     if (closed) {
       return
@@ -223,22 +204,16 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     try {
       readInboundFrame(json)
     } catch (error) {
-      // The delivery is the channel's and the handling is the page's (ruling 34 addendum). This is
-      // the one place that separates them: on iOS the host's post is `callAsyncJavaScript`, so a
-      // listener throwing here would reject a post for a frame the page already had, and the shell
-      // would read that as a frame that never arrived. Reported and not rethrown, and not retried
-      // either — the same listener would throw on the same frame again.
+      // Catch listener failures after frame receipt; letting them escape would reject iOS native post for a delivered frame. Report without retrying (ruling 34 addendum).
       report({ kind: 'inbound-listener-threw', error })
     }
   }
 
   function sendRequest(...args: [string, unknown?, SendRequestOptions?]): Promise<RpcResponse> {
-    // A call with no session is a page bug and throws; a call over the in-flight cap is the answer
-    // the shell would have posted back, so it arrives the way the shell's does, as a rejection.
+    // Missing session is a synchronous mount-order bug; in-flight cap refusal instead rejects like the shell’s response.
     requireSession()
     if (closed) {
-      // Rejected, not thrown: `bindDeferredRpcOperation` hands this promise straight back, so a
-      // synchronous throw would escape past the caller's `catch` on the promise.
+      // Return a rejected promise: deferred operations hand it back directly, so synchronous throws would bypass callers’ promise catches.
       return Promise.reject(new BridgeClientClosedError())
     }
     if (requests.size >= BRIDGE_MAX_PENDING_REQUESTS) {
@@ -248,7 +223,6 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     }
     const [method, params, requestOptions] = args
     return new Promise<RpcResponse>((resolve, reject) => {
-      // A refused envelope throws here, which rejects before an id is minted or a frame is posted.
       const frameOptions = readBridgeRequestFrameOptions(requestOptions, hasGrant)
       const id = nextId()
       requests.open(id, { resolve, reject })
@@ -257,17 +231,13 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
         type: 'request',
         id,
         method,
-        // Absent stays absent, because the shell replays whichever arity crossed. JSON drops an
-        // `undefined` value on its own, so an explicit `sendRequest(m, undefined)` reaches the shell
-        // as `sendRequest(m)`; no call site passes one, and no wire that carries `undefined` exists
-        // to carry it. The spread is what states the intent for a carrier that would.
+        // Preserve absent params for replayed arity. JSON cannot carry explicit undefined, so that spelling necessarily arrives as the absent form.
         ...(args.length > 1 ? { params } : {}),
         ...frameOptions
       })
       if (outcome !== 'sent') {
         requests.abandon(id)
-        // Both are definite failures — the frame never left — and they are told apart because a
-        // caller can act on one of them: an oversized request says which action to retry smaller.
+        // Both failures prove nothing was sent; distinguish oversize so the caller can retry a smaller action.
         reject(
           outcome === 'oversized' ? new BridgeRequestOversizedError() : new BridgeSendFailedError()
         )
@@ -279,23 +249,20 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     method: string,
     params: unknown,
     onData: (result: unknown) => void,
-    subscribeOptions?: Parameters<BridgeRpcClient['subscribe']>[3]
+    subscribeOptions?: Parameters<RpcClient['subscribe']>[3]
   ): () => void {
     requireSession()
     if (closed) {
       return () => undefined
     }
-    // Thrown rather than reported: `subscribe` hands back an unsubscribe and nothing else, so a
-    // refusal the caller could read does not exist on this member. A refusal the shell posts back
-    // arrives too late to throw at all, and reaches the page as a `stream-failed` diagnostic.
+    // Subscribe returns only cleanup, so local refusal throws; asynchronous shell refusal instead reports through the stream diagnostic.
     if (subscriptions.size >= BRIDGE_MAX_SUBSCRIPTIONS) {
       throw new BridgeClientCapExceededError(`over ${BRIDGE_MAX_SUBSCRIPTIONS} subscriptions`)
     }
     const { onBinaryFrame, envelope: fields } = subscribeOptions ?? {}
     const envelope = readBridgeRpcEnvelope(fields, hasGrant)
     const id = nextId()
-    // A frame that never left already told the listener and gave the slot back; the caller still
-    // gets a dispose, because it has no way to know which of the two it is holding.
+    // Failed posting already freed the slot and notified its listener; still return an idempotent cleanup.
     if (!subscriptions.open(id, method, params, onData, onBinaryFrame, envelope)) {
       return () => undefined
     }
@@ -314,10 +281,6 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
       return
     }
     closed = true
-    for (const listener of retirementListeners) {
-      listener(true)
-    }
-    retirementListeners.clear()
     handshake.stop()
     back.clear()
     subscriptions.closeAll()
@@ -346,30 +309,22 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     getReconnectAttempt: () => snapshot().reconnectAttempt,
     getLastConnectedAt: () => snapshot().lastConnectedAt,
     getLastInboundAt: () => snapshot().lastInboundAt,
-    // A shell client with no generation of its own never migrates, so its epoch is a constant and
-    // zero is as true as any other. The page still answers a number, because the member it stands in
-    // for is one the native screens read without asking whether it exists.
+    // Clients without migration generation use a constant zero; native screen readers still require a number.
     getGeneration: () => snapshot().generation ?? 0,
     carriesRpcEnvelope: () => hasGrant(BRIDGE_RPC_ENVELOPE_GRANT),
-    // Not gated on the session: it registers a listener and reads nothing, so it cannot answer
-    // wrongly, and a provider that subscribes before `init` is how a screen hears the first change.
+    // Allow listener registration before init so providers can observe the first state change; it reads no unprimed value.
     onStateChange: (listener) => cache.onStateChange(listener),
     notifyForeground: notifications.notifyForeground,
     notifyNavigate: notifications.notifyNavigate,
     notifyNavigateBack: notifications.notifyNavigateBack,
     notifyExternalLink: notifications.notifyExternalLink,
     callNativeVerb: (verb, params) => {
-      // Typed to the table, and checked anyway: the type is the fence for every caller the
-      // compiler can see, and this is the one for a caller that reached the member through a
-      // widened one. Without it the member is a raw port the inventory cannot count, because a
-      // bare-identifier call is not a shape its scan looks for.
+      // Validate the typed verb at runtime too; widened callers must not turn this into an untracked raw desktop RPC port.
       if (!isBridgeNativeMethod(verb)) {
         return Promise.reject(new BridgeClientNotNativeVerbError(verb))
       }
       return sendRequest(verb, params).then((reply) => {
-        // A refusal crosses as an `error` frame and rejects above, and nothing forwards a native
-        // method, so no host `RpcFailure` can arrive on one. Narrowed here rather than at every
-        // caller, which is what lets this member promise a success or a rejection and nothing else.
+        // Native refusals reject as error frames and never forward to desktop, so the return has no RpcFailure arm.
         if (!reply.ok) {
           throw new Error(reply.error.message)
         }
@@ -387,12 +342,6 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     onSafeAreaInsetsUpdate: shellSession.onSafeAreaInsetsUpdate,
     onKeyboardInsetUpdate: shellSession.onKeyboardInsetUpdate,
     getShellSession: shellSession.current,
-    onRuntimeRetired: (listener) => {
-      retirementListeners.add(listener)
-      return () => {
-        retirementListeners.delete(listener)
-      }
-    },
     clearRouteParam: (param, value) =>
       posted({
         v: BRIDGE_PROTOCOL_VERSION,

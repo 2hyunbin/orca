@@ -16,10 +16,7 @@ import {
 import { sessionSlashCommandSuggestions } from '../../../../shared/native-chat-slash-commands'
 import type { DiscoveredSkill } from '../../../../shared/skills'
 import { getNativeChatAgentProfile } from '../../../../shared/native-chat-agent-profiles'
-import {
-  composerSkillOccurrences,
-  pickedSkillsInText
-} from '../../../../shared/structured-agent-session-send-mutation'
+import { pickedSkillsInText } from '../../../../shared/structured-agent-session-send-mutation'
 
 const COMMANDS: SlashCommandSuggestion[] = [
   { name: 'clear' },
@@ -452,8 +449,7 @@ describe('native skill and command picker', () => {
       '/',
       [{ name: 'dataviz' }, { name: 'ref-oss' }]
     )
-    // The scanned-but-unreported skill is gone; the reported-but-unscanned one is
-    // offered without a scope, and sorts after the one the scan located.
+    // Keep only reported skills; unscanned reports sort after located skills without inventing scope.
     expect(items.map((item) => item.name)).toEqual(['ref-oss', 'dataviz'])
     expect(items[0]).toMatchObject({ kind: 'skill', description: 'On disk' })
     expect(items[1]).toMatchObject({ kind: 'skill', description: null, sources: [] })
@@ -668,20 +664,4 @@ it('preserves known skill completion for unclassified session members only', () 
   expect(
     buildNativeChatPickerItems(classified, diskSkills, '', '/', []).map(({ kind }) => kind)
   ).toEqual(['command'])
-})
-
-it('binds composer files once per occurrence without narrowing host skill dispatch', () => {
-  const one = { name: 'review', path: '/one' }
-  const two = { name: 'review', path: '/two' }
-  const other = { name: 'build', path: '/build' }
-  expect(composerSkillOccurrences('$review', [one, two])).toEqual([{ ref: one, at: 0 }])
-  expect(composerSkillOccurrences('$review $review', [one, one, two])).toEqual([
-    { ref: one, at: 0 },
-    { ref: two, at: 8 }
-  ])
-  expect(composerSkillOccurrences('$build, $reviewer $review', [one, other])).toEqual([
-    { ref: other, at: 0 },
-    { ref: one, at: 18 }
-  ])
-  expect(pickedSkillsInText('$review', [one, two])).toEqual([one, two])
 })

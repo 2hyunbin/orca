@@ -1,5 +1,5 @@
 import { endComposition } from '@/lib/ime-composition-event.test-support'
-import { changePrompt, promptEditor, promptValue } from './native-chat-prompt-editor.test-support'
+import { changePrompt, promptValue } from './native-chat-prompt-editor.test-support'
 // @vitest-environment happy-dom
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -76,17 +76,6 @@ vi.mock('../dictation/dictation-control-events', () => ({
 
 import { NativeChatComposer } from './NativeChatComposer'
 import { appendNativeChatDraftCache, readNativeChatDraftCache } from './native-chat-draft-cache'
-import {
-  readNativeChatComposerDraft,
-  structuredAgentSessionDraftScopeKey,
-  subscribeToNativeChatComposerDraft,
-  updateNativeChatComposerDraft
-} from './native-chat-composer-draft-store'
-import type { NativeChatComposerDraft } from './native-chat-composer-draft-storage'
-import { handBackStructuredAgentSessionMessage } from './structured-agent-session-message-hand-back'
-import { structuredAgentSessionSendBody } from '../../../../shared/structured-agent-session-send-mutation'
-import { promptSkillRefs, promptText } from './native-chat-prompt-document'
-import { nativeChatPastedTextToken } from './native-chat-pasted-text-reference'
 
 type Dispatched = { handled: boolean; accepted: boolean; error: string | null }
 
@@ -158,8 +147,7 @@ beforeEach(() => {
 afterEach(() => cleanup())
 
 describe('structured send racing the next IME composition', () => {
-  // The regression: the RPC's clear lands while the NEXT composition is live, so the DOM sync
-  // drops it and settlement used to adopt the sent text back into the composer (#17359).
+  // Replay accepted clears after the next IME composition; otherwise settlement can restore sent text (#17359).
   it('preserves the next composition when a typed goal is accepted', async () => {
     const dispatch = deferred()
     const structured = transport({
@@ -213,8 +201,7 @@ describe('structured send racing the next IME composition', () => {
     expect(promptValue(input)).toBe('가')
   })
 
-  // Clearing optimistically before the RPC would lose the draft here, which is why the clear
-  // stays on the acceptance path and is instead replayed at settlement.
+  // Clear only after acceptance so refusals retain drafts; replay the clear at IME settlement.
   it('keeps the draft when the send is rejected', async () => {
     const structured = transport({ send: vi.fn(() => false) })
     renderComposer(structured)
@@ -251,7 +238,6 @@ describe('structured send racing the next IME composition', () => {
     expect(promptValue(input)).toBe('안녕하')
   })
 
-  // A rejected command still reports its error, and the composer keeps the text to retry.
   it('keeps the draft when a handled command is rejected', async () => {
     const structured = transport({
       dispatchCommand: vi.fn(async () => ({ handled: true, accepted: false, error: 'nope' }))
@@ -269,8 +255,7 @@ describe('structured send racing the next IME composition', () => {
 })
 
 describe('a withdrawn message put back during an IME composition', () => {
-  // The field ignores a programmatic draft while the IME owns it, and the next composed keystroke
-  // wrote the draft without the text, after its outbox entry had already been dropped.
+  // IME skips programmatic draft sync; retain returned text after its outbox entry is removed.
   it('shows the text once the composition settles, after what was composed', () => {
     renderComposer(transport())
     const pane = `tab-${paneCounter}:structured`
@@ -287,7 +272,6 @@ describe('a withdrawn message put back during an IME composition', () => {
     expect(readNativeChatDraftCache(pane)).toBe('abc안녕\n\nwithdrawn')
   })
 
-  // Settling spends the held text; a later write or composition must not add it again.
   it('shows the text once, however much is typed or composed after', () => {
     renderComposer(transport())
     const pane = `tab-${paneCounter}:structured`
@@ -307,7 +291,7 @@ describe('a withdrawn message put back during an IME composition', () => {
     expect(readNativeChatDraftCache(pane)).toBe('abc안\n\nwithdrawn!가')
   })
 
-  // The settle first swaps in the composed value (dropping the sent text), then adds the held text.
+  // At settlement clear sent text before appending held returned text.
   it('keeps the text when a sent message is also cleared mid-composition', async () => {
     const dispatch = deferred()
     const structured = transport({ dispatchCommand: vi.fn(() => dispatch.promise) })
@@ -331,86 +315,6 @@ describe('a withdrawn message put back during an IME composition', () => {
   })
 })
 
-describe('a send handed back while the IME owns the editor', () => {
-  // Every store publication is the complete draft: the visible composition plus the held hand-back,
-  // with its file chip, image and the pasted text's saved file, including a preventUpdate write.
-  it('publishes only complete drafts through composition, settle, Send and a retyped token', async () => {
-    const structured = transport()
-    const scope = structuredAgentSessionDraftScopeKey('session-test')
-    const pasteId = '12345678-1234-1234-1234-123456789abc'
-    const pastedTextFiles = { [pasteId]: '/tmp/pasted.txt' }
-    updateNativeChatComposerDraft(
-      scope,
-      { text: `see ${nativeChatPastedTextToken(pasteId)}`, pastedTextFiles },
-      'immediate'
-    )
-    paneCounter += 1
-    render(
-      <NativeChatComposer
-        terminalTabId={`tab-${paneCounter}`}
-        paneKey={`tab-${paneCounter}:structured`}
-        draftScopeKey={scope}
-        targetPtyId={null}
-        agent="codex"
-        structuredTransport={structured}
-      />
-    )
-    const input = textarea()
-    const editor = promptEditor(input)
-    const compose = (text: string, preventUpdate = false) =>
-      act(() => {
-        const tr = editor.state.tr.insertText(text, editor.state.doc.content.size - 1)
-        editor.view.dispatch(preventUpdate ? tr.setMeta('preventUpdate', true) : tr)
-      })
-    const published: NativeChatComposerDraft[] = []
-    const stop = subscribeToNativeChatComposerDraft(scope, () =>
-      published.push(readNativeChatComposerDraft(scope))
-    )
-
-    fireEvent.compositionStart(input)
-    compose('가')
-    const returnedSkill = { name: 'review', path: '/one/SKILL.md' }
-    act(() => {
-      handBackStructuredAgentSessionMessage('session-test', 'returned-1', {
-        ...structuredAgentSessionSendBody('$review', [
-          { path: '/local/a.png', previewUri: '/local/a.png' }
-        ]),
-        skills: [returnedSkill]
-      })
-    })
-    const returned = readNativeChatComposerDraft(scope)
-    const tail = returned.text.slice(`see ${nativeChatPastedTextToken(pasteId)}가`.length)
-    compose('나')
-    compose('다', true)
-    stop()
-    fireEvent.compositionEnd(input, { data: '가나다' })
-
-    expect(published.at(-1)?.text).toBe(`see ${nativeChatPastedTextToken(pasteId)}가나다${tail}`)
-    for (const draft of published) {
-      expect(promptText(editor.schema.nodeFromJSON(draft.document!))).toBe(draft.text)
-      expect(draft.pastedTextFiles).toEqual(pastedTextFiles)
-    }
-    const afterReturn = published.slice(published.findIndex((draft) => draft.text.endsWith(tail)))
-    expect(afterReturn.length).toBe(3)
-    for (const draft of afterReturn) {
-      expect(draft.text.endsWith(tail)).toBe(true)
-      expect(promptSkillRefs(draft.document)).toEqual([returnedSkill])
-      expect(draft.images).toEqual(returned.images)
-    }
-    expect(promptValue(input)).toBe(readNativeChatComposerDraft(scope).text)
-    expect(window.document.querySelector('[data-native-chat-skill]')).not.toBeNull()
-
-    await act(async () => pressEnter(input))
-    expect(structured.send).toHaveBeenLastCalledWith(
-      expect.any(String),
-      expect.any(Array),
-      expect.objectContaining({ skills: [returnedSkill] })
-    )
-    changePrompt(input, '$review')
-    expect(promptSkillRefs(readNativeChatComposerDraft(scope).document)).toEqual([])
-  })
-})
-
 // Regression (#30159): a message ending in a composing syllable needed a second Enter.
 describe('the Enter that commits a Hangul composition', () => {
   it('sends the message once, with its last syllable', async () => {
@@ -429,7 +333,6 @@ describe('the Enter that commits a Hangul composition', () => {
   })
 })
 
-// One send per chat, as the common pattern: while it is out, Send is off and Enter keeps the text.
 describe('a structured send while the chat has one out', () => {
   it('keeps the text in the box and Send disabled until the send settles', async () => {
     const structured = transport({ send: vi.fn(() => false), sendOut: true })

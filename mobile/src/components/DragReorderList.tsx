@@ -1,56 +1,55 @@
-import { DragReorderRow, type DragSharedState } from './DragReorderRow'
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode
-} from 'react'
-import { View } from 'react-native'
-import type Animated from 'react-native-reanimated'
-import {
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
+import { StyleSheet, View } from 'react-native'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import { GripVertical } from 'lucide-react-native'
+import Animated, {
   measure,
   runOnJS,
   runOnUI,
   scrollTo,
+  useAnimatedStyle,
   useFrameCallback,
-  useDerivedValue,
   useSharedValue,
+  withSpring,
   type AnimatedRef,
   type SharedValue
 } from 'react-native-reanimated'
-import { triggerSelection } from '../platform/haptics'
+import { colors, spacing } from '../theme/mobile-theme'
+import { triggerMediumImpact, triggerSelection } from '../platform/haptics'
 import {
-  dragReorderTarget,
-  dragReorderLayout,
-  dragReorderMove,
-  type DragReorderMove,
+  clampDragReorderIndex,
   dragReorderPositionsFromKeys,
   moveDragReorderKey,
+  orderedKeysFromDragReorderPositions,
   type DragReorderPositions
 } from './drag-reorder-positions'
 
-// Why: joins row keys into a change-detection signature; NUL cannot occur in
-// a key, so the joined string is unambiguous.
+const ROW_SPRING = { damping: 28, stiffness: 350 }
+const LONG_PRESS_ACTIVATION_MS = 200
+// NUL cannot occur in row keys, making joined change signature unambiguous.
 const KEY_SEPARATOR = '\u0000'
-// Why: drags near the viewport edges scroll the outer ScrollView so rows can
-// travel further than one screen; speed ramps up the closer the finger gets.
+// Ramp outer scrolling near viewport edge so drags can span more than one screen.
 const AUTO_SCROLL_EDGE = 72
 const AUTO_SCROLL_MAX_SPEED = 560
+
+type DragSharedState = {
+  positions: SharedValue<DragReorderPositions>
+  dragStartPositions: SharedValue<DragReorderPositions>
+  activeKey: SharedValue<string | null>
+  activeTop: SharedValue<number>
+  dragStartTop: SharedValue<number>
+  dragStartScrollY: SharedValue<number>
+  dragTranslationY: SharedValue<number>
+  dragPointerAbsY: SharedValue<number>
+}
 
 export type DragReorderListProps<ItemT> = {
   items: ItemT[]
   itemKey: (item: ItemT) => string
-  canMove?: (item: ItemT) => boolean
-  rowHeight?: number
-  scopeKey?: string
-  rowPresentation?: 'settings' | 'plain'
-  renderRow: (item: ItemT, handle: ReactNode) => ReactNode
+  rowHeight: number
+  renderRow: (item: ItemT) => ReactNode
   /** Called with every item key in the new order after a drop changes it. */
-  onReorder?: (orderedKeys: string[]) => void
-  onMove?: (move: DragReorderMove) => void
+  onReorder: (orderedKeys: string[]) => void
   /** Lets the owning screen disable its ScrollView while a row is held. */
   onDragActiveChange?: (active: boolean) => void
   scrollRef: AnimatedRef<Animated.ScrollView>
@@ -61,61 +60,18 @@ export type DragReorderListProps<ItemT> = {
 export function DragReorderList<ItemT>({
   items,
   itemKey,
-  canMove,
   rowHeight,
-  scopeKey = '',
-  rowPresentation = 'settings',
   renderRow,
   onReorder,
-  onMove,
   onDragActiveChange,
   scrollRef,
   scrollOffsetY,
   scrollContentHeight
 }: DragReorderListProps<ItemT>): React.JSX.Element {
   const keys = items.map(itemKey)
-  const keySignature = keys.join(KEY_SEPARATOR)
-  const [measured, setMeasured] = useState<Record<string, number>>({})
-  const measurements = useRef(new Map<string, number>())
-  const measurementFrame = useRef<number | null>(null)
-  const publishMeasurements = useCallback(() => {
-    if (measurementFrame.current !== null) {
-      return
-    }
-    measurementFrame.current = requestAnimationFrame(() => {
-      measurementFrame.current = null
-      setMeasured(Object.fromEntries(measurements.current))
-    })
-  }, [])
-  useLayoutEffect(
-    () => () => {
-      if (measurementFrame.current !== null) {
-        cancelAnimationFrame(measurementFrame.current)
-        measurementFrame.current = null
-      }
-      measurements.current.clear()
-    },
-    []
-  )
-  const sizes = useSharedValue<Record<string, number>>({})
-  const initialPositions = useSharedValue<DragReorderPositions>({})
-  const rowSizes = useMemo(
-    () =>
-      Object.fromEntries(
-        (keySignature ? keySignature.split(KEY_SEPARATOR) : []).map((key) => [
-          key,
-          rowHeight ?? measured[key] ?? 0
-        ])
-      ),
-    [keySignature, rowHeight, measured]
-  )
-  const ready = keys.every((key) => rowSizes[key] > 0)
-  const height = Object.values(rowSizes).reduce((sum, size) => sum + size, 0)
+  const count = keys.length
   const positions = useSharedValue<DragReorderPositions>(dragReorderPositionsFromKeys(keys))
-  const layout = useDerivedValue(
-    () => dragReorderLayout(positions.value, sizes.value),
-    [positions, sizes]
-  )
+  const dragStartPositions = useSharedValue<DragReorderPositions>({})
   const activeKey = useSharedValue<string | null>(null)
   const activeTop = useSharedValue(0)
   const dragStartTop = useSharedValue(0)
@@ -123,42 +79,19 @@ export function DragReorderList<ItemT>({
   const dragTranslationY = useSharedValue(0)
   const dragPointerAbsY = useSharedValue(0)
 
-  const catalog = useMemo(() => ({ keySignature, scopeKey }), [keySignature, scopeKey])
-  const currentCatalog = useRef<typeof catalog | null>(catalog)
+  const keySignature = keys.join(KEY_SEPARATOR)
+  const dragActiveCallbackRef = useRef(onDragActiveChange)
+  const catalog = useMemo(() => ({ keySignature }), [keySignature])
+  const currentCatalogRef = useRef<typeof catalog | null>(catalog)
   useLayoutEffect(() => {
-    currentCatalog.current = catalog
-    const present = new Set(keySignature ? keySignature.split(KEY_SEPARATOR) : [])
-    let removed = false
-    for (const key of measurements.current.keys()) {
-      if (!present.has(key)) {
-        measurements.current.delete(key)
-        removed = true
-      }
-    }
-    if (removed) {
-      publishMeasurements()
-    }
+    currentCatalogRef.current = catalog
     return () => {
-      currentCatalog.current = null
+      currentCatalogRef.current = null
     }
-  }, [catalog, keySignature, publishMeasurements])
-  const onMeasure = useCallback(
-    (key: string, height: number) => {
-      if (
-        currentCatalog.current !== catalog ||
-        rowHeight !== undefined ||
-        measurements.current.get(key) === height
-      ) {
-        return
-      }
-      measurements.current.set(key, height)
-      publishMeasurements()
-    },
-    [catalog, rowHeight, publishMeasurements]
-  )
+  }, [catalog])
   useEffect(() => {
-    sizes.value = rowSizes
-  }, [rowSizes, sizes])
+    dragActiveCallbackRef.current = onDragActiveChange
+  }, [onDragActiveChange])
 
   const updateDragPosition = (key: string): void => {
     'worklet'
@@ -167,17 +100,16 @@ export function DragReorderList<ItemT>({
     }
     const rawTop =
       dragStartTop.value + dragTranslationY.value + (scrollOffsetY.value - dragStartScrollY.value)
-    const top = Math.min(Math.max(rawTop, 0), Math.max(0, height - (sizes.value[key] ?? 0)))
+    const top = Math.min(Math.max(rawTop, 0), Math.max(0, (count - 1) * rowHeight))
     activeTop.value = top
-    const target = dragReorderTarget(positions.value, sizes.value, layout.value, key, top)
+    const target = clampDragReorderIndex(Math.round(top / rowHeight), count)
     if (positions.value[key] !== target) {
       positions.value = moveDragReorderKey(positions.value, key, target)
       runOnJS(triggerSelection)()
     }
   }
 
-  // Why: pan updates stop while the finger holds still at a screen edge, so a
-  // frame callback keeps scrolling (and re-slotting the row) until it moves.
+  // Keep scrolling/re-slotting via frame callback while stationary edge finger stops pan updates.
   const autoScroll = useFrameCallback((frame) => {
     const key = activeKey.value
     if (key === null) {
@@ -212,66 +144,13 @@ export function DragReorderList<ItemT>({
     updateDragPosition(key)
   }, false)
 
-  const dragActiveCallback = useRef(onDragActiveChange)
-  useLayoutEffect(() => {
-    dragActiveCallback.current = onDragActiveChange
-  }, [onDragActiveChange])
   const setAutoScrollActive = autoScroll.setActive
   const handleDragActiveChange = useCallback(
     (active: boolean) => {
       setAutoScrollActive(active)
-      dragActiveCallback.current?.(active)
+      dragActiveCallbackRef.current?.(active)
     },
     [setAutoScrollActive]
-  )
-
-  const commitReorder = useCallback(
-    (orderedKeys: string[], movedId: string) => {
-      if (currentCatalog.current !== catalog) {
-        return
-      }
-      const movableKeys = new Set(items.filter((item) => !canMove || canMove(item)).map(itemKey))
-      const nextMovable = orderedKeys.filter((key) => movableKeys.has(key))
-      let at = 0
-      const next = keys.map((key) => (movableKeys.has(key) ? nextMovable[at++]! : key))
-      // Protected rows retain their slots even when the drop needs no host move.
-      runOnUI((nextPositions: DragReorderPositions) => {
-        'worklet'
-        positions.value = nextPositions
-      })(dragReorderPositionsFromKeys(next))
-      if (next.join(KEY_SEPARATOR) !== keySignature) {
-        onReorder?.(next)
-        const move = dragReorderMove(nextMovable, movedId)
-        if (move) {
-          onMove?.(move)
-        }
-      }
-    },
-    [onReorder, onMove, keySignature, catalog, canMove, items, itemKey, keys, positions]
-  )
-
-  // Why: screen-reader users can't long-press-drag; the handle exposes
-  // move up/down accessibility actions that commit the same reorder.
-  const moveRowByAccessibilityAction = useCallback(
-    (key: string, delta: number) => {
-      const movableKeys = items.filter((item) => !canMove || canMove(item)).map(itemKey)
-      const fromIndex = movableKeys.indexOf(key)
-      if (fromIndex === -1) {
-        return
-      }
-      const toIndex = Math.min(Math.max(fromIndex + delta, 0), movableKeys.length - 1)
-      if (toIndex === fromIndex) {
-        return
-      }
-      const nextMovable = [...movableKeys]
-      nextMovable.splice(fromIndex, 1)
-      nextMovable.splice(toIndex, 0, key)
-      let at = 0
-      const movable = new Set(movableKeys)
-      const next = keys.map((entry) => (movable.has(entry) ? nextMovable[at++]! : entry))
-      commitReorder(next, key)
-    },
-    [keys, commitReorder, canMove, items, itemKey]
   )
 
   // A removed handle may never finalize its native gesture.
@@ -290,12 +169,43 @@ export function DragReorderList<ItemT>({
         }
       })()
     }
-  }, [catalog, keySignature, positions, activeKey, handleDragActiveChange])
+  }, [keySignature, positions, activeKey, handleDragActiveChange])
+
+  const commitReorder = useCallback(
+    (orderedKeys: string[]) => {
+      // Why: a cancelled or no-op drag should not trigger a persisted write.
+      if (
+        currentCatalogRef.current === catalog &&
+        orderedKeys.join(KEY_SEPARATOR) !== keySignature
+      ) {
+        onReorder(orderedKeys)
+      }
+    },
+    [onReorder, keySignature, catalog]
+  )
+
+  // Expose move-up/down accessibility actions: screen readers cannot long-press-drag.
+  const moveRowByAccessibilityAction = useCallback(
+    (key: string, delta: number) => {
+      const fromIndex = keys.indexOf(key)
+      if (fromIndex === -1) {
+        return
+      }
+      const toIndex = Math.min(Math.max(fromIndex + delta, 0), keys.length - 1)
+      if (toIndex === fromIndex) {
+        return
+      }
+      const next = [...keys]
+      next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, key)
+      onReorder(next)
+    },
+    [keys, onReorder]
+  )
 
   const shared: DragSharedState = {
-    layout,
-    initialPositions,
     positions,
+    dragStartPositions,
     activeKey,
     activeTop,
     dragStartTop,
@@ -305,25 +215,173 @@ export function DragReorderList<ItemT>({
   }
 
   return (
-    <View style={ready ? { height } : undefined}>
+    <View style={{ height: count * rowHeight }}>
       {items.map((item) => (
         <DragReorderRow
           key={itemKey(item)}
           rowKey={itemKey(item)}
           rowHeight={rowHeight}
-          ready={ready}
-          movable={!canMove || canMove(item)}
-          presentation={rowPresentation}
-          onMeasure={onMeasure}
           shared={shared}
           scrollOffsetY={scrollOffsetY}
           updateDragPosition={updateDragPosition}
           onDragActiveChange={handleDragActiveChange}
           onCommit={commitReorder}
           onAccessibilityMove={moveRowByAccessibilityAction}
-          renderContent={(handle) => renderRow(item, handle)}
-        />
+        >
+          {renderRow(item)}
+        </DragReorderRow>
       ))}
     </View>
   )
 }
+
+function DragReorderRow({
+  rowKey,
+  rowHeight,
+  shared,
+  scrollOffsetY,
+  updateDragPosition,
+  onDragActiveChange,
+  onCommit,
+  onAccessibilityMove,
+  children
+}: {
+  rowKey: string
+  rowHeight: number
+  shared: DragSharedState
+  scrollOffsetY: SharedValue<number>
+  updateDragPosition: (key: string) => void
+  onDragActiveChange: (active: boolean) => void
+  onCommit: (orderedKeys: string[]) => void
+  onAccessibilityMove: (key: string, delta: number) => void
+  children: ReactNode
+}): React.JSX.Element {
+  const {
+    positions,
+    dragStartPositions,
+    activeKey,
+    activeTop,
+    dragStartTop,
+    dragStartScrollY,
+    dragTranslationY,
+    dragPointerAbsY
+  } = shared
+
+  const pan = Gesture.Pan()
+    .activateAfterLongPress(LONG_PRESS_ACTIVATION_MS)
+    .shouldCancelWhenOutside(false)
+    .onStart((event) => {
+      const index = positions.value[rowKey] ?? 0
+      dragStartPositions.value = positions.value
+      dragStartTop.value = index * rowHeight
+      dragStartScrollY.value = scrollOffsetY.value
+      dragTranslationY.value = 0
+      dragPointerAbsY.value = event.absoluteY
+      activeTop.value = dragStartTop.value
+      activeKey.value = rowKey
+      runOnJS(onDragActiveChange)(true)
+      runOnJS(triggerMediumImpact)()
+    })
+    .onUpdate((event) => {
+      if (activeKey.value !== rowKey) {
+        return
+      }
+      dragTranslationY.value = event.translationY
+      dragPointerAbsY.value = event.absoluteY
+      updateDragPosition(rowKey)
+    })
+    .onFinalize((_event, success) => {
+      if (activeKey.value !== rowKey) {
+        return
+      }
+      activeKey.value = null
+      if (success) {
+        const orderedKeys = orderedKeysFromDragReorderPositions(positions.value)
+        runOnJS(onCommit)(orderedKeys)
+      } else {
+        positions.value = dragStartPositions.value
+      }
+      runOnJS(onDragActiveChange)(false)
+    })
+
+  const rowStyle = useAnimatedStyle(() => {
+    const index = positions.value[rowKey] ?? 0
+    if (activeKey.value === rowKey) {
+      return {
+        top: activeTop.value,
+        zIndex: 2,
+        elevation: 4,
+        shadowOpacity: 0.3,
+        backgroundColor: colors.bgRaised,
+        transform: [{ scale: 1.02 }]
+      }
+    }
+    return {
+      top: withSpring(index * rowHeight, ROW_SPRING),
+      zIndex: 0,
+      elevation: 0,
+      shadowOpacity: 0,
+      backgroundColor: colors.bgPanel,
+      transform: [{ scale: 1 }]
+    }
+  }, [positions, activeKey, activeTop, rowKey, rowHeight])
+
+  return (
+    <Animated.View style={[styles.row, { height: rowHeight }, rowStyle]}>
+      <View style={styles.rowContent}>{children}</View>
+      <GestureDetector gesture={pan}>
+        <Animated.View
+          style={styles.handle}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel="Drag to reorder"
+          accessibilityHint="Use the move up and move down actions to reorder without dragging"
+          accessibilityActions={[
+            { name: 'moveUp', label: 'Move up' },
+            { name: 'moveDown', label: 'Move down' }
+          ]}
+          onAccessibilityAction={(event) => {
+            if (event.nativeEvent.actionName === 'moveUp') {
+              onAccessibilityMove(rowKey, -1)
+            } else if (event.nativeEvent.actionName === 'moveDown') {
+              onAccessibilityMove(rowKey, 1)
+            }
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <GripVertical size={18} color={colors.textMuted} />
+        </Animated.View>
+      </GestureDetector>
+      <View style={styles.rowSeparator} />
+    </Animated.View>
+  )
+}
+
+const styles = StyleSheet.create({
+  row: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8
+  },
+  rowContent: {
+    flex: 1
+  },
+  handle: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md
+  },
+  rowSeparator: {
+    position: 'absolute',
+    bottom: 0,
+    left: spacing.md,
+    right: spacing.md,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.borderSubtle
+  }
+})

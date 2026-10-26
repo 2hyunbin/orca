@@ -69,10 +69,6 @@ export const WORK_METHODS = [
     method: 'agentSession.queuedMessageDelete',
     params: { envelope: envelope(), messageId: 'queued-1' }
   },
-  {
-    method: 'agentSession.queuedMessageMove',
-    params: { envelope: envelope(), messageId: 'queued-1', beforeMessageId: null }
-  },
   { method: 'agentSession.queuedMessagesResume', params: { envelope: envelope() } },
   {
     method: 'agentSession.rewind',
@@ -104,5 +100,6 @@ export const WORK_METHODS = [
   { method: 'agentSession.hold', params: { sessionId: SESSION, holderId: 'surface-1' } },
   { method: 'agentSession.reveal', params: { sessionId: SESSION } },
   { method: 'agentSession.regenerateName', params: { sessionId: SESSION } },
+  { method: 'agentSession.rename', params: { sessionId: SESSION, name: 'Release notes' } },
   { method: 'agentSession.subscribeStatus', params: null }
 ] as const

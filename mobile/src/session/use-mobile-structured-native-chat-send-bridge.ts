@@ -1,28 +1,20 @@
-import { formatAgentTypeLabel } from '../../../src/shared/agent-type-label'
-import { MAX_SKILL_REFS } from '../../../src/shared/rpc-contract/structured-agent-session-message-params'
-import {
-  composerSkillOccurrences,
-  SkillRefLimitError,
-  structuredAgentSessionSendBody
-} from '../../../src/shared/structured-agent-session-send-mutation'
-import type { AgentJournalSkillRef } from '../../../src/shared/agent-session-journal-types'
 import { useCallback } from 'react'
 import type { StructuredAgentId } from '../../../src/shared/agent-session-provider-handle'
+import type { AgentSessionSlashCommand } from '../../../src/shared/agent-session-wire'
 import { isStructuredAgentSessionComposerCommand } from '../../../src/shared/structured-agent-session-composer'
-import type { MobileNativeChatSendOutcome } from './mobile-native-chat-send'
-import type { MobileNativeChatSendOrigin } from './use-mobile-native-chat-drafts'
+import type { MobileNativeChatSendOutcome } from './native-chat/mobile-native-chat-send'
+import type { MobileNativeChatSendOrigin } from './native-chat/mobile-native-chat-pending-echo'
 import type { StructuredMobileSendAttachment } from './use-mobile-structured-send-with-outcome'
 
 export function useMobileStructuredNativeChatSendBridge(args: {
   agent: StructuredAgentId | undefined
+  sessionCommands?: readonly AgentSessionSlashCommand[]
   sendStructured: (
     text: string,
     images?: string[],
     deadline?: number,
-    attachments?: readonly StructuredMobileSendAttachment[],
-    skills?: readonly AgentJournalSkillRef[]
+    attachments?: readonly StructuredMobileSendAttachment[]
   ) => Promise<MobileNativeChatSendOutcome>
-  authoringReady?: boolean
   captureSendOrigin: (text: string) => MobileNativeChatSendOrigin | null
   clearDraftForSend: (origin: MobileNativeChatSendOrigin, text: string) => void
   restoreRejectedDraft: (origin: MobileNativeChatSendOrigin, text: string) => void
@@ -40,10 +32,10 @@ export function useMobileStructuredNativeChatSendBridge(args: {
     agent,
     captureSendOrigin,
     clearDraftForSend,
-    authoringReady = true,
     onSendError,
     restoreRejectedDraft,
-    sendStructured
+    sendStructured,
+    sessionCommands
   } = args
   const sendWithOutcome = useCallback(
     async (
@@ -52,45 +44,22 @@ export function useMobileStructuredNativeChatSendBridge(args: {
       deadline?: number,
       attachments?: readonly StructuredMobileSendAttachment[]
     ): Promise<MobileNativeChatSendOutcome> => {
-      if (!authoringReady) {
-        return 'rejected'
-      }
       const origin = captureSendOrigin(text.trimEnd())
       if (!origin) {
         onSendError('Message not sent (disconnected)')
         return 'rejected'
       }
-      const isHostCommand = isStructuredAgentSessionComposerCommand(text, agent)
-      const skills = origin.skills
-      try {
-        if (skills?.length) {
-          structuredAgentSessionSendBody(
-            text,
-            [],
-            composerSkillOccurrences(text, skills).map(({ ref }) => ref)
-          )
-        }
-      } catch (error) {
-        if (!(error instanceof SkillRefLimitError)) {
-          throw error
-        }
-        onSendError(
-          `Your message was not sent to ${formatAgentTypeLabel(agent)}. Keep at most ${MAX_SKILL_REFS} selected skill files and try again.`
-        )
-        return 'rejected'
-      }
+      const isHostCommand = isStructuredAgentSessionComposerCommand(text, agent, sessionCommands)
       clearDraftForSend(origin, text)
-      const outcome = skills?.length
-        ? await sendStructured(text, images, deadline, attachments, skills)
-        : attachments !== undefined
+      const outcome =
+        attachments !== undefined
           ? await sendStructured(text, images, deadline, attachments)
           : deadline !== undefined
             ? await sendStructured(text, images, deadline)
             : images !== undefined
               ? await sendStructured(text, images)
               : await sendStructured(text)
-      // The structured session draws or holds a message the host took; a command's lost answer
-      // comes back instead.
+      // Accepted messages remain host-owned; restore commands whose reply was lost.
       if (outcome === 'rejected' || (outcome === 'unknown' && isHostCommand)) {
         restoreRejectedDraft(origin, text)
       }
@@ -98,12 +67,12 @@ export function useMobileStructuredNativeChatSendBridge(args: {
     },
     [
       agent,
-      authoringReady,
       captureSendOrigin,
       clearDraftForSend,
       onSendError,
       restoreRejectedDraft,
-      sendStructured
+      sendStructured,
+      sessionCommands
     ]
   )
   const send = useCallback(

@@ -1,22 +1,7 @@
-import { mobileChatDraftStorageKey } from './mobile-native-chat-draft-data'
-import { copyMobileQueuedMessageToDraft } from './mobile-native-chat-queued-extraction'
-import {
-  readMobileNativeChatDraft,
-  editMobileNativeChatDraft,
-  resetMobileNativeChatDraftStoreForTests,
-  hydrateMobileNativeChatDraft,
-  deleteMobileNativeChatDrafts
-} from './mobile-native-chat-draft-store'
-import { publishMobileChatDraftStorage } from './mobile-native-chat-draft-storage'
-import { agentSessionSendBodyFingerprint } from '../../../src/shared/structured-agent-session-send-mutation'
-// The mid-turn queue on mobile: `delivery` rides only capability-gated sends,
-// published drafts render as cards (never optimistic bubbles), and card actions
-// map to the queued-message RPCs. Stop never touches the queue — its cards
-// stay on the host under a queue-level pause, lifted by Resume, and no text
-// travels back over the wire.
-// Older hosts retain the copy-before-delete fallback; capable hosts edit in place.
+// Test capability-gated queue writes with authoritative cards; Stop preserves host-held drafts and legacy Edit copies before deleting.
 
 import { createElement } from 'react'
+import { agentJournalSubmissionKey } from '../../../src/shared/agent-session-journal-item-key'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { structuredAgentSessionPayloadFingerprint } from '../../../src/shared/structured-agent-session-mutation'
@@ -97,8 +82,6 @@ describe('mobile structured queued messages', () => {
       agent: 'claude',
       hostSupport,
       appendComposerText: appendText,
-      copyQueuedMessage: (message) =>
-        copyMobileQueuedMessageToDraft('copy-host\0workspace\0tab', message),
       onSendError
     })
     return null
@@ -129,13 +112,11 @@ describe('mobile structured queued messages', () => {
     return sendRequest.mock.calls.filter(([calledMethod]) => calledMethod === method)
   }
 
-  /** Params of the `index`th `method` request, and its envelope. */
   function requestOf(method: string, index = 0) {
     const params = fieldsOf(calls(method)[index]?.[1])
     return { params, envelope: fieldsOf(params.envelope) }
   }
 
-  /** Global invocation order of the first `method` request, for cross-spy ordering. */
   function callOrderOf(method: string): number | undefined {
     return sendRequest.mock.invocationCallOrder.find(
       (_, index) => sendRequest.mock.calls[index]?.[0] === method
@@ -160,185 +141,7 @@ describe('mobile structured queued messages', () => {
 
   afterEach(() => {
     vi.useRealTimers()
-    resetMobileNativeChatDraftStoreForTests()
-    publishMobileChatDraftStorage(null)
     unmountSession()
-  })
-
-  it('durably copies an occupied image and skill draft before conditional Delete, restores it, and sends as the user', async () => {
-    const scope = 'copy-host\0workspace\0tab'
-    let release = () => {}
-    const gate = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    const write = vi.fn(async (key: string, value: string | null) => {
-      await gate
-      if (value === null) {
-        stored.delete(key)
-      } else {
-        stored.set(key, value)
-      }
-    })
-    publishMobileChatDraftStorage({
-      read: async (key) => stored.get(key) ?? null,
-      write,
-      removeWorkspace: async () => {}
-    })
-    await hydrateMobileNativeChatDraft(scope)
-    editMobileNativeChatDraft(scope, 'already typed')
-    const message = queuedDraft({
-      messageId: 'copy',
-      body: {
-        kind: 'message',
-        role: 'user',
-        from: { kind: 'agent', senders: [], orchestration: null },
-        blocks: [
-          { type: 'text', text: 'look [Image #1] $review' },
-          { type: 'image-ref', url: 'https://example.com/picture.png', alt: 'diagram' }
-        ],
-        skills: [{ name: 'review', path: '/skills/review' }]
-      }
-    })
-    const event = snapshotEvent({ queuedMessages: [message], runningTurn: true })
-    await mountSession(
-      { ...CAPABLE, queuedMessageCopyDelete: true, queuedMessageReorder: true },
-      { ...event, queuedImageCards: true }
-    )
-    sendRequest.mockImplementation(async (method) =>
-      method === 'agentSession.queuedMessageDelete'
-        ? mutationOk({ messageId: 'copy', deleted: true, disposition: 'deleted' })
-        : method === 'agentSession.send'
-          ? mutationOk({ status: 'accepted' })
-          : ok({})
-    )
-    let editing!: Promise<boolean>
-    await act(async () => {
-      editing = hook!.queued.edit!('copy')
-    })
-    expect(calls('agentSession.queuedMessageDelete')).toHaveLength(0)
-    release()
-    await act(async () => {
-      expect(await editing).toBe(true)
-    })
-    expect(requestOf('agentSession.queuedMessageDelete').params).toMatchObject({
-      messageId: 'copy',
-      expectedBodyFingerprint: agentSessionSendBodyFingerprint(SESSION_ID, message.body)
-    })
-    // A restored permissive body may have more selected files than visible tokens.
-    stored.set(
-      mobileChatDraftStorageKey(scope),
-      JSON.stringify({
-        ...readMobileNativeChatDraft(scope),
-        skills: [...(message.body.skills ?? []), { name: 'review', path: '/surplus/SKILL.md' }]
-      })
-    )
-    resetMobileNativeChatDraftStoreForTests()
-    await hydrateMobileNativeChatDraft(scope)
-    const draft = readMobileNativeChatDraft(scope)
-    expect(draft.text).toBe('already typed\n\nlook [Image #1] $review')
-    expect(draft.images[0]?.reference).toEqual({
-      url: 'https://example.com/picture.png',
-      alt: 'diagram'
-    })
-    await act(async () => {
-      await hook!.sendWithOutcome(draft.text, undefined, undefined, draft.images, draft.skills)
-    })
-    const sent = requestOf('agentSession.send').params
-    expect(sent.body).toEqual({
-      kind: 'message',
-      role: 'user',
-      blocks: [
-        { type: 'text', text: draft.text },
-        { type: 'image-ref', url: 'https://example.com/picture.png', alt: 'diagram' }
-      ],
-      skills: [{ name: 'review', path: '/skills/review' }]
-    })
-    expect(sent).not.toHaveProperty('messageId')
-    expect(calls('agentSession.queuedMessageUpdate')).toHaveLength(0)
-    expect(calls('agentSession.attachmentUploadBegin')).toHaveLength(0)
-  })
-
-  it('does not Delete when removal retires the acknowledged copy before the final check', async () => {
-    const scope = 'copy-host\0workspace\0tab'
-    publishMobileChatDraftStorage({
-      read: async () => null,
-      write: async () => {},
-      removeWorkspace: async () => {}
-    })
-    await mountSession(
-      { ...CAPABLE, queuedMessageCopyDelete: true },
-      snapshotEvent({ queuedMessages: [queuedDraft({ messageId: 'removed' })] })
-    )
-    await act(async () => {
-      expect(
-        await hook!.queued.edit!('removed', () => {
-          void deleteMobileNativeChatDrafts('copy-host', 'workspace')
-        })
-      ).toBe(false)
-    })
-    expect(calls('agentSession.queuedMessageDelete')).toHaveLength(0)
-    expect(readMobileNativeChatDraft(scope).text).toBe('')
-    expect(onSendError).toHaveBeenLastCalledWith(
-      "Couldn't save this message to your draft. It is still queued."
-    )
-  })
-
-  it('keeps the copied draft after Delete refusal and reverts an optimistic relative move', async () => {
-    const scope = 'copy-host\0workspace\0tab'
-    publishMobileChatDraftStorage({
-      read: async () => null,
-      write: async () => {},
-      removeWorkspace: async () => {}
-    })
-    const messages = [queuedDraft({ messageId: 'a' }), queuedDraft({ messageId: 'b', position: 2 })]
-    await mountSession(
-      { ...CAPABLE, queuedMessageCopyDelete: true, queuedMessageReorder: true },
-      snapshotEvent({ queuedMessages: messages })
-    )
-    sendRequest.mockResolvedValue(
-      mutationOk({ messageId: 'a', deleted: false, disposition: 'dispatched' })
-    )
-    await act(async () => {
-      expect(await hook!.queued.edit!('a')).toBe(false)
-    })
-    expect(readMobileNativeChatDraft(scope).text).toBe('text of a')
-    expect(onSendError).toHaveBeenLastCalledWith(
-      'Already sent — your message is still in the composer.'
-    )
-    const deletedBeforeStorageFailure = calls('agentSession.queuedMessageDelete').length
-    publishMobileChatDraftStorage({
-      read: async () => null,
-      write: async () => {
-        throw new Error('disk full')
-      },
-      removeWorkspace: async () => {}
-    })
-    await act(async () => {
-      expect(await hook!.queued.edit!('b')).toBe(false)
-    })
-    expect(calls('agentSession.queuedMessageDelete')).toHaveLength(deletedBeforeStorageFailure)
-    expect(readMobileNativeChatDraft(scope).text).toContain('text of b')
-    let finish: (response: RpcResponse) => void = () => {}
-    sendRequest.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve
-        })
-    )
-    let moving!: Promise<boolean>
-    await act(async () => {
-      moving = hook!.queued.move!({ movedId: 'a', afterId: 'b' })
-    })
-    expect(hook!.queued.cards.map((card) => card.messageId)).toEqual(['b', 'a'])
-    expect(requestOf('agentSession.queuedMessageMove').params).toMatchObject({
-      messageId: 'a',
-      afterMessageId: 'b'
-    })
-    await act(async () => {
-      finish(mutationOk({ messageId: 'a', status: 'stale' }))
-      expect(await moving).toBe(false)
-    })
-    expect(hook!.queued.cards.map((card) => card.messageId)).toEqual(['a', 'b'])
   })
 
   describe('capability-gated delivery', () => {
@@ -496,7 +299,6 @@ describe('mobile structured queued messages', () => {
           attribution: null
         }
       ])
-      // A frame without the field leaves the list alone; null empties it.
       act(() => listener?.(batchEvent()))
       expect(hook!.queued.cards).toHaveLength(1)
       act(() => listener?.(batchEvent(null)))
@@ -511,6 +313,19 @@ describe('mobile structured queued messages', () => {
             queuedDraft({ messageId: 'drained' }),
             queuedDraft({ messageId: 'still-waiting' })
           ],
+          items: [
+            {
+              itemId: agentJournalSubmissionKey('fresh-hand-off-id'),
+              revision: 1,
+              sequence: 1,
+              observedAt: 10,
+              body: {
+                kind: 'message',
+                role: 'user',
+                blocks: [{ type: 'text', text: 'sent message' }]
+              }
+            }
+          ],
           submissions: [acceptedSubmission('fresh-hand-off-id', 'drained')]
         })
       )
@@ -522,14 +337,26 @@ describe('mobile structured queued messages', () => {
         CAPABLE,
         snapshotEvent({
           queuedMessages: [queuedDraft({ messageId: 'same-id' })],
+          items: [
+            {
+              itemId: agentJournalSubmissionKey('same-id'),
+              revision: 1,
+              sequence: 1,
+              observedAt: 10,
+              body: {
+                kind: 'message',
+                role: 'user',
+                blocks: [{ type: 'text', text: 'sent message' }]
+              }
+            }
+          ],
           submissions: [acceptedSubmission('same-id')]
         })
       )
       expect(hook!.queued.cards.map((card) => card.messageId)).toEqual(['same-id'])
     })
 
-    // A host that does not queue sends still keeps a message it accepted and never sent across a
-    // restart or a close, and publishes it as a card; only queueing a new send is gated.
+    // Any host may publish retained drafts after restart even if it cannot queue fresh sends.
     it('shows the cards a host that does not queue sends publishes', async () => {
       await mountSession(LEGACY)
       act(() =>
@@ -544,7 +371,6 @@ describe('mobile structured queued messages', () => {
           )
         )
       )
-      // Plain waiting cards: the host holds them until the chat's next turn, and shows no row.
       expect(hook!.queued.cards.map(({ messageId, caption }) => ({ messageId, caption }))).toEqual([
         { messageId: 'kept-1', caption: null },
         { messageId: 'behind', caption: null }
@@ -559,7 +385,6 @@ describe('mobile structured queued messages', () => {
         if (method === 'agentSession.queuedMessageSend') {
           return mutationOk({
             clientMessageId: 'draft-1',
-            // Every hand-off goes out under a fresh id and names its draft.
             submission: {
               clientMessageId: 'hand-off-1',
               queuedMessageId: 'draft-1',
@@ -657,14 +482,11 @@ describe('mobile structured queued messages', () => {
       await act(async () => {
         expect(await hook!.queued.edit!('draft-1')).toBe(true)
       })
-      // The copy comes from the card the user is looking at, not from any answer.
       expect(appendText.mock.calls).toEqual([['text of draft-1']])
-      // Copy-first: the text was in the composer before the delete RPC left, so
-      // no Delete outcome can lose it.
+      // Copy before Delete leaves no outcome that can lose card text.
       expect(appendText.mock.invocationCallOrder[0]).toBeLessThan(
         callOrderOf('agentSession.queuedMessageDelete')!
       )
-      // A plain delete: only the message id goes out, and nothing durable is written.
       expect(requestOf('agentSession.queuedMessageDelete').params.messageId).toBe('draft-1')
       expect(asyncStorage.setItem).not.toHaveBeenCalled()
     })
@@ -683,8 +505,7 @@ describe('mobile structured queued messages', () => {
       await act(async () => {
         expect(await hook!.queued.edit!('draft-1')).toBe(false)
       })
-      // The user sees both copies — composer text and the surviving card — and
-      // can press Delete again; nothing is lost and nothing is restored twice.
+      // Failed delete leaves both visible copies without restoring text a second time.
       expect(appendText.mock.calls).toEqual([['text of draft-1']])
       expect(hook!.queued.cards.map((card) => card.messageId)).toEqual(['draft-1'])
     })
@@ -704,7 +525,7 @@ describe('mobile structured queued messages', () => {
         expect(await hook!.queued.edit!('draft-1')).toBe(false)
       })
       expect(appendText.mock.calls).toEqual([['text of draft-1']])
-      // The copy is still in the composer: say so, or it reads as unsent and goes out twice.
+      // Report that the copy remains in the composer so users do not resend it as though nothing happened.
       expect(onSendError).toHaveBeenCalledWith('Already sent — your text is still in the composer.')
     })
 
@@ -746,14 +567,12 @@ describe('mobile structured queued messages', () => {
       await act(async () => {
         expect(await hook!.cancelPrompt()).toBe(true)
       })
-      // Exactly today's cancel: no withdrawal ask, no text owed back, nothing durable.
       const { params } = requestOf('agentSession.cancel')
       expect(Object.keys(params).sort()).toEqual(['envelope', 'turnId'])
       expect(params.turnId).toBe('turn-1')
       expect(appendText).not.toHaveBeenCalled()
       expect(asyncStorage.setItem).not.toHaveBeenCalled()
       expect(hook!.queued.cards.map((card) => card.messageId)).toEqual(['draft-1'])
-      // The host's pause is the queue's, published beside the list; the card itself is not held.
       act(() =>
         listener?.(batchEvent([queuedDraft({ messageId: 'draft-1' })], [], { reason: 'stopped' }))
       )
@@ -763,7 +582,6 @@ describe('mobile structured queued messages', () => {
         paused: false,
         caption: null
       })
-      // A frame without the list leaves the pause alone; one that publishes the list states it.
       act(() => listener?.(batchEvent()))
       expect(hook!.queued.pause).toEqual({ reason: 'stopped' })
       act(() => listener?.(batchEvent([queuedDraft({ messageId: 'draft-1' })], [], null)))

@@ -75,7 +75,6 @@ export function buildSubscriberFrame(
               ? {
                   queuedMessages: sideQueued.queuedMessages,
                   queuePause: sideQueued.queuePause,
-                  queuedImageCards: sideQueued.queuedImageCards,
                   nextQueuedMessageId: sideQueued.nextQueuedMessageId
                 }
               : {}),
