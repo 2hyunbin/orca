@@ -1,4 +1,4 @@
-import { expect, vi } from 'vitest'
+import { expect, vi, type Mock } from 'vitest'
 import { resolve } from 'node:path'
 import type { Store } from '../persistence'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
@@ -13,7 +13,40 @@ import {
 } from '../worktree-create-timing'
 import type { SparsePreset } from '../../shared/worktree/create-types'
 
-export const runtimeCreateMocks = {
+type RuntimeCreateMocks = {
+  git: Mock
+  rearm: Mock
+  routing: Mock<() => { wslDistro?: string }>
+  defaultBase: Mock
+  hasBase: Mock
+  branchName: Mock
+  canCheckout: Mock
+  pathExists: Mock
+  branchConflict: Mock
+  githubPr: Mock
+  consume: Mock
+  add: Mock
+  addSparse: Mock
+  pushTarget: Mock
+  listing: Mock
+  remoteBase: Mock
+  hasRemoteRef: Mock
+  refresh: Mock
+  fetch: Mock
+  resolveShared: Mock<() => Promise<string[]>>
+  resolveInclude: Mock<() => Promise<string[]>>
+  copyPaths: Mock<() => Promise<string[]>>
+  effectiveHooks: Mock
+  created: {
+    path: string
+    head: string
+    branch: string
+    isBare: boolean
+    isMainWorktree: boolean
+  }
+}
+
+export const runtimeCreateMocks: RuntimeCreateMocks = {
   git: vi.fn(),
   rearm: vi.fn(),
   routing: vi.fn<() => { wslDistro?: string }>(),
