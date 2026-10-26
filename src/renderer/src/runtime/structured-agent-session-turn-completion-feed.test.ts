@@ -240,12 +240,44 @@ describe('structured turn completion feed (renderer)', () => {
     expect(seen).toEqual(['turn-1'])
   })
 
-  it('hands the same owner to every caller for one target and separate owners per target', () => {
-    const local = getStructuredAgentSessionTurnCompletionFeed({ kind: 'local' })
-    expect(getStructuredAgentSessionTurnCompletionFeed({ kind: 'local' })).toBe(local)
+  it('retains only committed interest and joins a handle abandoned before effects', async () => {
+    const target = { kind: 'environment', environmentId: 'env-1' } as const
+    const abandoned = getStructuredAgentSessionTurnCompletionFeed(target, 'session-1')
+    const committed = getStructuredAgentSessionTurnCompletionFeed(target, 'session-1')
+    expect(committed).not.toBe(abandoned)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mocks.supportsCapability).not.toHaveBeenCalled()
+    expect(mocks.subscribe).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+
+    const seen: string[] = []
+    const stopCommitted = committed.subscribe((edge) => seen.push(`committed:${label(edge)}`))
+    expect(getStructuredAgentSessionTurnCompletionFeed(target, 'session-1')).toBe(committed)
+    expect(getStructuredAgentSessionTurnCompletionFeed(target, 'session-2')).not.toBe(committed)
     expect(
-      getStructuredAgentSessionTurnCompletionFeed({ kind: 'environment', environmentId: 'env-1' })
-    ).not.toBe(local)
+      getStructuredAgentSessionTurnCompletionFeed(
+        { kind: 'environment', environmentId: 'env-2' },
+        'session-1'
+      )
+    ).not.toBe(committed)
+    expect(mocks.subscribe).not.toHaveBeenCalled()
+    const releaseCommitted = committed.activate()
+    const stopAbandoned = abandoned.subscribe((edge) => seen.push(`retained:${label(edge)}`))
+    const releaseAbandoned = abandoned.activate()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(getStructuredAgentSessionTurnCompletionFeed(target, 'session-1')).toBe(committed)
+    expect(mocks.subscribe).toHaveBeenCalledOnce()
+    expect(mocks.supportsCapability).toHaveBeenCalledTimes(2)
+    subscription().emit({ type: 'completion', completion: completion('shared') })
+    expect(seen).toEqual(['committed:shared', 'retained:shared'])
+    releaseCommitted()
+    stopCommitted()
+    expect(subscription().unsubscribe).not.toHaveBeenCalled()
+    releaseAbandoned()
+    stopAbandoned()
+    expect(subscription().unsubscribe).toHaveBeenCalledOnce()
+    expect(getStructuredAgentSessionTurnCompletionFeed(target, 'session-1')).not.toBe(committed)
+    expect(vi.getTimerCount()).toBe(0)
   })
 })
 

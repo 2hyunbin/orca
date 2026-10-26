@@ -279,7 +279,6 @@ export function getStructuredAgentSessionTurnCompletionFeed(
       }
     )
     owner = created
-    owners.set(key, owner)
   }
   return owner
 }
