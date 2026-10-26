@@ -20,12 +20,10 @@ import {
 import { AGENT_SESSION_GOAL_CONTROL_COPY } from './agent-session-goal-control-copy'
 import { START_REFUSAL_RESUMABLE } from './agent-session-start-refusal-resumable'
 import { providerRetryWords, withRetryCause } from './agent-session-provider-retry-words'
-import {
-  usageLimitWords,
-  type AgentSessionUsageLimitResetWords
-} from './agent-session-usage-limit-words'
+import { usageLimitWords } from './agent-session-usage-limit-words'
+import type { AgentSessionUsageLimitResetWords } from './agent-session-usage-limit-words'
 import { commandRefusedByReason } from './agent-session-command-refusal-words'
-import { attachmentProblemSentence } from './agent-session-attachment-failure-words'
+import { agent, attachmentProblemSentence } from './agent-session-attachment-failure-words'
 import { joinSentences } from './sentence-joining'
 import { requestTimeoutSeconds } from './agent-session-request-timeout'
 import {
@@ -80,10 +78,6 @@ type Sentence = (
   say: AgentSessionFailureSay
 ) => string
 
-function agent(say: AgentSessionFailureSay, { agentName }: AgentSessionFailureWordsContext) {
-  return { agent: agentName ?? say('theAgent') }
-}
-
 function namingAgent(id: AgentSessionFailureCopyId): Sentence {
   return (context, _fact, _surface, say) => say(id, agent(say, context))
 }
@@ -127,7 +121,14 @@ function couldNot(verb: 'couldNotStart' | 'couldNotRestart'): Sentence {
     if (installationFailure) {
       return installationFailure
     }
+    if (!context.command && fact.refusal?.details?.reason === 'messagesUnsettled') {
+      return joinSentences([say('agentStillWorking'), say('waitForTurn')])
+    }
     const failed = say(verb, agent(say, context))
+    const blocked = commandRefusedByReason(say, context, fact)
+    if (blocked) {
+      return joinSentences([failed, blocked, ...startRetry(say, context)])
+    }
     if (fact.argumentProblem) {
       const problemCopy = {
         unsupportedOption: 'argumentsUnsupportedOption',
@@ -292,8 +293,7 @@ export function agentSessionFailureSentence(
   /** Desktop passes its translations; the host and the phone keep English. */
   say: AgentSessionFailureSay = sayAgentSessionFailureEnglish
 ): string {
-  const sentence: Sentence = FAILURE_SENTENCES[fact.kind]
-  return sentence(context, fact, surface, say)
+  return FAILURE_SENTENCES[fact.kind](context, fact, surface, say)
 }
 
 /** Preserve markers released clients hide. A write failure keeps the bare marker; its error stays in the log. */
