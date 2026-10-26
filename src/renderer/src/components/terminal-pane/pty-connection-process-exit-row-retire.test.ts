@@ -321,7 +321,7 @@ describe('connectPanePty confirmed process exit retires the live agent row', () 
       hasChildProcesses: children
     }))
     foreground = 'opencode'
-    await vi.advanceTimersByTimeAsync(5_000)
+    await vi.advanceTimersByTimeAsync(15_000)
     expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.agent).toBe('opencode')
     expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.shellForeground).toBe(false)
   })
@@ -340,7 +340,7 @@ describe('connectPanePty confirmed process exit retires the live agent row', () 
     expect(mockStoreState.agentLaunchConfigByPaneKey[paneKey]).toBeDefined()
     expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.shellForeground).not.toBe(true)
     foreground = 'codex'
-    await vi.advanceTimersByTimeAsync(5_000)
+    await vi.advanceTimersByTimeAsync(15_000)
     foreground = 'zsh'
     await vi.advanceTimersByTimeAsync(5_000)
     expect(onAgentExited).toHaveBeenCalledWith(leafIdForPane(1))

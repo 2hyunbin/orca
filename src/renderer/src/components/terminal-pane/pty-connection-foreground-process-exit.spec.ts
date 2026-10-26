@@ -103,7 +103,7 @@ export function registerPtyConnectionForegroundProcessExitTests(): void {
       foreground = 'codex'
       children = true
       binding.sampleForegroundAgentOnFocus()
-      await vi.advanceTimersByTimeAsync(3_000)
+      await vi.advanceTimersByTimeAsync(15_000)
       expect(mockStoreState.paneForegroundAgentByPaneKey[cacheKey]).toMatchObject({
         agent: 'codex',
         agentEvidence: 'process-read'

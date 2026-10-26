@@ -3,13 +3,13 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { expect, it, vi } from 'vitest'
 import type { TerminalInterfaceObservation } from '../../../src/shared/terminal-interface-observation'
 import { mobileTerminalInterfaceReleasesChat } from './native-chat/mobile-native-chat-eligibility'
-import { useMobileNativeChatLaunchDraftSeed } from './use-mobile-native-chat-launch-draft-seed'
+import { useMobileNativeChatLaunchDraftSeed } from './native-chat/composer/use-mobile-native-chat-launch-draft-seed'
 import {
   editMobileNativeChatDraft,
   resetMobileNativeChatDraftStoreForTests,
   setMobileNativeChatDraftText,
   useMobileNativeChatDraft
-} from './mobile-native-chat-draft-store'
+} from './native-chat/composer/mobile-native-chat-draft-store'
 import {
   loadDefaultSessionView,
   readSessionViewOverridesPreference,
