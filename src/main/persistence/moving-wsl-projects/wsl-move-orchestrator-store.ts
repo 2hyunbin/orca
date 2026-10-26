@@ -45,7 +45,8 @@ const stateSchema = z.discriminatedUnion('kind', [
       'host-update-required',
       'attempts-exhausted',
       'not-now',
-      'declined'
+      'declined',
+      'removal-pending'
     ]),
     until: z.number().optional()
   }),

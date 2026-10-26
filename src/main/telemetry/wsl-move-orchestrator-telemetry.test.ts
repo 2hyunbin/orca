@@ -53,6 +53,7 @@ describe('wslMoveOrchestratorEventProps', () => {
       { kind: 'backoff', nextAttemptAt: 0, reason: 'x' },
       { kind: 'parked', reason: 'not-now', until: 1 },
       { kind: 'parked', reason: 'declined' },
+      { kind: 'parked', reason: 'removal-pending' },
       { kind: 'done', migrationId: 'm' },
       { kind: 'distro-gone' },
       { kind: 'restore-offered' }

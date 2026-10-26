@@ -58,6 +58,7 @@ function fakePorts(overrides: Partial<WslMoveOrchestratorPorts> = {}): Fake {
     autoMoveEnabled: () => true,
     prepareHost: vi.fn(async () => 'ready' as const),
     isHostReady: vi.fn(() => true),
+    hostRemovalPending: vi.fn(() => false),
     preview: vi.fn(async (distro: string) => ready(distro)),
     start: vi.fn(async () => moved),
     finishedMove: () => null,
@@ -561,6 +562,39 @@ describe('WslMoveOrchestrator', () => {
       release()
       await first
       expect(preview).toHaveBeenCalledTimes(2)
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
+    })
+  })
+
+  // E11 (#33843): a Remove that could not prove the server stopped leaves the host to the user.
+  describe('a host whose Remove is pending', () => {
+    for (const trigger of ['connect', 'project-opened', 'startup', 'timer', 'user'] as const) {
+      it(`never readies, previews or moves it on ${trigger}`, async () => {
+        const ports = fakePorts({ hostRemovalPending: vi.fn(() => true) })
+        const orchestrator = new WslMoveOrchestrator(ports)
+        await orchestrator.trigger('Ubuntu', trigger)
+        expect(ports.prepareHost).not.toHaveBeenCalled()
+        expect(ports.preview).not.toHaveBeenCalled()
+        expect(ports.start).not.toHaveBeenCalled()
+        expect(stateOf(orchestrator, 'Ubuntu')).toEqual({
+          kind: 'parked',
+          reason: 'removal-pending'
+        })
+      })
+    }
+
+    it('stays parked through Retry until the Remove settles, then moves on Retry', async () => {
+      let pending = true
+      const ports = fakePorts({ hostRemovalPending: vi.fn(() => pending) })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.trigger('Ubuntu', 'connect')
+      await orchestrator.userAction('Ubuntu', 'retry')
+      expect(ports.start).not.toHaveBeenCalled()
+      pending = false
+      // Settling the Remove alone moves nothing: the distro waits for the user.
+      await orchestrator.trigger('Ubuntu', 'connect')
+      expect(ports.start).not.toHaveBeenCalled()
+      await orchestrator.userAction('Ubuntu', 'retry')
       expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
     })
   })

@@ -115,6 +115,7 @@ function parkedMayStart(
     case 'export-incomplete':
     case 'manifest-too-large':
     case 'declined':
+    case 'removal-pending':
       return false
   }
 }
@@ -307,6 +308,14 @@ export function applyWslMoveReleasedByUser(
   now: number
 ): WslMoveOrchestratorRecord {
   return withState(record, { kind: 'parked', reason: 'declined' }, now)
+}
+
+/** A host whose Remove is unfinished is the user's to settle; park the distro until they act. */
+export function applyWslMoveHostRemovalPending(
+  record: WslMoveOrchestratorRecord,
+  now: number
+): WslMoveOrchestratorRecord {
+  return withState(record, { kind: 'parked', reason: 'removal-pending' }, now)
 }
 
 /** A record read at startup, made true to what survived the last process. */

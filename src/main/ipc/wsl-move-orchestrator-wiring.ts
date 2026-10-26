@@ -28,6 +28,7 @@ import {
 import { prepareWslMoveHost } from '../persistence/moving-wsl-projects/wsl-move-host-readiness'
 import { readConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
 import { defaultWslOrcadEnvironmentId } from '../wsl/wsl-orcad-deploy'
+import { findWslHostDeployment } from '../../shared/runtime-environment-wsl-host-store'
 import {
   readWslMoveOrchestratorRecords,
   writeWslMoveOrchestratorRecords
@@ -129,6 +130,16 @@ function isHostReady(distro: string): boolean {
   )
 }
 
+/** E11 (#33843): a Remove that could not prove the server stopped leaves `pendingStop` set. */
+function hostRemovalPending(userDataPath: string, distro: string): boolean {
+  const record: object | null = findWslHostDeployment(
+    userDataPath,
+    defaultWslOrcadEnvironmentId(distro)
+  )
+  // Optional until #33843 lands: older records have no such field.
+  return !!record && 'pendingStop' in record && !!record.pendingStop
+}
+
 function prepareHost(distro: string): Promise<WslMoveHostReadiness> {
   const service = getWslHostService()
   if (!service) {
@@ -164,6 +175,7 @@ function createOrchestrator(
     appVersion: app.getVersion(),
     autoMoveEnabled: () => process.env[WSL_MOVE_ORCHESTRATOR_AUTO_ENV] !== '0',
     prepareHost,
+    hostRemovalPending: (distro) => hostRemovalPending(userDataPath, distro),
     isHostReady,
     preview: async (distro) =>
       previewWslMove(driverDeps(), {

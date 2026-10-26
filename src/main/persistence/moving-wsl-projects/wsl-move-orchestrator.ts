@@ -16,6 +16,7 @@ import type {
 import {
   applyWslMoveOutcome,
   applyWslMovedDistroVerdict,
+  applyWslMoveHostRemovalPending,
   applyWslMoveReleasedByUser,
   applyWslMoveUserAction,
   classifyWslMoveOutcome,
@@ -47,6 +48,8 @@ export type WslMoveOrchestratorPorts = {
    * `unverifiable`, never `not-running`: losing contact is no evidence either way.
    */
   prepareHost: (distro: string) => Promise<WslMoveHostReadiness>
+  /** E11: the user's Remove of the distro's host has not proven its server stopped. */
+  hostRemovalPending: (distro: string) => boolean
   /** Whether the distro's host connection is ready now; never connects. Gates timer steps. */
   isHostReady: (distro: string) => boolean
   preview: (distro: string) => Promise<WslMovePreview>
@@ -225,6 +228,11 @@ export class WslMoveOrchestrator {
     trigger: WslMoveOrchestratorTrigger
   ): Promise<void> {
     let record = this.recordFor(key, distro)
+    // Before anything that could connect, add or move: even the user's Retry waits for the Remove.
+    if (this.ports.hostRemovalPending(distro)) {
+      this.commit(key, trigger, applyWslMoveHostRemovalPending(record, this.ports.now()))
+      return
+    }
     // A timer re-check leaves R38 to the triggers, so a deferred move never polls the registry.
     const finished = trigger === 'timer' ? null : this.ports.finishedMove(distro)
     if (finished) {

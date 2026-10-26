@@ -7,6 +7,7 @@ import type { WslMoveOrchestratorRecord } from '../../../shared/wsl-move/wsl-mov
 import {
   applyWslMovedDistroVerdict,
   applyWslMoveOutcome,
+  applyWslMoveHostRemovalPending,
   applyWslMoveReleasedByUser,
   applyWslMoveUserAction,
   classifyWslMoveOutcome,
@@ -340,5 +341,13 @@ describe('review fixes (#33802)', () => {
     const a = record({ kind: 'deferred', blockers: [blocker], rechecks: 1 })
     expect(sameWslMoveOrchestratorRecord(a, { ...a, updatedAt: a.updatedAt + 1 })).toBe(true)
     expect(sameWslMoveOrchestratorRecord(a, { ...a, attempts: 1 })).toBe(false)
+  })
+
+  it('parks a host whose Remove is pending for every automatic trigger and new build', () => {
+    const parked = applyWslMoveHostRemovalPending(record({ kind: 'done', migrationId: 'm1' }), NOW)
+    expect(parked.state).toEqual({ kind: 'parked', reason: 'removal-pending' })
+    for (const trigger of ['connect', 'project-opened', 'startup', 'timer'] as const) {
+      expect(mayStartWslMove(parked, trigger, NOW + 365 * 86_400_000, '9.0.0')).toBe(false)
+    }
   })
 })

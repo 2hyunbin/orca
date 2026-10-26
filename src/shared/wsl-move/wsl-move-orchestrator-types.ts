@@ -28,6 +28,8 @@ export type WslMoveOrchestratorParkReason =
   | 'not-now'
   /** The user brought the projects back with "Use on this computer again"; only Retry undoes it. */
   | 'declined'
+  /** The user's Remove of the host could not prove its server stopped (E11); nothing touches it. */
+  | 'removal-pending'
 
 export type WslMoveOrchestratorState =
   /** Nothing of the distro left to move. */

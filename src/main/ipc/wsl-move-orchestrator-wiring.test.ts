@@ -36,6 +36,11 @@ const host = vi.hoisted(() => {
     added: new Array<string>()
   }
 })
+const deployments = vi.hoisted(() => new Map<string, Record<string, unknown>>())
+vi.mock('../../shared/runtime-environment-wsl-host-store', () => ({
+  findWslHostDeployment: (_userData: string, environmentId: string) =>
+    deployments.get(environmentId) ?? null
+}))
 vi.mock('../wsl/wsl-distro-registry-id', () => ({ readWslDistroRegistrations: async () => null }))
 vi.mock('../wsl/wsl-orcad-deploy', () => ({
   defaultWslOrcadEnvironmentId: (distro: string) => `wsl:${distro}`
@@ -143,6 +148,7 @@ beforeEach(() => {
   host.running = { status: 'confirmed', distros: ['Ubuntu'] }
   host.added = []
   releases.listeners.length = 0
+  deployments.clear()
   store.reads = 0
   driver.previewWslMove.mockClear()
   driver.moveProjectsToWslHost.mockClear()
@@ -275,6 +281,30 @@ describe('WSL move orchestrator wiring', () => {
     const records = await handlers.get('wslMoveOrchestrator:list')?.({})
     expect(records).toEqual([
       expect.objectContaining({ distro: 'Ubuntu', state: { kind: 'parked', reason: 'declined' } })
+    ])
+  })
+
+  // E11 (#33843): `pendingStop` is optional until that PR lands, so the guard reads it loosely.
+  it('never adds, connects or moves a host whose Remove is pending', async () => {
+    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
+    deployments.set('wsl:Ubuntu', {
+      environmentId: 'wsl:Ubuntu',
+      distro: 'Ubuntu',
+      pendingStop: { reason: 'server-still-running' }
+    })
+    host.statuses = [
+      { distro: 'Ubuntu', state: 'ready', environmentId: 'wsl:Ubuntu', detail: null }
+    ]
+    await register()
+    await handlers.get('wslMoveOrchestrator:projectOpened')?.(
+      { sender: { id: MAIN_WINDOW_ID } },
+      'Ubuntu'
+    )
+    await answerWindow()
+    expect(host.added).toEqual([])
+    expect(driver.previewWslMove).not.toHaveBeenCalled()
+    expect(await handlers.get('wslMoveOrchestrator:list')?.({})).toEqual([
+      expect.objectContaining({ state: { kind: 'parked', reason: 'removal-pending' } })
     ])
   })
 })
