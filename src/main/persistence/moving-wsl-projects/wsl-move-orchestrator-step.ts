@@ -122,8 +122,9 @@ export async function runWslMoveOrchestratorStep(
       return
     }
   } else if (trigger !== 'user') {
+    const seen = record
     const readiness = await ports
-      .prepareHost(distro)
+      .prepareHost(distro, () => !changedUnder(seen))
       .catch((): WslMoveHostReadiness => 'unverifiable')
     if (readiness !== 'ready' || changedUnder(record)) {
       return

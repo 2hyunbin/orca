@@ -1,5 +1,6 @@
 /** C7: persist WSL hosts and connect for explicit Add/Connect or visible project/terminal demand. Never boot stopped distros for background work. */
 import { errorMessage } from '../../shared/error-message'
+import { noteWslHostUserAction } from './wsl-host-user-actions'
 import { removeWslHostEnvironment } from '../../shared/runtime-environment-wsl-host-store'
 import {
   readWslHostDeployments,
@@ -178,6 +179,8 @@ export class WslHostService {
     this.statuses.delete(environmentId)
     this.notifyStatusesChanged()
     await this.deps.removed(environmentId)
+    // Every Remove (sidebar or Settings) is the user's: the move orchestrator never removes a host.
+    noteWslHostUserAction({ kind: 'removed', distro: record.distro })
     return serverStop
   }
 

@@ -62,7 +62,9 @@ function register(): void {
 }
 
 describe('WSL host IPC: the user Add and Remove (D3a)', () => {
-  it('reports a Remove and a successful Add, so the orchestrator can decline and resume', async () => {
+  // Removes are reported by the host service itself (see wsl-host-service.test.ts), so both the
+  // sidebar and Settings paths count; here the service is mocked and only the Add is the IPC's.
+  it('reports a successful Add, never a failed one', async () => {
     register()
     const heard: WslHostUserAction[] = []
     const stop = onWslHostUserAction((action) => heard.push(action))
@@ -71,9 +73,6 @@ describe('WSL host IPC: the user Add and Remove (D3a)', () => {
     service.add.mockResolvedValueOnce({ ok: false, kind: 'failed', message: 'no' })
     await handlers.get('wslHosts:add')?.({}, { distro: 'Debian' })
     stop()
-    expect(heard).toEqual([
-      { kind: 'removed', distro: 'Ubuntu' },
-      { kind: 'added', distro: 'Ubuntu' }
-    ])
+    expect(heard).toEqual([{ kind: 'added', distro: 'Ubuntu' }])
   })
 })

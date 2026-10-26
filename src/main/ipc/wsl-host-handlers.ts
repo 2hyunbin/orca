@@ -200,13 +200,7 @@ export function registerWslHostHandlers(args: WslHostHandlerArgs): void {
         'This server is the default host for new projects. Choose another one under New projects open on before removing it.'
       )
     }
-    const distro = wsl.recordForEnvironment(request.environmentId)?.distro
-    const stop = await wsl.remove(request.environmentId)
-    // Even an unproven stop is the user declining this host; the orchestrator must not re-add it.
-    if (distro) {
-      noteWslHostUserAction({ kind: 'removed', distro })
-    }
-    return stop
+    return wsl.remove(request.environmentId)
   })
   ipcMain.handle(
     'wslHosts:connect',

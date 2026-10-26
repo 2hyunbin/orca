@@ -22,7 +22,9 @@ export type WslMoveHostReadinessDeps = {
 
 export async function prepareWslMoveHost(
   deps: WslMoveHostReadinessDeps,
-  distro: string
+  distro: string,
+  /** False once the user declined the distro (a Remove, a release) during the waits here. */
+  stillWanted: () => boolean = () => true
 ): Promise<WslMoveHostReadiness> {
   if (deps.removalPending(distro)) {
     return 'failed'
@@ -40,8 +42,8 @@ export async function prepareWslMoveHost(
   if (deps.isHostReady(distro)) {
     return 'ready'
   }
-  // Re-read after the running-distro await: a Remove may have started meanwhile.
-  if (deps.removalPending(distro)) {
+  // Re-read after the running-distro await: a Remove may have started, or finished, meanwhile.
+  if (deps.removalPending(distro) || !stillWanted()) {
     return 'failed'
   }
   try {

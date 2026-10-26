@@ -90,7 +90,11 @@ function hostRemovalPending(userDataPath: string, distro: string): boolean {
   return !!record && 'pendingStop' in record && !!record.pendingStop
 }
 
-function prepareHost(userDataPath: string, distro: string): Promise<WslMoveHostReadiness> {
+function prepareHost(
+  userDataPath: string,
+  distro: string,
+  stillWanted: () => boolean
+): Promise<WslMoveHostReadiness> {
   const service = getWslHostService()
   if (!service) {
     return Promise.resolve('failed')
@@ -105,7 +109,8 @@ function prepareHost(userDataPath: string, distro: string): Promise<WslMoveHostR
       connect: () => service.connect(environmentId),
       add: () => service.add({ distro, startIfStopped: false })
     },
-    distro
+    distro,
+    stillWanted
   )
 }
 
@@ -125,7 +130,7 @@ function createOrchestrator(
     now: () => Date.now(),
     appVersion: app.getVersion(),
     autoMoveEnabled: () => process.env[WSL_MOVE_ORCHESTRATOR_AUTO_ENV] !== '0',
-    prepareHost: (distro) => prepareHost(userDataPath, distro),
+    prepareHost: (distro, stillWanted) => prepareHost(userDataPath, distro, stillWanted),
     hostRemovalPending: (distro) => hostRemovalPending(userDataPath, distro),
     hasHost: (distro) =>
       getWslHostService()?.recordForEnvironment(defaultWslOrcadEnvironmentId(distro)) != null,

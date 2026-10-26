@@ -22,7 +22,7 @@ export type WslMoveOrchestratorPorts = {
    * connects or adds its host then, and never boots it (A1). A failed running-distro read is
    * `unverifiable`, never `not-running`: losing contact is no evidence either way.
    */
-  prepareHost: (distro: string) => Promise<WslMoveHostReadiness>
+  prepareHost: (distro: string, stillWanted: () => boolean) => Promise<WslMoveHostReadiness>
   /** E11: the user's Remove of the distro's host has not proven its server stopped. */
   hostRemovalPending: (distro: string) => boolean
   /** Whether the distro still has a WSL host record; never connects. */

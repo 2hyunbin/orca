@@ -203,7 +203,7 @@ describe('WslMoveOrchestrator', () => {
       const ports = fakePorts()
       const orchestrator = new WslMoveOrchestrator(ports)
       await orchestrator.trigger('Ubuntu', 'project-opened')
-      expect(ports.prepareHost).toHaveBeenCalledWith('Ubuntu')
+      expect(ports.prepareHost).toHaveBeenCalledWith('Ubuntu', expect.any(Function))
       expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
     })
 
@@ -848,5 +848,29 @@ describe('WslMoveOrchestrator', () => {
       expect(preview).toHaveBeenCalledTimes(2)
       expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
     })
+  })
+
+  // Re-review: the step hands prepareHost a check that turns false once the user declines.
+  it('tells prepareHost the distro is no longer wanted after a Remove mid-read', async () => {
+    const seen: { wanted?: () => boolean } = {}
+    let readied: () => void = () => {}
+    const ports = fakePorts({
+      prepareHost: vi.fn(
+        (_distro: string, wanted: () => boolean) =>
+          new Promise<'ready' | 'failed'>((resolve) => {
+            seen.wanted = wanted
+            readied = () => resolve(wanted() ? 'ready' : 'failed')
+          })
+      )
+    })
+    const orchestrator = new WslMoveOrchestrator(ports)
+    const step = orchestrator.trigger('Ubuntu', 'project-opened')
+    await vi.waitFor(() => expect(seen.wanted).toBeDefined())
+    expect(seen.wanted?.()).toBe(true)
+    orchestrator.releasedByUser('Ubuntu')
+    expect(seen.wanted?.()).toBe(false)
+    readied()
+    await step
+    expect(ports.preview).not.toHaveBeenCalled()
   })
 })

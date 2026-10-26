@@ -84,4 +84,18 @@ describe('prepareWslMoveHost (A1)', () => {
     expect(await prepareWslMoveHost(racing, 'Ubuntu')).toBe('failed')
     expect(racing.add).not.toHaveBeenCalled()
   })
+
+  // Re-review: a Remove that completes during the running-distro read must not be undone by an add.
+  it('adds no host once the distro stopped being wanted during the read', async () => {
+    let wanted = true
+    const racing = deps({
+      readRunningDistros: async () => {
+        wanted = false
+        return { status: 'confirmed', distros: ['Ubuntu'] }
+      }
+    })
+    expect(await prepareWslMoveHost(racing, 'Ubuntu', () => wanted)).toBe('failed')
+    expect(racing.add).not.toHaveBeenCalled()
+    expect(racing.connect).not.toHaveBeenCalled()
+  })
 })

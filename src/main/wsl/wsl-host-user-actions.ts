@@ -1,6 +1,8 @@
 /**
- * The user's own Add and Remove of a WSL host, as opposed to the move orchestrator's automatic
- * add: a Remove is the user declining the host, and only their Add (or Retry) takes that back.
+ * The user's own Add and Remove of a WSL host: a Remove is the user declining the host, and only
+ * their Add (or Retry) takes that back. Removes are reported by the host service itself, which
+ * only the user's sidebar and Settings paths reach; Adds by the user's IPC, since the move
+ * orchestrator adds hosts through the same service.
  */
 export type WslHostUserAction = { kind: 'added' | 'removed'; distro: string }
 
