@@ -15,6 +15,7 @@ const SESSION_MAX_AGE_MS = 60 * 60_000
 const TRANSACTION_MAX_AGE_MS = 10 * 60_000
 const PROFILE_MAX_AGE_S = 365 * 24 * 60 * 60
 const AUTH_REQUEST_TIMEOUT_MS = 10_000
+const LOGOUT_ATTEMPTS = 2
 
 export const WEB_RETURN_PATHS = ['/host-login', '/machines'] as const
 type ReturnPath = (typeof WEB_RETURN_PATHS)[number]
@@ -36,6 +37,16 @@ const SessionExchangeSchema = z.object({
 export type WebSession = { account: ConnectorAccount; csrf: string }
 
 const random = (bytes: number): string => randomBytes(bytes).toString('base64url')
+
+function signInFailed(context: Context, returnTo: string, status: 400 | 502): Response {
+  return context.html(
+    messagePage('Sign-in failed', 'Orca sign-in did not finish. Try again.', {
+      href: returnTo,
+      label: 'Try again'
+    }),
+    status
+  )
+}
 
 // Orca web sign-in as a public PKCE client: the connector keeps its own short cookie and revokes the refresh token at once.
 export class ConnectorWebSignIn {
@@ -106,13 +117,7 @@ export class ConnectorWebSignIn {
     deleteCookie(context, TRANSACTION_COOKIE, { path: '/' })
     const code = context.req.query('code')
     if (!transaction || !code || context.req.query('state') !== transaction.state) {
-      return context.html(
-        messagePage('Sign-in failed', 'Orca sign-in did not finish. Try again.', {
-          href: transaction?.returnTo ?? '/host-login',
-          label: 'Try again'
-        }),
-        400
-      )
+      return signInFailed(context, transaction?.returnTo ?? '/host-login', 400)
     }
     const exchanged = SessionExchangeSchema.safeParse(
       await this.authRequest('/v1/desktop/auth/session', {
@@ -125,18 +130,12 @@ export class ConnectorWebSignIn {
       })
     )
     if (!exchanged.success) {
-      return context.html(
-        messagePage('Sign-in failed', 'Orca sign-in did not finish. Try again.', {
-          href: transaction.returnTo,
-          label: 'Try again'
-        }),
-        502
-      )
+      return signInFailed(context, transaction.returnTo, 502)
     }
     // The connector needs the identity once; a refresh token left alive would be a standing credential.
-    await this.authRequest('/v1/desktop/auth/logout', {
-      refreshToken: exchanged.data.refreshToken
-    })
+    if (!(await this.revoke(exchanged.data.refreshToken))) {
+      return signInFailed(context, transaction.returnTo, 502)
+    }
     const { userId, email } = exchanged.data.cloud
     this.setCookie(
       context,
@@ -145,6 +144,13 @@ export class ConnectorWebSignIn {
       SESSION_MAX_AGE_MS / 1000
     )
     return context.redirect(transaction.returnTo, 303)
+  }
+
+  private async revoke(refreshToken: string): Promise<boolean> {
+    for (let attempt = 0; attempt < LOGOUT_ATTEMPTS; attempt++) {
+      if ((await this.authRequest('/v1/desktop/auth/logout', { refreshToken })) !== null) return true
+    }
+    return false
   }
 
   // Resolves to the JSON body of a 2xx reply, otherwise null.

@@ -106,6 +106,44 @@ describe('connector machine sign-in', () => {
     expect(limited.headers.get('retry-after')).toBe('60')
   })
 
+  it('refuses a host key approval could never accept', async () => {
+    const harness = await createConnectorHarness()
+    const { response } = await harness.startSignIn(`${'A'.repeat(42)}B=`)
+    expect(response.status).toBe(400)
+  })
+
+  it('shows a rough location only from the configured load balancer header', async () => {
+    const shown = await createConnectorHarness({ clientLocationHeader: 'x-client-geo-location' })
+    const ignored = await createConnectorHarness()
+    for (const harness of [shown, ignored]) {
+      const { started } = await harness.startSignIn(hostKeypair(), {
+        'x-client-geo-location': 'us-east1,Ashburn'
+      })
+      const browser = await harness.signedInBrowser()
+      const page = await browser.post('/host-login', {
+        csrf: hiddenField(await (await browser.get('/host-login')).text(), 'csrf'),
+        userCode: started!.userCode
+      })
+      const text = await page.text()
+      expect(text.includes('Ashburn')).toBe(harness === shown)
+    }
+  })
+
+  it('serializes concurrent polls of one request', async () => {
+    const harness = await createConnectorHarness()
+    const { deviceCode } = (await harness.startSignIn(hostKeypair())).started!
+    harness.advance(5_000)
+    const poll = async () =>
+      await (await harness.json(CONNECTOR_PATHS.signInPoll, { v: 1, deviceCode })).json()
+    const replies = await Promise.all([poll(), poll()])
+    expect(replies).toEqual(
+      expect.arrayContaining([
+        { status: 'pending', interval: 5 },
+        { status: 'slow_down', interval: 10 }
+      ])
+    )
+  })
+
   it('rate-limits code guesses per signed-in account', async () => {
     const harness = await createConnectorHarness()
     const browser = await harness.signedInBrowser()
@@ -116,5 +154,12 @@ describe('connector machine sign-in', () => {
     }
     expect(statuses.slice(0, 10).every((status) => status === 404)).toBe(true)
     expect(statuses[10]).toBe(429)
+    // The decision form spends from the same budget, so skipping the preview gains nothing.
+    const decision = await browser.post('/host-login/decision', {
+      csrf,
+      userCode: 'AAAA-AAAA',
+      decision: 'allow'
+    })
+    expect(decision.status).toBe(429)
   })
 })

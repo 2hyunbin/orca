@@ -66,7 +66,11 @@ export class ConnectorSignInRequests {
   async start(
     request: ConnectorSignInStartRequest,
     requester: SignInRequester
-  ): Promise<{ deviceCode: string; userCode: string; expiresAt: number } | 'rate_limited'> {
+  ): Promise<
+    { deviceCode: string; userCode: string; expiresAt: number } | 'invalid_key' | 'rate_limited'
+  > {
+    // Approval derives the host id from this key, so refuse one it could never accept.
+    if (!decodeCanonicalBase64(request.hostPublicKeyB64, 32)) return 'invalid_key'
     const now = this.now()
     const deviceCode = randomBytes(32).toString('base64url')
     const expiresAt = now + CONNECTOR_LIMITS.signInTtlMs
@@ -118,11 +122,14 @@ export class ConnectorSignInRequests {
 
   async poll(deviceCode: string): Promise<ConnectorSignInPollResponse> {
     const now = this.now()
+    const deviceCodeHash = sha256(deviceCode)
     return await this.database.transaction(async (transaction) => {
+      // Concurrent polls must not both read the old throttle and overwrite each other's step.
+      await transaction.lockQuotaScope(`orca-connector-sign-in-poll:${deviceCodeHash}`)
       const [row] = await transaction.query(
         `SELECT status, interval_seconds, next_poll_at, host_public_key, account_email, expires_at
          FROM connector_sign_in_requests WHERE device_code_hash = ?`,
-        [sha256(deviceCode)]
+        [deviceCodeHash]
       )
       if (!row || now > Number(row.expires_at)) {
         return { status: 'expired', interval: CONNECTOR_LIMITS.signInPollIntervalSeconds }
@@ -133,7 +140,7 @@ export class ConnectorSignInRequests {
       await transaction.query(
         `UPDATE connector_sign_in_requests SET interval_seconds = ?, next_poll_at = ?
          WHERE device_code_hash = ?`,
-        [interval, now + interval * 1000, sha256(deviceCode)]
+        [interval, now + interval * 1000, deviceCodeHash]
       )
       if (early) return { status: 'slow_down', interval }
       if (row.status === 'approved') {

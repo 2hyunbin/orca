@@ -5,6 +5,8 @@ import type { ConnectorSignInRequests } from './sign-in-requests.js'
 import { codeEntryPage, confirmPage, machinesPage, messagePage } from './web-pages.js'
 import type { ConnectorWebSignIn, WebSession } from './web-sign-in.js'
 
+const TOO_MANY_ATTEMPTS = 'Too many attempts. Wait a minute and try again.'
+
 async function readForm(context: Context): Promise<Record<string, string>> {
   const form = await context.req.parseBody().catch(() => ({}))
   return Object.fromEntries(
@@ -54,10 +56,7 @@ export function registerWebRoutes<E extends Env>(
     if (session instanceof Response) return session
     const page = { email: session.account.email, csrf: session.csrf }
     if (!codeAttempts.allow(session.account.id)) {
-      return context.html(
-        codeEntryPage({ ...page, error: 'Too many attempts. Wait a minute and try again.' }),
-        429
-      )
+      return context.html(codeEntryPage({ ...page, error: TOO_MANY_ATTEMPTS }), 429)
     }
     const userCode = form.userCode ?? ''
     const pending = await signIns.findPending(userCode)
@@ -74,6 +73,10 @@ export function registerWebRoutes<E extends Env>(
     const form = await readForm(context)
     const session = await browserSession(context, '/host-login', form)
     if (session instanceof Response) return session
+    // Every code-taking form spends from one budget, so the preview step cannot be skipped to guess.
+    if (!codeAttempts.allow(session.account.id)) {
+      return context.html(messagePage('Not connected', TOO_MANY_ATTEMPTS), 429)
+    }
     const decision = await signIns.decide(
       form.userCode ?? '',
       session.account,
@@ -119,5 +122,4 @@ export function registerWebRoutes<E extends Env>(
     await hostLinks.revoke(session.account.id, context.req.param('hostId'))
     return context.redirect('/machines', 303)
   })
-
 }

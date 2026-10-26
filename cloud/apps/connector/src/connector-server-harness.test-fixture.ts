@@ -64,6 +64,7 @@ async function openTestDatabase(): Promise<CloudDatabase> {
 export function fakeIssuer() {
   const calls: { path: string; body: Record<string, unknown> }[] = []
   let account = { userId: 'user-1', email: 'ada@example.com' }
+  let logoutStatus = 200
   const fetchImpl: typeof fetch = async (input, init) => {
     const path = new URL(String(input)).pathname
     const body = JSON.parse(String(init?.body ?? '{}'))
@@ -77,7 +78,9 @@ export function fakeIssuer() {
         capabilities: { flags: {}, refreshedAt: 0 }
       })
     }
-    if (path === '/v1/desktop/auth/logout') return Response.json({ ok: true })
+    if (path === '/v1/desktop/auth/logout') {
+      return Response.json({ ok: logoutStatus === 200 }, { status: logoutStatus })
+    }
     return Response.json({ error: 'not_found' }, { status: 404 })
   }
   return {
@@ -85,6 +88,9 @@ export function fakeIssuer() {
     fetch: fetchImpl,
     signInAs: (next: { userId: string; email: string }) => {
       account = next
+    },
+    failLogout: () => {
+      logoutStatus = 503
     }
   }
 }
@@ -151,11 +157,11 @@ export function hiddenField(html: string, name: string): string {
   return match[1]
 }
 
-export async function createConnectorHarness() {
+export async function createConnectorHarness(config: Partial<ConnectorConfig> = {}) {
   let now = 1_800_000_000_000
   const issuer = fakeIssuer()
   const database = await openTestDatabase()
-  const runtime = createConnectorServer(testConnectorConfig(), database, {
+  const runtime = createConnectorServer({ ...testConnectorConfig(), ...config }, database, {
     now: () => now,
     fetch: issuer.fetch
   })
@@ -178,15 +184,16 @@ export async function createConnectorHarness() {
     return browser
   }
 
-  async function startSignIn(host: nacl.BoxKeyPair, hostName = 'build-box') {
-    const response = await json(CONNECTOR_PATHS.signInStart, {
-      v: 1,
-      hostPublicKeyB64: publicKeyB64(host),
-      hostName,
-      platform: 'linux',
-      runtime: 'serve',
-      orcaVersion: '1.4.230'
-    })
+  async function startSignIn(
+    host: nacl.BoxKeyPair | string,
+    headers: Record<string, string> = {}
+  ) {
+    const hostPublicKeyB64 = typeof host === 'string' ? host : publicKeyB64(host)
+    const response = await json(
+      CONNECTOR_PATHS.signInStart,
+      { v: 1, hostPublicKeyB64, hostName: 'build-box', platform: 'linux', runtime: 'serve', orcaVersion: '1.4.230' },
+      headers
+    )
     const body: unknown = await response.json()
     return { response, body, started: ConnectorSignInStartResponseSchema.safeParse(body).data }
   }

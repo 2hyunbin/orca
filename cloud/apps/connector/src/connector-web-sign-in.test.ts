@@ -58,6 +58,19 @@ describe('connector web sign-in', () => {
     expect(harness.issuer.calls).toEqual([])
   })
 
+  it('fails the sign-in when the refresh token cannot be revoked', async () => {
+    const harness = await createConnectorHarness()
+    harness.issuer.failLogout()
+    const browser = testBrowser(harness.request)
+    const authorize = new URL((await browser.get('/machines')).headers.get('location') ?? '')
+    const callback = await browser.get(
+      `/auth/callback?code=code-1&state=${authorize.searchParams.get('state')}`
+    )
+    expect(callback.status).toBe(502)
+    expect(harness.issuer.calls.filter((call) => call.path === '/v1/desktop/auth/logout')).toHaveLength(2)
+    expect(browser.jar.has('orca_connector_session')).toBe(false)
+  })
+
   it('refuses a form posted without the session-bound token', async () => {
     const harness = await createConnectorHarness()
     const browser = await harness.signedInBrowser()

@@ -14,7 +14,10 @@ const EnvSchema = z.object({
   // Signs the browser's sign-in cookies; rotating it signs every browser out.
   ORCA_CONNECTOR_COOKIE_SECRET: z.string().min(32),
   // As push: proxies appending to x-forwarded-for after the client (0 is Cloud Run alone).
-  ORCA_CONNECTOR_TRUSTED_PROXY_HOPS: z.coerce.number().int().nonnegative().max(8).default(0)
+  ORCA_CONNECTOR_TRUSTED_PROXY_HOPS: z.coerce.number().int().nonnegative().max(8).default(0),
+  // A header the load balancer sets to the client's rough location, overwriting any client copy.
+  // Unset means the sign-in page shows only the address.
+  ORCA_CONNECTOR_CLIENT_LOCATION_HEADER: OptionalTextSchema
 })
 
 export type ConnectorConfig = {
@@ -28,6 +31,7 @@ export type ConnectorConfig = {
   authClientId: string
   cookieSecret: string
   trustedProxyHops: number
+  clientLocationHeader?: string
 }
 
 function canonicalOrigin(value: string, name: string): string {
@@ -58,6 +62,9 @@ export function loadConnectorConfig(env: NodeJS.ProcessEnv = process.env): Conne
     authUrl: canonicalOrigin(parsed.ORCA_CONNECTOR_AUTH_URL, 'ORCA_CONNECTOR_AUTH_URL'),
     authClientId: parsed.ORCA_CONNECTOR_AUTH_CLIENT_ID,
     cookieSecret: parsed.ORCA_CONNECTOR_COOKIE_SECRET,
-    trustedProxyHops: parsed.ORCA_CONNECTOR_TRUSTED_PROXY_HOPS
+    trustedProxyHops: parsed.ORCA_CONNECTOR_TRUSTED_PROXY_HOPS,
+    ...(parsed.ORCA_CONNECTOR_CLIENT_LOCATION_HEADER === undefined
+      ? {}
+      : { clientLocationHeader: parsed.ORCA_CONNECTOR_CLIENT_LOCATION_HEADER.toLowerCase() })
   }
 }

@@ -28,8 +28,6 @@ const AUTHENTICATED_PER_MINUTE_PER_IP = 6_000
 const AUTHENTICATED_PER_MINUTE_PER_HOST = 600
 // Bounds guessing user codes from a signed-in browser.
 const CODE_ATTEMPTS_PER_MINUTE_PER_ACCOUNT = 10
-// Set by the load balancer when it is configured to forward the client's rough location.
-const CLIENT_LOCATION_HEADER = 'x-client-geo-location'
 
 export type ConnectorServerOptions = {
   now?: () => number
@@ -130,11 +128,14 @@ export function createConnectorServer(
   app.post(CONNECTOR_PATHS.signInStart, limitUnauthenticated, limitBody, async (context) => {
     const body = ConnectorSignInStartRequestSchema.safeParse(await readJson(context))
     if (!body.success) return context.json({ error: 'invalid_request' }, 400)
-    const location = context.req.header(CLIENT_LOCATION_HEADER)?.trim()
+    const location = config.clientLocationHeader
+      ? context.req.header(config.clientLocationHeader)?.trim()
+      : undefined
     const started = await signIns.start(body.data, {
       ip: readClientIp(context, config.trustedProxyHops),
       ...(location ? { location } : {})
     })
+    if (started === 'invalid_key') return context.json({ error: 'invalid_request' }, 400)
     if (started === 'rate_limited') {
       context.header('Retry-After', '60')
       return context.json({ error: 'rate_limited' }, 429)
