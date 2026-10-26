@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/store'
 import { useRepoMap, useAllWorktrees } from '@/store/selectors'
-import { localPreflightContextKey, getLocalPreflightContext } from '@/lib/local-preflight-context'
+import { localPreflightContextKey } from '@/lib/local-preflight-context-key'
+import { getLocalPreflightContext } from '@/lib/local-preflight-context'
 import {
   getProviderRuntimeContextKey,
   isEnvironmentRuntimeContextKey

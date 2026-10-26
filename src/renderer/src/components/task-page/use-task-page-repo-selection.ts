@@ -11,8 +11,9 @@ import { buildSelectedReposKey } from '@/components/task-page-work-item-paginati
 import {
   normalizeVisibleTaskProviders,
   restoreAvailableDefaultTaskProvider,
-  resolveVisibleTaskProvider
-} from '../../../shared/task-providers'
+  resolveVisibleTaskProvider,
+  type TaskProvider
+} from '../../../../shared/task-providers'
 import {
   getSourceOptions,
   getGitHubModeButtons,
@@ -25,10 +26,9 @@ import {
   getLinearOrderOptions,
   getLinearDisplayProperties
 } from '@/components/task-page-localized-options'
-import type { TaskProvider } from '../../../shared/task-providers'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
-import { getTaskPageRepoSourceContext } from './task-page-source-context'
+import { getTaskPageRepoSourceContext } from '../task-page-source-context'
 export function useTaskPageRepoSelection(model: TaskPageStoreBindingsModel) {
   const {
     settings,
