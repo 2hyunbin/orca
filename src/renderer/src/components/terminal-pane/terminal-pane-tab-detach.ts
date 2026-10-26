@@ -173,7 +173,13 @@ async function moveLeafToNewTab(
     const hostMove = moveWebRuntimeLeafToNewTab(paneMoveHost, request, placement)
     // Why: until the host settles, a snapshot taken before its move must not read the new tab's pane as stale.
     const releasePending = beginPendingHostPaneMove(request.targetTabId, leafId)
-    const applied = applyMove(args, request, false, request.ptyId)
+    let applied: ReturnType<typeof applyMove>
+    try {
+      applied = applyMove(args, request, false, request.ptyId)
+    } catch (error) {
+      releasePending()
+      throw error
+    }
     void hostMove
       .then((outcome) => settleHostPaneMove(paneMoveHost, request, outcome, applied !== null))
       .catch((error: unknown) => console.warn('[terminal-pane-detach] move not settled', error))

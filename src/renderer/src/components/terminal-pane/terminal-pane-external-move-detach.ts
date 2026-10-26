@@ -1,5 +1,4 @@
 import { makePaneKey } from '../../../../shared/stable-pane-id'
-import { resolveAgentPaneAuthorityKey } from '@/store/slices/agent-pane-authority'
 
 /** Detaches a pane the host moved to another tab, leaving its PTY running for that tab. */
 export function detachExternallyMovedPane(args: {
@@ -9,16 +8,24 @@ export function detachExternallyMovedPane(args: {
   }
   paneId: number
   tabId: string
-  retireAgentPaneAuthority: (paneKey: string) => void
+  /** The pane that binds the PTY now, in the tab the host moved it to. */
+  movedTo: { tabId: string; leafId: string }
+  ptyId: string
+  transferAgentPaneAuthority: (args: {
+    fromPaneKey: string
+    toPaneKey: string
+    ptyId: string
+  }) => void
 }): void {
   const leafId = args.manager.getLeafId(args.paneId)
   if (!args.manager.detachPaneForExternalMove(args.paneId) || !leafId) {
     return
   }
-  const paneKey = makePaneKey(args.tabId, leafId)
-  // Why: the host publishes the agent under its new tab, so this tab's copy is a stale badge.
-  // A key this window already moved resolves to the live target, whose records must stay.
-  if (resolveAgentPaneAuthorityKey(paneKey) === paneKey) {
-    args.retireAgentPaneAuthority(paneKey)
-  }
+  // Why: the agent's status, unread marks, launch and sleeping records follow the pane to its new
+  // tab, as a local move's do; a key this window already moved there is a no-op transfer.
+  args.transferAgentPaneAuthority({
+    fromPaneKey: makePaneKey(args.tabId, leafId),
+    toPaneKey: makePaneKey(args.movedTo.tabId, args.movedTo.leafId),
+    ptyId: args.ptyId
+  })
 }
