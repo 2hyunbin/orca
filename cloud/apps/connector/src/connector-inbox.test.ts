@@ -322,12 +322,12 @@ describe('connector inbox', () => {
     expect(Date.now() - machine.expiresAt).toBeLessThan(1_000)
   })
 
-  it('hands nothing out on a token that expired while its poll waited', async () => {
+  it('rolls back a poll pass whose token expired while it ran', async () => {
     let gate!: ReturnType<typeof pauseBefore>
     const { harness, machine, enqueue } = await setup(
       {
         wrapDatabase: (database) => {
-          gate = pauseBefore(database, 'SELECT hello_rev')
+          gate = pauseBefore(database, 'SELECT delivery_id, external_id, seq')
           return gate.database
         }
       },
@@ -343,6 +343,8 @@ describe('connector inbox', () => {
       "SELECT state FROM connector_inbox WHERE delivery_id = 'a1'"
     )
     expect(row?.state).toBe('pending')
+    const [host] = await harness.database.query('SELECT unsettled_due FROM connector_hosts')
+    expect(Number(host?.unsettled_due)).toBe(1)
   })
 
   it('wakes a held poll when a lease runs out', async () => {

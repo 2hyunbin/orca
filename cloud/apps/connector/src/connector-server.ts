@@ -35,6 +35,12 @@ function isLoopbackOrigin(origin: string): boolean {
   return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(origin).hostname)
 }
 
+// Local development listens on its loopback origin only, so the unauthenticated dev route can't be
+// reached from another machine; anything else listens on every interface, as Cloud Run needs.
+export function listenHostname(publicUrl: string): string | undefined {
+  return isLoopbackOrigin(publicUrl) ? new URL(publicUrl).hostname.replace(/^\[|\]$/g, '') : undefined
+}
+
 export function createConnectorServer(
   config: ConnectorConfig,
   database: CloudDatabase,
