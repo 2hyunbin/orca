@@ -20602,7 +20602,6 @@
       "signInLinkCopied": "Lien de connexion copié. Ouvrez-le dans une fenêtre privée pour vous connecter avec un autre compte.",
       "signInLinkCopyFailed": "Impossible de copier le lien.",
       "switchSessions": {
-        "selectAll": "Tout sélectionner",
         "busy": "En activité",
         "idle": "Inactif",
         "keyword": {
@@ -20618,17 +20617,27 @@
         "bodyOther": "{{count}} sessions Claude sont toujours en cours d’exécution sur {{previous}}. Le redémarrage poursuit chaque conversation sur {{next}}. Les sessions occupées attendent d’être inactives avant de redémarrer.",
         "restartOne": "Redémarrer la session",
         "restartOther": "Redémarrer {{count}} sessions",
-        "selectAllSessions": "Sélectionner toutes les sessions",
         "session": "Session Claude",
         "settingTitle": "Lorsque vous changez de compte alors que Claude est en cours d'exécution",
-        "selectedCount": "{{selected}} sur {{total}} sélectionnées",
-        "selectWorkspace": "Sélectionner toutes les sessions dans {{workspace}}",
         "listLabel": "Sessions Claude à redémarrer",
         "settingRestart": "Toujours redémarrer",
         "settingKeep": "Ne jamais redémarrer",
         "settingDescription": "Le redémarrage continue chaque conversation en cours sur le nouveau compte.",
         "restartingOne": "Redémarrage d’une session Claude sur {{account}}",
-        "restartingOther": "Redémarrage de {{count}} sessions Claude sur {{account}}"
+        "restartingOther": "Redémarrage de {{count}} sessions Claude sur {{account}}",
+        "groupOnAccount": "En cours sur {{account}}",
+        "groupElsewhere": "Pas sur {{account}}",
+        "groupCantMove": "Impossible à déplacer",
+        "selectGroup": "Sélectionner toutes les sessions de {{group}}",
+        "reasonWsl": "Terminal WSL",
+        "reasonOwnFolder": "Utilise votre propre dossier Claude",
+        "reasonUnknownAccount": "Compte inconnu",
+        "reasonNoSession": "Reprise impossible",
+        "reviewBodyOne": "1 autre session Claude n'a pas été déplacée vers {{next}}. Le redémarrage poursuit la conversation sur {{next}}.",
+        "reviewBodyOther": "{{count}} autres sessions Claude n'ont pas été déplacées vers {{next}}. Le redémarrage poursuit chaque conversation sur {{next}}.",
+        "notMovedOne": "1 autre session n'a pas été déplacée.",
+        "notMovedOther": "{{count}} autres sessions n'ont pas été déplacées.",
+        "review": "Vérifier"
       }
     },
     "hostSignIn": {

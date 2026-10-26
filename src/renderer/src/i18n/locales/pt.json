@@ -20742,10 +20742,6 @@
         "restartOne": "Reiniciar sessão",
         "restartOther": "Reiniciar {{count}} sessões",
         "listLabel": "Sessões do Claude para reiniciar",
-        "selectAll": "Selecionar tudo",
-        "selectAllSessions": "Selecionar todas as sessões",
-        "selectedCount": "{{selected}} de {{total}} selecionadas",
-        "selectWorkspace": "Selecionar todas as sessões em {{workspace}}",
         "session": "Sessão do Claude",
         "busy": "Trabalhando",
         "idle": "Ociosa",
@@ -20759,7 +20755,20 @@
         "settingRestart": "Sempre reiniciar",
         "settingKeep": "Nunca reiniciar",
         "restartingOne": "Reiniciando 1 sessão do Claude em {{account}}",
-        "restartingOther": "Reiniciando {{count}} sessões do Claude em {{account}}"
+        "restartingOther": "Reiniciando {{count}} sessões do Claude em {{account}}",
+        "groupOnAccount": "Em execução em {{account}}",
+        "groupElsewhere": "Fora de {{account}}",
+        "groupCantMove": "Não podem ser movidas",
+        "selectGroup": "Selecionar todas as sessões em {{group}}",
+        "reasonWsl": "Terminal WSL",
+        "reasonOwnFolder": "Usa sua própria pasta do Claude",
+        "reasonUnknownAccount": "Conta desconhecida",
+        "reasonNoSession": "Não é possível retomar",
+        "reviewBodyOne": "1 outra sessão do Claude não foi movida para {{next}}. Reiniciar continua a conversa em {{next}}.",
+        "reviewBodyOther": "{{count}} outras sessões do Claude não foram movidas para {{next}}. Reiniciar continua cada conversa em {{next}}.",
+        "notMovedOne": "1 outra sessão não foi movida.",
+        "notMovedOther": "{{count}} outras sessões não foram movidas.",
+        "review": "Revisar"
       }
     },
     "managedData": {

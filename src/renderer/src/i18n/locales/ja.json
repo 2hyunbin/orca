@@ -20601,7 +20601,6 @@
       "signInLinkCopied": "サインインリンクをコピーしました。別のアカウントでサインインするには、プライベートウィンドウで開いてください。",
       "signInLinkCopyFailed": "リンクをコピーできませんでした。",
       "switchSessions": {
-        "selectAll": "すべて選択",
         "busy": "作業中",
         "idle": "アイドル",
         "keyword": {
@@ -20615,10 +20614,7 @@
         "bodyOne": "{{previous}} で Claude セッションが 1 件まだ実行中です。再起動すると、{{next}} で会話が続きます。作業中のセッションは、アイドル状態になってから再起動します。",
         "dontAskAgain": "今後は確認しない（自動で再起動する）",
         "listLabel": "再起動する Claude セッション",
-        "selectWorkspace": "{{workspace}} のすべてのセッションを選択します",
-        "selectedCount": "{{selected}}/{{total}} が選択されました",
         "restartOne": "セッションを再起動",
-        "selectAllSessions": "すべてのセッションを選択します",
         "keep": "そのままにする",
         "session": "Claude セッション",
         "restartOther": "{{count}} 件のセッションを再起動",
@@ -20627,7 +20623,20 @@
         "restartingOne": "{{account}} で Claude セッションを 1 件再起動中",
         "restartingOther": "{{account}} で Claude セッションを {{count}} 件再起動中",
         "settingRestart": "常に再起動する",
-        "settingKeep": "再起動しない"
+        "settingKeep": "再起動しない",
+        "groupOnAccount": "{{account}} で実行中",
+        "groupElsewhere": "{{account}} 以外",
+        "groupCantMove": "移動できません",
+        "selectGroup": "{{group}} のセッションをすべて選択",
+        "reasonWsl": "WSL ターミナル",
+        "reasonOwnFolder": "独自の Claude フォルダーを使用",
+        "reasonUnknownAccount": "アカウント不明",
+        "reasonNoSession": "再開できません",
+        "reviewBodyOne": "他の Claude セッション 1 件は {{next}} に移動されませんでした。再起動すると {{next}} で会話を続けます。",
+        "reviewBodyOther": "他の Claude セッション {{count}} 件は {{next}} に移動されませんでした。再起動すると各会話を {{next}} で続けます。",
+        "notMovedOne": "他の 1 件のセッションは移動されませんでした。",
+        "notMovedOther": "他の {{count}} 件のセッションは移動されませんでした。",
+        "review": "確認"
       }
     },
     "hostSignIn": {

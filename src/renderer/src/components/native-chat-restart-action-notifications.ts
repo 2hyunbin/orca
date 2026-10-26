@@ -70,7 +70,7 @@ function descriptionFrom(lines: readonly string[]): ReactNode {
 }
 
 // Why: a short outcome reads best with its action beside it; the toaster's default wraps actions below.
-const INLINE_ACTION_CLASS_NAMES = {
+export const INLINE_ACTION_CLASS_NAMES = {
   content: '!basis-0',
   actionButton: '!m-0 !self-center'
 }
