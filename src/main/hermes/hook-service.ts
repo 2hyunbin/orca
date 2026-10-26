@@ -14,6 +14,7 @@ import {
   getConfigEnablement,
   installOrcaStatusContent,
   parseHermesConfig,
+  refreshProfileOrcaStatusContent,
   removeOrcaStatusContent,
   updateConfigContent
 } from './hermes-config-yaml'
@@ -74,15 +75,19 @@ function updateManagedProfiles(
   onUpdated: (pluginDir: string) => void
 ): void {
   for (const home of listManagedProfileHomes()) {
-    const configPath = getConfigPath(home)
-    const parsed = readConfigFile(configPath)
-    const next = parsed.ok ? update(parsed.content) : { content: null }
-    if (!parsed.ok || next.content === null) {
-      continue
-    }
-    onUpdated(getPluginDir(home))
-    if (next.content !== parsed.content) {
-      writeConfigFile(configPath, next.content)
+    try {
+      const configPath = getConfigPath(home)
+      const parsed = readConfigFile(configPath)
+      const next = parsed.ok ? update(parsed.content) : { content: null }
+      if (!parsed.ok || next.content === null) {
+        continue
+      }
+      onUpdated(getPluginDir(home))
+      if (next.content !== parsed.content) {
+        writeConfigFile(configPath, next.content)
+      }
+    } catch (error) {
+      console.warn(`[hermes] skipped profile ${home}:`, error)
     }
   }
 }
@@ -102,18 +107,29 @@ async function writeRemoteHome(
 }
 
 async function installRemoteManagedProfiles(sftp: SFTPWrapper, profilesDir: string): Promise<void> {
-  for (const name of (await listRemoteDirectory(sftp, profilesDir)) ?? []) {
+  const names = await listRemoteDirectory(sftp, profilesDir).catch((error: unknown) => {
+    console.warn(`[hermes] could not list remote profiles in ${profilesDir}:`, error)
+    return null
+  })
+  for (const name of names ?? []) {
     const home = `${profilesDir}/${name}`
-    const manifestPath = `${home}/plugins/${HERMES_PLUGIN_NAME}/plugin.yaml`
-    // A stray file or unreadable profile must not fail the default profile's install.
-    const manifest = await readTextFileRemote(sftp, manifestPath).catch(() => null)
-    if (!manifest?.includes(HERMES_PLUGIN_MARKER)) {
-      continue
-    }
-    const existing = await readTextFileRemote(sftp, `${home}/config.yaml`)
-    const next = installOrcaStatusContent(existing)
-    if (next.content !== null) {
-      await writeRemoteHome(sftp, home, existing, next.content)
+    const pluginDir = `${home}/plugins/${HERMES_PLUGIN_NAME}`
+    try {
+      const files = await Promise.all(
+        ['plugin.yaml', '__init__.py'].map((file) =>
+          readTextFileRemote(sftp, `${pluginDir}/${file}`)
+        )
+      )
+      if (!files.every((file) => file?.includes(HERMES_PLUGIN_MARKER))) {
+        continue
+      }
+      const existing = await readTextFileRemote(sftp, `${home}/config.yaml`)
+      const next = refreshProfileOrcaStatusContent(existing)
+      if (next.content !== null) {
+        await writeRemoteHome(sftp, home, existing, next.content)
+      }
+    } catch (error) {
+      console.warn(`[hermes] skipped remote profile ${home}:`, error)
     }
   }
 }
@@ -165,7 +181,7 @@ export class HermesHookService {
     if (next.content !== parsed.content) {
       writeConfigFile(configPath, next.content)
     }
-    updateManagedProfiles(installOrcaStatusContent, writePluginFiles)
+    updateManagedProfiles(refreshProfileOrcaStatusContent, writePluginFiles)
     return this.getStatus()
   }
 

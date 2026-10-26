@@ -121,35 +121,38 @@ describe('HermesHookService', () => {
     expect(removed).toContain('- MY_VAR # mine')
   })
 
-  it('keeps a named profile’s copy of the plugin and its passthrough current', () => {
+  it('refreshes named profiles that keep the plugin enabled, and only those', () => {
+    const stale = '# Managed by Orca. Do not edit; changes may be overwritten.\n# stale\n'
     // `hermes profile create --clone` copies the plugin but not later passthrough edits.
-    const cloned = join(homeDir, 'profiles', 'work')
-    const untouched = join(homeDir, 'profiles', 'plain')
-    mkdirSync(join(cloned, 'plugins', _internals.HERMES_PLUGIN_NAME), { recursive: true })
-    mkdirSync(untouched, { recursive: true })
-    writeFileSync(
-      join(cloned, 'plugins', _internals.HERMES_PLUGIN_NAME, 'plugin.yaml'),
-      _internals.getPluginManifest()
-    )
-    writeFileSync(
-      join(cloned, 'plugins', _internals.HERMES_PLUGIN_NAME, '__init__.py'),
-      '# Managed by Orca. Do not edit; changes may be overwritten.\n# stale\n'
-    )
-    writeFileSync(join(cloned, 'config.yaml'), 'plugins:\n  enabled: [orca-status]\n')
-    writeFileSync(join(untouched, 'config.yaml'), 'plugins:\n  enabled: []\n')
+    const profile = (name: string, config: string): string => {
+      const home = join(homeDir, 'profiles', name)
+      const pluginDir = join(home, 'plugins', _internals.HERMES_PLUGIN_NAME)
+      mkdirSync(pluginDir, { recursive: true })
+      writeFileSync(join(pluginDir, 'plugin.yaml'), _internals.getPluginManifest())
+      writeFileSync(join(pluginDir, '__init__.py'), stale)
+      writeFileSync(join(home, 'config.yaml'), config)
+      return home
+    }
+    const pluginSource = (home: string): string =>
+      readFileSync(join(home, 'plugins', _internals.HERMES_PLUGIN_NAME, '__init__.py'), 'utf-8')
+    const broken = profile('broken', '')
+    rmSync(join(broken, 'config.yaml'))
+    mkdirSync(join(broken, 'config.yaml'))
+    const work = profile('work', 'plugins:\n  enabled: [orca-status]\n')
+    const disabledConfig = 'plugins:\n  enabled: [orca-status]\n  disabled: [orca-status]\n'
+    const disabled = profile('off', disabledConfig)
     const service = new HermesHookService()
 
-    service.install()
-    expect(parse(readFileSync(join(cloned, 'config.yaml'), 'utf-8')).terminal).toEqual({
+    expect(service.install().state).toBe('installed')
+    expect(parse(readFileSync(join(work, 'config.yaml'), 'utf-8')).terminal).toEqual({
       client_env_passthrough: [...HERMES_CLIENT_ENV_PASSTHROUGH]
     })
-    expect(
-      readFileSync(join(cloned, 'plugins', _internals.HERMES_PLUGIN_NAME, '__init__.py'), 'utf-8')
-    ).toBe(_internals.getPluginInitSource())
-    expect(readFileSync(join(untouched, 'config.yaml'), 'utf-8')).toBe('plugins:\n  enabled: []\n')
+    expect(pluginSource(work)).toBe(_internals.getPluginInitSource())
+    expect(readFileSync(join(disabled, 'config.yaml'), 'utf-8')).toBe(disabledConfig)
+    expect(pluginSource(disabled)).toBe(stale)
 
     service.remove()
-    expect(parse(readFileSync(join(cloned, 'config.yaml'), 'utf-8'))).toEqual({
+    expect(parse(readFileSync(join(work, 'config.yaml'), 'utf-8'))).toEqual({
       plugins: { enabled: [] },
       terminal: { client_env_passthrough: [] }
     })
