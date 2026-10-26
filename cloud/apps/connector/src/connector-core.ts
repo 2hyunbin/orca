@@ -12,7 +12,7 @@ import { conversationOf } from './connector-threads.js'
 import { routeMessage } from './conversation-routing.js'
 import { HeldStarts } from './held-starts.js'
 import { PostWorker } from './post-worker.js'
-import { answerPromptCard, type CardPress } from './prompt-cards.js'
+import { answerPromptCard, type CardPress, type PressReply } from './prompt-cards.js'
 import type { QueueInTransaction } from './queue-delivery.js'
 import { ThreadPosts } from './thread-posts.js'
 
@@ -70,11 +70,21 @@ export function createConnectorCore(deps: {
     }
   }
 
+  const routeIn = (transaction: CloudDatabase, message: InboundMessage) =>
+    routeMessage({ queue, threadPosts: ownThreadPosts(message.source), now }, transaction, message)
+
   return {
     route: (message: InboundMessage) =>
-      routeMessage({ database, queue, threadPosts: ownThreadPosts(message.source), now }, message),
+      database.transaction((transaction) => routeIn(transaction, message)),
+    // Inside a caller's transaction, so a source can commit its own progress with the routing.
+    routeIn,
     answerCard: (source: ConnectorSource, press: CardPress) =>
       answerPromptCard({ database, queue, threadPosts: ownThreadPosts(source) }, press),
+    // A press reply, for sources whose interactions can't answer it directly.
+    notify: (source: ConnectorSource, reply: PressReply) =>
+      database.transaction((transaction) =>
+        ownThreadPosts(source).notify(transaction, reply.target, reply.postId, reply.notice)
+      ),
     // The agent's own reply; null when the conversation isn't this host's.
     reply: async (
       hostId: string,
