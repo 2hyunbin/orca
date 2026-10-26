@@ -22,7 +22,13 @@ export const CONNECTOR_CLIENT_LIMITS = {
   // The cloud refuses a larger request body with 413.
   maxRequestBytes: 256 * 1024,
   // One event's JSON, so any single event fits in an events request.
-  maxEventBytes: 192 * 1024
+  maxEventBytes: 192 * 1024,
+  // A snapshot lists linked conversations active in the last 7 days, newest first, up to this many.
+  maxSnapshotConversations: 200,
+  snapshotActiveWindowMs: 7 * 24 * 60 * 60 * 1000,
+  // A hello lists the most recently used projects, up to this many, and always fits maxRequestBytes.
+  maxHelloProjects: 500,
+  maxDisplayTextLength: 200
 } as const
 
 // Machine-side readers: they keep what this Orca uses and ignore fields a newer cloud adds.

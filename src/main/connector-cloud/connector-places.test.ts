@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CONNECTOR_CLIENT_LIMITS } from '../../shared/connector-cloud-contract'
 import type { ProjectGroup } from '../../shared/project-group-types'
 import type { Repo } from '../../shared/repo-types'
 import { connectorProjects, placeLaunchTarget, type ConnectorPlacesStore } from './connector-places'
@@ -23,7 +24,8 @@ function store(repos: Repo[], groups: Partial<ProjectGroup>[] = []): ConnectorPl
     getSshTargets: () => [
       { id: 'box', label: 'openclaw', host: 'openclaw', port: 22, username: 'me' }
     ],
-    getProjectHostSetups: () => []
+    getProjectHostSetups: () => [],
+    getAllWorktreeMeta: () => ({})
   }
 }
 
@@ -93,5 +95,31 @@ describe('connector places', () => {
       placeLaunchTarget(project!.placeId, 'd2')
     )
     expect(placeLaunchTarget('not-a-place', 'd1')).toBeNull()
+  })
+
+  it('lists the most recently used projects first, at most maxHelloProjects, with short names', () => {
+    const repos = Array.from({ length: CONNECTOR_CLIENT_LIMITS.maxHelloProjects + 1 }, (_, index) =>
+      repo({ id: `r${index}`, addedAt: index, displayName: 'n'.repeat(300) })
+    )
+    const projects = connectorProjects({
+      ...store(repos),
+      getAllWorktreeMeta: () => ({
+        'r0::/src/r0': {
+          displayName: 'r0',
+          comment: '',
+          linkedIssue: null,
+          linkedPR: null,
+          linkedLinearIssue: null,
+          isArchived: false,
+          isUnread: false,
+          isPinned: false,
+          sortOrder: 0,
+          lastActivityAt: 10_000
+        }
+      })
+    })
+    expect(projects).toHaveLength(CONNECTOR_CLIENT_LIMITS.maxHelloProjects)
+    expect(projects[0]?.name).toHaveLength(CONNECTOR_CLIENT_LIMITS.maxDisplayTextLength)
+    expect(projects[0]?.placeId).toBe(connectorProjects(store([repos[0]!]))[0]?.placeId)
   })
 })

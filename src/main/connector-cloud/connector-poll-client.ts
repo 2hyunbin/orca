@@ -3,7 +3,6 @@ import { z } from 'zod'
 import { delayUnlessAborted } from '../../shared/abort-aware-delay'
 import {
   CONNECTOR_CLIENT_LIMITS,
-  CONNECTOR_CONTRACT_VERSION,
   CONNECTOR_PATHS,
   ConnectorDeliveryId,
   ConnectorHelloResponse,
@@ -12,8 +11,7 @@ import {
   type ConnectorAck,
   type ConnectorConversation,
   type ConnectorDeliveryResult,
-  type ConnectorEvent,
-  type ConnectorProject
+  type ConnectorEvent
 } from '../../shared/connector-cloud-contract'
 import type {
   ExternalConversationHost,
@@ -21,15 +19,13 @@ import type {
 } from '../external-conversations/external-conversation-seam'
 import { UNREADABLE_ANSWER, type ConnectorFailure } from './connector-cloud-request'
 import { dispatchDelivery } from './connector-deliveries'
+import { connectorHello, type ConnectorHelloSaid } from './connector-hello'
 import type { ConnectorMachine, ConnectorTransport } from './connector-machine'
 import { connectorRetryDelayMs, ConnectorOutbox, ConnectorOutboxSender } from './connector-outbox'
 import type { ConnectorTurnEvents } from './connector-turn-events'
 
 const RECONNECT_SPREAD_MS = 2_000
 const MAX_ACKS_PER_REQUEST = 100
-// `reply` is advertised once `orca slack reply` ships.
-const FEATURES = ['answer', 'cancel']
-const PROMPT_KINDS = ['approval', 'question']
 
 export type ConnectorPollClientOptions = {
   transport: ConnectorTransport
@@ -67,6 +63,7 @@ export class ConnectorPollClient {
   // What that hello said.
   private helloSaid = ''
   private failures = 0
+  private warnedTrimmed = false
   private stopReason: Stop | null = null
 
   constructor(private readonly options: ConnectorPollClientOptions) {
@@ -191,30 +188,18 @@ export class ConnectorPollClient {
   }
 
   /** Null once the cloud took it; otherwise why not. Each hello also gets a fresh watch and snapshot. */
-  private async hello(said: {
-    agents: string[]
-    projects: ConnectorProject[]
-  }): Promise<ConnectorFailure | null> {
-    const { machine } = this.options
+  private async hello(said: ConnectorHelloSaid): Promise<ConnectorFailure | null> {
+    const { body, trimmed } = connectorHello(this.options.machine, said)
+    if (trimmed && !this.warnedTrimmed) {
+      this.warnedTrimmed = true
+      console.warn('[connector] the hello left out the least recently used projects to fit its cap')
+    }
     // From here the cloud may take this hello and answer the last one's requests 204 without applying them.
     this.helloRev = null
-    const answer = await this.transport.call(
-      CONNECTOR_PATHS.hello,
-      {
-        v: 1,
-        contract: CONNECTOR_CONTRACT_VERSION,
-        orcaVersion: machine.orcaVersion,
-        platform: process.platform,
-        runtime: machine.runtime,
-        hostName: machine.hostName,
-        agents: said.agents,
-        promptKinds: PROMPT_KINDS,
-        features: FEATURES,
-        projects: said.projects
-      },
-      ConnectorHelloResponse,
-      { method: 'PUT', signal: this.stopped.signal }
-    )
+    const answer = await this.transport.call(CONNECTOR_PATHS.hello, body, ConnectorHelloResponse, {
+      method: 'PUT',
+      signal: this.stopped.signal
+    })
     if (!answer.ok) {
       return answer
     }

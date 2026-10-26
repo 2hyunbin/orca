@@ -1,16 +1,21 @@
 // A place is where a Slack start may run; its id rebuilds the launch target with no lookup, so twins on other hosts stay apart.
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
-import type { ConnectorProject } from '../../shared/connector-cloud-contract'
+import {
+  CONNECTOR_CLIENT_LIMITS,
+  type ConnectorProject
+} from '../../shared/connector-cloud-contract'
 import {
   getRepoExecutionHostId,
   parseExecutionHostId,
   type ExecutionHostId
 } from '../../shared/execution-host'
 import { splitGitRemoteKey } from '../../shared/git-remote-identity'
+import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import { isFolderRepo } from '../../shared/repo-kind'
 import type { AgentLaunchParams } from '../../shared/rpc-contract/agent-launch-params'
 import { parseWslUncPath } from '../../shared/wsl-paths'
+import { readAllWorktreeMetaForRepo } from '../persistence/host-qualified-worktree-meta'
 import type { RuntimeStore } from '../runtime/runtime-store-contract'
 import {
   runtimeVisibleProjectGroups,
@@ -25,7 +30,13 @@ type Place = z.infer<typeof Place>
 
 export type ConnectorPlacesStore = Pick<
   RuntimeStore,
-  'getRepos' | 'getProjectGroups' | 'getFolderWorkspaces' | 'getSshTargets' | 'getProjectHostSetups'
+  | 'getRepos'
+  | 'getProjectGroups'
+  | 'getFolderWorkspaces'
+  | 'getSshTargets'
+  | 'getProjectHostSetups'
+  | 'getAllWorktreeMeta'
+  | 'getAllWorktreeMetaForHost'
 >
 
 function encodePlace(place: Place): string {
@@ -73,18 +84,31 @@ function placeWhere(
   const host = parseExecutionHostId(hostId)
   if (host?.kind === 'ssh') {
     const label = store.getSshTargets?.().find((target) => target.id === host.targetId)?.label
-    return { kind: 'ssh', ...(label ? { label } : {}) }
+    return { kind: 'ssh', ...(label ? { label: displayText(label) } : {}) }
   }
   if (host?.kind !== 'local') {
     return null
   }
   const wsl = path ? parseWslUncPath(path) : null
-  return wsl ? { kind: 'wsl', label: wsl.distro } : { kind: 'local' }
+  return wsl ? { kind: 'wsl', label: displayText(wsl.distro) } : { kind: 'local' }
 }
 
-/** Git repos (each a fresh worktree) and folder projects (each a fresh folder workspace). */
+/** At most the contract's display length, never splitting a surrogate pair. */
+function displayText(text: string): string {
+  const max = CONNECTOR_CLIENT_LIMITS.maxDisplayTextLength
+  if (text.length <= max) {
+    return text
+  }
+  const cut = text.slice(0, max)
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut
+}
+
+/**
+ * Git repos (each a fresh worktree) and folder projects (each a fresh folder workspace), most recently used
+ * first by their workspaces' activity, at most maxHelloProjects.
+ */
 export function connectorProjects(store: ConnectorPlacesStore): ConnectorProject[] {
-  const projects: ConnectorProject[] = []
+  const projects: { project: ConnectorProject; usedAt: number }[] = []
   for (const repo of runtimeVisibleRepos(store)) {
     const hostId = getRepoExecutionHostId(repo)
     const where = isFolderRepo(repo) ? null : placeWhere(hostId, repo.path, store)
@@ -92,26 +116,48 @@ export function connectorProjects(store: ConnectorPlacesStore): ConnectorProject
       continue
     }
     const remote = splitGitRemoteKey(repo.gitRemoteIdentity?.canonicalKey, (host) => host)?.tail
+    const usedAt = Object.entries(readAllWorktreeMetaForRepo(store, repo)).reduce(
+      (latest, [worktreeId, meta]) =>
+        getRepoIdFromWorktreeId(worktreeId) === repo.id
+          ? Math.max(latest, meta.lastActivityAt)
+          : latest,
+      repo.addedAt
+    )
     projects.push({
-      placeId: encodePlace(['git', hostId, repo.id]),
-      name: repo.displayName,
-      ...(remote ? { remote } : {}),
-      kind: 'git',
-      where
+      project: {
+        placeId: encodePlace(['git', hostId, repo.id]),
+        name: displayText(repo.displayName),
+        ...(remote ? { remote: displayText(remote) } : {}),
+        kind: 'git',
+        where
+      },
+      usedAt
     })
   }
+  const folders = store.getFolderWorkspaces?.() ?? []
   for (const group of runtimeVisibleProjectGroups(store)) {
     const where = group.parentPath
       ? placeWhere(getRepoExecutionHostId(group), group.parentPath, store)
       : null
     if (where) {
+      const usedAt = folders.reduce(
+        (latest, folder) =>
+          folder.projectGroupId === group.id ? Math.max(latest, folder.lastActivityAt) : latest,
+        group.updatedAt
+      )
       projects.push({
-        placeId: encodePlace(['folder', group.id]),
-        name: group.name,
-        kind: 'folder',
-        where
+        project: {
+          placeId: encodePlace(['folder', group.id]),
+          name: displayText(group.name),
+          kind: 'folder',
+          where
+        },
+        usedAt
       })
     }
   }
   return projects
+    .sort((a, b) => b.usedAt - a.usedAt)
+    .slice(0, CONNECTOR_CLIENT_LIMITS.maxHelloProjects)
+    .map(({ project }) => project)
 }

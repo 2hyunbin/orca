@@ -20,7 +20,8 @@ const [project] = connectorProjects({
   getProjectGroups: () => [],
   getFolderWorkspaces: () => [],
   getSshTargets: () => [],
-  getProjectHostSetups: () => []
+  getProjectHostSetups: () => [],
+  getAllWorktreeMeta: () => ({})
 })
 
 let userDataPath: string

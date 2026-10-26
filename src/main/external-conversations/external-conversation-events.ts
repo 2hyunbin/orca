@@ -46,6 +46,8 @@ export type ConversationSnapshot = {
     prompt: PendingPrompt | null
     /** The pane's latest turn, as its turn events name it; null before any. */
     turnId: number | null
+    /** When the conversation last showed activity: its link, or its agent's latest hook report. */
+    activeAt: number
   })[]
 }
 
@@ -212,7 +214,8 @@ export class ConversationEvents {
           turnId:
             this.turnStartedAt.get(link.paneKey) ??
             row?.turnStartedAt ??
-            (row && working ? row.stateStartedAt : null)
+            (row && working ? row.stateStartedAt : null),
+          activeAt: Math.max(link.createdAt, row?.receivedAt ?? 0)
         }
       })
     }
