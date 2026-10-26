@@ -7,6 +7,7 @@ export {
 } from './host-challenge-store.js'
 export { deriveHostFingerprint, fingerprintLogPrefix } from './host-fingerprint.js'
 export {
+  hostSessionLockKey,
   HostSessionStore,
   type HostSessionLookup,
   type HostSessionStoreConfig,

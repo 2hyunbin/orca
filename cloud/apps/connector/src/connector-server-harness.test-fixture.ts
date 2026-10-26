@@ -157,11 +157,40 @@ export function hiddenField(html: string, name: string): string {
   return match[1]
 }
 
-export async function createConnectorHarness(config: Partial<ConnectorConfig> = {}) {
+// Holds the first transaction statement starting with `prefix` until release(), locks still held.
+export function pauseBefore(database: CloudDatabase, prefix: string) {
+  let reached!: () => void
+  const atStatement = new Promise<void>((resolve) => (reached = resolve))
+  let release!: () => void
+  const released = new Promise<void>((resolve) => (release = resolve))
+  let paused = false
+  const wrap = (inner: CloudDatabase): CloudDatabase => ({
+    dialect: inner.dialect,
+    query: async (sql, params) => {
+      if (!paused && sql.trimStart().startsWith(prefix)) {
+        paused = true
+        reached()
+        await released
+      }
+      return await inner.query(sql, params)
+    },
+    transaction: (run) => inner.transaction((transaction) => run(wrap(transaction))),
+    lockQuotaScope: (key) => inner.lockQuotaScope(key),
+    tryLockScope: (key) => inner.tryLockScope(key),
+    tryLockSharedScope: (key) => inner.tryLockSharedScope(key),
+    close: () => inner.close()
+  })
+  return { database: wrap(database), atStatement, release }
+}
+
+export async function createConnectorHarness(
+  config: Partial<ConnectorConfig> = {},
+  wrapDatabase: (database: CloudDatabase) => CloudDatabase = (database) => database
+) {
   let now = 1_800_000_000_000
   const issuer = fakeIssuer()
   const database = await openTestDatabase()
-  const runtime = createConnectorServer({ ...testConnectorConfig(), ...config }, database, {
+  const runtime = createConnectorServer({ ...testConnectorConfig(), ...config }, wrapDatabase(database), {
     now: () => now,
     fetch: issuer.fetch
   })

@@ -6,6 +6,7 @@ import {
   type ConnectorSignInStartRequest
 } from '@orca-cloud/connector-contract'
 import { decodeCanonicalBase64, deriveHostFingerprint } from '@orca-cloud/host-handshake'
+import { lockConnectorHost } from './connector-host-handshake.js'
 import type { ConnectorAccount } from './host-links.js'
 
 // Crockford-style base32 without I, O, 0 and 1, so a typed code survives being read aloud.
@@ -188,7 +189,7 @@ export class ConnectorSignInRequests {
       const hostKey = decodeCanonicalBase64(publicKey, 32)
       if (!hostKey) throw new Error('stored_host_key_invalid')
       const hostId = deriveHostFingerprint(hostKey)
-      await transaction.lockQuotaScope(`orca-connector-host:${hostId}`)
+      await lockConnectorHost(transaction, hostId)
       const [existing] = await transaction.query(
         'SELECT account_id FROM connector_hosts WHERE host_id = ?',
         [hostId]
@@ -222,7 +223,7 @@ export class ConnectorSignInRequests {
           now
         ]
       )
-      // A session minted while a revoke or logout raced it must not come back to life with the new link.
+      // A relink starts clean: no session from an earlier link carries over.
       await transaction.query('DELETE FROM connector_sessions WHERE host_fingerprint = ?', [hostId])
       return 'approved'
     })
