@@ -7,13 +7,12 @@ import {
   createNestedRepoTelemetryAttemptId,
   type NestedRepoTelemetryRuntimeKind
 } from '../../../../shared/nested-repo-telemetry'
-import type { AddRepoExistingWorkspaceSource } from '../../../../shared/telemetry-events'
 import type { NestedRepoScanResult } from '../../../../shared/project-group-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { WorktreeFetchOptions } from '@/store/slices/worktree-helpers'
 import { createNestedRepoScanId } from './add-repo-dialog-types'
 import { worktreeRefreshOptions } from './add-repo-runtime-owner'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { CompleteGitRepoAdd } from './use-complete-git-repo-add'
 
 type ShowNestedRepoReview = (args: {
   scan: NestedRepoScanResult
@@ -60,11 +59,7 @@ export function useAddRepoServerPathFlow({
   setActiveNestedScanId: (scanId: string | null, runtimeEnvironmentId?: string | null) => void
   setNestedScanInProgress: (inProgress: boolean) => void
   showNestedRepoReview: ShowNestedRepoReview
-  onGitRepoReady: (
-    repoId: string,
-    source: AddRepoExistingWorkspaceSource,
-    executionHostId?: ExecutionHostId
-  ) => Promise<void>
+  onGitRepoReady: CompleteGitRepoAdd
   setAddProjectBusyLabel: (label: string | null) => void
 }): {
   serverPath: string
@@ -171,7 +166,9 @@ export function useAddRepoServerPathFlow({
           if (gen !== serverAddGenRef.current) {
             return
           }
-          await onGitRepoReady(repo.id, 'runtime_server_path', ownerOptions.executionHostId)
+          await onGitRepoReady(repo.id, 'runtime_server_path', ownerOptions.executionHostId, {
+            selectedPath: path
+          })
         } else if (repo) {
           // Folder projects open their synthetic root through the add flow instead of Git checkout completion.
           await markOnboardingProjectAdded('addedFolder')

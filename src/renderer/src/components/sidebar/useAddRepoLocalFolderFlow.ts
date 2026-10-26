@@ -15,7 +15,7 @@ import type { RepoSlice } from '@/store/repos/repo-state'
 import { createNestedRepoScanId } from './add-repo-dialog-types'
 import { translate } from '@/i18n/i18n'
 import { worktreeRefreshOptions } from './add-repo-runtime-owner'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { CompleteGitRepoAdd } from './use-complete-git-repo-add'
 
 type ShowNestedRepoReview = (args: {
   scan: NestedRepoScanResult
@@ -59,11 +59,7 @@ export function useAddRepoLocalFolderFlow({
   setActiveNestedScanId: (scanId: string | null, runtimeEnvironmentId?: string | null) => void
   setNestedScanInProgress: (inProgress: boolean) => void
   showNestedRepoReview: ShowNestedRepoReview
-  onGitRepoReady: (
-    repoId: string,
-    source: AddRepoExistingWorkspaceSource,
-    executionHostId?: ExecutionHostId
-  ) => Promise<void>
+  onGitRepoReady: CompleteGitRepoAdd
   setIsAdding: (isAdding: boolean) => void
   setAddProjectBusyLabel: (label: string | null) => void
 }): {
@@ -180,7 +176,9 @@ export function useAddRepoLocalFolderFlow({
           if (mode === 'batch') {
             return { status: 'completed', repo }
           }
-          await onGitRepoReady(repo.id, source, ownerOptions.executionHostId)
+          await onGitRepoReady(repo.id, source, ownerOptions.executionHostId, {
+            selectedPath: path
+          })
         } else {
           // Folder projects activate their synthetic root through the add flow instead of Git checkout completion.
           closeModal()
@@ -230,7 +228,7 @@ export function useAddRepoLocalFolderFlow({
 
   const handleAddLocalPaths = useCallback(
     async (paths: string[], source: AddRepoExistingWorkspaceSource, gen: number): Promise<void> => {
-      const gitRepoIds: string[] = []
+      const gitRepos: { id: string; selectedPath: string }[] = []
       const shouldDeferGitRepoReady = paths.length > 1
       let skippedCount = 0
       for (const path of paths) {
@@ -248,7 +246,7 @@ export function useAddRepoLocalFolderFlow({
           return
         }
         if (isGitRepoKind(result.repo)) {
-          gitRepoIds.push(result.repo.id)
+          gitRepos.push({ id: result.repo.id, selectedPath: path })
         }
       }
       if (gen !== localAddGenRef.current) {
@@ -268,11 +266,12 @@ export function useAddRepoLocalFolderFlow({
           }
         )
       }
-      if (shouldDeferGitRepoReady && gitRepoIds.length > 0) {
+      if (shouldDeferGitRepoReady && gitRepos.length > 0) {
         await onGitRepoReady(
-          gitRepoIds[0],
+          gitRepos[0].id,
           source,
-          worktreeRefreshOptions(activeRuntimeEnvironmentId ?? null).executionHostId
+          worktreeRefreshOptions(activeRuntimeEnvironmentId ?? null).executionHostId,
+          { selectedPath: gitRepos[0].selectedPath }
         )
       }
     },
