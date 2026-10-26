@@ -19279,7 +19279,7 @@
           "stoppedCount": "{{value0}} 중지됨",
           "unverifiableCount": "{{value0}} 상태를 확인할 수 없음"
         },
-        "startedOne": "서브에이전트 1명 추방",
+        "startedOne": "하위 에이전트 1개가 시작되었습니다.",
         "startedN": "{{value0}} 하위 에이전트가 시작되었습니다.",
         "ranOne": "하위 에이전트 1개 실행",
         "ranN": "{{value0}} 하위 에이전트를 실행했습니다.",
