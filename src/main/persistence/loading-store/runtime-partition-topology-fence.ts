@@ -38,6 +38,33 @@ export function noteRuntimeTopologyChange(
   }
 }
 
+/** A write that raises a repo's revision is main's change; so is a legacy surface tombstone the
+ *  sanitizer is about to retire. Either opens the fence for that repo. */
+export function noteRuntimeRevisionRaises(
+  owner: FenceOwner,
+  hostId: ExecutionHostId,
+  session: WorkspaceSessionState,
+  prior: WorkspaceSessionState | undefined,
+  now = performance.now()
+): void {
+  if (!isRuntimePartition(hostId)) {
+    return
+  }
+  const priorRevisions = prior?.terminalTopologyRevisionByRepoId ?? {}
+  const repos = fencedRepos(owner, hostId)
+  for (const [repoId, revision] of Object.entries(session.terminalTopologyRevisionByRepoId ?? {})) {
+    if (revision > (priorRevisions[repoId] ?? 0)) {
+      repos.set(repoId, now)
+    }
+  }
+  for (const tombstone of [
+    ...Object.values(prior?.terminalSurfaceTombstonesByPaneKey ?? {}),
+    ...Object.values(session.terminalSurfaceTombstonesByPaneKey ?? {})
+  ]) {
+    repos.set(getRepoIdFromWorktreeId(tombstone.worktreeId), now)
+  }
+}
+
 /** The prior a write rebases against: on a runtime partition, only repos main changed recently stay fenced. */
 export function runtimePartitionFencePrior(
   owner: FenceOwner,
@@ -50,15 +77,8 @@ export function runtimePartitionFencePrior(
     return prior
   }
   const priorRevisions = prior?.terminalTopologyRevisionByRepoId ?? {}
-  // A write that raises a revision is main's own change; it opens the fence for that repo.
+  noteRuntimeRevisionRaises(owner, hostId, incoming, prior, now)
   const repos = fencedRepos(owner, hostId)
-  for (const [repoId, revision] of Object.entries(
-    incoming.terminalTopologyRevisionByRepoId ?? {}
-  )) {
-    if (revision > (priorRevisions[repoId] ?? 0)) {
-      repos.set(repoId, now)
-    }
-  }
   if (!prior) {
     return prior
   }
