@@ -1,6 +1,8 @@
 import { useAppStore } from '@/store'
 import type { TypeCyclableTab } from '@/components/terminal/tab-type-cycle'
 import { activateStructuredAgentSessionTabOnOwner } from '@/lib/agent-session/structured-agent-session-tab-activation'
+import { runtimeEnvironmentIdOrLocalUnlessTwin } from '@/lib/worktree-runtime-owner'
+import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
 import {
   activateBrowserTabOnOwner,
   activateTerminalTabOnOwner
@@ -17,6 +19,10 @@ export function activateCycledTabOnOwner(worktreeId: string | null, next: TypeCy
   } else if (next.type === 'browser' && next.tabId) {
     activateBrowserTabOnOwner(worktreeId, next.tabId, next.id)
   } else if (next.type === 'agent-session') {
-    activateStructuredAgentSessionTabOnOwner(worktreeId, next.id)
+    // Why server-only: a local activation would make paired phones follow every intermediate stop.
+    const environmentId = runtimeEnvironmentIdOrLocalUnlessTwin(useAppStore.getState(), worktreeId)
+    if (environmentId && isWebRuntimeSessionActive(environmentId)) {
+      activateStructuredAgentSessionTabOnOwner(worktreeId, next.id)
+    }
   }
 }

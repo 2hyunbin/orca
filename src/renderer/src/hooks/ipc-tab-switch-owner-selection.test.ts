@@ -123,4 +123,15 @@ describe('keyboard tab switches in a server workspace', () => {
       expect.objectContaining({ tabId: 'agent-session:session-1' })
     )
   })
+
+  it('keeps an agent chat switch local in a workspace no server owns', () => {
+    mocks.ownerEnvironmentId.mockReturnValue(null)
+    mocks.getState.mockReturnValue(serverWorkspaceStore())
+    mocks.navOrder.mockReturnValue([
+      { type: 'agent-session', id: 'session-1', tabId: 'agent-tab' },
+      { type: 'terminal', id: 'web-terminal-b', tabId: 'web-terminal-b' }
+    ])
+    expect(handleSwitchTabAcrossAllTypes(-1)).toBe(true)
+    expect(mocks.runtimeRpc).not.toHaveBeenCalled()
+  })
 })
