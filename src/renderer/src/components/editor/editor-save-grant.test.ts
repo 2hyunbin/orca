@@ -30,14 +30,14 @@ function tab(overrides: Partial<OpenFile> = {}): OpenFile {
 describe('the grant an editor save writes through', () => {
   // Why: grants are never persisted, so a restored dirty tab that never loaded must still save.
   it('asks the host for a grant for a restored tab outside every workspace and keeps it', async () => {
-    grantRestoredHostFile.mockResolvedValue('g-2')
+    grantRestoredHostFile.mockResolvedValue({ grantId: 'g-2', readOnly: false })
     const setTerminalArtifactGrant = vi.fn()
 
     const grant = await editorSaveGrant(tab(), hostContext, () => ({ setTerminalArtifactGrant }))
 
     expect(grant?.grantId).toBe('g-2')
     expect(grantRestoredHostFile).toHaveBeenCalledWith(hostContext.target, 'wt-1', PATH)
-    expect(setTerminalArtifactGrant).toHaveBeenCalledWith(PATH, 'g-2')
+    expect(setTerminalArtifactGrant).toHaveBeenCalledWith(PATH, 'g-2', false)
   })
 
   it('leaves workspace files and this computer’s files to the ordinary save', async () => {

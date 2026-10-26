@@ -1,5 +1,6 @@
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { renewTerminalArtifactGrant } from '@/runtime/runtime-terminal-artifact-grant'
+import { hostSavesGrantedFiles } from '@/components/terminal-pane/host-file-refusal'
 
 export const REMOTE_EXTERNAL_FILE_UNAVAILABLE_MESSAGE =
   'External local files are not available for remote workspaces.'
@@ -9,13 +10,17 @@ export async function grantRestoredHostFile(
   target: RuntimeClientTarget,
   worktreeId: string | null | undefined,
   filePath: string
-): Promise<string> {
-  const renewed =
-    target.kind === 'environment' && worktreeId
-      ? await renewTerminalArtifactGrant({ target, worktreeId, absolutePath: filePath })
-      : null
+): Promise<{ grantId: string; readOnly: boolean }> {
+  if (target.kind !== 'environment' || !worktreeId) {
+    throw new Error(REMOTE_EXTERNAL_FILE_UNAVAILABLE_MESSAGE)
+  }
+  const renewed = await renewTerminalArtifactGrant({ target, worktreeId, absolutePath: filePath })
   if (!renewed) {
     throw new Error(REMOTE_EXTERNAL_FILE_UNAVAILABLE_MESSAGE)
   }
-  return renewed.grantId
+  return {
+    grantId: renewed.grantId,
+    // Why: match a fresh open, which stays read-only where the host can't renew grants.
+    readOnly: renewed.readOnly || !(await hostSavesGrantedFiles(target.environmentId))
+  }
 }

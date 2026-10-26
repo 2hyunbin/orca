@@ -117,7 +117,8 @@ export async function editorSaveGrant(
   context: RuntimeFileOperationArgs,
   getState: () => Pick<AppState, 'setTerminalArtifactGrant'>
 ): Promise<{ grantId: string; onRenewed: (grantId: string) => void } | undefined> {
-  const onRenewed = (renewed: string): void => getState().setTerminalArtifactGrant(file.id, renewed)
+  const onRenewed = (renewed: string, readOnly?: boolean): void =>
+    getState().setTerminalArtifactGrant(file.id, renewed, readOnly)
   if (file.terminalArtifactGrantId) {
     return { grantId: file.terminalArtifactGrantId, onRenewed }
   }
@@ -130,9 +131,12 @@ export async function editorSaveGrant(
   ) {
     return undefined
   }
-  const grantId = await grantRestoredHostFile(context.target, context.worktreeId, file.filePath)
-  onRenewed(grantId)
-  return { grantId, onRenewed }
+  const restored = await grantRestoredHostFile(context.target, context.worktreeId, file.filePath)
+  onRenewed(restored.grantId, restored.readOnly)
+  if (restored.readOnly) {
+    throw new Error('This host opens the file read-only.')
+  }
+  return { grantId: restored.grantId, onRenewed }
 }
 
 export function writeEditorSave(

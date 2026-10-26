@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
-const renewTerminalArtifactGrant = vi.hoisted(() => vi.fn())
+const { renewTerminalArtifactGrant, hostSavesGrantedFiles } = vi.hoisted(() => ({
+  renewTerminalArtifactGrant: vi.fn(),
+  hostSavesGrantedFiles: vi.fn(async () => true)
+}))
 vi.mock('@/runtime/runtime-terminal-artifact-grant', () => ({ renewTerminalArtifactGrant }))
+vi.mock('@/components/terminal-pane/host-file-refusal', () => ({ hostSavesGrantedFiles }))
 
 import {
   grantRestoredHostFile,
@@ -15,7 +19,10 @@ describe('a restored tab for a host file outside every workspace', () => {
   it('asks its host for a fresh grant, since grants are never persisted', async () => {
     renewTerminalArtifactGrant.mockResolvedValue({ grantId: 'g-2', readOnly: false })
 
-    await expect(grantRestoredHostFile(target, 'wt-1', PATH)).resolves.toBe('g-2')
+    await expect(grantRestoredHostFile(target, 'wt-1', PATH)).resolves.toEqual({
+      grantId: 'g-2',
+      readOnly: false
+    })
     expect(renewTerminalArtifactGrant).toHaveBeenCalledWith({
       target,
       worktreeId: 'wt-1',
@@ -38,5 +45,15 @@ describe('a restored tab for a host file outside every workspace', () => {
       REMOTE_EXTERNAL_FILE_UNAVAILABLE_MESSAGE
     )
     expect(renewTerminalArtifactGrant).not.toHaveBeenCalled()
+  })
+
+  it('restores read-only where a fresh open would be read-only', async () => {
+    renewTerminalArtifactGrant.mockResolvedValue({ grantId: 'g-3', readOnly: false })
+    hostSavesGrantedFiles.mockResolvedValueOnce(false)
+
+    await expect(grantRestoredHostFile(target, 'wt-1', PATH)).resolves.toEqual({
+      grantId: 'g-3',
+      readOnly: true
+    })
   })
 })

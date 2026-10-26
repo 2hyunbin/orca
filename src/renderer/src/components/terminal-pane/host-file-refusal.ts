@@ -31,10 +31,15 @@ export async function hostAbsentRefusal(
 }
 
 /** Older hosts' grants go stale on any host-side change and can't be renewed, so their tabs stay read-only. */
-export function hostSavesGrantedFiles(environmentId: string): Promise<boolean> {
-  return runtimeEnvironmentSupportsCapability(
-    environmentId,
-    TERMINAL_PATH_ABSOLUTE_FILES_RUNTIME_CAPABILITY,
-    15_000
-  )
+export async function hostSavesGrantedFiles(environmentId: string): Promise<boolean> {
+  try {
+    return await runtimeEnvironmentSupportsCapability(
+      environmentId,
+      TERMINAL_PATH_ABSOLUTE_FILES_RUNTIME_CAPABILITY,
+      15_000
+    )
+  } catch {
+    // Why: an unanswered probe must not block opening; the tab just opens read-only.
+    return false
+  }
 }
