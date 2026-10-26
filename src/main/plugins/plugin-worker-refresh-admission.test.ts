@@ -24,6 +24,7 @@ function worker(): PluginWorkerHandle & { exit: () => void } {
     commands: ['run'],
     invokeCommand: vi.fn(async () => null),
     deliverEvent: vi.fn(),
+    // ast-grep-ignore: test-no-wall-clock -- idle checks compare against the real clock, so "now" keeps the worker active
     lastActivityAt: () => Date.now(),
     inFlightCount: () => 0,
     dispose: vi.fn(async () => undefined),
@@ -190,6 +191,7 @@ it.each(['revoke', 'disable'] as const)(
     first.exit()
     expect(service.getGrantedCapabilities(pluginKey)).toBeNull()
     // Admission runs after the supervisor's first backoff.
+    // ast-grep-ignore: test-no-real-time-wait -- proving no restart happens needs the real backoff to elapse
     await new Promise((resolve) => setTimeout(resolve, 650))
     expect(factory).toHaveBeenCalledOnce()
   }
