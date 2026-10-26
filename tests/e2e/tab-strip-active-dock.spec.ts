@@ -127,6 +127,83 @@ test.describe('Tab strip active-tab dock', () => {
     expect(buttonBox!.x - stripBox!.x - stripBox!.width).toBeLessThanOrEqual(12)
   })
 
+  test('keeps tab and close-button positions stable through agent activity changes', async ({
+    orcaPage
+  }) => {
+    const worktreeId = await waitForActiveWorktree(orcaPage)
+    const ids = await orcaPage.evaluate((worktreeId) => {
+      const store = window.__store!
+      const agent = store
+        .getState()
+        .createTab(worktreeId, undefined, undefined, { activate: false })
+      const next = store.getState().createTab(worktreeId, undefined, undefined, { activate: false })
+      store.getState().setTabCustomTitle(agent.id, 'Agent')
+      store.getState().setTabCustomTitle(next.id, 'Neighbor')
+      store.setState((state) => ({
+        tabsByWorktree: {
+          ...state.tabsByWorktree,
+          [worktreeId]: state.tabsByWorktree[worktreeId].map((tab) =>
+            tab.id === agent.id ? { ...tab, launchAgent: 'codex' } : tab
+          )
+        }
+      }))
+      return [agent.id, next.id]
+    }, worktreeId)
+    const agent = orcaPage.locator(slotSelector(ids[0]))
+    await expect(agent.locator('[data-agent-icon="codex"]')).toBeVisible()
+    await expect(orcaPage.locator(slotSelector(ids[1]))).toContainText('Neighbor')
+    const geometry = (): Promise<number[][]> =>
+      orcaPage.evaluate(
+        (ids) =>
+          ids.map((id) => {
+            const slot = document.querySelector(`[data-tab-strip-slot="${id}"]`)!
+            const tab = slot.getBoundingClientRect()
+            const close = slot.querySelector('[data-tab-close-button]')!.getBoundingClientRect()
+            return [tab.x, tab.width, close.x]
+          }),
+        ids
+      )
+    const before = await geometry()
+
+    for (const stage of ['working', 'unread', 'idle'] as const) {
+      await orcaPage.evaluate(
+        ({ tabId, worktreeId, stage }) => {
+          const store = window.__store!
+          const paneKey = `${tabId}:00000000-0000-4000-8000-000000000001`
+          store.setState((state) => {
+            const agentStatusByPaneKey = { ...state.agentStatusByPaneKey }
+            const unreadTerminalTabs = { ...state.unreadTerminalTabs }
+            delete agentStatusByPaneKey[paneKey]
+            delete unreadTerminalTabs[tabId]
+            if (stage === 'working') {
+              agentStatusByPaneKey[paneKey] = {
+                paneKey,
+                worktreeId,
+                agentType: 'codex',
+                state: 'working',
+                prompt: '',
+                updatedAt: Date.now(),
+                stateStartedAt: Date.now(),
+                stateHistory: []
+              }
+            } else if (stage === 'unread') {
+              unreadTerminalTabs[tabId] = true
+            }
+            return { agentStatusByPaneKey, unreadTerminalTabs }
+          })
+        },
+        { tabId: ids[0], worktreeId, stage }
+      )
+      await expect(agent.locator('[data-testid="tab-agent-activity-indicator"]')).toHaveCount(
+        stage === 'working' ? 1 : 0
+      )
+      await expect(agent.locator('[data-testid="tab-activity-bell"]')).toHaveCount(
+        stage === 'unread' ? 1 : 0
+      )
+      await expect.poll(geometry).toEqual(before)
+    }
+  })
+
   test('docks an offscreen active tab and reveals an arriving tab beside it without flicker', async ({
     orcaPage
   }) => {
