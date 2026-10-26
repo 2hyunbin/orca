@@ -20,6 +20,7 @@ import { buildWebSessionTabsFinalPatch } from './apply-final-patch'
 import { isFrameDrawnServerWorkspace } from './frame-drawn-server-workspaces'
 import { buildFrameDrawnWorkspaceStatusPatch } from './frame-drawn-workspace-status-patch'
 import { indexMirroredTerminalSurfaces } from './mirrored-terminal-handle-index'
+import { isEchoOfThisAppsWorkspace } from './mirrored-snapshot-host-fence'
 
 export function applyWebSessionTabsSnapshotWithContext(
   state: WebSessionTabsSyncState,
@@ -34,7 +35,8 @@ export function applyWebSessionTabsSnapshotWithContext(
     environmentId === LOCAL_STRUCTURED_SESSION_OWNER && options?.contentScope === 'agent-session'
   if (
     suppressE2eWebRuntimeBrowserSnapshot(rawSnapshot) ||
-    (rawSnapshot.worktree === FLOATING_TERMINAL_WORKTREE_ID && !isLocalChatInventory)
+    (rawSnapshot.worktree === FLOATING_TERMINAL_WORKTREE_ID && !isLocalChatInventory) ||
+    isEchoOfThisAppsWorkspace(state, rawSnapshot.worktree, environmentId)
   ) {
     return state
   }
