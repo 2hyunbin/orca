@@ -2,6 +2,7 @@ import {
   TerminalStreamOpcode,
   encodeTerminalStreamJson
 } from '../../../../../shared/terminal-stream-protocol'
+import { recordYieldedTerminalQueries } from './terminal-multiplex-yielded-queries'
 import { iterateTerminalOutputFrameChunks } from '../../terminal-output-frame-chunks'
 import { TERMINAL_MULTIPLEX_ACK_STREAM_INITIAL_WINDOW_BYTES } from '../../../../../shared/terminal-multiplex-flow-control'
 import { createTerminalOutputBatcher } from './terminal-output-batcher'
@@ -54,6 +55,8 @@ export async function initializeMultiplexStream(
     ackPendingOutputBytes: 0,
     ackPendingOutputOverflowed: false,
     ackRecoverySnapshotInFlight: false,
+    yieldedQueries: [],
+    yieldedQueryPending: '',
     ackRecoveryHistoryOwed: false,
     pendingOutput: [],
     pendingOutputBytes: 0,
@@ -94,6 +97,7 @@ export async function initializeMultiplexStream(
       notePausedOutputDropped(state, stream)
       return
     }
+    recordYieldedTerminalQueries(runtime, stream, data, meta)
     if (stream.buffering) {
       appendPendingMultiplexOutput(stream, data, meta)
       return

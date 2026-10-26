@@ -12,7 +12,6 @@ import {
   normalizeTerminalTitle
 } from '../../../../shared/agent-detection'
 import { shouldModelAnswerHiddenPtyQueries } from '../../terminal-model-query-authority'
-import { extractHiddenStartupRendererQueryData } from '../../../../shared/terminal-reply-query-extraction'
 
 export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntimeWithSerializeMainTerminalBuffer {
   protected abstract getOrCreateHeadlessTerminal(ptyId: string): RuntimeHeadlessTerminal
@@ -149,16 +148,27 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
     })
   }
 
-  /** Answer stateless queries in output a remote view yielded at ingestion but will never receive. */
-  answerYieldedTerminalQueries(ptyId: string, data: string): void {
+  /** True when this PTY's queries go unanswered unless its single receiving remote view answers them. */
+  isSoleRemoteTerminalQueryOwner(ptyId: string): boolean {
+    return (
+      this.terminalViewSubscribers.remoteReceivingOutputCount(ptyId) === 1 &&
+      shouldModelAnswerHiddenPtyQueries({
+        ptyId,
+        settings: this.store?.getSettings(),
+        hasRemoteViewSubscriber: false
+      })
+    )
+  }
+
+  /** Answer stateless queries a sole remote view owned at ingestion but will never receive. */
+  answerYieldedTerminalQueries(ptyId: string, statelessQueryData: string): void {
     const state = this.headlessTerminals.get(ptyId)
-    const { statelessQueryData } = extractHiddenStartupRendererQueryData(data, '')
-    if (!state || !statelessQueryData || !this.shouldAnswerQueriesForLiveChunk(ptyId)) {
+    if (!state) {
       return
     }
     state.writeChain = state.writeChain
       .then(async () => {
-        // Why: injecting mid-escape would abort the live sequence and print its tail as text.
+        // Why drop, not retry: injecting mid-escape corrupts live parsing, and a deferred reply risks arriving after the query timed out.
         if (state.emulator.partialEscapeTailAnsi === '') {
           await state.emulator.write(statelessQueryData, { forwardQueryReplies: true })
         }

@@ -1,5 +1,5 @@
 import type { TerminalMultiplexConnection } from './terminal-multiplex-connection'
-import { getAckPendingOutputText } from './terminal-stream-replay'
+import { answerUndeliveredYieldedQueries } from './terminal-multiplex-yielded-queries'
 
 export function installMultiplexCleanup(state: TerminalMultiplexConnection): void {
   const { runtime, streams, pendingPtyWaitControllers, emit, signal } = state
@@ -12,17 +12,13 @@ export function installMultiplexCleanup(state: TerminalMultiplexConnection): voi
     stream.outputBatcher.dispose()
     state.ackTotalInFlightBytes = Math.max(0, state.ackTotalInFlightBytes - stream.ackInFlightBytes)
     stream.ackInFlightBytes = 0
-    const discardedAckPendingText = getAckPendingOutputText(stream)
     stream.ackPendingOutput = []
     stream.ackPendingOutputBytes = 0
     stream.ackPendingOutputOverflowed = false
     stream.ackRecoverySnapshotInFlight = false
     stream.ackRecoveryHistoryOwed = false
     stream.unsubscribeData()
-    if (discardedAckPendingText) {
-      // Why: after the view registration is released, main owns the replies this view never received.
-      runtime.answerYieldedTerminalQueries(stream.ptyId, discardedAckPendingText)
-    }
+    answerUndeliveredYieldedQueries(runtime, stream)
     stream.unsubscribeResize()
     stream.unsubscribeFit()
     stream.unsubscribeDriver()

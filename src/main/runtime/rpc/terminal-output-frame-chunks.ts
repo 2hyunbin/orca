@@ -1,7 +1,5 @@
 import {
   TerminalStreamOpcode,
-  decodeTerminalStreamJson,
-  decodeTerminalStreamText,
   encodeTerminalStreamJson,
   encodeTerminalStreamText
 } from '../../../shared/terminal-stream-protocol'
@@ -20,14 +18,6 @@ export type TerminalOutputFrameChunk = {
   displayLength: number
   seq?: number
   opcode?: TerminalStreamOpcode
-}
-
-export function decodeTerminalOutputFrameChunkText(chunk: TerminalOutputFrameChunk): string {
-  if (chunk.opcode === TerminalStreamOpcode.OutputSpan) {
-    const span = decodeTerminalStreamJson<{ data?: unknown }>(chunk.bytes)
-    return typeof span?.data === 'string' ? span.data : ''
-  }
-  return decodeTerminalStreamText(chunk.bytes)
 }
 
 /** `span` only for subscribers that decode OutputSpan (the multiplex); `text` is the opcode-1 encoding every client reads. */

@@ -283,22 +283,21 @@ describe('reply ownership matrix', () => {
     expect(replies).toHaveLength(2)
   })
 
-  // #32944: a pause discards output parked behind a full ACK window, after main yielded its replies.
-  it('answers yielded stateless queries once the view stops receiving', async () => {
+  // #32944: a paused view's discarded queries fall back to main only when that view alone owned them.
+  it('reports sole remote query ownership and answers yielded stateless queries', async () => {
     const { runtime, replies } = createResponderRuntime()
     markHiddenRendererPty('pty-yield')
-    let paused = false
-    const release = runtime.registerRemoteTerminalViewSubscriber('pty-yield', () => paused)
-    runtime.onPtyData('pty-yield', 'prompt\x1b[c', Date.now())
-    runtime.answerYieldedTerminalQueries('pty-yield', 'prompt\x1b[c')
-    await settle(runtime, 'pty-yield')
-    expect(replies).toEqual([])
+    const releaseA = runtime.registerRemoteTerminalViewSubscriber('pty-yield', () => false)
+    expect(runtime.isSoleRemoteTerminalQueryOwner('pty-yield')).toBe(true)
+    const releaseB = runtime.registerRemoteTerminalViewSubscriber('pty-yield', () => false)
+    expect(runtime.isSoleRemoteTerminalQueryOwner('pty-yield')).toBe(false)
+    releaseB()
+    releaseA()
 
-    paused = true
-    runtime.answerYieldedTerminalQueries('pty-yield', 'prompt\x1b[c\x1b[6n')
+    runtime.onPtyData('pty-yield', 'prompt', Date.now())
+    runtime.answerYieldedTerminalQueries('pty-yield', '\x1b[c')
     await settle(runtime, 'pty-yield')
     expect(replies.map((reply) => reply.data)).toEqual(['\x1b[?1;2c'])
-    release()
   })
 
   it('keeps raw preview presence separate from terminal query authority', async () => {
