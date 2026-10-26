@@ -149,7 +149,12 @@ export function DragReorderRow({
             onAccessibilityMove(rowKey, 1)
           }
         }}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        hitSlop={{
+          top: 8,
+          bottom: 8,
+          left: presentation === 'plain' ? 16 : 8,
+          right: presentation === 'plain' ? 16 : 8
+        }}
       >
         <GripVertical size={18} color={colors.textMuted} />
       </Animated.View>
