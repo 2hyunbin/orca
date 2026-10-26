@@ -113,7 +113,12 @@ test('a move an enabled SSH automation refuses offers Move anyway on the host ca
     )
     await card.hover()
     await card.getByRole('button', { name: 'Connect', exact: true }).click()
-    await expect(card).toContainText('automations (1)', { timeout: 4 * 60_000 })
+    await expect(card).toContainText(
+      'Some saved items for this host can’t move to its Orca server: automations (1), automation runs (2). Move anyway connects the host and keeps them on this computer.',
+      { timeout: 4 * 60_000 }
+    )
+    const toast = page.locator('[data-sonner-toast]').filter({ hasText: 'automations (1)' })
+    await expect(toast.getByRole('button', { name: 'Move anyway…' })).toBeVisible()
     const moveAnyway = card.getByRole('button', { name: 'Move anyway…', exact: true })
     await expect(moveAnyway).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('refused.png') })
