@@ -29,6 +29,7 @@ import {
   shouldReplaceTerminalTab
 } from './terminal-surfaces'
 import { buildMirroredTerminalTabs } from './terminal-build'
+import { isTerminalRowRetiredByHost } from './host-retired-terminal-rows'
 import { hostSnapshotAffirmsWorktreeContents } from '../host-session-snapshot-authority'
 
 export function prepareWebSessionTabsSnapshotBase(
@@ -148,6 +149,12 @@ export function prepareWebSessionTabsSnapshotBase(
             nextMirroredTerminalIds,
             exactProvisionalHandoffs,
             state.terminalLayoutsByTabId[tab.id]?.ptyIdsByLeafId
+          ) &&
+          !isTerminalRowRetiredByHost(
+            tab,
+            state.terminalLayoutsByTabId[tab.id],
+            snapshot.retiredTerminalSurfaces,
+            environmentId
           )
       )
     : currentTerminalTabs
