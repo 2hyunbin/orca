@@ -210,21 +210,10 @@ describe('OrcaRuntimeService', () => {
       await Promise.resolve()
       expect(write).not.toHaveBeenCalled()
 
-      const leaf = [
-        ...(
-          runtime as unknown as {
-            leaves: Map<
-              string,
-              {
-                lastAgentStatus: string | null
-                lastAgentStatusObservedLive: boolean
-              }
-            >
-          }
-        ).leaves.values()
-      ][0]
-      leaf.lastAgentStatus = 'idle'
-      leaf.lastAgentStatusObservedLive = true
+      // Mutate the terminal's own facts: the recheck reads the PTY, not a pane copy.
+      const pty = runtime['ptysById'].get('pty-1')!
+      pty.lastAgentStatus = 'idle'
+      pty.lastAgentStatusObservedLive = true
 
       await vi.advanceTimersByTimeAsync(2_000)
       expect(write).toHaveBeenCalledWith(
@@ -280,7 +269,8 @@ describe('OrcaRuntimeService', () => {
     }
   })
 
-  it('points restored mail when a live-idle PTY remounts after the repair edge', async () => {
+  // Mail follows the terminal: a window reload does not hold a live-idle terminal's restored mail.
+  it('points restored mail at the repair edge while the window reloads', async () => {
     vi.useFakeTimers()
     try {
       const runtime = new OrcaRuntimeService(store)
@@ -308,9 +298,6 @@ describe('OrcaRuntimeService', () => {
       setInMemoryOrchestrationMessages(runtime, db)
 
       await vi.advanceTimersByTimeAsync(2_000)
-      expect(write).not.toHaveBeenCalled()
-
-      syncSinglePty(runtime)
       expect(write).toHaveBeenCalledWith(
         'pty-1',
         expect.stringContaining('You have 1 orchestration message')

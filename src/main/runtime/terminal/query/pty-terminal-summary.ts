@@ -178,16 +178,17 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
     }
   }
 
-  /** The pane Runs and Dispatches bind this terminal by; none while another terminal holds or shares it, so no mail is typed. */
+  /** The pane Runs and Dispatches bind this terminal by: the window pane showing it, else the pane
+   *  it records, unless another terminal holds or shares that pane (then no mail is typed). */
   private getMailboxPaneKeyForPty(pty: RuntimePtyWorktreeRecord): string | null {
+    const [shownIn] = this.getLeavesForPty(pty.ptyId)
+    if (shownIn) {
+      return `${shownIn.tabId}:${shownIn.leafId}`
+    }
     const { paneKey } = this.paneOfPty(pty)
     const pane = parsePaneKey(paneKey ?? '')
-    if (!paneKey || !pane) {
+    if (!paneKey || (pane && this.leaves.get(this.getLeafKey(pane.tabId, pane.leafId))?.ptyId)) {
       return null
-    }
-    const holder = this.leaves.get(this.getLeafKey(pane.tabId, pane.leafId))?.ptyId
-    if (holder) {
-      return holder === pty.ptyId ? paneKey : null
     }
     // A retained predecessor and its replacement can both claim a pane no window shows.
     for (const other of this.ptysById.values()) {
