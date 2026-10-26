@@ -1,5 +1,8 @@
 // #33424: two desktops paired to each other. Each server republishes what it mirrors, so B echoes A's
 // own workspace back to A; A must not adopt that echo or its file reads and closes go to B.
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
 import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
@@ -31,6 +34,37 @@ async function pairAndSelect(page: Page, pairingUrl: string, name: string): Prom
   )
 }
 
+async function addLocalFolder(page: Page, folderPath: string): Promise<string> {
+  const repoId = await page.evaluate(async (folderPath) => {
+    const added = await window.api.repos.add({ path: folderPath, kind: 'folder' })
+    if ('error' in added) {
+      throw new Error(added.error)
+    }
+    return added.repo.id
+  }, folderPath)
+  let worktreeId = ''
+  await expect
+    .poll(
+      async () => {
+        worktreeId = await page.evaluate(async (repoId) => {
+          const store = window.__store!
+          await store.getState().fetchRepos({ runtimeEnvironmentId: null, throwOnError: true })
+          await store.getState().fetchWorktrees(repoId)
+          return (
+            store
+              .getState()
+              .allWorktrees()
+              .find((entry) => entry.repoId === repoId)?.id ?? ''
+          )
+        }, repoId)
+        return worktreeId
+      },
+      { timeout: 30_000, message: 'Desktop B never listed its own folder' }
+    )
+    .not.toBe('')
+  return worktreeId
+}
+
 function openFilesIn(page: Page, worktreeId: string) {
   return page.evaluate(
     (id) =>
@@ -48,7 +82,10 @@ function openFilesIn(page: Page, worktreeId: string) {
 test('a desktop ignores its own workspace echoed back by a server it serves', async ({
   orcaPage
 }, testInfo) => {
+  // Two desktops launch and pair to each other.
   test.setTimeout(240_000)
+  const desktopBFolder = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-desktop-b-'))
+  writeFileSync(path.join(desktopBFolder, 'note.md'), '# desktop B\n')
   const hubBSession = createRestartSession(testInfo)
   const hubB = await hubBSession.launch()
   try {
@@ -63,6 +100,7 @@ test('a desktop ignores its own workspace echoed back by a server it serves', as
     })
     expect(worktree).not.toBeNull()
     const { id: worktreeId, path: worktreePath } = worktree!
+    const desktopBWorktreeId = await addLocalFolder(hubB.page, desktopBFolder)
 
     const desktopBOnA = await pairAndSelect(
       orcaPage,
@@ -144,8 +182,25 @@ test('a desktop ignores its own workspace echoed back by a server it serves', as
         }
       )
       .toBe(true)
-    // ast-grep-ignore: test-no-real-time-wait -- proving absence: let A's live subscription deliver B's frame
-    await orcaPage.waitForTimeout(5_000)
+    // A frame B publishes after the echo reaches A after it on the same stream.
+    await hubB.page.evaluate(
+      ({ worktreeId, filePath }) => {
+        window.__store!.getState().openFile({
+          filePath,
+          relativePath: 'note.md',
+          worktreeId,
+          language: 'markdown',
+          mode: 'edit'
+        })
+      },
+      { worktreeId: desktopBWorktreeId, filePath: path.join(desktopBFolder, 'note.md') }
+    )
+    await expect
+      .poll(() => openFilesIn(orcaPage, desktopBWorktreeId), {
+        timeout: 30_000,
+        message: 'Desktop A never mirrored a tab in desktop B’s own workspace'
+      })
+      .toEqual([{ relativePath: 'note.md', env: desktopBOnA }])
     expect(await openFilesIn(orcaPage, worktreeId)).toEqual([])
     expect(await openFilesIn(hubB.page, worktreeId)).toEqual([
       { relativePath: 'README.md', env: desktopAOnB }
@@ -153,5 +208,6 @@ test('a desktop ignores its own workspace echoed back by a server it serves', as
   } finally {
     await hubBSession.close(hubB.app)
     await hubBSession.dispose()
+    rmSync(desktopBFolder, { recursive: true, force: true })
   }
 })

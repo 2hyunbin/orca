@@ -80,6 +80,24 @@ export function isWebSessionTabsWorktreeRemovalFrame(
   )
 }
 
+/** A host's tombstone for its whole share of a worktree mirror. */
+export function webSessionTabsWorktreeRemovalFrame(
+  worktree: string,
+  publicationEpoch: string,
+  snapshotVersion: number
+): RuntimeMobileSessionTabsRemovedResult {
+  return {
+    worktree,
+    publicationEpoch,
+    snapshotVersion,
+    removed: true,
+    activeGroupId: null,
+    activeTabId: null,
+    activeTabType: null,
+    tabs: []
+  }
+}
+
 // Tombstones need mirror-settle evidence: one authoritative PTY census omission suffices.
 // Unlabelled degraded/version-skewed inventories must repeat before destroying anything.
 export function buildMissingWebSessionTabsRemovals(
@@ -108,15 +126,10 @@ export function buildMissingWebSessionTabsRemovals(
     })
     .map((trackedWorktree) => ({
       trackedWorktree,
-      snapshot: {
-        worktree: trackedWorktree.worktree,
-        publicationEpoch: VISIBILITY_INVENTORY_REMOVAL_EPOCH,
-        snapshotVersion: 0,
-        removed: true,
-        activeGroupId: null,
-        activeTabId: null,
-        activeTabType: null,
-        tabs: []
-      }
+      snapshot: webSessionTabsWorktreeRemovalFrame(
+        trackedWorktree.worktree,
+        VISIBILITY_INVENTORY_REMOVAL_EPOCH,
+        0
+      )
     }))
 }

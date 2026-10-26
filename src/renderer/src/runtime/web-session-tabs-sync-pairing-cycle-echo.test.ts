@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import { applyWebSessionTabsSnapshot } from './web-session-tabs-sync/snapshot-api'
+import { takeEchoesNoLongerFenced } from './web-session-tabs-sync/mirrored-snapshot-host-fence'
 import type { WebSessionTabsSyncState } from './web-session-tabs-sync/state'
 import type { WorktreeOperationRouteState } from '../lib/worktree-operation-route'
 import {
@@ -58,13 +59,21 @@ function stateListing(hostIds: ExecutionHostId[]): MirrorState {
   }
 }
 
-function applyServerReadme(state: MirrorState, worktree: string): MirrorState {
+function applyServerReadme(state: MirrorState, worktree: string, version = 1): MirrorState {
   const snapshot = makeSnapshot([README], {
     worktree,
+    snapshotVersion: version,
     activeTabId: 'server-readme',
     activeTabType: 'markdown'
   })
-  return { ...state, ...applyWebSessionTabsSnapshot(state, snapshot, ENV, NOW) }
+  return { ...state, ...applyWebSessionTabsSnapshot(state, snapshot, ENV, NOW + version) }
+}
+
+function serverReadmeIn(state: MirrorState, worktree: string): boolean {
+  return (
+    (state.unifiedTabsByWorktree[worktree] ?? []).some((tab) => tab.id === 'server-readme') ||
+    state.openFiles.some((file) => file.worktreeId === worktree)
+  )
 }
 
 const OTHER_HOSTS: [string, ExecutionHostId[]][] = [
@@ -76,14 +85,27 @@ describe('a paired server echoing this app’s workspace back', () => {
   beforeEach(resetWebSessionTabsSyncTestState)
 
   it.each([WT, FOLDER])('keeps the echo out of this app’s own workspace %s', (worktree) => {
-    const state = stateListing(['local'])
-    expect(applyServerReadme(state, worktree).unifiedTabsByWorktree).toBe(
-      state.unifiedTabsByWorktree
+    expect(serverReadmeIn(applyServerReadme(stateListing(['local']), worktree), worktree)).toBe(
+      false
     )
   })
 
+  it('retires an echo it took before this app’s own row listed', () => {
+    const cold = applyServerReadme(stateListing([]), WT)
+    expect(serverReadmeIn(cold, WT)).toBe(true)
+    const listed = { ...cold, worktreesByRepo: stateListing(['local']).worktreesByRepo }
+    expect(serverReadmeIn(applyServerReadme(listed, WT, 2), WT)).toBe(false)
+  })
+
+  it('releases a held frame once the server lists its own copy', () => {
+    applyServerReadme(stateListing(['local']), WT)
+    expect(takeEchoesNoLongerFenced(stateListing(['local']))).toEqual([])
+    expect(takeEchoesNoLongerFenced(stateListing(['local', `runtime:${ENV}`]))).toEqual([
+      { environmentId: ENV, workspaceId: WT }
+    ])
+  })
+
   it.each(OTHER_HOSTS)('still mirrors the server’s tabs in %s', (_label, hostIds) => {
-    const next = applyServerReadme(stateListing(hostIds), WT)
-    expect(next.unifiedTabsByWorktree[WT]?.map((tab) => tab.id)).toContain('server-readme')
+    expect(serverReadmeIn(applyServerReadme(stateListing(hostIds), WT), WT)).toBe(true)
   })
 })

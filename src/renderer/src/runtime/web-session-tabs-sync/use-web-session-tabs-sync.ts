@@ -10,6 +10,7 @@ import {
 } from './global-session-subscription'
 import { installActiveSessionTabsSubscription } from './active-session-subscription'
 import { mirroredRuntimeEnvironmentIdForWorkspace } from './mirrored-workspace-owner'
+import { installFencedEchoReplay } from './fenced-echo-replay'
 import {
   createWarmWorktreeSessionSubscriptions,
   type WarmWorktreeSessionSubscriptions
@@ -118,6 +119,8 @@ export function useWebSessionTabsSync(): void {
   useEffect(() => {
     globalSubscriptionsRef.current?.restartEnded()
   }, [resubscribeSignal])
+
+  useEffect(installFencedEchoReplay, [])
 
   useEffect(() => {
     const subscriptions = createWarmWorktreeSessionSubscriptions(

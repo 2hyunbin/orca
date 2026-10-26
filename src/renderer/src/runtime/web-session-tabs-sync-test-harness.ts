@@ -1,4 +1,5 @@
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
+import { resetFencedEchoesForTests } from './web-session-tabs-sync/mirrored-snapshot-host-fence'
 import type { TabGroupLayoutNode } from '../../../shared/tab-types'
 import { resetWebSessionFocusIntentForTests } from './web-session-focus-intent'
 import { resetWebSessionCloseIntentForTests } from './web-session-close-intent'
@@ -25,6 +26,7 @@ export function resetWebSessionTabsSyncTestState(): void {
   resetWebSessionReorderIntentForTests()
   resetWebAgentSessionHandoffsForTests()
   resetWebRuntimeInitialTerminalBootstrapForTests()
+  resetFencedEchoesForTests()
 }
 
 export function layoutHasGroup(layout: TabGroupLayoutNode | undefined, groupId: string): boolean {

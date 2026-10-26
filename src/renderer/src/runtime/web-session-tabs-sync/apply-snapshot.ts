@@ -20,7 +20,11 @@ import { buildWebSessionTabsFinalPatch } from './apply-final-patch'
 import { isFrameDrawnServerWorkspace } from './frame-drawn-server-workspaces'
 import { buildFrameDrawnWorkspaceStatusPatch } from './frame-drawn-workspace-status-patch'
 import { indexMirroredTerminalSurfaces } from './mirrored-terminal-handle-index'
-import { isEchoOfThisAppsWorkspace } from './mirrored-snapshot-host-fence'
+import {
+  isEchoOfThisAppsWorkspace,
+  recordFencedEcho,
+  withoutEchoedTabs
+} from './mirrored-snapshot-host-fence'
 
 export function applyWebSessionTabsSnapshotWithContext(
   state: WebSessionTabsSyncState,
@@ -35,16 +39,20 @@ export function applyWebSessionTabsSnapshotWithContext(
     environmentId === LOCAL_STRUCTURED_SESSION_OWNER && options?.contentScope === 'agent-session'
   if (
     suppressE2eWebRuntimeBrowserSnapshot(rawSnapshot) ||
-    (rawSnapshot.worktree === FLOATING_TERMINAL_WORKTREE_ID && !isLocalChatInventory) ||
-    isEchoOfThisAppsWorkspace(state, rawSnapshot.worktree, environmentId)
+    (rawSnapshot.worktree === FLOATING_TERMINAL_WORKTREE_ID && !isLocalChatInventory)
   ) {
     return state
   }
-  const worktreeId = rawSnapshot.worktree
+  const isEcho = isEchoOfThisAppsWorkspace(state, rawSnapshot.worktree, environmentId)
+  if (isEcho) {
+    recordFencedEcho(environmentId, rawSnapshot.worktree)
+  }
+  const snapshot = isEcho ? withoutEchoedTabs(rawSnapshot) : rawSnapshot
+  const worktreeId = snapshot.worktree
   // Switch point: ORCA_LAYOUT_OWNER_IS_MAIN && — every mirror write (single, batch, operations) passes here.
   const previousSnapshotTabIds =
     ORCA_LAYOUT_OWNER_IS_MAIN && options?.contentScope !== 'agent-session'
-      ? indexMirroredTerminalSurfaces(environmentId, rawSnapshot)
+      ? indexMirroredTerminalSurfaces(environmentId, snapshot)
       : null
   const frameDrawnPreviousTabIds =
     previousSnapshotTabIds && isFrameDrawnServerWorkspace(environmentId, worktreeId)
@@ -54,7 +62,7 @@ export function applyWebSessionTabsSnapshotWithContext(
     // Server frames own tabs/IDs/focus and writes use server IDs; skip mirror intent ledgers for these workspaces.
     return buildFrameDrawnWorkspaceStatusPatch(
       state,
-      rawSnapshot,
+      snapshot,
       environmentId,
       worktreeId,
       frameDrawnPreviousTabIds,
@@ -66,7 +74,7 @@ export function applyWebSessionTabsSnapshotWithContext(
   // Phase 2 server cutoff retires the mirror's tab ids, close and focus intents.
   const base = prepareWebSessionTabsSnapshotBase(
     state,
-    rawSnapshot,
+    snapshot,
     environmentId,
     worktreeId,
     now,
