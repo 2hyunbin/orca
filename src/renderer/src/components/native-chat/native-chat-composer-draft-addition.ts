@@ -1,9 +1,8 @@
 // Keep additions replayable so late hydration and crash recovery merge returned text/images without replacing the draft.
 
 import type { JSONContent } from '@tiptap/react'
-import { promptTextContent } from './native-chat-prompt-document-text'
+import { promptTextContent, appendPromptDocumentText } from './native-chat-prompt-document-text'
 import { appendReturnedDraftText } from '../../../../shared/returned-draft-text'
-import { appendPromptDocumentText } from './native-chat-prompt-document-text'
 import { basename } from '@/lib/path'
 import type {
   NativeChatComposerDraft,

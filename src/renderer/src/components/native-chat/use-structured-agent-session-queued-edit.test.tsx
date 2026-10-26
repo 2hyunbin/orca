@@ -1,4 +1,3 @@
-import { appendNativeChatAttachmentCache } from './native-chat-draft-cache'
 // @vitest-environment happy-dom
 
 // Exercise real edit lifecycle with a scripted host: preserve dirty text on departure and keep lease failures from blocking typing/Save/Cancel.
@@ -17,6 +16,7 @@ import { agentSessionSendBodyFingerprint } from '../../../../shared/structured-a
 import { useStructuredAgentSessionQueuedEdit } from './use-structured-agent-session-queued-edit'
 import { projectQueuedMessageCards } from './structured-agent-session-queued-cards'
 import {
+  appendNativeChatAttachmentCache,
   clearNativeChatDraftCacheForTests,
   readNativeChatDraftCache,
   writeNativeChatDraftCache
