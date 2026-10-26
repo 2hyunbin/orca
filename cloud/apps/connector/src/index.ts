@@ -27,7 +27,9 @@ runtime.server.listen(config.port, () => {
 
 let stopping = false
 const shutdown = (): void => {
-  if (stopping) return
+  if (stopping) {
+    return
+  }
   stopping = true
   // Cloud Run sends SIGKILL after ten seconds; leave time for explicit cleanup.
   const deadline = setTimeout(() => process.exit(1), 9_000)

@@ -36,7 +36,9 @@ export type ConnectorConfig = {
 
 function canonicalOrigin(value: string, name: string): string {
   const url = new URL(value)
-  if (url.origin !== value) throw new Error(`${name} must be an origin`)
+  if (url.origin !== value) {
+    throw new Error(`${name} must be an origin`)
+  }
   const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)
   if (url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) {
     throw new Error(`${name} must use HTTPS outside loopback development`)

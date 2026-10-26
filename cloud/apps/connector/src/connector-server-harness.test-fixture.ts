@@ -115,7 +115,9 @@ export function answerChallenge(
     Buffer.from(challenge.gatewayEphemeralPublicKeyB64, 'base64'),
     host.secretKey
   )
-  if (!plaintext) throw new Error('challenge did not open')
+  if (!plaintext) {
+    throw new Error('challenge did not open')
+  }
   const bytes = Buffer.from(plaintext)
   const lengthAt = bytes.indexOf(0) + 1
   const transcript = bytes.subarray(lengthAt + 4, lengthAt + 4 + bytes.readUInt32BE(lengthAt))
@@ -129,14 +131,21 @@ export function testBrowser(request: (path: string, init?: RequestInit) => Promi
   const send = async (path: string, init: RequestInit = {}): Promise<Response> => {
     const headers = new Headers(init.headers)
     headers.set('x-forwarded-for', HOST_IP)
-    if (jar.size > 0) headers.set('cookie', [...jar].map(([k, v]) => `${k}=${v}`).join('; '))
+    if (jar.size > 0) {
+      headers.set('cookie', [...jar].map(([k, v]) => `${k}=${v}`).join('; '))
+    }
     const response = await request(path, { ...init, headers })
     for (const cookie of response.headers.getSetCookie()) {
       const [pair, ...attributes] = cookie.split(';')
       const [name, ...value] = (pair ?? '').split('=')
-      if (!name) continue
-      if (attributes.some((attribute) => /max-age=0\b/i.test(attribute.trim()))) jar.delete(name)
-      else jar.set(name, value.join('='))
+      if (!name) {
+        continue
+      }
+      if (attributes.some((attribute) => /max-age=0\b/i.test(attribute.trim()))) {
+        jar.delete(name)
+      } else {
+        jar.set(name, value.join('='))
+      }
     }
     return response
   }
@@ -154,7 +163,9 @@ export function testBrowser(request: (path: string, init?: RequestInit) => Promi
 
 export function hiddenField(html: string, name: string): string {
   const match = new RegExp(`name="${name}" value="([^"]*)"`).exec(html)
-  if (!match?.[1]) throw new Error(`missing hidden field ${name}`)
+  if (!match?.[1]) {
+    throw new Error(`missing hidden field ${name}`)
+  }
   return match[1]
 }
 

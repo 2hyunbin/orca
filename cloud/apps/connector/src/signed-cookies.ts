@@ -19,7 +19,9 @@ export class SignedCookies {
 
   open<T>(name: string, value: string | undefined, schema: z.ZodType<T>): T | null {
     const [body, mac] = value?.split('.') ?? []
-    if (!body || !mac || !this.matches(`${name}.${body}`, mac)) return null
+    if (!body || !mac || !this.matches(`${name}.${body}`, mac)) {
+      return null
+    }
     let json: unknown
     try {
       json = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'))
@@ -27,7 +29,9 @@ export class SignedCookies {
       return null
     }
     const expiry = ExpirySchema.safeParse(json)
-    if (!expiry.success || this.now() > expiry.data.exp) return null
+    if (!expiry.success || this.now() > expiry.data.exp) {
+      return null
+    }
     const parsed = schema.safeParse(json)
     return parsed.success ? parsed.data : null
   }

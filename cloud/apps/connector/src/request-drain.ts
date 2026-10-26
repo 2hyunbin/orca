@@ -7,14 +7,17 @@ export class RequestDrain {
   private idle: (() => void) | null = null
 
   readonly middleware: MiddlewareHandler = async (context, next) => {
-    if (this.draining) return context.json({ error: 'shutting_down' }, 503)
+    if (this.draining) {
+      return context.json({ error: 'shutting_down' }, 503)
+    }
     this.active++
     try {
       await next()
     } finally {
-      if (--this.active === 0) this.idle?.()
+      if (--this.active === 0) {
+        this.idle?.()
+      }
     }
-    return
   }
 
   begin(): Promise<void> {

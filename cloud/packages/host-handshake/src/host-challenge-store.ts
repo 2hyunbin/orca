@@ -51,7 +51,9 @@ export class HostChallengeStore {
 
   async issue(hostPublicKeyB64: string): Promise<IssuedHostChallenge | null> {
     const hostPublicKey = decodeCanonicalBase64(hostPublicKeyB64, 32)
-    if (!hostPublicKey) return null
+    if (!hostPublicKey) {
+      return null
+    }
     const hostFingerprint = deriveHostFingerprint(hostPublicKey)
     const ephemeral = nacl.box.keyPair()
     const challengeNonce = randomBytes(nacl.box.nonceLength)
@@ -111,14 +113,18 @@ export class HostChallengeStore {
          FROM ${this.config.table} WHERE challenge_id = ?`,
         [challengeId]
       )
-      if (!row) return { ok: false, reason: 'unknown_challenge' }
+      if (!row) {
+        return { ok: false, reason: 'unknown_challenge' }
+      }
       if (row.consumed_at !== null && row.consumed_at !== undefined) {
         return { ok: false, reason: 'already_consumed' }
       }
       const now = this.now()
       // No skew allowance here: the gateway set expires_at from this same clock.
       // The tolerance belongs to the host, which validates a foreign timestamp.
-      if (now > Number(row.expires_at)) return { ok: false, reason: 'expired' }
+      if (now > Number(row.expires_at)) {
+        return { ok: false, reason: 'expired' }
+      }
       if (!proof || !equalDigest(sha256(proof), String(row.secret_hash))) {
         return { ok: false, reason: 'proof_mismatch' }
       }
@@ -128,7 +134,9 @@ export class HostChallengeStore {
         `UPDATE ${this.config.table} SET consumed_at = ? WHERE challenge_id = ? AND consumed_at IS NULL`,
         [now, challengeId]
       )
-      if (Number(consumed?.changes ?? 0) !== 1) return { ok: false, reason: 'already_consumed' }
+      if (Number(consumed?.changes ?? 0) !== 1) {
+        return { ok: false, reason: 'already_consumed' }
+      }
       return { ok: true, hostFingerprint: String(row.host_fingerprint) }
     })
   }

@@ -26,7 +26,9 @@ export class RateLimiter {
     this.buckets.set(key, { tokens: refilled >= 1 ? refilled - 1 : refilled, updatedAt: now })
     if (this.buckets.size > this.maxKeys) {
       const oldest = this.buckets.keys().next().value
-      if (oldest !== undefined) this.buckets.delete(oldest)
+      if (oldest !== undefined) {
+        this.buckets.delete(oldest)
+      }
     }
     return refilled >= 1
   }
@@ -47,6 +49,5 @@ export function limitByClientIp(limiter: RateLimiter, trustedProxyHops: number):
       return context.json({ error: 'rate_limited' }, 429)
     }
     await next()
-    return
   }
 }

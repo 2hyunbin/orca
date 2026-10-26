@@ -14,7 +14,7 @@ const POSTGRES_RETRY_MAX_DELAY_MS = 25
 
 export type SqlRow = Record<string, unknown>
 
-export interface CloudDatabase {
+export type CloudDatabase = {
   readonly dialect: 'sqlite' | 'postgres'
   query(sql: string, params?: unknown[]): Promise<SqlRow[]>
   transaction<T>(operation: (transaction: CloudDatabase) => Promise<T>): Promise<T>
@@ -45,7 +45,9 @@ class SqliteTransaction implements CloudDatabase {
   async query(sql: string, params: unknown[] = []): Promise<SqlRow[]> {
     const statement = this.database.prepare(sql)
     const bound = params.map((value) => (value === undefined ? null : value)) as never[]
-    if (returnsRows(sql)) return statement.all(...bound) as SqlRow[]
+    if (returnsRows(sql)) {
+      return statement.all(...bound) as SqlRow[]
+    }
     const result = statement.run(...bound)
     return [{ changes: Number(result.changes) }]
   }
@@ -223,7 +225,9 @@ class PostgresDatabase implements CloudDatabase {
 }
 
 async function applySchema(database: CloudDatabase, statements: string[]): Promise<void> {
-  for (const statement of statements) await database.query(statement)
+  for (const statement of statements) {
+    await database.query(statement)
+  }
 }
 
 // DDL may outlast request statement_timeout; apply once on a separate untimed connection, closed before serving, or every startup repeats the failure.
@@ -274,7 +278,9 @@ export type OpenCloudDatabaseInput = {
 export async function openCloudDatabase(input: OpenCloudDatabaseInput): Promise<CloudDatabase> {
   let database: CloudDatabase
   if (input.databaseUrl) {
-    if (!input.readOnly) await applySchemaOnUntimedPool(input.databaseUrl, input)
+    if (!input.readOnly) {
+      await applySchemaOnUntimedPool(input.databaseUrl, input)
+    }
     let connection: pg.ClientConfig = { connectionString: input.databaseUrl }
     if (input.readOnly) {
       connection = parseIntoClientConfig(input.databaseUrl)
@@ -298,10 +304,14 @@ export async function openCloudDatabase(input: OpenCloudDatabaseInput): Promise<
     const sqlite = new DatabaseSync(join(input.dataDir, `orca-${input.service}.sqlite`), {
       readOnly: input.readOnly ?? false
     })
-    if (!input.readOnly) sqlite.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
+    if (!input.readOnly) {
+      sqlite.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
+    }
     database = new SqliteDatabase(sqlite)
   }
-  if (database.dialect === 'postgres' || input.readOnly) return database
+  if (database.dialect === 'postgres' || input.readOnly) {
+    return database
+  }
   try {
     await applySchema(database, input.schemaStatements)
     return database

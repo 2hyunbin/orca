@@ -33,7 +33,9 @@ export class ConnectorHostLinks {
       'SELECT revoked_at FROM connector_hosts WHERE host_id = ?',
       [hostId]
     )
-    if (!row) return 'host_not_linked'
+    if (!row) {
+      return 'host_not_linked'
+    }
     return row.revoked_at === null ? null : 'host_revoked'
   }
 
@@ -61,7 +63,9 @@ export class ConnectorHostLinks {
          WHERE host_id = ? AND account_id = ? AND revoked_at IS NULL`,
         [this.now(), hostId, accountId]
       )
-      if (Number(revoked?.changes ?? 0) === 0) return false
+      if (Number(revoked?.changes ?? 0) === 0) {
+        return false
+      }
       await transaction.query('DELETE FROM connector_sessions WHERE host_fingerprint = ?', [hostId])
       await this.inbox.expireHost(transaction, hostId)
       return true
@@ -77,7 +81,9 @@ export class ConnectorHostLinks {
         'DELETE FROM connector_sessions WHERE token_hash = ? AND host_fingerprint = ?',
         [sessionId, hostId]
       )
-      if (Number(ended?.changes ?? 0) === 0) return false
+      if (Number(ended?.changes ?? 0) === 0) {
+        return false
+      }
       await transaction.query('DELETE FROM connector_hosts WHERE host_id = ?', [hostId])
       await this.inbox.expireHost(transaction, hostId)
       return true

@@ -32,7 +32,9 @@ function answer(
     Buffer.from(challenge.gatewayEphemeralPublicKeyB64, 'base64'),
     host.secretKey
   )
-  if (!plaintext) throw new Error('challenge did not open')
+  if (!plaintext) {
+    throw new Error('challenge did not open')
+  }
   const bytes = Buffer.from(plaintext)
   const lengthAt = bytes.indexOf(0) + 1
   const transcript = bytes.subarray(lengthAt + 4, lengthAt + 4 + bytes.readUInt32BE(lengthAt))

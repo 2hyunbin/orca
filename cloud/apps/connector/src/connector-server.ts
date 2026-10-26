@@ -136,7 +136,9 @@ export function createConnectorServer(
 
   app.post(CONNECTOR_PATHS.signInStart, limitUnauthenticated, limitBody, async (context) => {
     const body = ConnectorSignInStartRequestSchema.safeParse(await readJson(context))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {
+      return context.json({ error: 'invalid_request' }, 400)
+    }
     const location = config.clientLocationHeader
       ? context.req.header(config.clientLocationHeader)?.trim()
       : undefined
@@ -144,7 +146,9 @@ export function createConnectorServer(
       ip: readClientIp(context, config.trustedProxyHops),
       ...(location ? { location } : {})
     })
-    if (started === 'invalid_key') return context.json({ error: 'invalid_request' }, 400)
+    if (started === 'invalid_key') {
+      return context.json({ error: 'invalid_request' }, 400)
+    }
     if (started === 'rate_limited') {
       context.header('Retry-After', '60')
       return context.json({ error: 'rate_limited' }, 429)
@@ -161,7 +165,9 @@ export function createConnectorServer(
 
   app.post(CONNECTOR_PATHS.signInPoll, limitUnauthenticated, limitBody, async (context) => {
     const body = ConnectorSignInPollRequestSchema.safeParse(await readJson(context))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {
+      return context.json({ error: 'invalid_request' }, 400)
+    }
     return context.json(await signIns.poll(body.data.deviceCode))
   })
 
@@ -177,16 +183,22 @@ export function createConnectorServer(
 
   app.post(CONNECTOR_PATHS.hostChallenge, limitUnauthenticated, limitBody, async (context) => {
     const body = ConnectorHostChallengeRequestSchema.safeParse(await readJson(context))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {
+      return context.json({ error: 'invalid_request' }, 400)
+    }
     const issued = await challenges.issue(body.data.hostPublicKeyB64)
-    if (!issued) return context.json({ error: 'invalid_request' }, 400)
+    if (!issued) {
+      return context.json({ error: 'invalid_request' }, 400)
+    }
     const { hostFingerprint: _bound, ...response } = issued
     return context.json(response)
   })
 
   app.post(CONNECTOR_PATHS.hostSession, limitUnauthenticated, limitBody, async (context) => {
     const body = ConnectorHostSessionRequestSchema.safeParse(await readJson(context))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {
+      return context.json({ error: 'invalid_request' }, 400)
+    }
     const verification = await challenges.verify(body.data.challengeId, body.data.proofB64)
     if (!verification.ok) {
       const error = verification.reason === 'unknown_challenge' ? 'invalid_challenge' : 'invalid_proof'
@@ -196,7 +208,9 @@ export function createConnectorServer(
     const session = await sessions.create(hostId, (transaction) =>
       hostLinks.refusal(transaction, hostId)
     )
-    if (typeof session === 'string') return context.json({ error: session }, 403)
+    if (typeof session === 'string') {
+      return context.json({ error: session }, 403)
+    }
     const { sessionToken, expiresAt } = session
     return context.json({ sessionToken, expiresAt, hostId })
   })
