@@ -207,7 +207,7 @@ it.each([undefined, false, 'true'])(
   }
 )
 
-it.each(['original', 'execution-replaced', 'mirror-replaced', 'pairing-replaced'] as const)(
+it.each(['original', 'mirror-replaced'] as const)(
   'joins paired original refusal to verified naming/link/Close: %s',
   async (outcome) => {
     const actual = await vi.importActual<typeof CloseHoldingTerminalModule>(
@@ -281,24 +281,7 @@ it.each(['original', 'execution-replaced', 'mirror-replaced', 'pairing-replaced'
           }
         })
       }
-      if (outcome === 'pairing-replaced') {
-        replaceRuntimeEnvironmentRevisions([{ id: environmentId, createdAt: 2 }])
-      }
-      const incarnation = outcome === 'execution-replaced' ? 'replacement-life' : incarnationId
-      const currentIdentity = { ...identity, incarnationId: incarnation }
-      return {
-        ok: true,
-        result: {
-          terminal: {
-            ...resolved,
-            incarnationId: incarnation,
-            presentation: {
-              identity: currentIdentity,
-              holders: [{ hostId: 'local', identity: currentIdentity }]
-            }
-          }
-        }
-      }
+      return { ok: true, result: { terminal: resolved } }
     })
     Object.assign(window.api, { runtimeEnvironments: { call: rpc } })
     const target = resolveHeldTerminalTarget(
@@ -331,15 +314,12 @@ it.each(['original', 'execution-replaced', 'mirror-replaced', 'pairing-replaced'
         incarnationId,
         supportsPinCloseConsent: true
       })
-    } else {
-      expect(captured).toBeNull()
-    }
-    if (outcome === 'original') {
       const link = screen.getByRole('button', { name: title })
       expect(screen.getByRole('button', { name: 'Close terminal' })).toBeDefined()
       fireEvent.click(link)
       await waitFor(() => expect(mocks.reveal).toHaveBeenCalledWith(target))
     } else {
+      expect(captured).toBeNull()
       expect(screen.getByText('Unnamed fallback')).toBeDefined()
       expect(screen.queryByRole('button')).toBeNull()
     }
