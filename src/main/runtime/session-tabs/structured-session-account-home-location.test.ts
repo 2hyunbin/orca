@@ -36,7 +36,7 @@ it('without a router keeps the founding home through the real runtime and catalo
 it.each([
   { executionHostId: 'ssh:remote', wslDistro: null },
   { executionHostId: 'local', wslDistro: 'Ubuntu' }
-])(
+] as const)(
   'unsupported $executionHostId/$wslDistro never probes or mutates the local catalog',
   async (location) => {
     const record = {

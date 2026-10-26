@@ -61,7 +61,7 @@ it('pairs to host-owned options and persists only a genuine pick on that host', 
   const catalogStore = new AgentModelCatalogStore()
   const modelCatalog = createAgentModelCatalogService({
     store: catalogStore,
-    getRecord: (id) => rig.store.getRecord(id),
+    getRecord: (id) => rig.store.getRecord(id) ?? undefined,
     drivesRecord: () => true,
     resolveAccountHome: async () => {
       const record = rig.store.getRecord(REST_TEST_SESSION)
