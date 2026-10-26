@@ -1,9 +1,10 @@
 import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
 import type { PendingPrompt } from '../../shared/agent-pending-prompt'
+import type { AgentStatusHooksSettings } from '../../shared/agent-status-hooks-setting'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
 import type { ExternalConversationLink } from '../../shared/external-conversation-link'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
-import { admitConnectorAgent, connectorAgentArgs, type ConnectorSettings } from './connector-agents'
+import { admitConnectorAgent } from './connector-agents'
 import { cancelConversation, type CancelTerminal } from './external-conversation-cancel'
 import { ConversationChain } from './external-conversation-chain'
 import {
@@ -57,7 +58,7 @@ export function runtimeConversationHost(runtime: OrcaRuntimeService): ExternalCo
 
 export type ExternalConversationSeamDeps = {
   store: ExternalConversationLinkStore
-  readSettings: () => ConnectorSettings
+  readSettings: () => AgentStatusHooksSettings
   /** Re-enabling must not settle this process's running deliveries as abandoned leftovers. */
   receipts: DeliveryReceipts
   onWorkspaceRemoved: (listener: (worktreeId: string) => void) => () => void
@@ -71,7 +72,7 @@ export type ExternalConversationSeamDeps = {
   onAgentPaneChange: (listener: (change: AgentPaneChange) => void) => () => void
 }
 
-type StartInput = Omit<ConversationLaunchInput, 'agent' | 'agentArgs'> & { agent: string }
+type StartInput = Omit<ConversationLaunchInput, 'agent'> & { agent: string }
 
 /** One enabled period: disabling settles queued work and aborts running work at its next boundary. */
 export class ExternalConversationSeam {
@@ -197,7 +198,7 @@ export class ExternalConversationSeam {
           }
           return launchConversation(
             host.launcher,
-            { ...input, agent, agentArgs: connectorAgentArgs(agent, this.deps.readSettings()) },
+            { ...input, agent },
             signal,
             (workspace, paneKey) => {
               const link = { ...key, paneKey, agent, createdAt: Date.now() }
@@ -283,7 +284,6 @@ export class ExternalConversationSeam {
       terminal,
       workspace.worktreeId,
       link,
-      this.deps.readSettings(),
       JSON.stringify(['connector-reopen', key.source, key.externalId, deliveryId]),
       signal,
       (paneKey) => {
