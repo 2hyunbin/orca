@@ -63,15 +63,16 @@ describe('ExternalConversationSeam cancel', () => {
     expect(fake.keys).toEqual(['\x1b'])
   })
 
-  it('knows no open turn once the last watch is released, so a bound cancel acts on nothing', async () => {
+  it('still names the open turn from the hook row once the last watch is released', async () => {
     const { seam, host, hookRows, fake } = await linked()
     seam.watch(host, () => {})()
     hookRows.set(PANE, hookRow({ turnStartedAt: 100 }))
-    await expect(seam.cancel(host, KEY, 'c1', 100)).resolves.toEqual({
+    await expect(seam.cancel(host, KEY, 'c-old', 50)).resolves.toEqual({
       outcome: 'refused',
       reason: 'turn_not_running'
     })
-    expect(fake.keys).toEqual([])
+    await expect(seam.cancel(host, KEY, 'c-now', 100)).resolves.toEqual({ outcome: 'accepted' })
+    expect(fake.keys).toEqual(['\x1b'])
   })
 
   it('interrupts a working agent with one Escape, once per delivery id', async () => {

@@ -286,8 +286,8 @@ export class ConversationEvents {
 
   /** The pane's turn still running or waiting on the user, by the id its turn events carry; null when none. */
   openTurn(paneKey: string): number | null {
-    // Turn ids are only known while watched.
-    const row = this.release ? this.deps.readHookRow(paneKey) : null
+    // Unwatched, the hook row still names the turn, the same way turn events fall back to it.
+    const row = this.deps.readHookRow(paneKey)
     if (!row || hookRowAgentPhase(row) === 'done' || hookRowAgentPhase(row) === 'rest') {
       return null
     }
