@@ -20,6 +20,7 @@ import { parsePairingCode } from '../../shared/pairing'
 import { sendRemoteRuntimeRequest } from '../../shared/remote-runtime-client'
 import { execCommand } from '../ssh/remote-exec/remote-exec-command'
 import { readConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
+import { readWindowsProcessTableFresh } from '../windows/windows-process-table'
 import { resolveWslInteropSpawnCwd } from '../wsl-interop-spawn-directory'
 import { createWslDistroHolder, type WslDistroHolder } from './wsl-distro-holder'
 import { WSL_DISTRO_HOLDER_POLL_SECONDS } from './wsl-distro-holder-command'
@@ -205,8 +206,13 @@ async function idleReleasePhase(): Promise<void> {
     RELEASE_BUDGET_MS
   ).catch(async (error: unknown) => {
     // The distro is still running, so this boots nothing: record what kept it.
+    // Windows first: the guest probe below is itself a wsl.exe client.
+    receipt.windowsWslClients = (await readWindowsProcessTableFresh())
+      .filter((row) => /^wsl(host)?\.exe$/iu.test(row.name))
+      .map((row) => `${row.pid} ${row.command}`)
+    receipt.holderState = await holder.holderState(PLAIN)
     receipt.stillRunning = await guest(
-      'ls -la "$HOME/.orca/wsl-holder-release" 2>&1; ps -eo pid,args | grep -v grep | grep -v orca-wsl-exec-loop | grep -E "orca|node" || true'
+      'ls -la "$HOME/.orca/wsl-holder-release" 2>&1; ps -eo pid,ppid,args | grep -v orca-wsl-exec-loop || true'
     ).catch(String)
     throw error
   })
