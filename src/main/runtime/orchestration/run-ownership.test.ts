@@ -198,9 +198,7 @@ describe('Run ownership', () => {
     expect(db.getRun(run.id)).toEqual(before)
     expect(db.getRun(targetRun.id)?.coordinator_handle).toBe('target')
     expect(getRunHandover(db, run.id)).toBeDefined()
-    db.db
-      .prepare('UPDATE run_handovers SET expires_at = ? WHERE run_id = ?')
-      .run(Date.now() - 1, run.id)
+    db.db.prepare('UPDATE run_handovers SET expires_at = ? WHERE run_id = ?').run(0, run.id)
     expect(() => bind(run.id, target)).toThrow('not owned by your Task')
     issueRunHandover(db, { runId: run.id, caller: issuer, target: { taskId: task.id } })
     bind(run.id, caller('different'))

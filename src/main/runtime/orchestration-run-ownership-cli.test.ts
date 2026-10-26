@@ -30,6 +30,7 @@ afterEach(() => {
 })
 
 describe(`Run ownership through the ${compiledCli ? 'compiled' : 'source'} CLI and real host`, () => {
+  // The cross-process grant and replacement contract requires repeated real CLI startups.
   it('bounds explicit grants and lets a replacement inherit Task-owned Runs', async () => {
     const home = mkdtempSync(join(tmpdir(), 'orca-run-ownership-cli-'))
     for (const name of [
@@ -152,9 +153,7 @@ describe(`Run ownership through the ${compiledCli ? 'compiled' : 'source'} CLI a
       await grant(task)
       expect(getRunHandover(db, foreign)?.target_task_id).toBe(task)
       // Expire the saved grant without changing global clocks or subprocess time.
-      db.db
-        .prepare('UPDATE run_handovers SET expires_at = ? WHERE run_id = ?')
-        .run(Date.now() - 1, foreign)
+      db.db.prepare('UPDATE run_handovers SET expires_at = ? WHERE run_id = ?').run(0, foreign)
       refuseOwnership(await cli(worker, ['run-use', '--id', foreign], 1))
       await grant(task)
       await grant(otherTask)
