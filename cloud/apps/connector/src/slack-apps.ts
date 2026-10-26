@@ -25,12 +25,12 @@ export class SlackApps {
       : null
   }
 
-  async save(database: CloudDatabase, app: SlackAppCredentials, now: number): Promise<void> {
-    await database.query(
+  // False when the app is already registered: replacing an app's secrets is its own operation,
+  // never a side effect of registering again.
+  async register(database: CloudDatabase, app: SlackAppCredentials, now: number): Promise<boolean> {
+    const [result] = await database.query(
       `INSERT INTO connector_slack_apps (app_id, client_id, client_secret, signing_secret, created_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT (app_id) DO UPDATE SET client_id = excluded.client_id,
-         client_secret = excluded.client_secret, signing_secret = excluded.signing_secret`,
+       VALUES (?, ?, ?, ?, ?) ON CONFLICT (app_id) DO NOTHING`,
       [
         app.appId,
         app.clientId,
@@ -39,5 +39,6 @@ export class SlackApps {
         now
       ]
     )
+    return Number(result?.changes ?? 0) > 0
   }
 }

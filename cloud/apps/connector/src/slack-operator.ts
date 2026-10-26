@@ -84,11 +84,10 @@ export async function runSlackOperator(
       const { clientSecret, signingSecret, botToken } = secrets
       const now = deps.now()
       await deps.database.transaction(async (transaction) => {
-        await new SlackApps(tokenKey()).save(
-          transaction,
-          { appId, clientId, clientSecret, signingSecret },
-          now
-        )
+        const app = { appId, clientId, clientSecret, signingSecret }
+        if (!(await new SlackApps(tokenKey()).register(transaction, app, now))) {
+          throw new Error(`${appId} is already registered`)
+        }
         if (!(await installs().save(transaction, { teamId, appId, botUserId, botToken }, now))) {
           throw new Error(`${teamId} already has another Orca app installed`)
         }

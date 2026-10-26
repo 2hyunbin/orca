@@ -69,16 +69,16 @@ describe('Slack event ingress', () => {
   it('verifies each app with its own secret, and acts only where that app is installed', async () => {
     const harness = await linkedOwner()
     const now = harness.now()
-    await new SlackApps(harness.tokenKey).save(
+    await new SlackApps(harness.tokenKey).register(
       harness.database,
       { appId: 'A2', clientId: '3.4', clientSecret: 'cs-2', signingSecret: 'secret-2' },
       now
     )
-    await new SlackInstalls(harness.tokenKey).save(
-      harness.database,
-      { teamId: 'T2', appId: 'A2', botUserId: 'UBOT2', botToken: 'xoxb-2' },
-      now
-    )
+    const installs = new SlackInstalls(harness.tokenKey)
+    const install = { appId: 'A2', botUserId: 'UBOT2', botToken: 'xoxb-2' }
+    // One Orca app per workspace: app 2 can't take over app 1's workspace.
+    expect(await installs.save(harness.database, { ...install, teamId: TEAM }, now)).toBe(false)
+    expect(await installs.save(harness.database, { ...install, teamId: 'T2' }, now)).toBe(true)
     const signedBy = (secret: string, path: string, body: string) => {
       const timestamp = String(Math.floor(now / 1000))
       return harness.request(path, {
@@ -107,6 +107,32 @@ describe('Slack event ingress', () => {
     expect((await signedBy('secret-2', '/slack/apps/A2/events', event('A2', TEAM))).status).toBe(200)
     expect(await harness.poll()).toEqual([])
     expect(await harness.posts()).toEqual([])
+
+    // The same for answer presses.
+    const click = (appId: string) =>
+      new URLSearchParams({
+        payload: JSON.stringify({
+          type: 'block_actions',
+          api_app_id: appId,
+          team: { id: TEAM },
+          user: { id: OWNER },
+          channel: { id: CHANNEL },
+          container: { message_ts: THREAD },
+          actions: [{ action_id: 'answer:0', value: 'allow_once' }]
+        })
+      }).toString()
+    const clicked = (secret: string, appId: string, body: string) =>
+      signedBy(secret, `/slack/apps/${appId}/interactivity`, body)
+    expect((await clicked('secret-2', APP, click(APP))).status).toBe(401)
+    expect((await clicked('secret-2', 'A2', click(APP))).status).toBe(200)
+    expect((await clicked('secret-2', 'A2', click('A2'))).status).toBe(200)
+    expect(harness.fake.take()).toEqual([])
+
+    // A row that won't open is an operator fault, not a bad request: Slack retries a 500.
+    await harness.database.query(
+      "UPDATE connector_slack_apps SET signing_secret = 'v1.AAAA.AAAA.AAAA' WHERE app_id = 'A2'"
+    )
+    expect((await signedBy('secret-2', '/slack/apps/A2/events', event('A2', 'T2'))).status).toBe(500)
 
     // App 1's own signed event in its own workspace starts the conversation.
     expect((await harness.message(mention())).status).toBe(200)

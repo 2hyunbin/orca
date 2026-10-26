@@ -53,9 +53,9 @@ describe('Slack operator command', () => {
     ).rejects.toThrow('T1 already has another Orca app installed')
     // Refused as a whole: app 2 isn't kept either.
     expect(await new SlackApps(tokenKey).signingSecret(database, 'A2')).toBeNull()
-    // Re-registering the same app updates it in place.
-    await run(...REGISTER, '--bot-user', 'UBOT2')
-    expect((await new SlackInstalls(tokenKey).find(database, 'T1'))?.botUserId).toBe('UBOT2')
+    // Registering again never replaces an app's secrets.
+    await expect(run(...REGISTER, '--bot-user', 'UBOT2')).rejects.toThrow('A1 is already registered')
+    expect((await new SlackInstalls(tokenKey).find(database, 'T1'))?.botUserId).toBe('UBOT')
   })
 
   it('refuses bad stdin without echoing it, and bad ids', async () => {
