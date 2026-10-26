@@ -46,8 +46,12 @@ export function reportVisibleTabPickToHost(
     return
   }
   const state = useAppStore.getState()
-  // Without groups of its own the desktop shows the server's pick; there is nothing to report.
-  if ((state.groupsByWorktree[worktreeId] ?? []).length === 0) {
+  // Only the workspace on screen: its pane attaches anyway, so a report can never start a terminal
+  // the user isn't looking at. Without groups of its own the desktop shows the server's pick.
+  if (
+    state.activeWorktreeId !== worktreeId ||
+    (state.groupsByWorktree[worktreeId] ?? []).length === 0
+  ) {
     return
   }
   const visibleId = resolveWebSessionVisibleTabId(state, worktreeId)
@@ -56,12 +60,7 @@ export function reportVisibleTabPickToHost(
     return
   }
   const hostTabId = toHostSessionTabId(visible.entityId)
-  const picked = snapshot.tabs.find((tab) => tab.id === snapshot.activeTabId)
-  const pickedHostTabId = picked?.type === 'terminal' ? picked.parentTabId : picked?.id
-  if (pickedHostTabId === hostTabId) {
-    return
-  }
-  // Name the exact pane and require it ready: activating a pending one would start its terminal.
+  // Name the exact pane: the server remembers a pane, not just a tab.
   const localLeafId = state.terminalLayoutsByTabId[visible.entityId]?.activeLeafId
   const target = snapshot.tabs.find(
     (tab) =>
@@ -69,7 +68,7 @@ export function reportVisibleTabPickToHost(
       tab.parentTabId === hostTabId &&
       (!localLeafId || tab.leafId === localLeafId)
   )
-  if (target?.type !== 'terminal' || target.status !== 'ready') {
+  if (target?.type !== 'terminal') {
     return
   }
   const key = [
@@ -79,7 +78,13 @@ export function reportVisibleTabPickToHost(
     worktreeId
   ].join('\0')
   const pane = `${hostTabId}\0${target.leafId}`
-  if (reportedPaneByWorkspace.get(key) === pane) {
+  if (snapshot.activeTabId === target.id) {
+    // In agreement: remember it, so a later change of this desktop's pane reports again.
+    reportedPaneByWorkspace.set(key, pane)
+    return
+  }
+  // A pending pane would be started by activation; its own attach handles that.
+  if (target.status !== 'ready' || reportedPaneByWorkspace.get(key) === pane) {
     return
   }
   reportedPaneByWorkspace.set(key, pane)

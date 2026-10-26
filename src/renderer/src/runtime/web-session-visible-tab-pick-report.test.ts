@@ -55,6 +55,7 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
     mocks.call.mockReset().mockResolvedValue({ ok: true, result: {} })
     vi.stubGlobal('window', { api: { runtimeEnvironments: { call: mocks.call } } })
     mocks.state = {
+      activeWorktreeId: WT,
       activeGroupIdByWorktree: { [WT]: 'group' },
       groupsByWorktree: { [WT]: [{ id: 'group', activeTabId: 'u1', tabOrder: ['u1', 'u2'] }] },
       unifiedTabsByWorktree: {
@@ -85,6 +86,22 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
         intent: 'automatic'
       }
     })
+  })
+
+  it('reports again after the desktop moved away and back while the server agreed', () => {
+    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    const groups = mocks.state.groupsByWorktree as Record<string, { activeTabId: string }[]>
+    groups[WT]![0]!.activeTabId = 'u2'
+    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    groups[WT]![0]!.activeTabId = 'u1'
+    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    expect(mocks.call).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports nothing for a workspace that is not on screen', () => {
+    mocks.state.activeWorktreeId = 'other'
+    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    expect(mocks.call).not.toHaveBeenCalled()
   })
 
   it('reports again on a new connection', () => {
