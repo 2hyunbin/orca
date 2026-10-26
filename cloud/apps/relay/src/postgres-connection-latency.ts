@@ -11,6 +11,8 @@ export const SLOW_CONNECTION_WINDOW = 16
 export const SLOW_CONNECTION_PEER_MIN_SAMPLES = 8
 // pg-pool reuses the last-released client, so peers often sit idle through a stall: their latest
 // samples may predate the slow window by seconds (10-26 replay: up to ~30 s).
+// Trade-off: at a database-wide slowdown onset with idle peers, up to 3 retirements per pool (one per
+// 10 s while the idle peers' fast samples stay inside this slack), then none.
 export const SLOW_CONNECTION_PEER_SLACK_MS = 30_000
 // Older samples describe a connection that may have recovered since.
 export const SLOW_CONNECTION_SAMPLE_MAX_AGE_MS = 60_000

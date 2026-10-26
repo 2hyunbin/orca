@@ -4,6 +4,7 @@ import { PostgresDatabase } from './database.js'
 import type pg from 'pg'
 import {
   noteConnectionStatement,
+  SLOW_CONNECTION_PEER_SLACK_MS,
   SLOW_CONNECTION_RETIRE_INTERVAL_MS,
   SLOW_CONNECTION_SAMPLE_MAX_AGE_MS,
   SLOW_CONNECTION_WINDOW,
@@ -187,6 +188,34 @@ describe('slow connection retirement', () => {
     clock += SLOW_CONNECTION_RETIRE_INTERVAL_MS
     await runStatements(two.database, 4)
     expect(two.destroyed).toEqual(['slow-1', 'slow-2'])
+  })
+
+  it('bounds the misfire at a database-wide slowdown onset while peers sit idle', () => {
+    const retirement = new SlowConnectionRetirement(() => clock)
+    const peers = [fakeClient(), fakeClient()]
+    for (const peer of peers) {
+      for (let index = 0; index < 8; index++) {
+        noteConnectionStatement(peer, 3)
+        retirement.shouldRetire(peer, 1)
+      }
+    }
+    // From here every statement is slow, and only the busy connection (and its redials) runs.
+    let busy = fakeClient()
+    let id = 10
+    const retiredAt: number[] = []
+    for (let elapsed = 0; elapsed < 120_000; elapsed += 60) {
+      clock += 60
+      noteConnectionStatement(busy, 60)
+      if (retirement.shouldRetire(busy, id)) {
+        retiredAt.push(elapsed)
+        busy = fakeClient()
+        id++
+      }
+    }
+
+    expect(retiredAt.length).toBeLessThanOrEqual(3)
+    expect(retiredAt.length).toBeGreaterThan(0)
+    expect(Math.max(...retiredAt)).toBeLessThan(SLOW_CONNECTION_PEER_SLACK_MS + SLOW_CONNECTION_RETIRE_INTERVAL_MS)
   })
 
   it('drops clients the pool closed on idle, even when nothing else is judged', () => {
