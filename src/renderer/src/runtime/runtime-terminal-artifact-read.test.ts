@@ -16,6 +16,12 @@ const granted = {
 }
 const grantParams = { worktree: 'id:wt-1', grantId: 'g-1', absolutePath: '/tmp/out.png' }
 
+function grantIdOf(params: unknown): string | undefined {
+  return typeof params === 'object' && params !== null && 'grantId' in params
+    ? String(params.grantId)
+    : undefined
+}
+
 describe('a granted host file outside every workspace', () => {
   it('reads text through its grant', async () => {
     runtimeEnvironmentCall.mockResolvedValue({
@@ -89,7 +95,7 @@ describe('a granted host file outside every workspace', () => {
             _meta: meta
           }
         }
-        return (args.params as { grantId?: string }).grantId === 'g-1'
+        return grantIdOf(args.params) === 'g-1'
           ? {
               id: 'rpc',
               ok: false,

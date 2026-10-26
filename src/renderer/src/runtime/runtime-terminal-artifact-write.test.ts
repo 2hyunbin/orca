@@ -43,6 +43,12 @@ function save(content: string, baseline: string, onGrantRenewed?: (grantId: stri
   })
 }
 
+function grantIdOf(params: unknown): string | undefined {
+  return typeof params === 'object' && params !== null && 'grantId' in params
+    ? String(params.grantId)
+    : undefined
+}
+
 function callsTo(method: string): RuntimeRpcRequest[] {
   return runtimeEnvironmentCall.mock.calls.map(([call]) => call).filter((c) => c.method === method)
 }
@@ -79,7 +85,7 @@ describe('saving a granted host file outside every workspace', () => {
       if (method === 'files.resolveTerminalPath') {
         return granted('g-2')
       }
-      const grantId = (params as { grantId?: string }).grantId
+      const grantId = grantIdOf(params)
       if (grantId === 'g-1') {
         return refused('terminal_file_grant_expired')
       }
@@ -106,7 +112,7 @@ describe('saving a granted host file outside every workspace', () => {
       if (method === 'files.resolveTerminalPath') {
         return granted('g-2')
       }
-      if ((params as { grantId?: string }).grantId === 'g-1') {
+      if (grantIdOf(params) === 'g-1') {
         return refused('terminal_file_grant_stale')
       }
       return method === 'files.readTerminalArtifact' ? read('# theirs') : ok({ ok: true })

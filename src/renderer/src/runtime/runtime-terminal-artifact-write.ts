@@ -82,7 +82,6 @@ export async function writeRuntimeTerminalArtifactFile(
     return comparison === null ? null : { ok: false, diskConflict: comparison }
   }
   const send = async (grantId: string): Promise<FileWriteResult> => {
-    args.beforeSend?.()
     await callRuntimeRpc(
       args.target,
       'files.writeTerminalArtifact',
@@ -92,7 +91,8 @@ export async function writeRuntimeTerminalArtifactFile(
         absolutePath: args.absolutePath,
         content: args.content
       },
-      { timeoutMs: 15_000 }
+      // Why: runs after connection setup, so a discard during it still stops the write.
+      { timeoutMs: 15_000, beforeSend: args.beforeSend }
     )
     return FILE_WRITE_OK
   }
