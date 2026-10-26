@@ -30,9 +30,25 @@ export class WslOrcadConnectionSupersededError extends Error {
 /** A no-boot connect re-reads the running list just before anything spawns in the distro. */
 export async function assertWslDistroMayStart(
   distro: string,
-  requireRunning: ((distro: string) => Promise<boolean>) | undefined
+  requireRunning: ((distro: string) => Promise<boolean>) | undefined,
+  isCurrent: () => boolean
 ): Promise<void> {
-  if (requireRunning && !(await requireRunning(distro))) {
+  if (!requireRunning) {
+    return
+  }
+  const running = await requireRunning(distro)
+  // A close during the read supersedes this connect before it deploys anything.
+  if (!isCurrent()) {
+    throw new WslOrcadConnectionSupersededError(distro)
+  }
+  if (!running) {
     throw new WslDistroNotRunningError(distro)
   }
+}
+
+/** Failures the connection's status must not report as `failed`: liveness owns those verdicts. */
+export function isQuietConnectFailure(error: unknown): boolean {
+  return (
+    error instanceof WslOrcadConnectionSupersededError || error instanceof WslDistroNotRunningError
+  )
 }
