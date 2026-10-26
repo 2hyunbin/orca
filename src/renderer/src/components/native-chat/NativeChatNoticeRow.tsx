@@ -1,7 +1,7 @@
 import { NativeChatUsageLimitActions } from './NativeChatUsageLimitActions'
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/CommentMarkdown'
 import { NativeChatMarkdown } from './NativeChatMarkdown'
 import { NativeChatCodeBlock } from './NativeChatCodeBlock'
@@ -230,22 +230,37 @@ export function NativeChatNoticeRow({
   )
 }
 
-// Before the reported reset the same limit refuses the message, so Continue Now waits for it.
+// The clock subscription only invalidates the view; fresh wall time owns reset eligibility.
 function UsageLimitContinueNow({
   resetsAt
 }: {
   resetsAt: number | undefined
 }): React.JSX.Element | null {
   const orcaStopView = useNativeChatOrcaStopView()
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (resetsAt === undefined || now >= resetsAt) {
-      return
-    }
-    const timer = setTimeout(() => setNow(Date.now()), resetsAt - now)
-    return () => clearTimeout(timer)
-  }, [now, resetsAt])
-  if (resetsAt === undefined || now < resetsAt) {
+  const resetPassed = useSyncExternalStore(
+    (invalidate) => {
+      if (resetsAt === undefined) {
+        return () => {}
+      }
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const refresh = (): void => {
+        clearTimeout(timer)
+        const delay = resetsAt - Date.now()
+        timer = delay > 0 ? setTimeout(refresh, Math.min(delay, 2_147_483_647)) : undefined
+        invalidate()
+      }
+      refresh()
+      window.addEventListener('focus', refresh)
+      document.addEventListener('visibilitychange', refresh)
+      return () => {
+        clearTimeout(timer)
+        window.removeEventListener('focus', refresh)
+        document.removeEventListener('visibilitychange', refresh)
+      }
+    },
+    () => resetsAt !== undefined && Date.now() >= resetsAt
+  )
+  if (!resetPassed) {
     return null
   }
   return (
