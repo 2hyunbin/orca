@@ -40,11 +40,6 @@ export async function collectOrphanedBrowserRoutePartitionStorage(
     isBrowserRoutePartitionRetainedByAnyOwner,
     'cold'
   )
-  const boundDirectoryKeys = new Set(
-    [...dependencies.bindings.listBindings().keys()].map((partition) =>
-      browserRoutePartitionDirectoryKey(partitionDirectory(dependencies, partition))
-    )
-  )
   reportStorageFailures(
     'deferred folder deletion',
     await deletePendingBrowserRoutePartitionDirectories({
@@ -52,7 +47,14 @@ export async function collectOrphanedBrowserRoutePartitionStorage(
         currentBrowserRoutePartitionBindingFilePath()
       ),
       partitionDataRoot: dependencies.partitionDataRoot,
-      isBound: (directory) => boundDirectoryKeys.has(browserRoutePartitionDirectoryKey(directory)),
+      // Re-read per entry: a partition bound while an earlier delete awaited must survive.
+      isBound: (directory) => {
+        const key = browserRoutePartitionDirectoryKey(directory)
+        return [...dependencies.bindings.listBindings().keys()].some(
+          (partition) =>
+            browserRoutePartitionDirectoryKey(partitionDirectory(dependencies, partition)) === key
+        )
+      },
       removeDirectory: dependencies.removePartitionDirectory
     })
   )

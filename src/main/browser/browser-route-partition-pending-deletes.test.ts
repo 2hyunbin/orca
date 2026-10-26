@@ -139,3 +139,19 @@ it('compares Windows partition folders case-insensitively', async () => {
   })
   expect(removed).toEqual(['c:\\USERS\\me\\appdata\\orca\\PARTITIONS\\abc'])
 })
+
+it('keeps a folder queued while an earlier delete is in flight', async () => {
+  const a = folder('a')
+  const late = folder('late')
+  queueBrowserRoutePartitionDirectoryDelete(listPath, a)
+  await deletePendingBrowserRoutePartitionDirectories({
+    filePath: listPath,
+    partitionDataRoot: partitions,
+    isBound: () => false,
+    removeDirectory: async (directory) => {
+      queueBrowserRoutePartitionDirectoryDelete(listPath, late)
+      await removeDirectory(directory)
+    }
+  })
+  expect(JSON.parse(readFileSync(listPath, 'utf8'))).toEqual([late])
+})

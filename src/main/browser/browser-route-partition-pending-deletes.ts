@@ -91,6 +91,11 @@ export async function deletePendingBrowserRoutePartitionDirectories(input: {
       kept.push(directory)
     }
   }
-  writePending(input.filePath, kept)
+  // Keep folders queued while a delete above was awaiting.
+  const processed = new Set(pending)
+  writePending(input.filePath, [
+    ...kept,
+    ...readPending(input.filePath).filter((directory) => !processed.has(directory))
+  ])
   return failures
 }
