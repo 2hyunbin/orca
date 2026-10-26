@@ -422,6 +422,7 @@ describeIfBuilt('orca orchestration task readiness subprocess', () => {
 })
 
 describeIfBuilt('native caller subprocess over durable records', () => {
+  // Real CLI subprocess round trips include store reopen, retry/refusal checks and IPC cleanup.
   it('saves and replays the native caller result, then separates damaged admission from reference reads', async () => {
     const [{ OrcaRuntimeService }, { OrchestrationDb }, { OrcaRuntimeRpcServer }] =
       await loadRuntimeModules()
