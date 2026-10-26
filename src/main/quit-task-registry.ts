@@ -38,6 +38,11 @@ type QuitTask = (context: QuitTaskContext) => void | Promise<unknown>
 
 export class QuitTaskRegistry {
   private readonly phases = new Map<QuitTaskPhase, Map<string, QuitTask>>()
+  private readonly startedPhases = new Set<QuitTaskPhase>()
+
+  hasStarted(phase: QuitTaskPhase): boolean {
+    return this.startedPhases.has(phase)
+  }
 
   register(phase: QuitTaskPhase, name: string, task: QuitTask): () => void {
     let tasks = this.phases.get(phase)
@@ -55,6 +60,7 @@ export class QuitTaskRegistry {
 
   // Invoke before returning: SSH detach and the final save must share one synchronous turn.
   run(phase: QuitTaskPhase, context: QuitTaskContext): Promise<void> {
+    this.startedPhases.add(phase)
     const pending: Promise<unknown>[] = []
     for (const [name, task] of this.phases.get(phase) ?? []) {
       try {
@@ -75,3 +81,4 @@ const quitTasks = new QuitTaskRegistry()
 
 export const registerQuitTask = quitTasks.register.bind(quitTasks)
 export const runQuitTasks = quitTasks.run.bind(quitTasks)
+export const hasQuitTaskPhaseStarted = quitTasks.hasStarted.bind(quitTasks)
