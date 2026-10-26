@@ -84,6 +84,7 @@ describe('ConnectorPollClient', () => {
       agents: ['claude', 'codex'],
       promptKinds: ['approval', 'question'],
       features: ['answer', 'cancel', 'reply'],
+      sources: ['slack'],
       projects: [{ placeId: project!.placeId, name: 'orca', kind: 'git' }]
     })
     expect(fake.events).toEqual([{ kind: 'snapshot', conversations: [] }])
