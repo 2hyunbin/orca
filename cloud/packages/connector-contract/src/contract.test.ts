@@ -134,10 +134,8 @@ describe('events', () => {
         .success
     ).toBe(true)
     expect(
-      ConnectorEventSchema.safeParse({
-        ...turnEnded,
-        lastAssistantMessage: 'é'.repeat(limit / 2 + 1)
-      }).success
+      ConnectorEventSchema.safeParse({ ...turnEnded, lastAssistantMessage: 'é'.repeat(limit / 2 + 1) })
+        .success
     ).toBe(false)
   })
 
@@ -160,8 +158,7 @@ describe('events', () => {
 
   it('numbers every events batch within the hello it belongs to', () => {
     const events = [{ kind: 'turn-started', conversation, paneKey: 'tab:leaf', at: 1 }]
-    const parse = (body: object) =>
-      ConnectorEventsRequestSchema.safeParse({ v: 1, events, ...body })
+    const parse = (body: object) => ConnectorEventsRequestSchema.safeParse({ v: 1, events, ...body })
     expect(parse({ helloRev: 7, seq: 0 }).success).toBe(true)
     expect(parse({ helloRev: 7 }).success).toBe(false)
     expect(parse({ seq: 0 }).success).toBe(false)
