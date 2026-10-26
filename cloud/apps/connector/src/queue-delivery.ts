@@ -5,6 +5,12 @@ import type { ConnectorThreads, NewThread } from './connector-threads.js'
 
 export type QueueResult = EnqueueResult | 'unknown_host' | 'not_this_hosts_thread'
 
+// queueDelivery inside a caller's transaction.
+export type QueueInTransaction = (
+  transaction: CloudDatabase,
+  input: Parameters<typeof queueDelivery>[1]
+) => ReturnType<typeof queueDelivery>
+
 // One host-locked transaction finds the host, binds the thread and queues, so per-host seq is
 // assigned in order.
 export async function queueDelivery(

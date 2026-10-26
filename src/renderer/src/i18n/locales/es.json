@@ -20473,7 +20473,6 @@
       "signInLinkCopied": "Enlace de inicio de sesión copiado. Ábrelo en una ventana privada para iniciar sesión con otra cuenta.",
       "signInLinkCopyFailed": "No se pudo copiar el enlace.",
       "switchSessions": {
-        "selectAll": "Seleccionar todo",
         "busy": "Trabajando",
         "idle": "Inactivo",
         "keyword": {
@@ -20487,19 +20486,29 @@
         "restartOne": "Reiniciar sesión",
         "title": "Cambiado a {{account}}",
         "keep": "Mantener como está",
-        "selectAllSessions": "Seleccionar todas las sesiones",
         "restartOther": "Reiniciar {{count}} sesiones",
         "listLabel": "Sesiones de Claude que se reiniciarán",
-        "selectedCount": "{{selected}} de {{total}} seleccionadas",
         "dontAskAgainHint": "Puede desactivar esto en Configuración → Cuentas de proveedores de IA.",
-        "selectWorkspace": "Seleccionar todas las sesiones en {{workspace}}",
         "session": "Sesión de Claude",
         "settingKeep": "Nunca reiniciar",
         "settingRestart": "Reiniciar siempre",
         "settingTitle": "Cuando cambias de cuenta mientras Claude se está ejecutando",
         "settingDescription": "El reinicio continúa con cada conversación en ejecución en la nueva cuenta.",
         "restartingOther": "Reiniciando {{count}} sesiones de Claude con {{account}}",
-        "restartingOne": "Reiniciando 1 sesión de Claude con {{account}}"
+        "restartingOne": "Reiniciando 1 sesión de Claude con {{account}}",
+        "groupOnAccount": "En ejecución con {{account}}",
+        "groupElsewhere": "No está con {{account}}",
+        "groupCantMove": "No se pueden mover",
+        "selectGroup": "Seleccionar todas las sesiones de {{group}}",
+        "reasonWsl": "Terminal de WSL",
+        "reasonOwnFolder": "Usa tu propia carpeta de Claude",
+        "reasonUnknownAccount": "Cuenta desconocida",
+        "reasonNoSession": "No se puede reanudar",
+        "reviewBodyOne": "Otra sesión de Claude no se movió a {{next}}.",
+        "reviewBodyOther": "Otras {{count}} sesiones de Claude no se movieron a {{next}}.",
+        "notMovedOne": "Otra sesión no se movió.",
+        "notMovedOther": "Otras {{count}} sesiones no se movieron.",
+        "review": "Revisar"
       }
     },
     "hostSignIn": {

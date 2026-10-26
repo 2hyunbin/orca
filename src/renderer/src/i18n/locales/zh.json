@@ -20622,7 +20622,6 @@
       "signInLinkCopied": "已复制登录链接。请在隐私窗口中打开它以使用其他账户登录。",
       "signInLinkCopyFailed": "无法复制链接。",
       "switchSessions": {
-        "selectAll": "选择全部",
         "busy": "工作中",
         "idle": "空闲",
         "keyword": {
@@ -20641,14 +20640,24 @@
         "settingTitle": "Claude 运行期间切换账户时",
         "settingDescription": "重启后，每个正在进行的对话都会在新账户上继续。",
         "settingRestart": "总是重新启动",
-        "selectAllSessions": "选择所有会话",
         "restartOther": "重启 {{count}} 个会话",
         "session": "Claude 会话",
-        "selectWorkspace": "选择 {{workspace}} 中的所有会话",
-        "selectedCount": "已选择 {{selected}} / {{total}}",
         "restartingOther": "正在 {{account}} 账户上重启 {{count}} 个 Claude 会话",
         "restartingOne": "正在 {{account}} 账户上重启 1 个 Claude 会话",
-        "settingKeep": "永不重启"
+        "settingKeep": "永不重启",
+        "groupOnAccount": "在 {{account}} 上运行",
+        "groupElsewhere": "不在 {{account}} 上",
+        "groupCantMove": "无法移动",
+        "selectGroup": "选择 {{group}} 中的所有会话",
+        "reasonWsl": "WSL 终端",
+        "reasonOwnFolder": "使用你自己的 Claude 文件夹",
+        "reasonUnknownAccount": "账户未知",
+        "reasonNoSession": "无法恢复",
+        "reviewBodyOne": "另有 1 个 Claude 会话未移至 {{next}}。",
+        "reviewBodyOther": "另有 {{count}} 个 Claude 会话未移至 {{next}}。",
+        "notMovedOne": "另有 1 个会话未移动。",
+        "notMovedOther": "另有 {{count}} 个会话未移动。",
+        "review": "查看"
       }
     },
     "hostSignIn": {

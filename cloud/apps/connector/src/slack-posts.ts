@@ -5,6 +5,8 @@ import type { CloudDatabase, SqlRow } from '@orca-cloud/cloud-database'
 export type SlackPostKind = 'message' | 'status' | 'reaction' | 'ephemeral'
 
 export type SlackPlace = { teamId: string; channelId: string; threadTs: string }
+// A Block Kit block, built in slack-prompt-cards.ts and passed to Slack as is.
+export type SlackBlock = Record<string, unknown>
 
 export type ClaimedPost = SlackPlace & {
   postId: string
@@ -76,7 +78,7 @@ export class SlackPosts {
   // A text change never erases a delivery outcome: an uncertain status stays so, and stops editing.
   async setStatus(
     transaction: CloudDatabase,
-    status: SlackPlace & { postId: string; text: string }
+    status: SlackPlace & { postId: string; text: string; blocks?: SlackBlock[] }
   ): Promise<void> {
     const now = this.now()
     await transaction.query(
@@ -100,7 +102,7 @@ export class SlackPosts {
         status.teamId,
         status.channelId,
         status.threadTs,
-        JSON.stringify({ text: status.text }),
+        JSON.stringify({ text: status.text, ...(status.blocks ? { blocks: status.blocks } : {}) }),
         now,
         now,
         now
