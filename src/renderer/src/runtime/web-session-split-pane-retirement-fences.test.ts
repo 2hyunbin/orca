@@ -33,7 +33,22 @@ import {
   resetWebSessionTabsSyncTestState
 } from './web-session-tabs-sync-test-harness'
 
-vi.mock('../store', () => ({ useAppStore: { setState: vi.fn() } }))
+const store = vi.hoisted(() => {
+  const holder: { state: object; transferAgentPaneAuthority: ReturnType<typeof vi.fn> } = {
+    state: {},
+    transferAgentPaneAuthority: vi.fn()
+  }
+  return holder
+})
+vi.mock('../store', () => ({
+  useAppStore: {
+    setState: vi.fn(),
+    getState: () => ({
+      ...store.state,
+      transferAgentPaneAuthority: store.transferAgentPaneAuthority
+    })
+  }
+}))
 vi.mock('@/hooks/agent-hook-completion-notifications', () => ({
   observeAgentHookCompletionForNotification: vi.fn()
 }))
@@ -146,6 +161,7 @@ function createReconciliation() {
       })
       expect(recovered).not.toBeNull()
       if (recovered) {
+        store.state = state
         state = { ...state, ...applyFreshWebSessionTabsSnapshot(state, recovered, ENV) }
       }
     }
@@ -157,6 +173,7 @@ describe('host snapshot fences before split-pane retirement', () => {
     resetWebSessionTabsSyncTestState()
     clearWebSessionTerminalOrphanRecoveryForTests()
     clearPendingHostPaneMovesForTests()
+    store.transferAgentPaneAuthority.mockReset()
   })
 
   it('keeps a null-transport pane when an older layout arrives', async () => {
@@ -209,6 +226,13 @@ describe('host snapshot fences before split-pane retirement', () => {
     ])
     await view.receive(moved)
     expect(view.call).not.toHaveBeenCalled()
+    await vi.waitFor(() =>
+      expect(store.transferAgentPaneAuthority).toHaveBeenCalledWith({
+        fromPaneKey: makePaneKey(TAB_ID, SECOND_LEAF_ID),
+        toPaneKey: makePaneKey('web-terminal-host-tab-2', SECOND_LEAF_ID),
+        ptyId: movedPtyId
+      })
+    )
     expect(view.leaves()).toEqual([LEAF_ID])
     expect(view.layoutOf('web-terminal-host-tab-2')?.ptyIdsByLeafId).toEqual({
       [SECOND_LEAF_ID]: movedPtyId
@@ -250,6 +274,31 @@ describe('host snapshot fences before split-pane retirement', () => {
     confirmHostPaneMovesInSnapshot(
       snapshot(4, mountedLeaves, (leafId) => (leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'))
     )
+    expect(isPendingHostPaneMoveTarget(targetTabId, SECOND_LEAF_ID)).toBe(false)
+  })
+
+  it('moves no records for a snapshot older than the one already applied', async () => {
+    const view = createReconciliation()
+    await view.receive(snapshot(5))
+    const before = view.state()
+    // A delayed list reply from before a move another client made later; this window drops it.
+    const stale = snapshot(4, mountedLeaves, (leafId) =>
+      leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'
+    )
+    expect(collectPanesMovedElsewhere(before, stale, ENV)).toHaveLength(1)
+    await view.receive(stale)
+    await Promise.resolve()
+    expect(store.transferAgentPaneAuthority).not.toHaveBeenCalled()
+  })
+
+  it('needs no hold for a move whose snapshot arrived before its reply', () => {
+    const targetTabId = 'web-terminal-host-tab-2'
+    const release = beginPendingHostPaneMove(targetTabId, SECOND_LEAF_ID)
+    confirmHostPaneMovesInSnapshot(
+      snapshot(4, mountedLeaves, (leafId) => (leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'))
+    )
+    holdHostPaneMoveUntilSnapshot(targetTabId, SECOND_LEAF_ID)
+    release()
     expect(isPendingHostPaneMoveTarget(targetTabId, SECOND_LEAF_ID)).toBe(false)
   })
 

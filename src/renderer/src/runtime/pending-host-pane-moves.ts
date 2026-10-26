@@ -6,6 +6,8 @@ import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 const pendingTargets = new Map<string, number>()
 // Moves the host committed whose snapshot this window has not seen yet; a reply can beat its snapshot.
 const awaitingSnapshot = new Set<string>()
+// In-flight moves a host snapshot already showed, so their reply needs no hold.
+const shownWhileInFlight = new Set<string>()
 
 /** Marks a pane this window drew in its new tab before the host moved it; returns the release. */
 export function beginPendingHostPaneMove(targetTabId: string, leafId: string): () => void {
@@ -22,23 +24,31 @@ export function beginPendingHostPaneMove(targetTabId: string, leafId: string): (
       pendingTargets.set(key, remaining)
     } else {
       pendingTargets.delete(key)
+      shownWhileInFlight.delete(key)
     }
   }
 }
 
 /** Keeps a move the host committed pending until a host snapshot names the pane in its new tab. */
 export function holdHostPaneMoveUntilSnapshot(targetTabId: string, leafId: string): void {
-  awaitingSnapshot.add(makePaneKey(targetTabId, leafId))
+  const key = makePaneKey(targetTabId, leafId)
+  if (!shownWhileInFlight.has(key)) {
+    awaitingSnapshot.add(key)
+  }
 }
 
 /** Ends the hold on every committed move this host snapshot shows in its new tab. */
 export function confirmHostPaneMovesInSnapshot(snapshot: RuntimeMobileSessionTabsResult): void {
-  if (awaitingSnapshot.size === 0) {
+  if (awaitingSnapshot.size === 0 && pendingTargets.size === 0) {
     return
   }
   for (const row of snapshot.tabs) {
     if (row.type === 'terminal' && row.leafId) {
-      awaitingSnapshot.delete(makePaneKey(toWebTerminalSurfaceTabId(row.parentTabId), row.leafId))
+      const key = makePaneKey(toWebTerminalSurfaceTabId(row.parentTabId), row.leafId)
+      awaitingSnapshot.delete(key)
+      if (pendingTargets.has(key)) {
+        shownWhileInFlight.add(key)
+      }
     }
   }
 }
@@ -52,4 +62,5 @@ export function isPendingHostPaneMoveTarget(tabId: string, leafId: string): bool
 export function clearPendingHostPaneMovesForTests(): void {
   pendingTargets.clear()
   awaitingSnapshot.clear()
+  shownWhileInFlight.clear()
 }

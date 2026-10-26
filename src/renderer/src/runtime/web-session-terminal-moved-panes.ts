@@ -7,7 +7,11 @@ import {
   toHostSessionTabId,
   toWebTerminalSurfaceTabId
 } from '../../../shared/terminal-surface-id'
-import { isPendingHostPaneMoveTarget } from './pending-host-pane-moves'
+import {
+  confirmHostPaneMovesInSnapshot,
+  isPendingHostPaneMoveTarget
+} from './pending-host-pane-moves'
+import { useAppStore } from '../store'
 import {
   isRemovedSnapshot,
   isValidReadySurface,
@@ -98,4 +102,24 @@ export function collectPanesMovedElsewhere(
     }
   }
   return moved
+}
+
+/**
+ * For a host snapshot this window accepted: a pane another client moved keeps its status, unread,
+ * launch and sleeping records, as a local move's do, whether or not its source tab is mounted.
+ */
+export function transferPanesMovedInAcceptedSnapshot(
+  snapshot: RuntimeMobileSessionTabsResult,
+  environmentId: string
+): void {
+  confirmHostPaneMovesInSnapshot(snapshot)
+  // Why: read the bindings before this snapshot applies; transfer after, outside the store write.
+  const moved = collectPanesMovedElsewhere(useAppStore.getState(), snapshot, environmentId)
+  if (moved.length > 0) {
+    queueMicrotask(() => {
+      for (const transfer of moved) {
+        useAppStore.getState().transferAgentPaneAuthority(transfer)
+      }
+    })
+  }
 }

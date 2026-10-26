@@ -20,6 +20,7 @@ import {
 } from './tracking'
 import { clearWebSessionTabsTrackingForWorktree } from './tracking-lifecycle'
 import { queueAcceptedWebSessionTerminalSnapshot } from '../web-session-terminal-handle-events'
+import { transferPanesMovedInAcceptedSnapshot } from '../web-session-terminal-moved-panes'
 import { shouldAutoCreateInitialTerminal } from '@/components/terminal/initial-terminal'
 import { hostSnapshotAffirmsWorktreeContents } from '../host-session-snapshot-authority'
 
@@ -124,6 +125,7 @@ export function decideWebSessionTabsSnapshot(
   recordAcceptedWebSessionTabsEnvironment(environmentId, snapshot)
   // Why: a mounted mirror that exhausted bounded polling needs fresh host evidence without subscribing to every store write.
   queueAcceptedWebSessionTerminalSnapshot(snapshot, environmentId)
+  transferPanesMovedInAcceptedSnapshot(snapshot, environmentId)
   return WEB_SESSION_TABS_FRAME_APPLIED
 }
 
