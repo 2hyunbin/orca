@@ -555,6 +555,79 @@ describe('shared agent-hook-listener', () => {
     }
   })
 
+  it('keeps an Antigravity pane working until every helper finishes after the parent ends its turn', () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), 'orca-antigravity-helpers-'))
+    const transcriptPath = join(tmpDir, 'parent.jsonl')
+    writeFileSync(
+      transcriptPath,
+      `${[
+        JSON.stringify({ source: 'USER_EXPLICIT', type: 'USER_INPUT', content: 'translate' }),
+        JSON.stringify({
+          source: 'MODEL',
+          type: 'PLANNER_RESPONSE',
+          content: 'Waiting for helpers'
+        })
+      ].join('\n')}\n`
+    )
+    const parent = { conversationId: 'parent', lastUserInput: 'translate', transcriptPath }
+    const helper = (id: string) => ({ conversationId: id, lastUserInput: '' })
+    const launch = { name: 'invoke_subagent', args: { Model: 'flash', Workspace: 'inherit' } }
+    const send = (hookEventName: string, payload: Record<string, unknown>) =>
+      normalizeHookPayload(
+        state,
+        'antigravity',
+        { paneKey: PANE_KEY, hook_event_name: hookEventName, payload },
+        'production'
+      )
+
+    try {
+      const events = [
+        send('PreInvocation', parent),
+        send('PreToolUse', { ...parent, toolCall: launch }),
+        // A helper's first hook can beat the parent's PostToolUse.
+        send('PreInvocation', helper('fr')),
+        send('PostToolUse', { ...parent, toolCall: launch, error: '' }),
+        send('PreToolUse', { ...parent, toolCall: launch }),
+        send('PostToolUse', { ...parent, toolCall: launch, error: '' }),
+        send('PreToolUse', { ...parent, toolCall: launch }),
+        send('PostToolUse', { ...parent, toolCall: launch, error: '' }),
+        send('PreInvocation', helper('es')),
+        // Ended turn without fullyIdle=false while the third helper has not reported yet.
+        send('Stop', parent),
+        send('Stop', { ...helper('fr'), fullyIdle: true }),
+        send('PreInvocation', helper('de')),
+        send('Stop', { ...helper('es'), fullyIdle: true })
+      ]
+      // The parent's own turn is over; only its helpers hold the pane open.
+      expect(events[9]?.payload.mainAgent?.state).toBe('done')
+      expect(events.map((event) => event?.payload.state ?? null)).toEqual([
+        'working',
+        'working',
+        null,
+        'working',
+        'working',
+        'working',
+        'working',
+        'working',
+        null,
+        'working',
+        null,
+        null,
+        null
+      ])
+      const done = send('Stop', { ...helper('de'), fullyIdle: true })
+      expect(done?.payload).toMatchObject({
+        state: 'done',
+        prompt: 'translate',
+        lastAssistantMessage: 'Waiting for helpers',
+        mainAgent: { state: 'done' }
+      })
+      expect(done?.providerSession?.id).toBe('parent')
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('tracks a new Antigravity conversation after the parent exits mid-subagent', () => {
     const send = (hookEventName: string, payload: Record<string, unknown>) =>
       normalizeHookPayload(

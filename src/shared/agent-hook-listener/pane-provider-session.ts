@@ -6,6 +6,7 @@ import {
   type AgentProviderSessionMetadata
 } from '../agent-session-resume'
 import type { HookListenerState } from './listener-state'
+import { withAntigravityParentConversation } from './providers/antigravity-subagent-roster'
 import { withHermesPaneSessionId } from './providers/hermes-events'
 import { readString } from './tool-input-preview'
 
@@ -21,7 +22,11 @@ export function readPaneProviderSession(
   }
   const providerSession = extractAgentProviderSession(
     source,
-    source === 'hermes' ? withHermesPaneSessionId(state, paneKey, hookPayload) : hookPayload
+    source === 'hermes'
+      ? withHermesPaneSessionId(state, paneKey, hookPayload)
+      : source === 'antigravity'
+        ? withAntigravityParentConversation(state, paneKey, hookPayload)
+        : hookPayload
   )
   if (!providerSession) {
     return null
