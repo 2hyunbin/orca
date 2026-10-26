@@ -22,6 +22,7 @@ export type RemoteFileBrowserFilterKeyCommandsArgs = {
   moveHighlight: (index: number) => void
   listParentPath: string
   preview: PreviewState | null
+  previewMatchesInput: (raw: string) => boolean
   discardPreview: () => void
   resolvedPath: string
   pathFlavor: FilesystemPathFlavor
@@ -43,6 +44,7 @@ export function useRemoteFileBrowserFilterKeyCommands({
   moveHighlight,
   listParentPath,
   preview,
+  previewMatchesInput,
   discardPreview,
   resolvedPath,
   pathFlavor,
@@ -55,7 +57,12 @@ export function useRemoteFileBrowserFilterKeyCommands({
 }: RemoteFileBrowserFilterKeyCommandsArgs): (e: KeyboardEvent<HTMLInputElement>) => void {
   return useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
-      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !isImeOwnedKeyboardEvent(e)) {
+      const modified = e.shiftKey || e.metaKey || e.ctrlKey || e.altKey
+      if (
+        (e.key === 'ArrowDown' || e.key === 'ArrowUp') &&
+        !modified &&
+        !isImeOwnedKeyboardEvent(e)
+      ) {
         if (displayEntries.length > 0 && !preview?.loading) {
           e.preventDefault()
           const delta = e.key === 'ArrowDown' ? 1 : -1
@@ -64,7 +71,8 @@ export function useRemoteFileBrowserFilterKeyCommands({
         return
       }
       if (e.key === 'Enter') {
-        if (preview?.error || preview?.loading) {
+        // Why: until the debounce resolves a newly typed directory, the preview shows the old one.
+        if (preview?.error || preview?.loading || (preview && !previewMatchesInput(filter))) {
           e.preventDefault()
           return
         }
@@ -143,6 +151,7 @@ export function useRemoteFileBrowserFilterKeyCommands({
       moveHighlight,
       listParentPath,
       preview,
+      previewMatchesInput,
       navigate,
       navigateInto,
       navigateUp,

@@ -40,9 +40,29 @@ async function render(): Promise<{
   return { container, input, root }
 }
 
-async function press(input: HTMLInputElement, key: string): Promise<void> {
+async function press(
+  input: HTMLInputElement,
+  key: string,
+  modifiers: KeyboardEventInit = {}
+): Promise<void> {
   await act(async () => {
-    input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers })
+    )
+    await flushPromises()
+  })
+}
+
+async function type(input: HTMLInputElement, value: string): Promise<void> {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+async function settlePathResolve(): Promise<void> {
+  await act(async () => {
+    vi.advanceTimersByTime(300)
     await flushPromises()
   })
 }
@@ -59,6 +79,7 @@ describe('RemoteFileBrowser keyboard navigation', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     document.body.replaceChildren()
     vi.restoreAllMocks()
   })
@@ -80,6 +101,10 @@ describe('RemoteFileBrowser keyboard navigation', () => {
     expect(selectedRow(container)).toBe('README.md')
 
     await press(input, 'ArrowUp')
+    expect(selectedRow(container)).toBe('src')
+
+    // Modified arrows stay with the input (selection, caret jumps).
+    await press(input, 'ArrowDown', { shiftKey: true })
     expect(selectedRow(container)).toBe('src')
 
     await act(async () => root.unmount())
@@ -136,22 +161,39 @@ describe('RemoteFileBrowser keyboard navigation', () => {
     await press(input, 'ArrowDown')
     browseDir.mockClear()
 
-    await act(async () => {
-      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
-      valueSetter?.call(input, '~/')
-      input.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    await act(async () => {
-      vi.advanceTimersByTime(300)
-      await flushPromises()
-    })
+    await type(input, '~/')
+    await settlePathResolve()
     await press(input, 'Enter')
 
+    // Committing `~/` reopens the cached home listing and clears the typed path.
+    expect(input.value).toBe('')
     expect(browseDir).not.toHaveBeenCalledWith({
       targetId: 'target-1',
       dirPath: '/home/alice/src'
     })
-    vi.useRealTimers()
+    await act(async () => root.unmount())
+  })
+
+  // Why: until the debounce resolves `docs/`, the preview and its moved highlight still show `~/`.
+  it('ignores Enter on a typed directory that has not resolved yet', async () => {
+    vi.useFakeTimers()
+    const { input, root } = await render()
+    await type(input, '~/')
+    await settlePathResolve()
+    await press(input, 'ArrowDown')
+    await press(input, 'ArrowDown')
+    browseDir.mockClear()
+
+    await type(input, '~/docs/')
+    await press(input, 'Enter')
+    expect(browseDir).not.toHaveBeenCalled()
+
+    await settlePathResolve()
+    await press(input, 'Enter')
+    expect(browseDir).toHaveBeenLastCalledWith({
+      targetId: 'target-1',
+      dirPath: '/home/alice/docs'
+    })
     await act(async () => root.unmount())
   })
 })
