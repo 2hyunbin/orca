@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import {
   CONNECTOR_CLIENT_LIMITS,
+  type ConnectorConversation,
   type ConnectorProject
 } from '../../shared/connector-cloud-contract'
 import {
@@ -56,7 +57,7 @@ function decodePlace(placeId: string): Place | null {
 export function placeLaunchTarget(
   placeId: string,
   deliveryId: string,
-  source: string
+  source: ConnectorConversation['source']
 ): AgentLaunchParams['target'] | null {
   const place = decodePlace(placeId)
   if (!place) {
