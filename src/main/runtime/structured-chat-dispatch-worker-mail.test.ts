@@ -4,7 +4,8 @@ import { encodeAgentSessionRecord } from '../../shared/agent-session-record-stor
 import { createStructuredWorkerSessionForWorktree } from './rpc/methods/orchestration/worker/worker-topology'
 import {
   sendStructuredWorkerPreamble,
-  releaseStructuredWorkerSession
+  releaseStructuredWorkerSession,
+  subscribeForRedrive
 } from './rpc/methods/orchestration-structured-worker-session'
 import { attachParams } from './structured-chat-coordinator-fake-codex-fixture'
 import { sealedChildEnv } from './structured-session-child-env.test-support'
@@ -24,7 +25,6 @@ vi.mock('../node-runtime/pinned-zip-members', () => ({
 import { describe, expect, it, vi } from 'vitest'
 import { formatOrcaSessionAddress } from '../../shared/orca-session-address'
 import { testOrcaSessionId } from '../../shared/orca-session-address-test-fixture'
-import { subscribeForRedrive } from './rpc/methods/orchestration-structured-worker-session'
 import { idOf } from './rpc/orchestration-session-caller-test-fixture'
 import {
   COORDINATOR,

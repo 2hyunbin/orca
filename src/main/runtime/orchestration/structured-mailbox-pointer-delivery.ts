@@ -1,7 +1,9 @@
 import { isAdmissibleAgentJournalMessageBody } from '../../../shared/agent-session-journal-schemas'
 import { selectSessionMail } from './structured-session-mail-target'
-import { currentSessionMail } from './structured-mailbox-pointer-receipt'
-import { recordStructuredMailHandoff as record } from './structured-mailbox-pointer-receipt'
+import {
+  currentSessionMail,
+  recordStructuredMailHandoff as record
+} from './structured-mailbox-pointer-receipt'
 import type { OrchestrationMessageWaiter } from './mailbox-pointer-eligibility'
 import type { StructuredPointerRetainReason } from './structured-session-pointer-delivery'
 import { readMailHandoff } from './mail-handoff'

@@ -1,8 +1,10 @@
 import { type selectStructuredMailHandoff, structuredMailMaySubmit } from './mailbox-settlement'
-import type { StructuredPointerTarget } from './structured-mailbox-pointer-delivery'
+import type {
+  StructuredPointerTarget,
+  StructuredMailboxPointerHost
+} from './structured-mailbox-pointer-delivery'
 import type { OrchestrationDb, MessageRow } from './db'
 import { readMailHandoff, type StructuredMailHandoff } from './mail-handoff'
-import type { StructuredMailboxPointerHost } from './structured-mailbox-pointer-delivery'
 
 export function recordStructuredMailHandoff(
   db: OrchestrationDb,

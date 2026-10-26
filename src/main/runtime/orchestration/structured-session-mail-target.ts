@@ -12,11 +12,13 @@ import { selectStructuredMailHandoff } from './mailbox-settlement'
 import { currentSessionMail } from './structured-mailbox-pointer-receipt'
 import { drainLegacyMailHandoff } from './legacy-mail-handoff'
 import { structuredMailBody } from './structured-mail-source'
-import type { StructuredMailboxPointerHost } from './structured-mailbox-pointer-delivery'
+import type {
+  StructuredMailboxPointerHost,
+  StructuredPointerTarget
+} from './structured-mailbox-pointer-delivery'
 import type { OrchestrationMessageWaiter } from './mailbox-pointer-eligibility'
 import type { OrchestrationCliCommand } from './cli-command'
 import type { SenderNameResolver } from './agent-message-sender'
-import type { StructuredPointerTarget } from './structured-mailbox-pointer-delivery'
 import {
   addressableSessionParty,
   structuredSessionMailReach
