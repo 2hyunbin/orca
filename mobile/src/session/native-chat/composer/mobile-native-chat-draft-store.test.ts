@@ -2,7 +2,17 @@ import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it } from 'vitest'
 import { useMobileNativeChatDrafts } from './use-mobile-native-chat-drafts'
-import { resetMobileNativeChatDraftStoreForTests } from './mobile-native-chat-draft-store'
+import {
+  clearMobileNativeChatDraftForSend,
+  setMobileNativeChatDraftText,
+  readMobileNativeChatDraftEditGeneration,
+  resetMobileNativeChatDraftStoreForTests
+} from './mobile-native-chat-draft-store'
+import {
+  readMobileNativeChatDraftInputs,
+  updateMobileNativeChatDraftInputs,
+  resetMobileNativeChatDraftInputsForTests
+} from './mobile-native-chat-draft-inputs'
 
 type DraftState = ReturnType<typeof useMobileNativeChatDrafts>
 
@@ -13,6 +23,7 @@ describe('mobile native-chat draft store', () => {
   afterEach(() => {
     act(() => renderer?.unmount())
     resetMobileNativeChatDraftStoreForTests()
+    resetMobileNativeChatDraftInputsForTests()
     renderer = null
     state = null
   })
@@ -64,6 +75,21 @@ describe('mobile native-chat draft store', () => {
     act(() => currentState().setComposerText('ping'))
     act(() => currentState().clearDraftForSend(editedOrigin, 'ping'))
     expect(currentState().composerText).toBe('ping')
+  })
+
+  it('retires sent skill identity only when the matching draft is cleared', () => {
+    const scope = 'sent-skills'
+    setMobileNativeChatDraftText(scope, '$review draft')
+    updateMobileNativeChatDraftInputs(scope, () => ({
+      images: [],
+      files: [],
+      skills: [{ name: 'review', path: '/remote/SKILL.md' }]
+    }))
+    const generation = readMobileNativeChatDraftEditGeneration(scope)
+    clearMobileNativeChatDraftForSend(scope, generation - 1, '$review draft')
+    expect(readMobileNativeChatDraftInputs(scope).skills).toHaveLength(1)
+    clearMobileNativeChatDraftForSend(scope, generation, '$review draft')
+    expect(readMobileNativeChatDraftInputs(scope).skills).toEqual([])
   })
 
   it('keeps a typed draft after the chat screen unmounts and remounts', async () => {

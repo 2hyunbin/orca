@@ -1,4 +1,5 @@
 import { useSyncExternalStore, type SetStateAction } from 'react'
+import { pruneMobileNativeChatDraftSkills } from './mobile-native-chat-draft-inputs'
 import type { MobileNativeChatLaunchDraftSeed } from './use-mobile-native-chat-launch-draft-seed'
 
 // Text and its edit revision outlive the screen, including callbacks from an older mount.
@@ -59,6 +60,7 @@ export function clearMobileNativeChatDraftForSend(
 ): void {
   const current = drafts.get(draftKey)
   if ((current?.editGeneration ?? 0) === editGeneration && (current?.text ?? '') === text) {
+    pruneMobileNativeChatDraftSkills(draftKey, '')
     setMobileNativeChatDraftText(draftKey, '')
   }
 }
