@@ -41,7 +41,7 @@ async function setup(
   const harness = await createConnectorHarness({}, options)
   const machine = await harness.machine('user-1', machineOptions)
   expect(await machine.hello()).toEqual({ status: 200, helloRev: 1 })
-  const enqueue = (externalId: string, deliveryId: string, body: DeliveryBody) =>
+  const enqueue = (externalId: string, deliveryId: string, body: DeliveryBody, held = false) =>
     harness.runtime.queueDelivery({
       thread: {
         externalId,
@@ -53,7 +53,8 @@ async function setup(
         placeId: 'pl_1'
       },
       deliveryId,
-      body
+      body,
+      held
     })
   const poll = async () => {
     const { status, body } = await machine.poll()
@@ -61,7 +62,17 @@ async function setup(
     return ConnectorPollResponseSchema.parse(body)
   }
   const ids = async () => (await poll()).deliveries.map((delivery) => delivery.deliveryId)
-  return { harness, machine, enqueue, poll, ids }
+  const attach = (deliveryId: string, prompt: string) =>
+    harness.database.transaction((transaction) =>
+      harness.runtime.inbox.attach(transaction, machine.hostId, deliveryId, prompt)
+    )
+  const states = async () =>
+    Object.fromEntries(
+      (await harness.database.query('SELECT delivery_id, state FROM connector_inbox')).map(
+        (row) => [String(row.delivery_id), String(row.state)]
+      )
+    )
+  return { harness, machine, enqueue, poll, ids, attach, states }
 }
 
 describe('connector inbox', () => {
@@ -74,7 +85,9 @@ describe('connector inbox', () => {
     const { harness, machine, enqueue, ids } = await setup()
     await enqueue('a', 'a1', START)
     const sameMachine = await harness.machine('user-1', { machineId: machine.machineId })
-    expect(ConnectorPollResponseSchema.parse((await sameMachine.poll()).body).deliveries).toHaveLength(1)
+    expect(
+      ConnectorPollResponseSchema.parse((await sameMachine.poll()).body).deliveries
+    ).toHaveLength(1)
     const otherAccount = await harness.machine('user-2', { machineId: machine.machineId })
     expect((await otherAccount.poll()).status).toBe(409)
     expect(await ids()).toEqual([])
@@ -367,6 +380,70 @@ describe('connector inbox', () => {
     expect(await harness.runtime.inbox.expireDue()).toEqual([
       { hostId: expect.any(String), externalId: 'a' }
     ])
+  })
+
+  it('holds a start, and what is behind it, until its prompt is attached', async () => {
+    const { enqueue, poll, ids, attach } = await setup()
+    await enqueue('a', 'a1', START, true)
+    await enqueue('a', 'a2', SEND)
+    await enqueue('b', 'b1', START)
+    expect(await ids()).toEqual(['b1'])
+    await expect(attach('a1', 'the thread\n\nfix it')).resolves.toBe(true)
+    await expect(attach('a1', 'again')).resolves.toBe(false)
+    expect((await poll()).deliveries).toEqual([
+      expect.objectContaining({ deliveryId: 'a1', prompt: 'the thread\n\nfix it' })
+    ])
+  })
+
+  it('refuses to attach a held start past its deadline, swept yet or not', async () => {
+    const { harness, enqueue, ids, attach, states } = await setup()
+    await enqueue('a', 'a1', START, true)
+    harness.advance(CONNECTOR_LIMITS.deliveryTtlMs)
+    await expect(attach('a1', 'late')).resolves.toBe(false)
+    expect(await harness.runtime.inbox.expireDue()).toEqual([
+      { hostId: expect.any(String), externalId: 'a' }
+    ])
+    await expect(attach('a1', 'late')).resolves.toBe(false)
+    expect(await states()).toEqual({ a1: 'expired' })
+    expect(await ids()).toEqual([])
+  })
+
+  it('expires what is queued behind a start that never left, and lets a new start through', async () => {
+    const { harness, enqueue, ids, states } = await setup()
+    await enqueue('a', 'a1', START, true)
+    harness.advance(1)
+    await enqueue('a', 'a2', SEND)
+    harness.advance(CONNECTOR_LIMITS.deliveryTtlMs - 1)
+    await enqueue('a', 'a3', START)
+    await enqueue('a', 'a4', SEND)
+    await harness.runtime.inbox.expireDue()
+    expect(await states()).toEqual({ a1: 'expired', a2: 'expired', a3: 'pending', a4: 'pending' })
+    expect(await ids()).toEqual(['a3'])
+  })
+
+  it('never hands out a send that committed behind a start an earlier sweep expired', async () => {
+    const { harness, enqueue, ids, states } = await setup()
+    await enqueue('a', 'a1', START)
+    harness.advance(CONNECTOR_LIMITS.deliveryTtlMs)
+    await harness.runtime.inbox.expireDue()
+    // Routed on a read from before the sweep.
+    await enqueue('a', 'a2', SEND)
+    expect(await ids()).toEqual([])
+    await harness.runtime.inbox.expireDue()
+    expect(await states()).toEqual({ a1: 'expired', a2: 'expired' })
+  })
+
+  it('keeps what is behind a start that was leased, since it may yet be received', async () => {
+    const { harness, machine, enqueue, ids, states } = await setup()
+    await enqueue('a', 'a1', START)
+    expect(await ids()).toEqual(['a1'])
+    harness.advance(CONNECTOR_LIMITS.deliveryTtlMs - 1)
+    await enqueue('a', 'a2', SEND)
+    harness.advance(CONNECTOR_LIMITS.leasedExpiryGraceMs + 1)
+    await harness.runtime.inbox.expireDue()
+    expect(await states()).toEqual({ a1: 'expired', a2: 'pending' })
+    await machine.ack([{ deliveryId: 'a1', step: 'received' }])
+    expect(await ids()).toEqual(['a2'])
   })
 
   it('accepts a late received for expired work', async () => {

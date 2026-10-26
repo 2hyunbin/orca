@@ -13,7 +13,18 @@ const rebindParams = (paneKey: string) => [paneKey, paneKey, paneKey, paneKey]
 const ON_BOUND_PANE = 'host_id = ? AND external_id = ? AND (pane_key IS NULL OR pane_key = ?)'
 
 // Only Slack threads are stored so far; another source's conversation never names one of them.
-const isStored = (conversation: ConnectorConversation) => conversation.source === 'slack'
+export const isStored = (conversation: ConnectorConversation) => conversation.source === 'slack'
+
+// A batch narrowed to stored conversations; a snapshot keeps only its stored entries.
+export function storedEvents(events: ConnectorEvent[]): ConnectorEvent[] {
+  return events.flatMap((event): ConnectorEvent[] => {
+    if (event.kind === 'snapshot') {
+      const conversations = event.conversations.filter((entry) => isStored(entry.conversation))
+      return [{ ...event, conversations }]
+    }
+    return isStored(event.conversation) ? [event] : []
+  })
+}
 
 export type NewThread = {
   externalId: string
@@ -63,16 +74,12 @@ export class ConnectorThreads {
     events: ConnectorEvent[]
   ): Promise<void> {
     for (const event of events) {
-      if (event.kind !== 'snapshot' && !isStored(event.conversation)) {
-        continue
-      }
       if (event.kind === 'snapshot') {
-        const conversations = event.conversations.filter((entry) => isStored(entry.conversation))
         // Not working never means done: an open turn the snapshot doesn't show working (or doesn't
         // list; it lists recently active linked conversations) is unverifiable, and an unlisted one has no prompt.
         const notIn = (ids: string[]) =>
           ids.length > 0 ? ` AND external_id NOT IN (${ids.map(() => '?').join(', ')})` : ''
-        const working = conversations
+        const working = event.conversations
           .filter((entry) => entry.working)
           .map((entry) => entry.conversation.externalId)
         await transaction.query(
@@ -80,12 +87,12 @@ export class ConnectorThreads {
            WHERE host_id = ? AND turn_state = 'working'${notIn(working)}`,
           [hostId, ...working]
         )
-        const listed = conversations.map((entry) => entry.conversation.externalId)
+        const listed = event.conversations.map((entry) => entry.conversation.externalId)
         await transaction.query(
           `UPDATE connector_threads SET pending_prompt = NULL WHERE host_id = ?${notIn(listed)}`,
           [hostId, ...listed]
         )
-        for (const entry of conversations) {
+        for (const entry of event.conversations) {
           await transaction.query(
             `UPDATE connector_threads SET ${REBIND_PANE}, agent = ?, pending_prompt = ?
              WHERE host_id = ? AND external_id = ?`,

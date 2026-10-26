@@ -10,6 +10,8 @@ import { jsonBytes } from './connector-snapshot'
 // `reply` is advertised once `orca slack reply` ships.
 const FEATURES = ['answer', 'cancel']
 const PROMPT_KINDS = ['approval', 'question']
+// Only Slack conversations reach this machine's seam so far.
+const SOURCES = ['slack']
 
 export type ConnectorHelloSaid = { agents: string[]; projects: ConnectorProject[] }
 
@@ -27,7 +29,8 @@ export function connectorHello(
     hostName: machine.hostName,
     agents: said.agents,
     promptKinds: PROMPT_KINDS,
-    features: FEATURES
+    features: FEATURES,
+    sources: SOURCES
   }
   let bytes = jsonBytes({ ...envelope, projects: [] })
   let count = 0
