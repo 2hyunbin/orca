@@ -303,10 +303,7 @@ export function promptPlan(
   }
 }
 
-export function setOptionPlan(params: {
-  key: string
-  value: string
-}): MutationPlan<AgentSessionOptionResult> {
+export function setOptionPlan(params: { key: string; value: string }) {
   return {
     method: 'agentSession.setOption',
     fields: { key: params.key, value: params.value },
@@ -330,5 +327,5 @@ export function setOptionPlan(params: {
         ...(ctx.persistedOptions ? { options: { ...ctx.persistedOptions } } : {})
       }
     }
-  }
+  } satisfies MutationPlan<AgentSessionOptionResult>
 }

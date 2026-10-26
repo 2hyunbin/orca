@@ -33,6 +33,7 @@ import {
 import { OrcaRuntimeService } from '../../orca-runtime'
 import type { RpcResponse } from '../core'
 import { RpcDispatcher } from '../dispatcher'
+import type { RpcDispatchStreamingOptions } from '../dispatcher-stream-options'
 import { closeStructuredAgentSessionChild } from '../../agent-session/structured-agent-session-close'
 import { discardStructuredWorkerSession } from './orchestration-structured-worker-session'
 import { STRUCTURED_AGENT_SESSION_METHODS } from './structured-agent-session'
@@ -54,7 +55,11 @@ let rig: RestTestRig
 let dispatcher: RpcDispatcher
 let requests = 0
 
-async function call(method: string, params: unknown, client = CLIENT): Promise<RpcResponse[]> {
+async function call(
+  method: string,
+  params: unknown,
+  client: RpcDispatchStreamingOptions = CLIENT
+): Promise<RpcResponse[]> {
   const replies: RpcResponse[] = []
   requests += 1
   await dispatcher.dispatchStreaming(
