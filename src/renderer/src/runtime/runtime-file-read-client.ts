@@ -21,7 +21,10 @@ import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import { chatScratchFileAddress } from './runtime-chat-scratch-file-address'
 import { isAgentSessionAttachmentStorePath } from '../../../shared/agent-session-attachments'
 import type { LocalFileAccess } from '../../../shared/local-file-access'
-import { readHostFileOutsideWorkspaces } from './runtime-terminal-artifact-read'
+import {
+  isHostFileOutsideWorkspaces,
+  readHostFileOutsideWorkspaces
+} from './runtime-terminal-artifact-read'
 import {
   pagedTextFileResult,
   pinRemoteFileAddress,
@@ -65,16 +68,16 @@ export async function readRuntimeFileContent({
       ...localAccess(connectionId, access)
     })
   }
-  const hostFile = await readHostFileOutsideWorkspaces({
-    target,
-    worktreeId,
-    filePath,
-    relativePath,
-    grantId: terminalArtifactGrantId,
-    expectedEnvironmentPairingRevision
-  })
-  if (hostFile) {
-    return hostFile
+  // Why: decided synchronously so ordinary reads pin their pairing without an extra await.
+  if (isHostFileOutsideWorkspaces({ filePath, relativePath, grantId: terminalArtifactGrantId })) {
+    return readHostFileOutsideWorkspaces({
+      target,
+      worktreeId,
+      filePath,
+      relativePath,
+      grantId: terminalArtifactGrantId,
+      expectedEnvironmentPairingRevision
+    })
   }
   // A workspace path first; a chat's scratch file is the absolute path no workspace contains.
   const scratch = canReadRelativeRuntimeFile(relativePath) ? null : chatScratchFileAddress(filePath)

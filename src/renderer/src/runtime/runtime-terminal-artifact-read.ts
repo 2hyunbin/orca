@@ -12,7 +12,17 @@ import {
   type TerminalArtifactGrantTarget
 } from './runtime-terminal-artifact-grant'
 
-/** A granted host file, or a restored tab's absolute host path (grants are never persisted); null otherwise. */
+/** A granted host file, or a restored tab's absolute host path (grants are never persisted). */
+export function isHostFileOutsideWorkspaces(args: {
+  filePath: string
+  relativePath?: string
+  grantId?: string
+}): boolean {
+  return Boolean(
+    args.grantId ?? (args.relativePath === args.filePath && !chatScratchFileAddress(args.filePath))
+  )
+}
+
 export async function readHostFileOutsideWorkspaces(args: {
   target: TerminalArtifactGrantTarget['target']
   worktreeId: string
@@ -20,19 +30,15 @@ export async function readHostFileOutsideWorkspaces(args: {
   relativePath?: string
   grantId?: string
   expectedEnvironmentPairingRevision?: number
-}): Promise<RuntimeReadableFileContent | null> {
+}): Promise<RuntimeReadableFileContent> {
   const pinned = pinTerminalArtifactGrantTarget({
     target: args.target,
     worktreeId: args.worktreeId,
     absolutePath: args.filePath,
     expectedEnvironmentPairingRevision: args.expectedEnvironmentPairingRevision
   })
-  const grantId =
-    args.grantId ??
-    (args.relativePath === args.filePath && !chatScratchFileAddress(args.filePath)
-      ? await renewRestoredHostFileGrant(pinned)
-      : undefined)
-  return grantId ? readRuntimeTerminalArtifactContent({ ...pinned, grantId }) : null
+  const grantId = args.grantId ?? (await renewRestoredHostFileGrant(pinned))
+  return readRuntimeTerminalArtifactContent({ ...pinned, grantId })
 }
 
 /** Reads a host file outside every workspace through its grant, renewing a lapsed or stale one. */

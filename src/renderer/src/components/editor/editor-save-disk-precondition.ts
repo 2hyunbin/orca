@@ -120,11 +120,12 @@ export type EditorSaveGrant = {
   expectedEnvironmentPairingRevision?: number
 }
 
-export async function editorSaveGrant(
+/** Sync unless a restored tab must ask its host, so ordinary saves gain no await before their pairing pin. */
+export function editorSaveGrant(
   file: OpenFile,
   context: RuntimeFileOperationArgs,
   getState: () => Pick<AppState, 'setTerminalArtifactGrant'>
-): Promise<EditorSaveGrant | undefined> {
+): EditorSaveGrant | Promise<EditorSaveGrant> | undefined {
   const onRenewed = (renewed: string): void => getState().setTerminalArtifactGrant(file.id, renewed)
   const expectedEnvironmentPairingRevision =
     context.target.kind === 'environment'
@@ -142,18 +143,21 @@ export async function editorSaveGrant(
   ) {
     return undefined
   }
-  const restored = await grantRestoredHostFile(
-    context.target,
-    context.worktreeId,
-    file.filePath,
-    expectedEnvironmentPairingRevision
-  )
-  // Why: refuse rather than mark the tab read-only, which would drop its draft from the session.
-  if (restored.readOnly) {
-    throw new Error('This host opens the file read-only.')
-  }
-  onRenewed(restored.grantId)
-  return { grantId: restored.grantId, onRenewed, expectedEnvironmentPairingRevision }
+  const target = context.target
+  return (async () => {
+    const restored = await grantRestoredHostFile(
+      target,
+      context.worktreeId,
+      file.filePath,
+      expectedEnvironmentPairingRevision
+    )
+    // Why: refuse rather than mark the tab read-only, which would drop its draft from the session.
+    if (restored.readOnly) {
+      throw new Error('This host opens the file read-only.')
+    }
+    onRenewed(restored.grantId)
+    return { grantId: restored.grantId, onRenewed, expectedEnvironmentPairingRevision }
+  })()
 }
 
 export function writeEditorSave(
@@ -163,7 +167,7 @@ export function writeEditorSave(
   access: LocalFileAccess | undefined,
   write: EditorSaveWrite,
   beforeSend?: () => void,
-  grant?: EditorSaveGrant
+  grant?: EditorSaveGrant | Promise<EditorSaveGrant>
 ): Promise<FileWriteResult> {
   const precondition =
     write.kind === 'guarded'
@@ -178,17 +182,21 @@ export function writeEditorSave(
     if (context.target.kind !== 'environment' || !context.worktreeId) {
       throw new Error('This file belongs to a host that is no longer this tab’s owner.')
     }
-    return writeRuntimeTerminalArtifactFile({
-      target: context.target,
-      worktreeId: context.worktreeId,
-      absolutePath: filePath,
-      grantId: grant.grantId,
-      content,
-      precondition,
-      beforeSend,
-      onGrantRenewed: grant.onRenewed,
-      expectedEnvironmentPairingRevision: grant.expectedEnvironmentPairingRevision
-    })
+    const target = context.target
+    const worktreeId = context.worktreeId
+    return Promise.resolve(grant).then((resolved) =>
+      writeRuntimeTerminalArtifactFile({
+        target,
+        worktreeId,
+        absolutePath: filePath,
+        grantId: resolved.grantId,
+        content,
+        precondition,
+        beforeSend,
+        onGrantRenewed: resolved.onRenewed,
+        expectedEnvironmentPairingRevision: resolved.expectedEnvironmentPairingRevision
+      })
+    )
   }
   return writeRuntimeFile(context, filePath, content, access, precondition, beforeSend)
 }

@@ -44,16 +44,17 @@ describe('the grant an editor save writes through', () => {
     grantRestoredHostFile.mockClear()
     const getState = () => ({ setTerminalArtifactGrant: vi.fn() })
 
-    await expect(
+    // Why: synchronous, so an ordinary save gains no await before its pairing pin.
+    expect(
       editorSaveGrant(
         tab({ filePath: '/srv/repo/a.md', relativePath: '/srv/repo/a.md' }),
         hostContext,
         getState
       )
-    ).resolves.toBeUndefined()
-    await expect(
+    ).toBeUndefined()
+    expect(
       editorSaveGrant(tab(), { ...hostContext, target: { kind: 'local' } }, getState)
-    ).resolves.toBeUndefined()
+    ).toBeUndefined()
     expect(grantRestoredHostFile).not.toHaveBeenCalled()
   })
 
