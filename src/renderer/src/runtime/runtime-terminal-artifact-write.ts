@@ -1,6 +1,7 @@
 import type { RuntimeFileReadResult } from '../../../shared/runtime-file-contracts'
 import {
   compareDiskWritePrecondition,
+  isConfirmedFileNotFoundError,
   FILE_WRITE_OK,
   FILE_WRITE_UNCHANGED,
   type FileWriteDiskPrecondition,
@@ -9,7 +10,6 @@ import {
 import { callRuntimeRpc } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
-import { isMissingRuntimePathError } from './runtime-file-metadata-client'
 import {
   isRenewableGrantError,
   pinTerminalArtifactGrantTarget,
@@ -46,7 +46,7 @@ async function readGrantedText(
     if (isRenewableGrantError(error)) {
       throw error
     }
-    if (isMissingRuntimePathError(error)) {
+    if (isConfirmedFileNotFoundError(error)) {
       return null
     }
     // Why: binary or oversized host text can't be compared, so it counts as changed.

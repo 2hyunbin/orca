@@ -154,4 +154,14 @@ describe('saving a granted host file outside every workspace', () => {
       .map((call) => call.expectedEnvironmentPairingRevision)
     expect(new Set(revisions)).toEqual(new Set([7]))
   })
+
+  // Why: a quoted path can spell "not found"; only the error itself proves absence.
+  it('surfaces a permission failure on a path that mentions not found', async () => {
+    runtimeEnvironmentCall.mockImplementation(async () =>
+      refused("EACCES: permission denied, open '/tmp/not found.md'")
+    )
+
+    await expect(save('# new', '# old')).rejects.toThrow('EACCES')
+    expect(callsTo('files.writeTerminalArtifact')).toHaveLength(0)
+  })
 })
