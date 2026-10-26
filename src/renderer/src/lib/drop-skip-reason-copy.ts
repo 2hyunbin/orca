@@ -44,8 +44,13 @@ export function describeSharedDropSkipReason(
   return reason ? describeDropSkipReason(reason) : undefined
 }
 
-// Ordered: a "too large" refusal can also read as a write failure.
+// Ordered: a manual disconnect also reads as a lost connection, and "too large" as a write failure.
 const FAILURE_CATEGORIES: readonly { matches: RegExp; key: string; fallback: string }[] = [
+  {
+    matches: /manually disconnected/i,
+    key: 'auto.lib.dropFailureReason.disconnected',
+    fallback: 'The host is disconnected.'
+  },
   {
     matches: /file_too_large|\btoo large\b|\bis larger than\b|remote import limit/i,
     key: 'auto.lib.dropFailureReason.tooLarge',
@@ -62,7 +67,8 @@ const FAILURE_CATEGORIES: readonly { matches: RegExp; key: string; fallback: str
     fallback: 'Permission denied.'
   },
   {
-    matches: /changed during upload|changed while/i,
+    matches:
+      /changed during upload|changed while|changed since it was staged|truncated during upload/i,
     key: 'auto.lib.dropFailureReason.changed',
     fallback: 'The file changed while it was uploading. Try again.'
   },
@@ -73,9 +79,9 @@ const FAILURE_CATEGORIES: readonly { matches: RegExp; key: string; fallback: str
   },
   {
     matches:
-      /\bE(?:CONNRESET|CONNREFUSED|TIMEDOUT|PIPE|HOSTUNREACH)\b|timed out|disconnect|not connected|unreachable/i,
+      /\bE(?:CONNRESET|CONNREFUSED|TIMEDOUT|PIPE|HOSTUNREACH)\b|timed out|disconnect|not connected|unreachable|\b(?:pairing|connection) changed\b/i,
     key: 'auto.lib.dropFailureReason.hostUnreachable',
-    fallback: 'Lost the connection to the host. Try again once it reconnects.'
+    fallback: 'The connection to the host changed or dropped. Try again.'
   }
 ]
 
@@ -94,7 +100,9 @@ export function describeSharedDropFailureReason(
   }
   // Why: host prose can quote absolute paths and toasts are often on shared screens; keep it in logs.
   console.warn('[drop] upload failed:', reason)
-  const category = FAILURE_CATEGORIES.find((entry) => entry.matches.test(reason))
+  // Quoted segments are file names, which must not pick the category (`disconnect-notes.txt`).
+  const unquoted = reason.replace(/(['"`]).*?\1/g, '')
+  const category = FAILURE_CATEGORIES.find((entry) => entry.matches.test(unquoted))
   if (category) {
     return translate(category.key, category.fallback)
   }

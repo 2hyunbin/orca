@@ -100,12 +100,25 @@ describe('reportTerminalDropUploadSkipsAndFailures', () => {
       [],
       [{ reason: 'C:\\Users\\John Doe\\Application Support\\shot.png: unexpected' }]
     )
+    reportTerminalDropUploadSkipsAndFailures(
+      [],
+      [{ reason: "File changed since it was staged: 'disconnect-notes.txt'" }]
+    )
+    reportTerminalDropUploadSkipsAndFailures(
+      [],
+      [{ reason: 'Runtime environment is manually disconnected.' }]
+    )
     reportTerminalDropUploadSkipsAndFailures([], [{ reason: 'a' }, { reason: 'b' }])
 
     expect(vi.mocked(toast.error).mock.calls.map((call) => call[1])).toEqual([
       { description: 'auto.lib.dropFailureReason.noSpace:The host is out of disk space.' },
       { description: 'auto.lib.dropSkipReason.permissionDenied:Permission denied.' },
       { description: "auto.lib.dropFailureReason.unknownOne:Couldn't upload this file." },
+      {
+        description:
+          'auto.lib.dropFailureReason.changed:The file changed while it was uploading. Try again.'
+      },
+      { description: 'auto.lib.dropFailureReason.disconnected:The host is disconnected.' },
       { description: undefined }
     ])
   })
