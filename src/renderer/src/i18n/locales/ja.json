@@ -6046,16 +6046,16 @@
           "sshTargetNotFoundDetail": "ワークスペースを更新するかホストに再接続してから、もう一度お試しください。",
           "sshTargetInvalid": "SSH ホストの設定が不完全です。",
           "sshTargetInvalidDetail": "SSH ホストを編集するか再接続してから、もう一度お試しください。",
-          "sshAliasRequired": "VS Code には、このホストの SSH 設定エイリアスが必要です。",
+          "sshAliasRequired": "このエディターには、このホストの SSH 設定エイリアスが必要です。",
           "sshAliasRequiredDetail": "ローカルの SSH 設定に {{host}}:{{port}} の Host エイリアスを追加し、ワークスペースを再接続してから、もう一度お試しください。",
           "remoteEditorUnsupported": "このアプリは SSH ワークスペースを開けません。",
-          "remoteEditorUnsupportedDetail": "VS Code を選択するか、このアプリをローカルで使用してください。",
+          "remoteEditorUnsupportedDetail": "VS Code、Cursor、Zed のいずれかを選択するか、アプリをローカルで使用してください。",
           "remotePathInvalid": "このパスは SSH ホストでは無効です。",
           "remotePathInvalidDetail": "ワークスペースを更新してから、もう一度お試しください。",
-          "remoteLaunchFailed": "VS Code でパスを開けませんでした。",
-          "remoteLaunchFailedDetail": "このマシンに設定されている VS Code のコマンドを確認してください。",
+          "remoteLaunchFailed": "エディターでパスを開けませんでした。",
+          "remoteLaunchFailedDetail": "このマシンで設定されているエディターのコマンドを確認してください。",
           "wsl": "WSL",
-          "remoteEditorHint": "SSH ホスト上のフォルダーを開くことができるのは VS Code のみです。",
+          "remoteEditorHint": "SSH ホスト上のフォルダーを開くことができるのは VS Code、Cursor、Zed のみです。",
           "remoteRuntimeEditorHint": "このコンピュータ上のアプリは、Orca が SSH を介してサーバーに到達した場合にのみ、このサーバーのファイルを開くことができます。"
         },
         "WorktreeTitleInlineRename": {
@@ -19085,6 +19085,7 @@
         "showTerminal": "ターミナルを表示"
       },
       "resumeInNewChat": {
+        "hostUpdateRequired": "チャット UI で続けるには、このホストの Orca を更新してください。",
         "notSavedYet": "{{agent}} はまだこの会話を保存していません。応答してから再度お試しください。",
         "cannotResume": "この {{agent}} の会話はネイティブチャットで再開できません。",
         "exitUnconfirmedFromTerminal": "{{agent}} は別のターミナルですでにこの会話を実行しています。そちらの {{agent}} を終了するか、そのターミナルを閉じてから、セッション履歴でこの会話を開いてください。",
