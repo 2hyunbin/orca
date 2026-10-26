@@ -4,9 +4,11 @@ import { useAppStore } from '@/store'
 import { replaceRuntimeEnvironmentRevisions } from '@/runtime/runtime-environment-revision'
 import { captureTerminalSurfaceIdentity } from '../../../../shared/terminal-tab-close'
 import type * as PtyDispatcherModule from '../terminal-pane/pty-dispatcher'
+import { TerminalClose } from '../../../../shared/rpc-contract/terminal-unary-params'
 import type { TerminalPaneCloseCallbacks } from '@/constants/terminal'
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
+  supportsPinCloseConsent: true,
   request: vi.fn(),
   exit: vi.fn(),
   subscribe: vi.fn(),
@@ -54,6 +56,7 @@ const activeWatchers = new Set<() => void>()
 beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
+  mocks.supportsPinCloseConsent = true
   vi.stubGlobal('requestAnimationFrame', (run: FrameRequestCallback) => {
     frame = run
     return 1
@@ -122,6 +125,7 @@ beforeEach(() => {
         handle: 'handle',
         ptyId: 'pty',
         incarnationId: 'life',
+        supportsPinCloseConsent: mocks.supportsPinCloseConsent,
         presentation: {
           identity: { ...identity, tabId: 't', ptyId: 'pty', incarnationId: 'life' },
           holders: []
@@ -271,12 +275,13 @@ it.each([true, false])(
       'terminal.resolvePane',
       { paneKey: target.paneKey, worktreeId: 'w' }
     )
-    callbacks.onConfirm?.()
+    callbacks.onConfirm?.(true)
     expect(call).toHaveBeenCalledWith(
       expect.objectContaining({
         selector: 'host',
         expectedEnvironmentPairingRevision: 1,
-        method: 'terminal.close'
+        method: 'terminal.close',
+        params: expect.objectContaining({ force: true })
       })
     )
     useAppStore.setState({ tabsByWorktree: {} })
@@ -324,4 +329,31 @@ it('restores the invoking chat through its real tab consumer and preserves later
     useAppStore.getState().groupsByWorktree.origin.find((group) => group.id === later.groupId)
       ?.activeTabId
   ).toBe(later.id)
+})
+
+it('emits only effective literal consent on the captured parser/handler contract', async () => {
+  const { result } = await begin()
+  callbacks.onConfirm?.(true)
+  const params = mocks.rpc.mock.calls.find(([, method]) => method === 'terminal.close')?.[2]
+  expect(params).toMatchObject({ terminal: 'handle', expectedIncarnationId: 'life', force: true })
+  expect(TerminalClose.parse(params)).toEqual(params)
+  for (const force of [false, null, 'true']) {
+    expect(TerminalClose.safeParse({ ...params, force }).success).toBe(false)
+  }
+  expect(TerminalClose.safeParse({ terminal: 'handle', force: true }).success).toBe(false)
+  expect(TerminalClose.safeParse({ ...params, expectedIncarnationId: undefined }).success).toBe(
+    false
+  )
+  expect(TerminalClose.safeParse({ ...params, originalPresentation: undefined }).success).toBe(
+    false
+  )
+  expect(TerminalClose.parse({ terminal: 'handle' })).toEqual({ terminal: 'handle' })
+  closing.resolve({ close: { ptyKilled: true } })
+  expect(await result).toBe(true)
+})
+it('fresh unsupported capture refuses before reveal or confirmation', async () => {
+  mocks.supportsPinCloseConsent = false
+  expect(await closeHoldingTerminal(target)).toBe(false)
+  expect(mocks.reveal).not.toHaveBeenCalled()
+  expect(mocks.request).not.toHaveBeenCalled()
 })

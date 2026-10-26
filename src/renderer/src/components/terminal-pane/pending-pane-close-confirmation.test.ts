@@ -251,6 +251,9 @@ it.each(['cancel', 'replacement', 'confirm'] as const)(
     }
     await p.settle()
     expect(onConfirm).toHaveBeenCalledTimes(outcome === 'confirm' ? 1 : 0)
+    if (outcome === 'confirm') {
+      expect(onConfirm).toHaveBeenCalledWith()
+    }
     expect(onCancel).toHaveBeenCalledTimes(outcome === 'confirm' ? 0 : 1)
   }
 )

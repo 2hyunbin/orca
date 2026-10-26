@@ -88,7 +88,8 @@ export async function captureSourceTerminal(
           target,
           handle: owner?.terminal ?? terminal.handle,
           incarnationId: terminal.incarnationId,
-          presentation: terminal.presentation
+          presentation: terminal.presentation,
+          supportsPinCloseConsent: terminal.supportsPinCloseConsent === true
         }
       : null
   } catch {

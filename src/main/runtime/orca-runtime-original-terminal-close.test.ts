@@ -11,7 +11,7 @@ import {
   WORKTREE_ID
 } from './__fixtures__/orca-runtime-terminal-close-continuity-fixtures'
 
-function captured(harness: ReturnType<typeof createHarness>) {
+function captured(harness: ReturnType<typeof createHarness>, force = false) {
   const source = harness.runtime.resolveTerminalPane(`${TAB_ID}:${LEAF_ID}`, WORKTREE_ID)
   if (!source.presentation || !source.incarnationId) {
     throw new Error('Missing original source')
@@ -19,7 +19,7 @@ function captured(harness: ReturnType<typeof createHarness>) {
   const { incarnationId, presentation } = source
   return {
     source,
-    close: () => harness.runtime.closeTerminal(source.handle, incarnationId, presentation)
+    close: () => harness.runtime.closeTerminal(source.handle, incarnationId, presentation, force)
   }
 }
 
@@ -156,15 +156,28 @@ describe('original-aware terminal close owner transaction', () => {
         [WORKTREE_ID]: state.tabsByWorktree[WORKTREE_ID].map((row) => ({ ...row, isPinned: true }))
       }
     }))
-    await expect(close()).rejects.toThrow('terminal_tab_pinned')
+    addSibling(harness)
+    const split = captured(harness)
+    harness.editSession((state) => ({
+      ...state,
+      terminalLayoutsByTabId: {
+        ...state.terminalLayoutsByTabId,
+        [TAB_ID]: {
+          ...state.terminalLayoutsByTabId[TAB_ID],
+          root: { type: 'leaf', leafId: LEAF_ID },
+          ptyIdsByLeafId: { [LEAF_ID]: PTY_ID }
+        }
+      }
+    }))
+    await expect(split.close()).rejects.toThrow('terminal_tab_pinned')
     expect(harness.stopAndWait).toHaveBeenCalledTimes(1)
   })
 
   it.each(['sibling', 'successor', 'write failure'] as const)(
-    'revalidates %s after the acknowledged owner await',
+    'consent still revalidates %s after the acknowledged owner await',
     async (change) => {
       const harness = createHarness({ registerPtyBacked: true, publishMobileSurface: true })
-      const { close } = captured(harness)
+      const { close } = captured(harness, true)
       harness.setVerifiedStopResult(true)
       harness.setCloseTerminalTabAction(() => {
         addSibling(harness)

@@ -280,6 +280,7 @@ export type RuntimeTerminalSplit = {
 
 export type RuntimeTerminalResolvePane = TerminalLaunchResult & {
   presentation?: TerminalSurfaceCloseCapture
+  supportsPinCloseConsent?: true
 
   handle: string
   /** Host-owned PTY incarnation used to fence remote identity observations. */

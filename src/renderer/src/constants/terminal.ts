@@ -56,7 +56,7 @@ export type TerminalPaneCloseCallbacks = {
   isCurrent?: () => boolean
   onClosed?: () => void
   onCancel?: () => void
-  onConfirm?: () => void
+  onConfirm?: (force?: true) => void
   signal?: AbortSignal
 }
 

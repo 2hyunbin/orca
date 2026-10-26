@@ -122,7 +122,7 @@ export function MobileNativeChatNoticeRow({
         tab && holder
           ? HELD_TERMINAL_CONTINUE_SENTENCE.replace(/<\/?terminal>/g, '')
               .replace('{{agent}}', tuiAgentDisplayName(holder.agent))
-              .replace('{{terminal}}', getMobileSessionTabTitle(tab) ?? tab.title)
+              .replace('{{terminal}}', getMobileSessionTabTitle(tab))
           : usageLimitLineText(notice)
       const textStyle = [
         styles.line,

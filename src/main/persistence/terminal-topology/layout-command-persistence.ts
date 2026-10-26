@@ -82,6 +82,7 @@ export class LayoutCommandPersistence {
     hostIds: readonly string[] = [],
     run: {
       originalPresentation?: TerminalSurfaceCloseCapture
+      force?: boolean
       admit?: () => boolean
       live?: LayoutLiveContext
       stopBeforeWrite?: (ptyIds: readonly string[]) => boolean
@@ -114,6 +115,7 @@ export class LayoutCommandPersistence {
             options: {
               allowMissing: true,
               originalPresentation: original,
+              force: run.force,
               onClosed: (tab) => {
                 closedTab = tab
               }

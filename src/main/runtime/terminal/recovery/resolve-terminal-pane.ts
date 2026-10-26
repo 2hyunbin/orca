@@ -21,6 +21,7 @@ import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { labelTerminalReadSource, readTerminalTail } from '../../terminal-tail-read'
 import { getTerminalState } from '../../terminal-wait-results'
 import { readStructuredWorkerTerminal } from '../../structured-worker-terminal-read'
+import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWithRestoredHandlePaneStart {
@@ -34,7 +35,6 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
     ptyId: string | null
   ): Pick<RuntimeTerminalCreate, 'executionHostId' | 'hostPlatform' | 'incarnationId'>
   protected abstract getPaneKeyForTerminalHandle(handle: string): string | null
-  protected abstract getResolvedWorktreeMap(): Promise<Map<string, ResolvedWorktree>>
   protected abstract buildPtyTerminalSummary(
     pty: RuntimePtyWorktreeRecord,
     worktreesById: Map<string, ResolvedWorktree>
@@ -117,6 +117,7 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
         : null
     return {
       ...(identity ? { presentation: { identity, holders } } : {}),
+      supportsPinCloseConsent: identity && !isRemoteRuntimePtyId(executionPtyId) ? true : undefined,
       handle,
       tabId: parsed?.tabId ?? record?.tabId ?? '',
       leafId: parsed?.leafId ?? record?.leafId ?? '',

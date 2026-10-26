@@ -48,9 +48,9 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
           callbacks?.onConfirm
             ? {
                 ...callbacks,
-                onConfirm: () => {
+                onConfirm: (force) => {
                   cancelCloseRef.current = undefined
-                  callbacks.onConfirm?.()
+                  callbacks.onConfirm?.(force)
                 }
               }
             : callbacks

@@ -23,7 +23,7 @@ import type { MobileSessionTabCloseOptions } from '../../mobile-session-tab-clos
 
 type TerminalPaneRetirementOptions = Pick<
   MobileSessionTabCloseOptions,
-  'originalPresentation' | 'rendererOwnsPresentation' | 'retirementProofs'
+  'originalPresentation' | 'rendererOwnsPresentation' | 'retirementProofs' | 'force'
 >
 
 export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRuntimeWithTerminalSurfaceCloseCommit {
@@ -147,6 +147,7 @@ export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs exten
           },
           {
             originalPresentation: options.originalPresentation,
+            force: options.force,
             admit: () =>
               this.originalTerminalExecutionMatches(options.originalPresentation!.identity)
           }

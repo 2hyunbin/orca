@@ -49,8 +49,12 @@ export const TerminalHandle = z.object({
 })
 
 export const TerminalClose = TerminalHandle.extend({
-  originalPresentation: TerminalSurfaceCloseCapture.optional()
-})
+  originalPresentation: TerminalSurfaceCloseCapture.optional(),
+  force: z.literal(true).optional()
+}).refine(
+  (params) => !params.force || !!(params.originalPresentation && params.expectedIncarnationId),
+  { message: 'Force requires an original terminal capture and incarnation' }
+)
 
 export const TerminalReadKittyFile = TerminalHandle.extend({
   path: z

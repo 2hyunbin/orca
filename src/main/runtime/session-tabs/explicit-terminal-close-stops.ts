@@ -1,3 +1,4 @@
+import { isRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
 import { windowListsTab } from '../terminal/surface/main-terminal-surfaces'
 import { isOriginalTerminalHandle } from '../workspace-session-terminal-tab-retirement-identity'
 import { NO_STOP } from './explicit-terminal-close-pty-stops'
@@ -9,10 +10,7 @@ import type { WorktreePtyHostFence } from '../worktree-pty-host-fence'
 import type { RuntimeTerminalClose } from '../../../shared/runtime-types'
 import type { RuntimePtyTabCloseAuthority } from '../runtime-terminal-state-records'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
-import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
-import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
-import type { WindowLayoutCommand } from '../runtime-layout-apply'
 import { closeMainOwnedPaneByHandle } from './main-handle-close'
 import { OrcaRuntimeWithExplicitTerminalTabClose } from './explicit-terminal-tab-close'
 import {
@@ -22,8 +20,6 @@ import {
 } from './paired-host-terminal-close'
 
 export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRuntimeWithExplicitTerminalTabClose {
-  protected abstract getResolvedWorktreeMap(): Promise<Map<string, ResolvedWorktree>>
-  abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
   protected abstract refreshPtyWorktreeRecordsFromController(
     resolvedWorktrees: ResolvedWorktree[],
     targetWorktreeId?: string | null,
@@ -51,11 +47,16 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
   async closeTerminal(
     handle: string,
     incarnation?: string,
-    originalPresentation?: TerminalSurfaceCloseCapture
+    originalPresentation?: TerminalSurfaceCloseCapture,
+    force = false
   ): Promise<RuntimeTerminalClose> {
     const pty = this.getLivePtyForHandle(handle)
     if (originalPresentation) {
-      const remote = getPairedHostTerminal(pty?.pty.ptyId ?? this.handles.get(handle)?.ptyId)
+      const executionPtyId = pty?.pty.ptyId ?? this.handles.get(handle)?.ptyId
+      if (force && isRemoteRuntimePtyId(executionPtyId)) {
+        throw new Error('terminal_close_unverifiable')
+      }
+      const remote = getPairedHostTerminal(executionPtyId)
       if (remote) {
         const leaf = this.getLiveLeafForHandle(handle).leaf
         const pane = { kind: 'pane' as const, tabId: leaf.tabId, leafId: leaf.leafId }
@@ -109,6 +110,7 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
         incarnationId: incarnation
       }
       if (
+        !force &&
         this.resolveTerminalCloseTarget(source.worktreeId, target) === 'last-pane' &&
         this.getWorkspaceSessionHostIdsForTab(source.worktreeId, source.tabId).some((hostId) =>
           isTerminalTabPinnedInSession(this.store?.getWorkspaceSession?.(hostId), source)
@@ -122,6 +124,7 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
       }
       const outcome = await this.closeMobileSessionTab(`id:${source.worktreeId}`, source.tabId, {
         originalPresentation,
+        force,
         rendererOwnsPresentation,
         localPtyTeardownOwnedExternally: true,
         retirementProofs: [proof]

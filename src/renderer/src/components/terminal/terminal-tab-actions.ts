@@ -125,7 +125,7 @@ export function closeTerminalTab(
   }
 
   if (options?.onConfirm) {
-    options.onConfirm()
+    options.onConfirm(options.force === true || pinnedCloseConsented ? true : undefined)
     return
   }
 

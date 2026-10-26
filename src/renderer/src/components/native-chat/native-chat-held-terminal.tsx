@@ -114,7 +114,10 @@ function useHeldTerminalTarget(
     }
   }, [paneKey, worktreeId, incarnationId, executionHostId])
   const candidate = useAppStore(select)
-  const [verified, setVerified] = useState<HeldTerminalTarget | null>(null)
+  const [verified, setVerified] = useState<{
+    target: HeldTerminalTarget
+    canClose: boolean
+  } | null>(null)
   useEffect(() => {
     if (!candidate) {
       return
@@ -162,7 +165,11 @@ function useHeldTerminalTarget(
     const stopRetirement = onRuntimeEnvironmentsRetired(changed)
     void captureHeldTerminal(candidate).then((captured) => {
       if (current) {
-        setVerified(captured ? candidate : null)
+        setVerified(
+          captured
+            ? { target: candidate, canClose: captured.supportsPinCloseConsent === true }
+            : null
+        )
       }
     }, invalidate)
     return () => {
@@ -173,7 +180,7 @@ function useHeldTerminalTarget(
       stopRetirement()
     }
   }, [candidate])
-  return verified === candidate ? verified : null
+  return verified?.target === candidate ? verified : null
 }
 
 export const closeHoldingTerminalLabel = () =>
@@ -203,7 +210,7 @@ export function HeldTerminalSentence({
         terminal: (
           <Button
             variant="ghost"
-            className="inline h-auto p-0 font-normal text-chat-foreground hover:text-chat-foreground-strong"
+            size="xs"
             onClick={() => {
               void captureHeldTerminal(target).then((current) => {
                 if (current) {
@@ -224,7 +231,9 @@ export function useHeldTerminalNotice(
   agent: string,
   inChat = true
 ) {
-  const target = useHeldTerminalTarget(terminal, executionHostId)
+  const verified = useHeldTerminalTarget(terminal, executionHostId)
+  const target = verified?.target
+  const canClose = verified?.canClose === true
   const busy = useRef(false)
   const [closing, setClosing] = useState(false)
   return useMemo(
@@ -234,24 +243,27 @@ export function useHeldTerminalNotice(
             content: target ? (
               <HeldTerminalSentence target={target} agent={agent} inChat={inChat} />
             ) : undefined,
-            action: {
-              label: closeHoldingTerminalLabel(),
-              disabled: closing,
-              onClick: () => {
-                if (busy.current || !target) {
-                  return
-                }
-                busy.current = true
-                setClosing(true)
-                void closeHoldingTerminal(target).finally(() => {
-                  busy.current = false
-                  setClosing(false)
-                })
-              }
-            }
+            action:
+              canClose || closing
+                ? {
+                    label: closeHoldingTerminalLabel(),
+                    disabled: closing,
+                    onClick: () => {
+                      if (busy.current || !target) {
+                        return
+                      }
+                      busy.current = true
+                      setClosing(true)
+                      void closeHoldingTerminal(target).finally(() => {
+                        busy.current = false
+                        setClosing(false)
+                      })
+                    }
+                  }
+                : undefined
           }
         : null,
-    [target, closing, agent, inChat]
+    [target, canClose, closing, agent, inChat]
   )
 }
 
@@ -267,7 +279,7 @@ function HeldTerminalToast({ input, id }: { input: HeldTerminalToastInput; id: s
     toast.error(<HeldTerminalToast input={input} id={id} />, {
       id,
       action: notice?.action,
-      duration: notice?.action.disabled ? Infinity : 4_000
+      duration: notice?.action?.disabled ? Infinity : 4_000
     })
   }, [input, id, notice])
   return notice?.content ?? input.fallback

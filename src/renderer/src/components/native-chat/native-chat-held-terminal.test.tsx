@@ -33,7 +33,7 @@ const block = {
 const spawned = new Set<(event: { id: string; incarnationId?: string }) => void>()
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.capture.mockResolvedValue({ incarnationId: 'life' })
+  mocks.capture.mockResolvedValue({ incarnationId: 'life', supportsPinCloseConsent: true })
   vi.stubGlobal('api', {
     pty: {
       onSpawned: (fn: (event: { id: string; incarnationId?: string }) => void) => {
@@ -154,3 +154,16 @@ it('keeps Close busy for one attempt, then clears without submitting another act
   expect(mocks.close).toHaveBeenCalledOnce()
   expect(mocks.reveal).not.toHaveBeenCalled()
 })
+
+it.each([undefined, false, 'true'])(
+  'retains verified naming/link with unsupported consent %s and withholds only Close',
+  async (support) => {
+    mocks.capture.mockResolvedValue({ incarnationId: 'life', supportsPinCloseConsent: support })
+    notice()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeDefined())
+    expect(screen.queryByRole('button', { name: 'Close terminal' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+    await waitFor(() => expect(mocks.reveal).toHaveBeenCalledOnce())
+    expect(mocks.close).not.toHaveBeenCalled()
+  }
+)

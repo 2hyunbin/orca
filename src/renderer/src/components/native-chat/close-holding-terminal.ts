@@ -86,6 +86,7 @@ export async function closeHoldingTerminal(target: HeldTerminalTarget): Promise<
   // A later deliberate navigation relinquishes even the temporary reveal.
   if (
     !captured?.presentation ||
+    !captured.supportsPinCloseConsent ||
     !hostCurrent() ||
     !sameNavigation(useAppStore.getState(), initial) ||
     !surfaceCurrent()
@@ -221,7 +222,7 @@ export async function closeHoldingTerminal(target: HeldTerminalTarget): Promise<
         signal: abort.signal,
         isCurrent: () => hostCurrent() && !settled && surfaceCurrent(),
         onCancel: () => finish(false),
-        onConfirm: () => {
+        onConfirm: (force) => {
           if (confirmed || settled) {
             return
           }
@@ -234,7 +235,8 @@ export async function closeHoldingTerminal(target: HeldTerminalTarget): Promise<
           const params = {
             terminal: captured.handle,
             expectedIncarnationId: captured.incarnationId,
-            originalPresentation: captured.presentation
+            originalPresentation: captured.presentation,
+            ...(force === true ? { force } : {})
           }
           const closing = call
             ? call({ method: 'terminal.close', params }).then((response) =>

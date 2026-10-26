@@ -57,6 +57,7 @@ it.each(['successor', 'new holder'] as const)(
     await pause.started.promise
     const closing = applyWindowLayoutCommand(store, () => ['local'], command, undefined, {
       originalPresentation,
+      force: true,
       admit: () => true
     })
     // A replacement commits before the close is admitted, after its caller already dispatched it.
