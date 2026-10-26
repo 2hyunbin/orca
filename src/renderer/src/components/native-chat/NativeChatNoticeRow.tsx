@@ -1,3 +1,4 @@
+import { agentSessionGoalControlWords } from './agent-session-goal-control-words'
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/CommentMarkdown'
@@ -148,9 +149,6 @@ export function NativeChatNoticeRow({
     orcaStop?.turnItemId !== undefined && orcaStop.turnItemId === orcaStopView.offeredTurnItemId
   const failure = readWholeAgentSessionFailureFact(block.failure)
   const antigravitySignInContent = nativeChatAntigravitySignInContent(failure?.kind, agentName)
-  const usageLimitContinue =
-    block.usageLimitTurnItemId !== undefined &&
-    block.usageLimitTurnItemId === orcaStopView.usageLimitTurnItemId
   // Only reword auth text fully described by its fact; host text may also carry command advice.
   const authSurface =
     failure?.kind === 'notSignedIn'
@@ -166,7 +164,6 @@ export function NativeChatNoticeRow({
           'row',
           {
             agentName,
-            retryControl: usageLimitContinue,
             usageLimitReset: formatUsageLimitResetClock
           },
           sayAgentSessionFailureTranslated
@@ -178,7 +175,7 @@ export function NativeChatNoticeRow({
             { agentName },
             sayAgentSessionFailureTranslated
           )
-        : block.text
+        : agentSessionGoalControlWords(block.text)
   const failureDetail = agentSessionFailureDetailText(failure)
   const detail = failureDetail?.trim() !== text.trim() ? failureDetail : undefined
   const tone = named ? 'notice' : look.kind === 'line' ? look.tone : null
@@ -207,15 +204,6 @@ export function NativeChatNoticeRow({
         </p>
         {continueOffered ? (
           <NativeChatInterruptedContinueButton onContinue={orcaStopView.continueNow} />
-        ) : usageLimitContinue ? (
-          <NativeChatInterruptedContinueButton
-            onContinue={orcaStopView.continueUsageLimit}
-            disabled={orcaStopView.usageLimitContinueDisabled}
-            explanation={translate(
-              'components.native-chat.interruptedContinue.usageLimitExplanation',
-              'Asks the agent to continue where it left off. Use it once the limit resets.'
-            )}
-          />
         ) : null}
       </div>
       {claudeSignIn && isClaudeSignInFailureKind(block.failure?.kind) ? (
