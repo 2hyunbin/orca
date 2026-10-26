@@ -372,6 +372,9 @@ describe.runIf(POSIX)('resolveOrcadMachineHome on a home several machines share'
     await expect(
       resolveOrcadMachineHome(machine('node-a', 'dev-a', { machineName: 'dev\nb' }), true)
     ).rejects.toThrow(/ORCA_MACHINE_NAME is set to "dev b"/)
+    await expect(
+      resolveOrcadMachineHome(machine('node-a', 'dev-a', { machineName: '   ' }), true)
+    ).rejects.toThrow(/ORCA_MACHINE_NAME is set to " {3}"/)
   })
 
   it('keeps a renamed machine on its own install', async () => {

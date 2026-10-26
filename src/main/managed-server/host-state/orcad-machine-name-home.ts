@@ -7,14 +7,19 @@ import type { OrcadMachineHomeDecision } from './orcad-machine-home'
 const MACHINE_NAME_PREFIX = `${ORCA_MACHINE_NAME_ENV}=`
 const MACHINE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u
 
-/** Probe line for the hostname section; newlines become spaces so a multi-line name is refused. */
-export const ORCAD_MACHINE_NAME_PROBE = `printf '${MACHINE_NAME_PREFIX}%s\\n' "$(printf %s "\${${ORCA_MACHINE_NAME_ENV}-}" | tr '\\n' ' ')";`
+/** Probe line for the hostname section; brackets keep spaces and newlines become spaces, so both are refused. */
+export const ORCAD_MACHINE_NAME_PROBE = `printf '${MACHINE_NAME_PREFIX}[%s]\\n' "$(printf %s "\${${ORCA_MACHINE_NAME_ENV}-}" | tr '\\n' ' ')";`
 
 export function parseOrcadMachineNameProbe(lines: readonly string[]): {
   machineName: string | null
 } {
-  const line = lines.find((candidate) => candidate.startsWith(MACHINE_NAME_PREFIX))
-  return { machineName: line?.slice(MACHINE_NAME_PREFIX.length) || null }
+  const value = lines
+    .find((candidate) => candidate.startsWith(MACHINE_NAME_PREFIX))
+    ?.slice(MACHINE_NAME_PREFIX.length)
+  // An unset or empty name means none; anything else must validate.
+  return {
+    machineName: value?.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) || null : null
+  }
 }
 
 export function machineKeyOf(input: string): string {
