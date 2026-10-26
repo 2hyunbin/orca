@@ -18,6 +18,7 @@ import {
 } from '../../../../shared/agent-status-types'
 import { isSupersededAgentCompletionSnapshot } from './agent-completion-snapshot-staleness'
 import { selectHookNotificationTimestamp } from './agent-completion-notification-controller'
+import { isAutoApprovedAntigravityPermission } from './antigravity-auto-approved-permission'
 import type {
   AgentCompletionDispatchMeta,
   AgentCompletionStatusSnapshot
@@ -115,7 +116,11 @@ export function dispatchTerminalNotification(
       : undefined
   if (
     event.source === 'agent-task-complete' &&
-    isSupersededAgentCompletionSnapshot(storedAgentStatus, eventAgentStatusSnapshot)
+    (isSupersededAgentCompletionSnapshot(storedAgentStatus, eventAgentStatusSnapshot) ||
+      isAutoApprovedAntigravityPermission(
+        agentStatus,
+        event.paneKey ? state.agentLaunchConfigByPaneKey[event.paneKey] : undefined
+      ))
   ) {
     return false
   }
