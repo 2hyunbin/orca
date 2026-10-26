@@ -31,11 +31,13 @@ export const ConnectorDeliverySchema = z.discriminatedUnion('kind', [
   z.object({ ...DeliveryBase, kind: z.literal('cancel') })
 ])
 
-// Exactly one control per poll; the machine ignores a control it cannot read.
+const absent = z.never().optional()
+
+// Exactly one known control per poll; added fields are still ignored, as everywhere else.
 const PollControlSchema = z.union([
-  z.strictObject({ stop: z.string().min(1) }),
-  z.strictObject({ pausedForMs: z.number().int().positive() }),
-  z.strictObject({ reconnect: z.literal(true) })
+  z.object({ stop: z.string().min(1), pausedForMs: absent, reconnect: absent }),
+  z.object({ pausedForMs: z.number().int().positive(), stop: absent, reconnect: absent }),
+  z.object({ reconnect: z.literal(true), stop: absent, pausedForMs: absent })
 ])
 
 export const ConnectorPollResponseSchema = z.object({

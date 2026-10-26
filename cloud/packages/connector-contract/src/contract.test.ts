@@ -61,6 +61,9 @@ describe('poll response', () => {
     })
     expect(poll([], { control: { pausedForMs: 0 } }).success).toBe(false)
     expect(poll([], { control: { stop: 'host_revoked', reconnect: true } }).success).toBe(false)
+    expect(poll([], { control: { reconnect: true, addedLater: 1 } }).data?.control).toEqual({
+      reconnect: true
+    })
   })
 
   it('bounds the batch and the hold', () => {
