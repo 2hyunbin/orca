@@ -677,4 +677,19 @@ describe('WslHostService', () => {
       setWslHostService(null)
     }
   })
+
+  it('reports the Remove even when the cleanup after it fails', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    removed.mockRejectedValueOnce(new Error('transport cleanup failed'))
+    const heard: WslHostUserAction[] = []
+    const stop = onWslHostUserAction((action) => heard.push(action))
+    try {
+      await expect(service.remove('wsl:ubuntu')).rejects.toThrow('transport cleanup failed')
+      expect(heard).toEqual([{ kind: 'removed', distro: 'Ubuntu' }])
+    } finally {
+      stop()
+    }
+  })
 })

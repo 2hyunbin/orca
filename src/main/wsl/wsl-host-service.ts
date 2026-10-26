@@ -178,9 +178,10 @@ export class WslHostService {
     }
     this.statuses.delete(environmentId)
     this.notifyStatusesChanged()
-    await this.deps.removed(environmentId)
     // Every Remove (sidebar or Settings) is the user's: the move orchestrator never removes a host.
+    // Before the cleanup await, so a failed cleanup cannot drop the decline of a host already gone.
     noteWslHostUserAction({ kind: 'removed', distro: record.distro })
+    await this.deps.removed(environmentId)
     return serverStop
   }
 
