@@ -19476,6 +19476,7 @@
         "runToolMany": "Used {{value0}} tools",
         "runPair": "{{value0}} and {{value1}}",
         "runList": "{{value0}}, and {{value1}}",
+        "runListSeparator": ", ",
         "runLiveReadOne": "Reading 1 file",
         "runLiveReadMany": "Reading {{value0}} files",
         "runLiveSearchOne": "Searching 1 time",

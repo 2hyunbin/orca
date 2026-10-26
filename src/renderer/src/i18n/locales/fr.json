@@ -19392,9 +19392,9 @@
           "unverifiableCount": "{{value0}} au statut indisponible"
         },
         "startedOne": "A lancé 1 sous-agent",
-        "startedN": "Lancement des sous-agents {{value0}}",
+        "startedN": "A lancé {{value0}} sous-agents",
         "ranOne": "A exécuté 1 sous-agent",
-        "ranN": "Ran les sous-agents {{value0}}",
+        "ranN": "A exécuté {{value0}} sous-agents",
         "tokens": "Jetons {{value0}}",
         "unnamed": "Sous-agent"
       },
