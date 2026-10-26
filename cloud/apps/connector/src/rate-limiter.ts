@@ -18,7 +18,7 @@ export class RateLimiter {
     const refilled = bucket
       ? Math.min(
           this.capacityPerMinute,
-          bucket.tokens + ((now - bucket.updatedAt) * this.capacityPerMinute) / 60_000
+          bucket.tokens + (Math.max(0, now - bucket.updatedAt) * this.capacityPerMinute) / 60_000
         )
       : this.capacityPerMinute
     // Re-inserting keeps the map in recency order, so the oldest key is evicted first.

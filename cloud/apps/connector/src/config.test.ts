@@ -30,7 +30,8 @@ describe('connector config', () => {
   it.each([
     ['a path on the public URL', { ORCA_CONNECTOR_PUBLIC_URL: 'https://connector.onorca.dev/x' }],
     ['plain HTTP off loopback', { ORCA_CONNECTOR_AUTH_ISSUER: 'http://login.onorca.dev' }],
-    ['a missing key set URL', { ORCA_CONNECTOR_JWKS_URL: undefined }]
+    ['a missing key set URL', { ORCA_CONNECTOR_JWKS_URL: undefined }],
+    ['a plain HTTP key set URL', { ORCA_CONNECTOR_JWKS_URL: 'http://login.onorca.dev/jwks' }]
   ])('rejects %s', (_name, override) => {
     expect(() => loadConnectorConfig({ ...ENV, ...override })).toThrow()
   })

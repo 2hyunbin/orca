@@ -23,8 +23,8 @@ export function connectorHostId(claims: Pick<ConnectorTokenClaims, 'sub' | 'mid'
   return `${claims.sub}:${claims.mid}`
 }
 
-// No stale-if-error key cache as the relay has: tokens last 5 min and only auth mints them, so an
-// auth outage ends every machine's access within minutes either way.
+// jose's plain key cache, without the relay's stale-if-error fallback: machines already need the
+// auth service for a fresh token every 5 min.
 export function createConnectorTokenVerifier(
   config: Pick<ConnectorConfig, 'authIssuer' | 'jwksUrl'>,
   jwks: JWTVerifyGetKey = createRemoteJWKSet(new URL(config.jwksUrl))
