@@ -1,5 +1,10 @@
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 
+const LINEAR_AUTHORIZE_URL = 'https://linear.app/oauth/authorize'
+// Mention and delegation as the app itself; actor=app can't also ask for admin.
+const INSTALL_SCOPES = 'read,write,app:assignable,app:mentionable'
+const INSTALL_STATE_TTL_MS = 10 * 60_000
 const LINEAR_TOKEN_URL = 'https://api.linear.app/oauth/token'
 // Under the database's 5 s idle-in-transaction limit, since a refresh runs inside the row lock.
 const LINEAR_TOKEN_TIMEOUT_MS = 4_000
@@ -70,4 +75,43 @@ export function createLinearTokenEndpoint(
       ? { kind: 'failed', error: refused.data.error }
       : { kind: 'unknown' }
   }
+}
+
+function stateMac(key: string, payload: string): Buffer {
+  return createHmac('sha256', key).update(payload).digest()
+}
+
+// The operator's install link: a workspace admin approves it, and Linear sends the code to our callback.
+export function linearInstallUrl(input: {
+  clientId: string
+  redirectUri: string
+  stateKey: string
+  nowMs: number
+}): string {
+  const payload = `${input.nowMs + INSTALL_STATE_TTL_MS}.${randomBytes(16).toString('base64url')}`
+  const url = new URL(LINEAR_AUTHORIZE_URL)
+  url.search = new URLSearchParams({
+    client_id: input.clientId,
+    redirect_uri: input.redirectUri,
+    response_type: 'code',
+    scope: INSTALL_SCOPES,
+    actor: 'app',
+    state: `${payload}.${stateMac(input.stateKey, payload).toString('base64url')}`
+  }).toString()
+  return url.toString()
+}
+
+// True for a state we minted that has not expired; anything else never reaches the token exchange.
+export function verifyInstallState(stateKey: string, state: string, nowMs: number): boolean {
+  const [expiresAt, nonce, mac, ...rest] = state.split('.')
+  if (!expiresAt || !nonce || !mac || rest.length > 0 || !/^\d+$/.test(expiresAt)) {
+    return false
+  }
+  const expected = stateMac(stateKey, `${expiresAt}.${nonce}`)
+  const received = Buffer.from(mac, 'base64url')
+  return (
+    received.length === expected.length &&
+    timingSafeEqual(received, expected) &&
+    nowMs <= Number(expiresAt)
+  )
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createLinearTokenEndpoint, type LinearTokenGrant } from './linear-oauth.js'
+import {
+  createLinearTokenEndpoint,
+  linearInstallUrl,
+  verifyInstallState,
+  type LinearTokenGrant
+} from './linear-oauth.js'
 
 // Request and response shapes from https://linear.app/developers/oauth-2-0-authentication
 // (form-encoded, Basic client auth, expires_in 86399, rotating refresh token).
@@ -71,5 +76,51 @@ describe('createLinearTokenEndpoint', () => {
       throw new Error('timeout')
     })
     expect(await failing(refresh)).toEqual({ kind: 'unknown' })
+  })
+})
+
+// Authorize parameters from https://linear.app/developers/oauth-2-0-authentication (comma-separated
+// scopes) and https://linear.app/developers/agents (actor=app, app:assignable, app:mentionable).
+describe('Linear install links', () => {
+  const stateKey = 'k'.repeat(32)
+  const link = () =>
+    new URL(
+      linearInstallUrl({
+        clientId: 'client',
+        redirectUri: 'https://connector.example/linear/oauth/callback',
+        stateKey,
+        nowMs: NOW
+      })
+    )
+
+  it('asks for an app install with mention and delegation scopes', () => {
+    const url = link()
+    expect(url.origin + url.pathname).toBe('https://linear.app/oauth/authorize')
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+      client_id: 'client',
+      redirect_uri: 'https://connector.example/linear/oauth/callback',
+      response_type: 'code',
+      scope: 'read,write,app:assignable,app:mentionable',
+      actor: 'app'
+    })
+  })
+
+  it('accepts its own state for ten minutes', () => {
+    const state = link().searchParams.get('state') ?? ''
+    expect(verifyInstallState(stateKey, state, NOW)).toBe(true)
+    expect(verifyInstallState(stateKey, state, NOW + 10 * 60_000)).toBe(true)
+    expect(verifyInstallState(stateKey, state, NOW + 10 * 60_000 + 1)).toBe(false)
+    expect(link().searchParams.get('state')).not.toBe(state)
+  })
+
+  it('refuses another key, an edited expiry, or a malformed state', () => {
+    const state = link().searchParams.get('state') ?? ''
+    expect(verifyInstallState('o'.repeat(32), state, NOW)).toBe(false)
+    const [expiresAt, nonce, mac] = state.split('.')
+    expect(verifyInstallState(stateKey, `${Number(expiresAt) + 1}.${nonce}.${mac}`, NOW)).toBe(
+      false
+    )
+    expect(verifyInstallState(stateKey, `${state}.extra`, NOW)).toBe(false)
+    expect(verifyInstallState(stateKey, '', NOW)).toBe(false)
   })
 })

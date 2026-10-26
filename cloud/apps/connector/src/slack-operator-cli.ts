@@ -1,6 +1,6 @@
 import { text } from 'node:stream/consumers'
 import { openConnectorDatabase } from './connector-database.js'
-import { decodeTokenKey } from './slack-config.js'
+import { decodeSlackTokenKey } from './slack-config.js'
 import { runSlackOperator } from './slack-operator.js'
 
 // pnpm --filter @orca-cloud/connector slack-operator <command>, with the service's database env.
@@ -15,12 +15,7 @@ try {
   const output = await runSlackOperator(process.argv.slice(2), {
     database,
     ...(env.ORCA_CONNECTOR_SLACK_TOKEN_KEY
-      ? {
-          tokenKey: decodeTokenKey(
-            env.ORCA_CONNECTOR_SLACK_TOKEN_KEY,
-            'ORCA_CONNECTOR_SLACK_TOKEN_KEY'
-          )
-        }
+      ? { tokenKey: decodeSlackTokenKey(env.ORCA_CONNECTOR_SLACK_TOKEN_KEY) }
       : {}),
     readSecret: () => text(process.stdin),
     now: Date.now

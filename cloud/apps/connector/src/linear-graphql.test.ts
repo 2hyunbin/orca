@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   activityCreateRequest,
   createLinearGraphql,
+  linearActivityId,
   sessionUpdateRequest,
   type LinearRequest
 } from './linear-graphql.js'
@@ -86,12 +87,20 @@ describe('createLinearGraphql', () => {
 describe('Linear agent requests', () => {
   const input = (request: LinearRequest) => request.variables.input
 
+  it('names each post’s activity with a stable UUID v4', () => {
+    expect(linearActivityId('post-1')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    )
+    expect(linearActivityId('post-1')).toBe(linearActivityId('post-1'))
+    expect(linearActivityId('post-2')).not.toBe(linearActivityId('post-1'))
+  })
+
   it('builds thoughts, actions, responses and errors', () => {
     expect(
       input(activityCreateRequest('s1', 'a1', { type: 'thought', body: 'Sent', ephemeral: true }))
     ).toEqual({
       agentSessionId: 's1',
-      id: 'a1',
+      id: linearActivityId('a1'),
       content: { type: 'thought', body: 'Sent' },
       ephemeral: true
     })
@@ -106,17 +115,17 @@ describe('Linear agent requests', () => {
       )
     ).toEqual({
       agentSessionId: 's1',
-      id: 'a1',
+      id: linearActivityId('a1'),
       content: { type: 'action', action: 'Ran', parameter: 'tests', result: 'ok' }
     })
     expect(input(activityCreateRequest('s1', 'a1', { type: 'response', body: 'Done' }))).toEqual({
       agentSessionId: 's1',
-      id: 'a1',
+      id: linearActivityId('a1'),
       content: { type: 'response', body: 'Done' }
     })
     expect(input(activityCreateRequest('s1', 'a1', { type: 'error', body: 'Stopped' }))).toEqual({
       agentSessionId: 's1',
-      id: 'a1',
+      id: linearActivityId('a1'),
       content: { type: 'error', body: 'Stopped' }
     })
   })
@@ -136,7 +145,7 @@ describe('Linear agent requests', () => {
       )
     ).toEqual({
       agentSessionId: 's1',
-      id: 'a1',
+      id: linearActivityId('a1'),
       content: { type: 'elicitation', body: 'Which package?' },
       signal: 'select',
       signalMetadata: { options }
@@ -148,7 +157,7 @@ describe('Linear agent requests', () => {
       )
     ).toEqual({
       agentSessionId: 's1',
-      id: 'a1',
+      id: linearActivityId('a1'),
       content: { type: 'elicitation', body: 'Link your account' },
       signal: 'auth',
       signalMetadata: auth

@@ -91,7 +91,8 @@ describe('readLinearEnvelope', () => {
       event: {
         kind: 'created',
         session: expectedSession,
-        promptContext: created.promptContext,
+        text: created.promptContext,
+        choiceText: '@orca please implement this',
         previousComments: [{ id: 'comment-0', body: 'Earlier note', userId: 'user-2' }]
       }
     })
@@ -108,9 +109,19 @@ describe('readLinearEnvelope', () => {
     expect(result.kind === 'event' && result.event).toMatchObject({
       kind: 'created',
       session: { creator: null, commentId: null },
-      promptContext: '',
+      text: 'Fix accessibility on checkout page',
+      choiceText: 'Fix accessibility on checkout page',
       previousComments: []
     })
+  })
+
+  it('caps the start text at 32 KB without splitting a character', () => {
+    const result = readLinearEnvelope({
+      ...created,
+      promptContext: `${'a'.repeat(32 * 1024 - 1)}é`
+    })
+    const text = result.kind === 'event' && result.event.kind === 'created' ? result.event.text : ''
+    expect(text).toBe('a'.repeat(32 * 1024 - 1))
   })
 
   it('reads a prompt with its author, from content.body or the documented body field', () => {
@@ -122,7 +133,7 @@ describe('readLinearEnvelope', () => {
         activity: {
           id: 'activity-1',
           author: { id: 'user-2', name: 'Grace Hopper' },
-          body: 'Also update the tests',
+          text: 'Also update the tests',
           stop: false
         }
       }
@@ -130,7 +141,7 @@ describe('readLinearEnvelope', () => {
     const bodyOnly = prompted({ content: { type: 'prompt' }, body: 'From the body field' })
     const result = readLinearEnvelope(bodyOnly)
     expect(
-      result.kind === 'event' && result.event.kind === 'prompted' && result.event.activity.body
+      result.kind === 'event' && result.event.kind === 'prompted' && result.event.activity.text
     ).toBe('From the body field')
   })
 
@@ -143,7 +154,7 @@ describe('readLinearEnvelope', () => {
     ).toEqual({
       id: 'activity-1',
       author: { id: 'user-2', name: 'Grace Hopper' },
-      body: '',
+      text: '',
       stop: true
     })
   })

@@ -1,5 +1,8 @@
 import { z } from 'zod'
 
+// promptContext carries the whole issue and its threads; the agent's start text stays bounded.
+const MAX_START_TEXT_BYTES = 32 * 1024
+
 const UserSchema = z.object({ id: z.string().min(1), name: z.string() })
 
 const CommentSchema = z.object({
@@ -24,6 +27,7 @@ const SessionSchema = z.object({
     })
     .nullish(),
   commentId: z.string().min(1).nullish(),
+  comment: z.object({ body: z.string() }).nullish(),
   url: z.string().min(1).nullish()
 })
 
@@ -72,19 +76,28 @@ export type LinearAgentEvent =
   | {
       kind: 'created'
       session: LinearSession
-      promptContext: string
+      // What the agent starts from: Linear's promptContext, capped.
+      text: string
+      // What machine choice reads: the triggering comment, else the issue title.
+      choiceText: string
       previousComments: LinearComment[]
     }
   | {
       kind: 'prompted'
       session: LinearSession
-      activity: { id: string; author: LinearUser; body: string; stop: boolean }
+      activity: { id: string; author: LinearUser; text: string; stop: boolean }
     }
 
 export type LinearEnvelope =
   | { kind: 'event'; event: LinearAgentEvent }
   | { kind: 'ignored' }
   | { kind: 'invalid' }
+
+// Whole characters only: encodeInto stops before one that would not fit.
+function capUtf8(text: string, maxBytes: number): string {
+  const { read } = new TextEncoder().encodeInto(text, new Uint8Array(maxBytes))
+  return text.slice(0, read)
+}
 
 // Only agent session events start or continue work; app, permission and data-change webhooks
 // are acknowledged and ignored.
@@ -107,12 +120,14 @@ export function readLinearEnvelope(payload: unknown): LinearEnvelope {
     url: raw.url ?? null
   }
   if (data.action === 'created') {
+    const choiceText = raw.comment?.body ?? raw.issue?.title ?? ''
     return {
       kind: 'event',
       event: {
         kind: 'created',
         session,
-        promptContext: data.promptContext ?? '',
+        text: capUtf8(data.promptContext ?? choiceText, MAX_START_TEXT_BYTES),
+        choiceText,
         previousComments: (data.previousComments ?? []).map((comment) => ({
           ...comment,
           userId: comment.userId ?? null
@@ -130,7 +145,7 @@ export function readLinearEnvelope(payload: unknown): LinearEnvelope {
         activity: {
           id: activity.id,
           author: { id: activity.userId, name: activity.user.name },
-          body: activity.content.body ?? activity.body ?? '',
+          text: activity.content.body ?? activity.body ?? '',
           stop: activity.signal === 'stop'
         }
       }

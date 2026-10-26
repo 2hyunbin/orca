@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql'
@@ -112,13 +113,21 @@ const SESSION_UPDATE = `mutation AgentSessionUpdate($id: String!, $input: AgentS
   agentSessionUpdate(id: $id, input: $input) { success }
 }`
 
-// activityId (UUID v4) is ours, so a retried create names the same activity.
+// Linear takes a client-chosen UUID v4 per activity, so a resend after a lost reply names the same one.
+export function linearActivityId(postId: string): string {
+  const bytes = createHash('sha256').update(`linear-activity:${postId}`).digest().subarray(0, 16)
+  bytes.writeUInt8((bytes.readUInt8(6) & 0x0f) | 0x40, 6)
+  bytes.writeUInt8((bytes.readUInt8(8) & 0x3f) | 0x80, 8)
+  const hex = bytes.toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 export function activityCreateRequest(
   sessionId: string,
-  activityId: string,
+  postId: string,
   activity: LinearActivity
 ): LinearRequest {
-  const input: Record<string, unknown> = { agentSessionId: sessionId, id: activityId }
+  const input: Record<string, unknown> = { agentSessionId: sessionId, id: linearActivityId(postId) }
   if ('select' in activity) {
     const { select, ...content } = activity
     Object.assign(input, { content, signal: 'select', signalMetadata: { options: select } })
