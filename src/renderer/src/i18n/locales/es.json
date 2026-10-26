@@ -19055,6 +19055,7 @@
         "showTerminal": "Mostrar terminal"
       },
       "resumeInNewChat": {
+        "hostUpdateRequired": "Actualiza Orca en este host para continuar en la interfaz de chat.",
         "notSavedYet": "{{agent}} aún no ha guardado esta conversación. Inténtalo de nuevo cuando responda.",
         "cannotResume": "Esta conversación de {{agent}} no se puede reanudar en un chat nativo.",
         "exitUnconfirmed": "{{agent}} ya está ejecutando esta conversación en otra terminal. Sal de {{agent}} allí o cierra esa terminal; luego abre esta conversación desde el Historial de sesiones.",

@@ -19545,6 +19545,7 @@
         "showTerminal": "Show terminal"
       },
       "resumeInNewChat": {
+        "hostUpdateRequired": "Update Orca on this host to continue in Chat UI.",
         "exitUnconfirmedFromTerminal": "{{agent}} is already running this conversation in another terminal. Quit {{agent}} there or close that terminal, then open this conversation from Session History.",
         "exitUnconfirmed": "{{agent}} is already running this conversation in another terminal. Quit {{agent}} there or close that terminal, then open this conversation from Session History.",
         "notSavedYet": "{{agent}} hasn't saved this conversation yet. Try again after it replies.",
