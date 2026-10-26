@@ -33,7 +33,7 @@ import {
   nativeChatSessionOptionDisabledReason,
   nativeChatSessionOptionLabel,
   sayNativeChatSessionOptionEnglish as say
-} from '../../../src/shared/native-chat-session-option-labels'
+} from '../../../../../src/shared/native-chat-session-option-labels'
 import { mobileSessionOptionSummaryValue } from './mobile-native-chat-session-option-labels'
 import {
   DescriptorRows,
