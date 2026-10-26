@@ -386,5 +386,6 @@ describe('LinuxLidSleepAssertion', () => {
     children[1].emit('exit', 1, null)
 
     expect(logger.warn).toHaveBeenCalledTimes(2)
+    assertion.dispose()
   })
 })
