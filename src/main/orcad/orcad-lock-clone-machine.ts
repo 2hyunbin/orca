@@ -6,8 +6,9 @@ import type { OrcadPeerMachine } from './orcad-lock-holder-locality'
 import { currentLinuxBootStartedAtMs } from '../persistence/profile-state/profile-state-access-identity'
 
 const CLONE_MACHINE_ID_HINT =
-  'Machines cloned from one image share /etc/machine-id, so Orca cannot tell them apart. On the ' +
-  'clone, run `sudo rm /etc/machine-id && sudo systemd-machine-id-setup` and reboot it.'
+  'Machines cloned from one image share /etc/machine-id, so Orca cannot tell them apart. If that ' +
+  'server crashed, a normal start takes over once its lock goes 5 minutes without a heartbeat. ' +
+  'On the clone, run `sudo rm /etc/machine-id && sudo systemd-machine-id-setup` and reboot it.'
 const CLONE_OWN_DATA_HINT =
   'Or, on that machine only, give Orca its own data: for Orca-managed SSH servers set ' +
   `${ORCA_MACHINE_NAME_ENV} where its non-interactive SSH logins read it (~/.zshenv, or above the ` +
@@ -78,8 +79,9 @@ export function startOrcadLockHeartbeat(lockPath: string): () => void {
     try {
       const now = new Date()
       utimesSync(lockPath, now, now)
-    } catch {
-      // A missing lock belongs to a successor; release owns cleanup.
+    } catch (error) {
+      // A stalled heartbeat lets a machine sharing this machine-id take the lock.
+      console.warn('[orcad] could not refresh the instance lock heartbeat:', error)
     }
   }, ORCAD_LOCK_HEARTBEAT_MS)
   heartbeat.unref()
