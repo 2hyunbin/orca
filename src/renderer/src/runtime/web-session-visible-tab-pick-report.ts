@@ -4,24 +4,29 @@ import {
 } from '../../../shared/runtime-types'
 import { isWebTerminalSurfaceTabId, toHostSessionTabId } from '../../../shared/terminal-surface-id'
 import { useAppStore } from '../store'
+import { getRuntimeEnvironmentConnectionGeneration } from '../store/slices/runtime-status-connection-generation'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import {
   captureRuntimeEnvironmentCall,
   captureWebSessionIntentOwner,
   isWebRuntimeSessionActive
 } from './web-runtime-session-environment'
-import { peekWebSessionFocusIntent } from './web-session-focus-intent'
+import {
+  peekWebSessionFocusIntent,
+  resolveWebSessionVisibleTabId
+} from './web-session-focus-intent'
 import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
 import { isServerFrameDrawnWorkspace } from './web-session-tabs-sync/frame-drawn-server-workspaces'
 
-/** Last pick reported per environment and workspace, so one divergence costs one RPC. */
-const reportedPickByWorkspace = new Map<string, string>()
+/** The pane last reported per connection and workspace. Reporting again only when the desktop's own
+ *  pane changes keeps two windows sharing one device id from steering the pick back and forth. */
+const reportedPaneByWorkspace = new Map<string, string>()
 
 /**
  * The server remembers each device's tab per workspace and hands it back whenever the desktop has
  * no tab groups of its own for that workspace (first open, or a saved session that lost them). A
- * desktop that kept its own groups never tells the server what it shows, so that memory went stale
- * and such an open landed on the wrong tab. Report the visible terminal tab when they differ.
+ * desktop that kept its own groups never told the server what it showed, so that memory went stale
+ * and such an open landed on the wrong tab. Report the visible terminal pane when they differ.
  */
 export function reportVisibleTabPickToHost(
   environmentId: string,
@@ -32,53 +37,61 @@ export function reportVisibleTabPickToHost(
     return
   }
   const worktreeId = snapshot.worktree
+  const owner = captureWebSessionIntentOwner(environmentId)
   if (
     !isWebRuntimeSessionActive(environmentId) ||
     isServerFrameDrawnWorkspace(environmentId, worktreeId) ||
-    peekWebSessionFocusIntent(captureWebSessionIntentOwner(environmentId), worktreeId)
+    peekWebSessionFocusIntent(owner, worktreeId)
   ) {
     return
   }
   const state = useAppStore.getState()
-  const activeGroupId = state.activeGroupIdByWorktree[worktreeId]
-  const activeTabId = state.groupsByWorktree[worktreeId]?.find(
-    (group) => group.id === activeGroupId
-  )?.activeTabId
-  const visible = state.unifiedTabsByWorktree[worktreeId]?.find((tab) => tab.id === activeTabId)
+  // Without groups of its own the desktop shows the server's pick; there is nothing to report.
+  if ((state.groupsByWorktree[worktreeId] ?? []).length === 0) {
+    return
+  }
+  const visibleId = resolveWebSessionVisibleTabId(state, worktreeId)
+  const visible = state.unifiedTabsByWorktree[worktreeId]?.find((tab) => tab.id === visibleId)
   if (visible?.contentType !== 'terminal' || !isWebTerminalSurfaceTabId(visible.entityId)) {
     return
   }
   const hostTabId = toHostSessionTabId(visible.entityId)
   const picked = snapshot.tabs.find((tab) => tab.id === snapshot.activeTabId)
   const pickedHostTabId = picked?.type === 'terminal' ? picked.parentTabId : picked?.id
-  const key = `${environmentId}\0${worktreeId}`
   if (pickedHostTabId === hostTabId) {
-    reportedPickByWorkspace.delete(key)
     return
   }
   // Name the exact pane and require it ready: activating a pending one would start its terminal.
   const localLeafId = state.terminalLayoutsByTabId[visible.entityId]?.activeLeafId
-  const target =
-    snapshot.tabs.find(
-      (tab) =>
-        tab.type === 'terminal' &&
-        tab.parentTabId === hostTabId &&
-        (!localLeafId || tab.leafId === localLeafId)
-    ) ?? null
-  if (
-    target?.type !== 'terminal' ||
-    target.status !== 'ready' ||
-    reportedPickByWorkspace.get(key) === hostTabId
-  ) {
+  const target = snapshot.tabs.find(
+    (tab) =>
+      tab.type === 'terminal' &&
+      tab.parentTabId === hostTabId &&
+      (!localLeafId || tab.leafId === localLeafId)
+  )
+  if (target?.type !== 'terminal' || target.status !== 'ready') {
     return
   }
-  reportedPickByWorkspace.set(key, hostTabId)
+  const key = [
+    environmentId,
+    owner.pairingRevision,
+    getRuntimeEnvironmentConnectionGeneration(environmentId),
+    worktreeId
+  ].join('\0')
+  const pane = `${hostTabId}\0${target.leafId}`
+  if (reportedPaneByWorkspace.get(key) === pane) {
+    return
+  }
+  reportedPaneByWorkspace.set(key, pane)
   const retryLater = (): void => {
-    if (reportedPickByWorkspace.get(key) === hostTabId) {
-      reportedPickByWorkspace.delete(key)
+    if (reportedPaneByWorkspace.get(key) === pane) {
+      reportedPaneByWorkspace.delete(key)
     }
   }
-  void captureRuntimeEnvironmentCall(environmentId)({
+  void captureRuntimeEnvironmentCall(
+    environmentId,
+    owner.pairingRevision
+  )({
     method: 'session.tabs.activate',
     params: {
       worktree: toRuntimeWorktreeSelector(worktreeId),
@@ -90,7 +103,7 @@ export function reportVisibleTabPickToHost(
     },
     timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS
   }).then(
-    // Best effort; a later frame that still differs reports again.
+    // Best effort; a failed report is tried again on a later frame.
     (response) => {
       if (!response.ok) {
         retryLater()
@@ -101,5 +114,5 @@ export function reportVisibleTabPickToHost(
 }
 
 export function resetReportedVisibleTabPicksForTests(): void {
-  reportedPickByWorkspace.clear()
+  reportedPaneByWorkspace.clear()
 }

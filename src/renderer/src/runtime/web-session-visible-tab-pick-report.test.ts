@@ -13,6 +13,7 @@ vi.mock('./web-session-tabs-sync/frame-drawn-server-workspaces', () => ({
   isServerFrameDrawnWorkspace: () => false
 }))
 
+import { setRuntimeEnvironmentConnectionGenerationForTests } from '../store/slices/runtime-status-connection-generation'
 import {
   reportVisibleTabPickToHost,
   resetReportedVisibleTabPicksForTests
@@ -58,16 +59,18 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
       groupsByWorktree: { [WT]: [{ id: 'group', activeTabId: 'u1', tabOrder: ['u1', 'u2'] }] },
       unifiedTabsByWorktree: {
         [WT]: [
-          { id: 'u1', contentType: 'terminal', entityId: T1 },
-          { id: 'u2', contentType: 'terminal', entityId: T2 }
+          { id: 'u1', contentType: 'terminal', entityId: T1, groupId: 'group' },
+          { id: 'u2', contentType: 'terminal', entityId: T2, groupId: 'group' }
         ]
       },
       terminalLayoutsByTabId: { [T1]: { activeLeafId: 'leaf' } }
     }
   })
 
-  it('moves a stale server pick back to the visible tab, once', () => {
+  it('moves a stale server pick back to the visible tab, once per connection', () => {
     reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    reportVisibleTabPickToHost(ENV, frame('host-tab-1'))
+    // Another window on this device moved it again; only this desktop's own change reports anew.
     reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
 
     expect(mocks.call).toHaveBeenCalledTimes(1)
@@ -82,6 +85,14 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
         intent: 'automatic'
       }
     })
+  })
+
+  it('reports again on a new connection', () => {
+    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    setRuntimeEnvironmentConnectionGenerationForTests(ENV, 7)
+    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    expect(mocks.call).toHaveBeenCalledTimes(2)
+    setRuntimeEnvironmentConnectionGenerationForTests(ENV, 0)
   })
 
   it('retries after the server answers with an error', async () => {
