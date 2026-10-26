@@ -22,6 +22,8 @@ import {
 import { extractOscTitleScanTail } from '../../../../shared/osc-title-scan-tail'
 
 export abstract class OrcaRuntimeWithOnPtyData extends OrcaRuntimeWithPreparePtyExecutionContext {
+  protected abstract setPtyConnected(pty: RuntimePtyWorktreeRecord, connected: boolean): void
+
   protected abstract recordOsc7MetadataForPty(
     ptyId: string,
     data: string
