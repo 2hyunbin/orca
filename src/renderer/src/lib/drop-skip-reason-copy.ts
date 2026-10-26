@@ -1,6 +1,4 @@
 import { translate } from '@/i18n/i18n'
-import { compactIpcErrorMessage } from '@/lib/ipc-error'
-import { basename } from '@/lib/path'
 import type { ImportSkipReason } from '../../../shared/filesystem-import-result-types'
 
 const SKIP_REASON_COPY: Record<ImportSkipReason, { key: string; fallback: string }> = {
@@ -46,6 +44,41 @@ export function describeSharedDropSkipReason(
   return reason ? describeDropSkipReason(reason) : undefined
 }
 
+// Ordered: a "too large" refusal can also read as a write failure.
+const FAILURE_CATEGORIES: readonly { matches: RegExp; key: string; fallback: string }[] = [
+  {
+    matches: /file_too_large|\btoo large\b|\bis larger than\b|remote import limit/i,
+    key: 'auto.lib.dropFailureReason.tooLarge',
+    fallback: 'Too large to upload to this host.'
+  },
+  {
+    matches: /\bENOSPC\b|no space left|disk quota|\bEDQUOT\b/i,
+    key: 'auto.lib.dropFailureReason.noSpace',
+    fallback: 'The host is out of disk space.'
+  },
+  {
+    matches: /\bEACCES\b|\bEPERM\b|\bEROFS\b|permission[ _]denied|read-only file system/i,
+    key: 'auto.lib.dropSkipReason.permissionDenied',
+    fallback: 'Permission denied.'
+  },
+  {
+    matches: /changed during upload|changed while/i,
+    key: 'auto.lib.dropFailureReason.changed',
+    fallback: 'The file changed while it was uploading. Try again.'
+  },
+  {
+    matches: /\bENOENT\b|no such file/i,
+    key: 'auto.lib.dropSkipReason.missing',
+    fallback: 'No longer at its original path.'
+  },
+  {
+    matches:
+      /\bE(?:CONNRESET|CONNREFUSED|TIMEDOUT|PIPE|HOSTUNREACH)\b|timed out|disconnect|not connected|unreachable/i,
+    key: 'auto.lib.dropFailureReason.hostUnreachable',
+    fallback: 'Lost the connection to the host. Try again once it reconnects.'
+  }
+]
+
 /** Toast detail when every rejected item shares one reason; mixed reasons stay generic. */
 export function describeSharedDropFailureReason(
   items: readonly { status?: 'skipped' | 'failed'; reason?: string }[]
@@ -59,24 +92,13 @@ export function describeSharedDropFailureReason(
   if (skipCopy || items.some((item) => item.status === 'skipped')) {
     return skipCopy
   }
-  return describeFailureProse(compactIpcErrorMessage(reason))
-}
-
-// Absolute POSIX, drive-letter or UNC paths: whole when quoted (they may hold spaces), else to whitespace.
-const QUOTED_ABSOLUTE_PATH = /(['"`])((?:[A-Za-z]:[\\/]|\\\\|\/)[^'"`]*)\1/g
-const BARE_ABSOLUTE_PATH = /(?<=^|[\s(])(?:[A-Za-z]:[\\/]|\\\\|\/)[^\s'"`)]*/g
-
-// Why: host errors quote absolute paths and toasts are often on shared screens; name only the file.
-function describeFailureProse(prose: string | undefined): string | undefined {
-  if (!prose) {
-    return undefined
+  // Why: host prose can quote absolute paths and toasts are often on shared screens; keep it in logs.
+  console.warn('[drop] upload failed:', reason)
+  const category = FAILURE_CATEGORIES.find((entry) => entry.matches.test(reason))
+  if (category) {
+    return translate(category.key, category.fallback)
   }
-  const shortened = prose
-    .replace(QUOTED_ABSOLUTE_PATH, (_match, quote: string, path: string) => {
-      return `${quote}${basename(path)}${quote}`
-    })
-    .replace(BARE_ABSOLUTE_PATH, (path) => basename(path))
-  const pathOnly =
-    prose.replace(QUOTED_ABSOLUTE_PATH, '').replace(BARE_ABSOLUTE_PATH, '').trim() === ''
-  return pathOnly ? undefined : shortened
+  return items.length === 1
+    ? translate('auto.lib.dropFailureReason.unknownOne', "Couldn't upload this file.")
+    : translate('auto.lib.dropFailureReason.unknownMany', "Couldn't upload these files.")
 }

@@ -44,6 +44,12 @@ afterEach(async () => {
 })
 
 describe('drop staging ignore file with the real Git binary', () => {
+  it('keeps dropped files and the ignore file itself out of git status', async () => {
+    await dropFile()
+
+    expect(await gitStatus()).toBe('')
+  })
+
   // Older SSH builds wrote `.orca/.gitignore` with `!.gitignore`, which matches at any depth.
   it('keeps drops hidden under the legacy `.orca/.gitignore`', async () => {
     await dropFile()

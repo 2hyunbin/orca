@@ -48,7 +48,7 @@ describe('reportTerminalDropUploadSkipsAndFailures', () => {
     )
     expect(toast.error).toHaveBeenCalledWith(
       expect.not.stringContaining('/secret/project/file.txt'),
-      { description: undefined }
+      { description: expect.not.stringContaining('/secret/project/file.txt') }
     )
   })
 
@@ -86,25 +86,26 @@ describe('reportTerminalDropUploadSkipsAndFailures', () => {
     )
   })
 
-  it('names a shared failure reason and leaves mixed failures generic', () => {
+  it('names a shared failure category, never the host text', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     reportTerminalDropUploadSkipsAndFailures(
       [],
-      [{ reason: "Error invoking remote method 'fs:x': Error: No space left on device" }]
+      [{ reason: "Error invoking remote method 'fs:x': Error: ENOSPC: no space left on device" }]
     )
     reportTerminalDropUploadSkipsAndFailures(
       [],
-      [{ reason: "EACCES: permission denied, open '/home/me/Top Secret (old)/shot.png'" }]
+      [{ reason: 'EACCES: permission denied, open \'/home/John Doe/Client "Acme"/shot.png\'' }]
     )
     reportTerminalDropUploadSkipsAndFailures(
       [],
-      [{ reason: 'Could not write "C:\\Users\\me\\My Files\\shot.png" on \\\\nas\\share\\x.png' }]
+      [{ reason: 'C:\\Users\\John Doe\\Application Support\\shot.png: unexpected' }]
     )
     reportTerminalDropUploadSkipsAndFailures([], [{ reason: 'a' }, { reason: 'b' }])
 
     expect(vi.mocked(toast.error).mock.calls.map((call) => call[1])).toEqual([
-      { description: 'No space left on device' },
-      { description: "EACCES: permission denied, open 'shot.png'" },
-      { description: 'Could not write "shot.png" on x.png' },
+      { description: 'auto.lib.dropFailureReason.noSpace:The host is out of disk space.' },
+      { description: 'auto.lib.dropSkipReason.permissionDenied:Permission denied.' },
+      { description: "auto.lib.dropFailureReason.unknownOne:Couldn't upload this file." },
       { description: undefined }
     ])
   })

@@ -146,6 +146,8 @@ describe('file explorer OS file drops on remote workspaces', () => {
     const view = render(<Explorer worktreeId="wt-runtime" root={RUNTIME_ROOT} />)
     dropFile(view.getByTestId('src'))
     await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(1))
-    expect(mocks.toastError).toHaveBeenCalledWith(expect.any(String), { description: reason })
+    expect(mocks.toastError).toHaveBeenCalledWith(expect.any(String), {
+      description: 'Too large to upload to this host.'
+    })
   })
 })
