@@ -6,8 +6,9 @@ import type {
 } from '../../../shared/ssh-types'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
-import { extractIpcErrorMessage } from '@/lib/ipc-error'
+import { compactIpcErrorMessage, extractIpcErrorMessage } from '@/lib/ipc-error'
 import { launchSessionEndedLine } from './ssh-host-launch-session-copy'
+import { automationsLeftDisabledLine } from './ssh-host-moved-automations-copy'
 import { bridgedTerminalsLine } from './ssh-host-bridged-terminals-copy'
 import { managedUpdateLine, withDetail } from './ssh-host-server-update-copy'
 import { blockedNodeDownload, nodeDownloadBlockedText } from './ssh-host-node-download-copy'
@@ -52,14 +53,7 @@ export function sshHostServerStatusLine(
     return linkedProjectsLine(status.linked)
   }
   if (status?.kind === 'managed' && status.automationsLeftDisabled) {
-    return {
-      tone: 'warning',
-      text: translate(
-        'auto.components.settings.sshHostServer.automationsLeftDisabled',
-        'This host’s Orca server took over {{count}} automations but couldn’t turn them back on. Turn them on in Automations.',
-        { count: status.automationsLeftDisabled }
-      )
-    }
+    return automationsLeftDisabledLine(status.automationsLeftDisabled)
   }
   // A healthy managed server is the default; the card stays quiet unless something needs attention.
   if (status?.kind === 'managed' || (!status && target.orcadFence)) {
@@ -101,10 +95,13 @@ export function sshTargetConnectFailureText(
   error: unknown,
   fallback: string
 ): string {
-  return sshConnectFailureText(
-    useAppStore.getState().sshConnectionStates.get(targetId),
-    extractIpcErrorMessage(error, fallback)
-  )
+  const state = useAppStore.getState().sshConnectionStates.get(targetId)
+  // Main publishes the failure with its next step; the rejection carries only SSH's raw words.
+  const published =
+    state?.status === 'error' || state?.status === 'auth-failed'
+      ? compactIpcErrorMessage(state.error ?? '')
+      : undefined
+  return sshConnectFailureText(state, published || extractIpcErrorMessage(error, fallback))
 }
 
 // Mirror main's ORCAD_TUNNEL_UNAVAILABLE_REASON.

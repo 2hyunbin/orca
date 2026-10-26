@@ -149,17 +149,17 @@ export const PR_E2E_SOURCE_ROUTES = [
         ))
   },
   {
-    id: 'ssh.orcad-enabled-automation-move',
-    specs: ['tests/e2e/ssh-orcad-enabled-automation-move.spec.ts'],
-    matches: (file) => MANAGED_SSH_HARNESS.test(file) || ENABLED_AUTOMATION_MOVE.test(file)
-  },
-  {
-    id: 'ssh.orcad-ssh-failure-reason',
-    specs: ['tests/e2e/ssh-orcad-ssh-failure-reason.spec.ts'],
+    id: 'ssh.orcad-connect-failure',
+    specs: [
+      'tests/e2e/ssh-orcad-ssh-failure-reason.spec.ts',
+      'tests/e2e/ssh-orcad-move-anyway-inline.spec.ts',
+      'tests/e2e/ssh-orcad-enabled-automation-move.spec.ts'
+    ],
     matches: (file) =>
       MANAGED_SSH_HARNESS.test(file) ||
+      ENABLED_AUTOMATION_MOVE.test(file) ||
       (isProductSource(file) &&
-        /^src\/(?:main\/(?:ipc\/ssh\/(?:ssh-connect-flow|ssh-host-server-)|ssh\/(?:ssh-session-start-failure|ssh-host-server-|connection\/ssh-connection-manager))|renderer\/src\/ssh\/(?:ssh-host-server-status-copy|ssh-connect-failure-toast))/.test(
+        /^src\/(?:main\/(?:ipc\/ssh\/(?:ssh-connect-flow|ssh-host-server-)|ssh\/(?:ssh-session-start-failure|ssh-host-server-|connection\/ssh-connection-manager|orcad-migration-refusal-reason|targets\/ssh-target-orcad-preflight)|managed-server\/lifecycle\/orcad-runtime-conversion|persistence\/migrating-orcad-catalog\/orcad-source-(?:automation-state|leave-behind-view))|renderer\/src\/(?:ssh\/(?:ssh-host-server-status-copy|ssh-connect-failure-toast)|components\/settings\/(?:SshTargetServerStatus|SshHostMoveAnywayAction|SshTargetCard)))/.test(
           file
         ))
   },
