@@ -25,6 +25,11 @@ function missingPath(path: string): Error & { code: string } {
   return Object.assign(new Error(`missing ${path}`), { code: 'ENOENT' })
 }
 
+const deniedPath = (operation: string, path: string) =>
+  Object.assign(new Error(`EACCES: permission denied, ${operation} '${path}'`), {
+    code: 'EACCES'
+  })
+
 function makeStatPath(filePaths: readonly string[], directoryPaths: readonly string[] = []) {
   const files = new Set(filePaths)
   const directories = new Set(directoryPaths)
@@ -153,25 +158,52 @@ describe('canSafelyRemoveOrphanedWorktreeDirectory', () => {
     expect(realPath).not.toHaveBeenCalled()
   })
 
-  it('accepts remote filesystem provider readFile results for linked worktree .git files', async () => {
-    await expect(
-      canSafelyRemoveOrphanedWorktreeDirectory(
-        '/workspaces/orphan',
-        '/repo',
-        CLIENT_REMOVAL_HOME,
-        makeStatPath(['/workspaces/orphan/.git'], ['/repo/.git']),
-        makeReadPath([
-          [
-            '/workspaces/orphan/.git',
-            { isBinary: false, content: 'gitdir: /repo/.git/worktrees/orphan\n' }
-          ],
-          [
-            '/repo/.git/worktrees/orphan/gitdir',
-            { isBinary: false, content: '/workspaces/orphan/.git\n' }
-          ]
-        ])
-      )
-    ).resolves.toBe(true)
+  it('requires definitive absence throughout owner fallback and missing-admin proof', async () => {
+    const owner = '/repos/ENOENT'
+    const candidate = '/workspaces/orphan'
+    const admin = `${owner}/worktrees/orphan`
+    const stat = makeStatPath([`${candidate}/.git`])
+    const statPath = vi.fn(stat)
+    const layoutStatPath = vi.fn(makeStatPath([]))
+    const read = makeReadPath([
+      [`${candidate}/.git`, { content: `gitdir: ${admin}\n`, isBinary: false }],
+      [`${owner}/HEAD`, 'ref: refs/heads/main\n']
+    ])
+    const readPath = vi.fn(read)
+    const realPath = vi.fn(async () => {
+      throw new Error('unexpected canonical operation')
+    })
+    const access = { statPath, layoutStatPath, readPath, realPath }
+    const prove = () => proveWithAccess(candidate, owner, CLIENT_REMOVAL_HOME, access)
+    await expect(prove()).resolves.toBe(true)
+    const denied = deniedPath('stat', `${owner}/.git`)
+    for (const error of [denied, new Error(`cannot inspect '${owner}/.git'`)]) {
+      layoutStatPath.mockRejectedValueOnce(error)
+      await expect(prove()).resolves.toBe(false)
+    }
+    // Each unknown replaces one independently missing observation in the successful proof.
+    for (const unknownPath of [`${owner}/commondir`, `${admin}/gitdir`]) {
+      readPath.mockImplementation(async (path) => {
+        if (path === unknownPath) {
+          throw deniedPath('open', path)
+        }
+        return read(path)
+      })
+      await expect(prove()).resolves.toBe(false)
+    }
+    readPath.mockImplementation(read)
+    statPath.mockImplementation(async (path) => {
+      if (path === admin) {
+        throw deniedPath('stat', path)
+      }
+      return stat(path)
+    })
+    await expect(prove()).resolves.toBe(false)
+    statPath.mockImplementation(stat)
+    readPath.mockImplementation(async (path) =>
+      path === `${admin}/gitdir` ? { content: `${candidate}/.git\n`, isBinary: false } : read(path)
+    )
+    await expect(prove()).resolves.toBe(true)
   })
 
   it('preserves forward-slash UNC roots when probing linked worktree .git files', async () => {
@@ -400,9 +432,7 @@ describe('canSafelyRemoveOrphanedWorktreeDirectory', () => {
       [`${common}/worktrees/orphan/gitdir`, `${candidate}/.git`]
     ])
     for (const error of [
-      Object.assign(new Error(`EACCES: permission denied, realpath '${physical}/worktrees'`), {
-        code: 'EACCES'
-      }),
+      deniedPath('realpath', `${physical}/worktrees`),
       new Error(`owner unavailable, realpath '${physical}/worktrees'`)
     ]) {
       realPath.mockRejectedValueOnce(error)

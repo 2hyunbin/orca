@@ -1,4 +1,5 @@
 import type { posix } from 'node:path'
+import { isDefinitiveAbsence } from '../shared/definitive-filesystem-absence'
 import { resolveGitCommonDirectory } from '../shared/git-common-directory'
 import {
   areResolvedPathsEqual,
@@ -112,7 +113,7 @@ async function readProvenRepoWorktreesPath(
           }
           return text
         } catch (error) {
-          if (isMissingPathError(error)) {
+          if (isDefinitiveAbsence(error)) {
             return null
           }
           throw error
@@ -125,7 +126,7 @@ async function readProvenRepoWorktreesPath(
         owningGitDir = marker ? resolveGitdirPath(marker, repoPath, pathOps) : null
         return marker
       },
-      isMissing: isMissingPathError
+      isMissing: isDefinitiveAbsence
     }
   )
   if (!common) {
@@ -223,14 +224,14 @@ async function adminGitdirPointsAtCandidate(
     // A copied .git file can name another checkout; verify the admin entry's backlink.
     return areResolvedPathsEqual(resolvedCandidateGitPath, resolvedExpectedGitPath, pathOps)
   } catch (error) {
-    if (!isMissingPathError(error)) {
+    if (!isDefinitiveAbsence(error)) {
       return false
     }
     try {
       await statPath(resolvedGitdirPath)
       return false
     } catch (statError) {
-      return isMissingPathError(statError)
+      return isDefinitiveAbsence(statError)
     }
   }
 }
@@ -248,25 +249,4 @@ function parseGitdirPath(contents: string): string | null {
 function parseFirstLinePath(contents: string): string | null {
   const firstLine = contents.split(/\r?\n/, 1)[0]?.trim()
   return firstLine || null
-}
-
-function isMissingPathError(error: unknown): boolean {
-  const code =
-    error && typeof error === 'object' && 'code' in error
-      ? String((error as NodeJS.ErrnoException).code)
-      : undefined
-  if (code === 'ENOENT' || code === 'ENOTDIR') {
-    return true
-  }
-  const message =
-    error instanceof Error
-      ? error.message
-      : error && typeof error === 'object' && 'message' in error
-        ? String((error as { message: unknown }).message)
-        : typeof error === 'string'
-          ? error
-          : ''
-  return /\b(ENOENT|ENOTDIR)\b|no such file or directory|cannot find (?:the )?(?:file|path)|(?:file|path) not found/i.test(
-    message
-  )
 }

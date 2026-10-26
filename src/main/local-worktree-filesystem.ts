@@ -109,7 +109,7 @@ export function getLocalWorktreePathAccess(
     },
     readPath: async (path) => {
       const target = quotePosixShell(toLinuxPath(path))
-      const stdout = await runWslCommand(distro, `cat -- ${target}`)
+      const stdout = await inspect(path, `LC_ALL=C cat -- ${target}`)
       return stdout
     }
   }

@@ -205,10 +205,15 @@ describe('local worktree filesystem runtime access', () => {
       expect(runProcessMock.mock.calls[2]?.[0].args.at(-1)).toBe(
         "LC_ALL=C realpath -e -- '/home/me/repo/.git'"
       )
-      completeExecFile('gitdir: /home/me/repo/.git/worktrees/feature\n')
-      await expect(access.readPath('/home/me/repo/.git')).resolves.toBe(
-        'gitdir: /home/me/repo/.git/worktrees/feature\n'
+      completeExecFile('  gitdir: /home/me/repo with spaces/.git/worktrees/feature \n')
+      await expect(access.readPath("/home/me/repo's file")).resolves.toBe(
+        '  gitdir: /home/me/repo with spaces/.git/worktrees/feature \n'
       )
+      expect(runProcessMock.mock.calls[3]?.[0]).toMatchObject({
+        program: 'wsl.exe',
+        args: ['-d', 'Ubuntu', '--exec', 'sh', '-c', "LC_ALL=C cat -- '/home/me/repo'\\''s file'"],
+        timeoutMs: 30_000
+      })
 
       completeExecFile()
       await removeLocalWorktreePath('C:\\Users\\me\\repo feature', { wslDistro: 'Ubuntu' })
@@ -223,17 +228,11 @@ describe('local worktree filesystem runtime access', () => {
           cwd: expect.any(String)
         })
       )
-      expect(runProcessMock).toHaveBeenNthCalledWith(
-        3,
-        expect.objectContaining({
-          program: 'wsl.exe',
-          args: expect.arrayContaining(['-d', 'Ubuntu']),
-          timeoutMs: 30_000
-        })
-      )
-      const removeArgs = runProcessMock.mock.calls[4]?.[0].args as string[]
-      expect(removeArgs.at(-1)).toContain('rm -rf --')
-      expect(removeArgs.at(-1)).toContain(String.raw`rm -rf -- '/mnt/c/Users/me/repo feature'`)
+      const removeArgs: unknown = runProcessMock.mock.calls[4]?.[0].args
+      if (!Array.isArray(removeArgs) || !removeArgs.every((arg) => typeof arg === 'string')) {
+        throw new Error('Expected WSL removal command arguments')
+      }
+      expect(removeArgs.at(-1)).toBe(String.raw`rm -rf -- '/mnt/c/Users/me/repo feature'`)
       expect(rmMock).not.toHaveBeenCalled()
     })
   })
@@ -298,6 +297,20 @@ describe('local worktree filesystem runtime access', () => {
     }
   )
 
+  it('normalizes only definitive cat absence, preserving path-bearing read failures', async () => {
+    await withPlatform('win32', async () => {
+      const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
+      const path = '/mnt/c/ENOENT/repo/.git/commondir'
+      // Synthetic cat-shaped diagnostics exercise the same transport as the recorded stat errors.
+      for (const reason of ['No such file or directory', 'Not a directory']) {
+        failExecFile(1, `cat: ${path}: ${reason}\n`)
+        await expect(access.readPath(path)).rejects.toMatchObject({ code: 'ENOENT' })
+      }
+      failExecFile(1, `cat: ${path}: Permission denied\n`)
+      await expect(access.readPath(path)).rejects.not.toMatchObject({ code: 'ENOENT' })
+    })
+  })
+
   it('pins the stat probe to the C locale so its error text stays English', async () => {
     await withPlatform('win32', async () => {
       completeExecFile('directory')
@@ -314,7 +327,12 @@ describe('local worktree filesystem runtime access', () => {
       failExecFile(1, "stat: <translated verb> '/mnt/c/repo/missing': <translated errno>\n")
       const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
 
-      for (const inspect of [access.statPath, access.layoutStatPath, access.realPath]) {
+      for (const inspect of [
+        access.statPath,
+        access.layoutStatPath,
+        access.realPath,
+        access.readPath
+      ]) {
         await expect(inspect('/mnt/c/repo/missing')).rejects.not.toMatchObject({ code: 'ENOENT' })
       }
       await expect(isWorktreePathMissing('/mnt/c/repo/missing', access.statPath)).resolves.toBe(
