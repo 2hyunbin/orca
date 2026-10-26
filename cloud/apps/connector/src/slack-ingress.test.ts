@@ -498,31 +498,29 @@ describe('Slack event ingress', () => {
     expect(retry).toMatchObject({ kind: 'start', prompt: 'try again' })
   })
 
-  it('a retry that reads the thread carries teammates’ kept messages in it, not again after it', async () => {
+  it('a held retry carries teammates’ kept messages even when the thread can’t be read', async () => {
     const harness = await linkedOwner()
     await harness.message(mention())
     harness.advance(5 * 60_000 + 1)
     await harness.runtime.inbox.expireDue(harness.edge.onExpired)
-    const TEAMMATE_TS = '1800000000.000500'
     await harness.message({
       user: TEAMMATE,
       text: 'see the logs',
-      ts: TEAMMATE_TS,
+      ts: '1800000000.000500',
       thread_ts: THREAD
     })
     await harness.edge.members.checkContextAuthors()
     await harness.message({ text: 'retry', ts: '1800000000.000600', thread_ts: THREAD })
-    expect(await harness.database.query('SELECT * FROM connector_thread_context')).toEqual([])
     harness.fake.respond(
       'conversations.replies',
-      Response.json({
-        ok: true,
-        messages: [{ ts: TEAMMATE_TS, user: TEAMMATE, text: 'see the logs' }]
-      })
+      Response.json({ ok: false, error: 'ratelimited' })
     )
     await harness.edge.starts.buildDue()
     const [retry] = await harness.poll()
-    expect(retry?.kind === 'start' ? retry.prompt : '').toContain('[Bob] see the logs')
+    const prompt = retry?.kind === 'start' ? retry.prompt : ''
+    expect(prompt).toContain('couldn’t be read')
+    expect(prompt).toMatch(/\[Bob\] see the logs\n\nretry/)
+    expect(await harness.database.query('SELECT * FROM connector_thread_context')).toEqual([])
   })
 
   it('keeps teammates’ context when the owner only gets an update notice', async () => {

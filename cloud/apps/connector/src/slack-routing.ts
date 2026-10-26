@@ -8,11 +8,7 @@ import { findSlackIdentity } from './slack-identities.js'
 import type { SlackInstalls } from './slack-installs.js'
 import { chooseMachine, knownHost } from './slack-machine-choice.js'
 import type { SlackPlace, SlackPosts } from './slack-posts.js'
-import {
-  dropTeammateContextBefore,
-  keepTeammateContext,
-  withTeammateContext
-} from './slack-teammate-context.js'
+import { keepTeammateContext, withTeammateContext } from './slack-teammate-context.js'
 import { slackText } from './slack-text.js'
 import { reactSeen, replyToWriter } from './slack-writer-replies.js'
 import { refreshSlackStatus } from './slack-thread-posts.js'
@@ -197,20 +193,11 @@ async function continueConversation(route: Route, thread: ThreadRow): Promise<vo
     )
     return
   }
-  // Like any start partway through a thread, it carries the thread, kept context included.
-  const held = message.ts !== message.threadTs
-  if (held) {
-    await dropTeammateContextBefore(transaction, thread.externalId, message.ts)
-  }
   await deliver(route, {
     ...thread,
-    body: {
-      kind: 'start',
-      agent,
-      placeId: thread.placeId,
-      prompt: held ? route.text : await prompt()
-    },
-    held
+    body: { kind: 'start', agent, placeId: thread.placeId, prompt: await prompt() },
+    // Like any start partway through a thread, it waits to carry the thread too.
+    held: message.ts !== message.threadTs
   })
 }
 

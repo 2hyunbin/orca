@@ -120,4 +120,13 @@ describe('chooseMachine', () => {
       expect(choose(text, ident, [laptop])).toMatchObject({ kind: 'chosen', placeId: 'pl_1' })
     }
   })
+  it('reads non-English project names, in either Unicode form, over a different default', () => {
+    const ident = identity({ defaultProject: 'web' })
+    for (const name of ['café', '프로젝트', '工具']) {
+      const desk = host('h1', 'laptop', [project(name, 'pl_named'), project('web', 'pl_web')])
+      for (const text of [`Please fix ${name}.`, `Please fix ${name}`.normalize('NFD')]) {
+        expect(choose(text, ident, [desk])).toMatchObject({ kind: 'chosen', placeId: 'pl_named' })
+      }
+    }
+  })
 })

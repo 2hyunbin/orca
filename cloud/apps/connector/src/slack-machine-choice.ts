@@ -26,24 +26,24 @@ export type MachineChoice =
 type Project = ConnectorHelloRequest['projects'][number]
 type Place = { host: KnownHost & { agent: string }; project: Project }
 
+// Names and messages compare case-folded and in one Unicode form.
+const fold = (text: string) => text.normalize('NFC').toLowerCase()
+
 // One project across machines: its remote when it has one, else its name.
 function projectKey(project: Project): string {
-  return (project.remote ?? project.name).toLowerCase()
+  return fold(project.remote ?? project.name)
 }
 
 function projectNames(project: Project): string[] {
-  const remote = project.remote?.toLowerCase()
-  return [
-    project.name.toLowerCase(),
-    ...(remote ? [remote, remote.split('/').at(-1) ?? remote] : [])
-  ]
+  const remote = project.remote && fold(project.remote)
+  return [fold(project.name), ...(remote ? [remote, remote.split('/').at(-1) ?? remote] : [])]
 }
 
 // Words of the message (sentence dots trimmed, inner ones kept), plus owner/name for each
 // repository link (<https://host/owner/name…>).
 function messageWords(lower: string): Set<string> {
   const words = lower
-    .split(/[^a-z0-9._/-]+/)
+    .split(/[^\p{L}\p{N}\p{M}._/-]+/u)
     .map((word) => word.replace(/^\.+|\.+$/g, ''))
     .filter((word) => word.length > 0)
   const links = [
@@ -60,7 +60,7 @@ export function chooseMachine(input: {
   channelId: string
   text: string
 }): MachineChoice {
-  const lower = input.text.toLowerCase()
+  const lower = fold(input.text)
   const words = messageWords(lower)
   const named = (name: string) => (/\s/.test(name) ? lower.includes(name) : words.has(name))
 
@@ -79,14 +79,14 @@ export function chooseMachine(input: {
   const referenced =
     inMessage.length > 0 || fallback === null
       ? inMessage
-      : places.filter((place) => projectNames(place.project).includes(fallback.toLowerCase()))
+      : places.filter((place) => projectNames(place.project).includes(fold(fallback)))
   if (new Set(referenced.map((place) => projectKey(place.project))).size !== 1) {
     return ask(referenced.length > 0 ? referenced : places)
   }
 
   let machines = referenced
   for (const prefer of [
-    (place: Place) => named(place.host.hostName.toLowerCase()),
+    (place: Place) => named(fold(place.host.hostName)),
     (place: Place) => place.host.hostId === input.identity.defaultHostId
   ]) {
     const preferred = machines.filter(prefer)
