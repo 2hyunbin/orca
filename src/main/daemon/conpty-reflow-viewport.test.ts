@@ -111,6 +111,15 @@ describe('ConPTY resize correction when narrowing', () => {
     terminal.dispose()
   })
 
+  // xterm's own reflow keeps savedY within ybase + rows - 1; DECRC also restricts the cursor.
+  it('moves a cursor saved on a popped row to the new bottom row', async () => {
+    const terminal = await conptyScreenNeedingNarrowCorrection('\x1b[10;1H\x1b7\x1b[6;3H')
+    await narrow(terminal)
+    await write(terminal, '\x1b8X')
+    expect(row(terminal, ROWS - 1)).toBe('X')
+    terminal.dispose()
+  })
+
   it('keeps a background-coloured blank row rather than popping it', async () => {
     const terminal = await conptyScreenNeedingNarrowCorrection(
       '\x1b[10;1H\x1b[44m\x1b[K\x1b[0m\x1b[6;3H'

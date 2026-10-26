@@ -1,5 +1,5 @@
 import type { Socket } from 'node:net'
-import { readFileSync } from 'node:fs'
+import { readDaemonClientToken } from './daemon-client-token'
 import { randomUUID } from 'node:crypto'
 import { encodeNdjson } from './ndjson'
 import {
@@ -52,6 +52,7 @@ export class DaemonClient {
   private connectingPromise: Promise<void> | null = null
   private connectionAttemptGeneration = 0
   private daemonIdentity: DaemonEndpointIdentity | null = null
+  private daemonResizeModel: string | null = null
   private observedAuthenticatedDisconnect = false
 
   private pendingRequests = new DaemonPendingRequests()
@@ -72,6 +73,11 @@ export class DaemonClient {
 
   getDaemonIdentity(): DaemonEndpointIdentity | null {
     return this.daemonIdentity ? { ...this.daemonIdentity } : null
+  }
+
+  /** The connected daemon's resize model; null for an older daemon or while disconnected. */
+  getDaemonResizeModel(): string | null {
+    return this.connected ? this.daemonResizeModel : null
   }
 
   hasObservedAuthenticatedDisconnect(): boolean {
@@ -108,24 +114,12 @@ export class DaemonClient {
     }
   }
 
-  // Probe the endpoint even when its token is missing.
-  private readToken(): string {
-    try {
-      return readFileSync(this.tokenPath, 'utf-8').trim()
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') {
-        return ''
-      }
-      throw error
-    }
-  }
-
   private async doConnect(
     timeoutMs: number,
     attemptGeneration: number,
     sharedBudget: boolean
   ): Promise<void> {
-    const token = this.readToken()
+    const token = readDaemonClientToken(this.tokenPath)
     const deadlineMs = Date.now() + timeoutMs
     const remainingMs = (): number =>
       sharedBudget ? Math.max(1, deadlineMs - Date.now()) : timeoutMs
@@ -168,6 +162,7 @@ export class DaemonClient {
       this.connected = true
       this.observedAuthenticatedDisconnect = false
       this.daemonIdentity = controlIdentity
+      this.daemonResizeModel = controlHello.resizeModel
       this.disconnectArmed = true
       this.connectionGeneration++
 
@@ -278,6 +273,7 @@ export class DaemonClient {
     this.connectionAttemptGeneration++
     this.connected = false
     this.daemonIdentity = null
+    this.daemonResizeModel = null
     this.disconnectArmed = false
     this.cleanupActiveSocketListeners()
 
@@ -324,6 +320,7 @@ export class DaemonClient {
     }
     this.connected = false
     this.daemonIdentity = null
+    this.daemonResizeModel = null
     this.cleanupActiveSocketListeners()
 
     this.pendingRequests.rejectAll('Connection lost')

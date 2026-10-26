@@ -5,7 +5,6 @@ import { isValidTerminalHistorySize } from './terminal-history-dimensions'
 import { readTerminalHistoryJson } from './terminal-history-file-reader'
 import { TERMINAL_HISTORY_META_MAX_BYTES } from './terminal-history-file-limits'
 import { PRIVATE_FILE_MODE, tightenPathMode } from './daemon-private-file-modes'
-import { DAEMON_HISTORY_RESIZE_MODEL } from './daemon-history-replay-pty'
 
 export type SessionMeta = {
   cwd: string
@@ -48,9 +47,10 @@ export function readTerminalHistoryMetaFromDir(dir: string): SessionMeta | null 
   }
 }
 
-/** A session this daemon opens, stamped with its live resize model. */
+/** A new session's meta, stamped with the resize model of the daemon hosting it. */
 export function newTerminalHistoryMeta(
-  opts: Pick<SessionMeta, 'cwd' | 'cols' | 'rows'>
+  opts: Pick<SessionMeta, 'cwd' | 'cols' | 'rows'>,
+  resizeModel: string | null
 ): SessionMeta {
   return {
     cwd: opts.cwd,
@@ -59,8 +59,18 @@ export function newTerminalHistoryMeta(
     startedAt: new Date().toISOString(),
     endedAt: null,
     exitCode: null,
-    resizeModel: DAEMON_HISTORY_RESIZE_MODEL
+    ...(resizeModel ? { resizeModel } : {})
   }
+}
+
+/** Restamps the model a fresh log is recorded against; null drops it (an older daemon). */
+export function stampTerminalHistoryResizeModel(dir: string, resizeModel: string | null): void {
+  const meta = readTerminalHistoryMetaFromDir(dir)
+  if (!meta || meta.resizeModel === (resizeModel ?? undefined)) {
+    return
+  }
+  const { resizeModel: _previous, ...rest } = meta
+  writeTerminalHistoryMeta(dir, resizeModel ? { ...rest, resizeModel } : rest)
 }
 
 export function writeTerminalHistoryMeta(dir: string, meta: SessionMeta): void {

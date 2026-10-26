@@ -11,6 +11,8 @@ export type OpenSessionOptions = {
 export type HistoryManagerOptions = {
   onWriteError?: (sessionId: string, error: Error) => void
   checkpointMaxBytes?: number
+  /** The hosting daemon's resize model (client hello); null or absent means xterm's. */
+  resizeModel?: () => string | null
 }
 
 export type HistoryCheckpointResult = 'committed' | 'retryable' | 'unavailable'

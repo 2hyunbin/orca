@@ -68,7 +68,11 @@ function liveBuffer(terminal: Terminal): LiveBuffer | null {
         buffer.ydisp = buffer.ybase
       }
       buffer.y = num(buffer.y) + 1
-      // DECSC's savedY is absolute (ybase + y), so it already stays on the text it was saved on.
+      // DECSC's savedY is absolute (ybase + y), so it stays on its text; one saved on the popped
+      // row would point past the buffer, so it moves to the new bottom row.
+      if ('savedY' in buffer && typeof buffer.savedY === 'number') {
+        buffer.savedY = Math.min(buffer.savedY, num(buffer.ybase) + terminal.rows - 1)
+      }
     }
   }
 }

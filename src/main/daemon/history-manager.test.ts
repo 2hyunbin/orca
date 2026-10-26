@@ -247,6 +247,23 @@ describe('HistoryManager', () => {
       expect(data.checkpointedAt).toBeDefined()
     })
 
+    it("stamps the hosting daemon's resize model on open and restamps it at each checkpoint", async () => {
+      let hosting: string | null = null
+      const stamping = new HistoryManager(dir, { resizeModel: () => hosting })
+      const metaPath = sessionPath(dir, 'sess-r', 'meta.json')
+      const stamp = (): unknown => JSON.parse(readFileSync(metaPath, 'utf-8')).resizeModel
+      await stamping.openSession('sess-r', { cwd: '/tmp', cols: 80, rows: 24 })
+      expect(stamp()).toBeUndefined()
+      // A newer daemon now hosts the session: the fresh log after the checkpoint is its.
+      hosting = 'conpty-viewport-v1'
+      await stamping.checkpoint('sess-r', makeSnapshot())
+      expect(stamp()).toBe('conpty-viewport-v1')
+      hosting = null
+      await stamping.checkpoint('sess-r', makeSnapshot())
+      expect(stamp()).toBeUndefined()
+      await stamping.dispose()
+    })
+
     it('overwrites previous checkpoint atomically', async () => {
       await mgr.openSession('sess-1', { cwd: '/tmp', cols: 80, rows: 24 })
 

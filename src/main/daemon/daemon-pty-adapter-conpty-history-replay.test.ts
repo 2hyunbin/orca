@@ -1,7 +1,7 @@
 import './mock-descendant-sweep'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { join } from 'node:path'
-import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { readFileSync, rmSync } from 'node:fs'
 import { Terminal } from '@xterm/headless'
 import { HistoryReader } from './history-reader'
 import { getHistorySessionDirName } from './history-paths'
@@ -10,6 +10,9 @@ import type { DaemonServer } from './daemon-server'
 import { createMockSubprocess, startDaemonAdapterHarness } from './daemon-pty-adapter-test-harness'
 import type * as DaemonHealthModule from './daemon-health'
 import type * as DaemonTccAttributionModule from './daemon-tcc-attribution'
+import type * as DaemonHistoryReplayPtyModule from './daemon-history-replay-pty'
+import type * as ConptyReflowViewportModule from './conpty-reflow-viewport'
+import type * as DaemonDurableHistorySnapshotModule from './daemon-durable-history-snapshot'
 
 const { getMacDaemonSystemResolverHealthMock, getMacDaemonTccAttributionHealthMock } = vi.hoisted(
   () => ({
@@ -21,6 +24,39 @@ const { getMacDaemonSystemResolverHealthMock, getMacDaemonTccAttributionHealthMo
     )
   })
 )
+
+// An older daemon: its hello reports no resize model and its live emulators resize as xterm does.
+const olderDaemon = vi.hoisted((): { hosting: boolean; rebuildModels: unknown[] } => ({
+  hosting: false,
+  rebuildModels: []
+}))
+vi.mock('./daemon-durable-history-snapshot', async (importOriginal) => {
+  const actual = await importOriginal<typeof DaemonDurableHistorySnapshotModule>()
+  return {
+    ...actual,
+    buildDurableCheckpointSnapshot: (
+      opts: Parameters<typeof actual.buildDurableCheckpointSnapshot>[0]
+    ) => {
+      olderDaemon.rebuildModels.push(opts.resizeModel)
+      return actual.buildDurableCheckpointSnapshot(opts)
+    }
+  }
+})
+vi.mock('./daemon-history-replay-pty', async (importOriginal) => {
+  const actual = await importOriginal<typeof DaemonHistoryReplayPtyModule>()
+  return {
+    ...actual,
+    daemonHelloResizeModel: () => (olderDaemon.hosting ? {} : actual.daemonHelloResizeModel())
+  }
+})
+vi.mock('./conpty-reflow-viewport', async (importOriginal) => {
+  const actual = await importOriginal<typeof ConptyReflowViewportModule>()
+  return {
+    ...actual,
+    resizeLikeOwnPty: (...args: Parameters<typeof actual.resizeLikeOwnPty>) =>
+      olderDaemon.hosting ? args[0].resize(args[1], args[2]) : actual.resizeLikeOwnPty(...args)
+  }
+})
 
 vi.mock('./daemon-health', async (importOriginal) => {
   const actual = await importOriginal<typeof DaemonHealthModule>()
@@ -65,6 +101,11 @@ class SavingDaemonPtyAdapter extends DaemonPtyAdapter {
   savePeriodically(sessionIds: string[]): Promise<unknown> {
     return this.checkpointSessions(sessionIds, { final: false })
   }
+
+  /** A full checkpoint, which rebuilds durable history around the live snapshot. */
+  saveFinally(sessionIds: string[]): Promise<unknown> {
+    return this.checkpointSessions(sessionIds, { final: true })
+  }
 }
 
 describe('daemon history of a ConPTY session through a resize', () => {
@@ -100,11 +141,13 @@ describe('daemon history of a ConPTY session through a resize', () => {
   async function restoredLabels(opts: {
     from: [number, number]
     to: [number, number]
-    /** A session an older daemon recorded carries no resize model in its meta. */
+    /** New main recording a session an older daemon hosts. */
     olderDaemon?: boolean
   }): Promise<string[]> {
     const original = Object.getOwnPropertyDescriptor(process, 'platform')
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
+    olderDaemon.hosting = opts.olderDaemon === true
+    olderDaemon.rebuildModels = []
     try {
       const historyDir = join(dir, 'history')
       const sessionId = `wt-1::/project@@resize${opts.from[0]}to${opts.to[0]}`
@@ -119,12 +162,14 @@ describe('daemon history of a ConPTY session through a resize', () => {
       // ConPTY keeps no scrollback: it repaints from the top only the screen it still holds.
       lastSubprocess._simulateData(await conptyRepaintAfterResize(output, opts.from, opts.to))
       await history.savePeriodically([sessionId])
+      await history.saveFinally([sessionId])
       history.dispose()
-      if (opts.olderDaemon) {
-        const metaPath = join(historyDir, getHistorySessionDirName(sessionId), 'meta.json')
-        const { resizeModel: _dropped, ...meta } = JSON.parse(readFileSync(metaPath, 'utf8'))
-        writeFileSync(metaPath, JSON.stringify(meta))
-      }
+      const metaPath = join(historyDir, getHistorySessionDirName(sessionId), 'meta.json')
+      // Main stamps, and rebuilds durable history with, the hosting daemon's model, never its own.
+      const hostingModel = opts.olderDaemon ? null : 'conpty-viewport-v1'
+      expect(JSON.parse(readFileSync(metaPath, 'utf8')).resizeModel).toBe(hostingModel ?? undefined)
+      expect(olderDaemon.rebuildModels.length).toBeGreaterThan(0)
+      expect(new Set(olderDaemon.rebuildModels)).toEqual(new Set([hostingModel]))
 
       const restored = await new HistoryReader(historyDir).detectColdRestore(sessionId, {
         ignoreCleanEnd: true
@@ -149,6 +194,7 @@ describe('daemon history of a ConPTY session through a resize', () => {
       terminal.dispose()
       return labels
     } finally {
+      olderDaemon.hosting = false
       if (original) {
         Object.defineProperty(process, 'platform', original)
       }
@@ -166,7 +212,8 @@ describe('daemon history of a ConPTY session through a resize', () => {
     expect(await restoredLabels({ from: [120, 10], to: [40, 10] })).toEqual(EVERY_ROW_ONCE)
   })
 
-  it("replays an older daemon's session with xterm's model, as that daemon's live screen did", async () => {
+  // New main after an update, with sessions still hosted by the older daemon.
+  it("records an older daemon's session with xterm's model, as that daemon's live screen has it", async () => {
     // xterm's model pulls four rows back out of scrollback, and ConPTY's repaint overwrites them.
     const overwritten = ['L21', 'L22', 'L23', 'L24']
     expect(await restoredLabels({ from: [40, 10], to: [120, 10], olderDaemon: true })).toEqual(
