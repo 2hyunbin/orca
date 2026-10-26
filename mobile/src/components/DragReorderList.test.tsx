@@ -2,6 +2,7 @@ import type * as ReactModule from 'react'
 import { createElement, type ReactNode } from 'react'
 import { act, create } from 'react-test-renderer'
 import Animated, { useAnimatedRef, useSharedValue } from 'react-native-reanimated'
+import { GripVertical } from 'lucide-react-native'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type DragEvent = { absoluteY: number; translationY: number }
@@ -188,6 +189,8 @@ vi.mock('../platform/haptics', () => ({ triggerMediumImpact: vi.fn(), triggerSel
 
 import { DragReorderList } from './DragReorderList'
 import { TerminalShortcutSettings } from './TerminalShortcutSettings'
+import { queuedMessageStyles } from '../session/mobile-native-chat-queued-message-styles'
+import { spacing } from '../theme/mobile-theme'
 
 beforeEach(() => {
   probe.copiedStateKeys = 0
@@ -511,6 +514,15 @@ it('keeps measured rows still on hold, restores cancellation, and drops by moved
   await act(async () => {
     root = create(createElement(Harness))
   })
+  const handle = root!.root.findAllByType(Animated.View).find((node) => node.props.hitSlop)!
+  const handleStyle = Object.assign({}, ...handle.props.style)
+  const gripWidth = handle.findByType(GripVertical).props.size
+  const width = gripWidth + 2 * handleStyle.paddingHorizontal
+  const left = queuedMessageStyles.row.paddingLeft - handle.props.hitSlop.left
+  const right = queuedMessageStyles.row.paddingLeft + width + handle.props.hitSlop.right
+  expect(handleStyle.paddingHorizontal).toBe(spacing.xs)
+  expect([left, right]).toEqual([4, 62])
+  expect(right - Math.max(0, left)).toBe(58)
   const rows = root!.root.findAll(
     (node) => node.type === Animated.View && typeof node.props.onLayout === 'function'
   )
@@ -704,6 +716,12 @@ it('keeps the actual fixed-height shortcut settings consumer ready without measu
   await act(async () => {
     root = create(createElement(Harness))
   })
+  const handles = root!.root.findAllByType(Animated.View).filter((node) => node.props.hitSlop)
+  expect(handles.length).toBeGreaterThan(1)
+  for (const handle of handles) {
+    expect(Object.assign({}, ...handle.props.style).paddingHorizontal).toBe(spacing.md)
+    expect(handle.props.hitSlop).toEqual({ top: 8, bottom: 8, left: 8, right: 8 })
+  }
   const rows = root!.root.findAll((node) => node.type === Animated.View && node.props.onLayout)
   expect(rows.length).toBeGreaterThan(1)
   const projections = vi.spyOn(Object, 'fromEntries')

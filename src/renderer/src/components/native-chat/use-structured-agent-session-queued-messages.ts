@@ -116,7 +116,11 @@ export function useStructuredAgentSessionQueuedMessages(args: {
     ],
     [isWorking, sending, queuePause, queuedMessages, submissions]
   )
-  const reordered = useStructuredAgentSessionQueuedReorder(cards, args.editTransport)
+  const reordered = useStructuredAgentSessionQueuedReorder(
+    cards,
+    args.editTransport,
+    capturePresentation
+  )
   const cardsRef = useRef(cards)
   useEffect(() => {
     cardsRef.current = cards

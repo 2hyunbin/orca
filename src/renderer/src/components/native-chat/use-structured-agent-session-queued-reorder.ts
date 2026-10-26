@@ -5,6 +5,7 @@ import type { AgentSessionQueuedMessageMoveResult } from '../../../../shared/age
 import { structuredAgentSessionHostKey } from '@/runtime/structured-agent-session-host-capability'
 import type { QueuedMessageCard } from './structured-agent-session-queued-cards'
 import type { QueuedEditTransport } from './use-structured-agent-session-queued-edit'
+import type { CaptureStructuredAgentSessionPresentation } from './use-structured-agent-session-mutate'
 
 export type QueuedMessageMoveAnchor =
   | { beforeMessageId: string | null; afterMessageId?: never }
@@ -18,7 +19,8 @@ export type QueuedMessageReorder = {
 
 export function useStructuredAgentSessionQueuedReorder(
   cards: QueuedMessageCard[],
-  transport: QueuedEditTransport
+  transport: QueuedEditTransport,
+  capturePresentation: CaptureStructuredAgentSessionPresentation
 ): { cards: QueuedMessageCard[]; reorder?: QueuedMessageReorder } {
   const scope = `${structuredAgentSessionHostKey(transport.target)}:${transport.sessionId}`
   const busy = useRef(false)
@@ -55,6 +57,7 @@ export function useStructuredAgentSessionQueuedReorder(
       busy.current = true
       setPending(true)
       setPreview(optimistic)
+      const isCurrent = capturePresentation()
       try {
         const result = await transport.write<AgentSessionQueuedMessageMoveResult>(
           'agentSession.queuedMessageMove',
@@ -66,9 +69,9 @@ export function useStructuredAgentSessionQueuedReorder(
           (result.value.status !== 'moved' && result.value.status !== 'unchanged')
         ) {
           setPreview((current) => (current === optimistic ? null : current))
-          if (result.kind === 'not-done') {
+          if (isCurrent() && result.kind === 'not-done') {
             toast.error(result.notice)
-          } else if (result.kind === 'done') {
+          } else if (isCurrent() && result.kind === 'done') {
             toast.error(
               translate(
                 'components.native-chat.queuedMessages.moveChanged',
@@ -82,7 +85,7 @@ export function useStructuredAgentSessionQueuedReorder(
         setPending(false)
       }
     },
-    [cards, scope, transport]
+    [cards, capturePresentation, scope, transport]
   )
   return {
     // Any publication supersedes the preview, including another client's concurrent move.
