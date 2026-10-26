@@ -42,6 +42,8 @@ const HELD_WITH_TERMINAL_MS = IDLE_TIMEOUT_MS + WSL_DISTRO_HOLDER_POLL_SECONDS *
 
 type Receipt = Record<string, unknown>
 const receipt: Receipt = { phase: 'idle-release' }
+const commandLog: string[] = []
+receipt.commandLog = commandLog
 let holder: WslDistroHolder
 let manager: WslOrcadConnectionManager
 
@@ -74,6 +76,26 @@ function createManager(): void {
   const templates = launchTemplates()
   manager = new WslOrcadConnectionManager({
     holder,
+    // Logs every guest command with its time, to match the zombie's start time to one step.
+    createTransport: (target) => {
+      const transport = createWslOrcadHostTransport({ target })
+      const log = (path: string, command: string): void => {
+        commandLog.push(`${Math.round(performance.now())} ${path} ${command.slice(0, 160)}`)
+      }
+      return {
+        ...transport,
+        exec: (command, options) => {
+          log('exec', command)
+          return transport.exec(command, options)
+        },
+        execWithClosedStdin: (command, options) => {
+          log('loop', command)
+          return (
+            transport.execWithClosedStdin?.(command, options) ?? transport.exec(command, options)
+          )
+        }
+      }
+    },
     deployAndLaunch: (distro, options) =>
       deployAndLaunchWslOrcad(distro, {
         ...options,
@@ -179,6 +201,8 @@ function waitFor<T>(
 async function idleReleasePhase(): Promise<void> {
   process.env[ORCAD_E2E_IDLE_TIMEOUT_ENV] = String(IDLE_TIMEOUT_MS)
   receipt.vmBeforeLaunchKiB = await vmWorkingSetKiB()
+  // Aligns guest uptime with this process's clock for the command log.
+  receipt.clockAlignment = `${Math.round(performance.now())} ${(await guest('cat /proc/uptime')).trim()}`
   let connection = await manager.ensure(PLAIN)
   // The release hunt: a zombie `cat` under a session init kept the distro up; find which step leaves it.
   const zombies =
