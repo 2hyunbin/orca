@@ -1,4 +1,4 @@
-import { legacyAgentTerminalResumeArgs } from '@/lib/legacy-agent-terminal-resume'
+import type { SleepingAgentLaunchConfig } from '../../../shared/agent-session-resume'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { agentProviderSessionForHostEnsure } from './agent-session-ensure-provider-session'
 import {
@@ -12,21 +12,24 @@ import type { CreateWebRuntimeSessionTerminalArgs } from './web-runtime-session-
 import type { captureRuntimeEnvironmentCall } from './web-runtime-session-environment'
 import type { createAgentSessionKeyboardOptions } from './agent-session-keyboard-capability'
 
-export function createWebRuntimeAgentTerminalAuthority({
-  args,
-  agent,
-  agentArgsOverride,
-  environmentId,
-  callEnvironment,
-  keyboardOptions
-}: {
-  args: CreateWebRuntimeSessionTerminalArgs
-  agent: TuiAgent
-  agentArgsOverride: string | null | undefined
-  environmentId: string
-  callEnvironment: ReturnType<typeof captureRuntimeEnvironmentCall>
-  keyboardOptions: ReturnType<typeof createAgentSessionKeyboardOptions>
-}) {
+export function createWebRuntimeAgentTerminalAuthority(
+  {
+    args,
+    agent,
+    agentArgsOverride,
+    environmentId,
+    callEnvironment,
+    keyboardOptions
+  }: {
+    args: CreateWebRuntimeSessionTerminalArgs
+    agent: TuiAgent
+    agentArgsOverride: string | null | undefined
+    environmentId: string
+    callEnvironment: ReturnType<typeof captureRuntimeEnvironmentCall>
+    keyboardOptions: ReturnType<typeof createAgentSessionKeyboardOptions>
+  },
+  legacyLaunchConfig: () => SleepingAgentLaunchConfig | undefined
+) {
   let legacyProviderSession: Promise<NonNullable<typeof args.providerSession>> | undefined
   const mustUseLegacyAgentCreate = !args.resume && (args.preparedAgentCommand || args.afterTabId)
   return (typedResume: typeof args.resume | null) =>
@@ -39,8 +42,11 @@ export function createWebRuntimeAgentTerminalAuthority({
               const ensureArgs =
                 agentArgsOverride !== undefined
                   ? agentArgsOverride
-                  : !typedResume && args.resume
-                    ? legacyAgentTerminalResumeArgs(args.resume, agent)
+                  : !typedResume &&
+                      args.resume &&
+                      (args.resume.recipe.source === 'current-inputs' ||
+                        (args.resume.recipe.source === 'saved' && args.resume.recipe.launchConfig))
+                    ? legacyLaunchConfig()?.agentArgs
                     : config?.agentArgs
               const ompResumeFilePath = args.resume?.ompResumeFilePath ?? config?.ompResumeFilePath
               return readCreatedAgentTerminalIdentity(

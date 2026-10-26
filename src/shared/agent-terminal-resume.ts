@@ -1,5 +1,6 @@
 import type { AgentStartupSettings } from './agent-startup-plan-inputs'
 import type { SleepingAgentLaunchConfig } from './agent-session-resume'
+import type { TuiAgent } from './tui-agent'
 
 /** Recipe provenance survives transport until the execution host composes account env. */
 export type AgentTerminalResume = {
@@ -14,16 +15,22 @@ export type AgentTerminalResume = {
 
 export const AGENT_RESUME_HOST_PLAN_CAPABILITY = 'agent-resume.host-plan.v1' as const
 
-/** Capture only launch inputs, never unrelated settings or a prequoted executable. */
+function selectedAgentInput<T>(values: Partial<Record<TuiAgent, T>> | undefined, agent: TuiAgent) {
+  const value = values?.[agent]
+  return value === undefined ? undefined : { [agent]: value }
+}
+
+/** Project before cloning: unrelated agent profiles cannot enlarge or refuse a History drag. */
 export function agentResumeCurrentInputs(
+  agent: TuiAgent,
   settings: AgentStartupSettings | null | undefined
 ): AgentStartupSettings {
   return structuredClone({
-    agentCmdOverrides: settings?.agentCmdOverrides,
-    agentDefaultArgs: settings?.agentDefaultArgs,
-    agentDefaultEnv: settings?.agentDefaultEnv,
+    agentCmdOverrides: selectedAgentInput(settings?.agentCmdOverrides, agent),
+    agentDefaultArgs: selectedAgentInput(settings?.agentDefaultArgs, agent),
+    agentDefaultEnv: selectedAgentInput(settings?.agentDefaultEnv, agent),
     agentPermissionDefault: settings?.agentPermissionDefault,
-    agentPermissionOverrides: settings?.agentPermissionOverrides
+    agentPermissionOverrides: selectedAgentInput(settings?.agentPermissionOverrides, agent)
   })
 }
 

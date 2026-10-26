@@ -75,7 +75,7 @@ export function buildAiVaultResumeStartupForWorktree(
     !opaque &&
     !isAntigravityReferenceSession(args.session)
   ) {
-    const settings = agentResumeCurrentInputs(args.state.settings)
+    const settings = agentResumeCurrentInputs(args.session.agent, args.state.settings)
     if (args.commandOverride?.trim()) {
       settings.agentCmdOverrides = {
         ...settings.agentCmdOverrides,

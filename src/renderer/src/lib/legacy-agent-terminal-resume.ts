@@ -1,4 +1,3 @@
-import { resolveTuiAgentLaunchArgs } from '../../../shared/tui-agent-launch-defaults'
 import { parseExecutionHostId } from '../../../shared/execution-host'
 import { remoteExecutionPlatform } from '../../../shared/agent-launch-runtime'
 import { isWslUncPath } from '../../../shared/wsl-paths'
@@ -83,20 +82,4 @@ export function prepareLegacyAgentTerminalResume(args: {
     launchConfig: plan.launchConfig,
     startupCommandDelivery: plan.startupCommandDelivery
   }
-}
-
-export function legacyAgentTerminalResumeArgs(
-  resume: AgentTerminalResume,
-  agent: TuiAgent
-): string | null | undefined {
-  const { recipe } = resume
-  if (recipe.source === 'saved') {
-    return recipe.launchConfig?.agentArgs ?? ''
-  }
-  if (recipe.source === 'current-inputs') {
-    return recipe.agentArgs !== undefined
-      ? recipe.agentArgs
-      : resolveTuiAgentLaunchArgs(agent, recipe.settings)
-  }
-  return undefined
 }

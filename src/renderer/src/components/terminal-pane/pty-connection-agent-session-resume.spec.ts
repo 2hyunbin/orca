@@ -466,12 +466,12 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
         }
         expect(transport.connect).toHaveBeenCalledTimes(1)
         expect(transport.attach).not.toHaveBeenCalled()
-        const options = transport.connect.mock.calls[0]?.[0] as {
+        const options: {
           sessionId?: string
           resume?: unknown
           command?: string
           resumeProviderSession?: unknown
-        }
+        } = transport.connect.mock.calls[0]?.[0]
         expect(options.sessionId).toBe(retainedPtyId)
         expect(options.command).toBeUndefined()
         expect(options.resume).toEqual({ recipe: { source: 'saved' } })

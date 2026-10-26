@@ -116,7 +116,10 @@ export async function resolveAgentTerminalCreateOptions(
     if (!store) {
       throw new Error('runtime_unavailable')
     }
-    if (!isTuiAgentEnabled(opts.startupAgent, store.getSettings().disabledTuiAgents)) {
+    if (
+      !opts.resume &&
+      !isTuiAgentEnabled(opts.startupAgent, store.getSettings().disabledTuiAgents)
+    ) {
       throw new Error(`Agent ${opts.startupAgent} is disabled. Choose an enabled agent.`)
     }
   }

@@ -64,7 +64,7 @@ export function buildMobileTerminalChatFork(args: {
       resume: {
         recipe: {
           source: 'current-inputs',
-          settings: agentResumeCurrentInputs(settings),
+          settings: agentResumeCurrentInputs(source.agent, settings),
           agentArgs: resolveAiVaultCopiedSessionAgentArgs({
             ...startupArgs,
             sourceAgent: source.sourceAgent

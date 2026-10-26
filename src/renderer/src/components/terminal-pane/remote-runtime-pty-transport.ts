@@ -1,8 +1,5 @@
 import { AGENT_RESUME_HOST_PLAN_CAPABILITY } from '../../../../shared/agent-terminal-resume'
-import {
-  legacyAgentTerminalResumeArgs,
-  prepareLegacyAgentTerminalResume
-} from '@/lib/legacy-agent-terminal-resume'
+import { prepareLegacyAgentTerminalResume } from '@/lib/legacy-agent-terminal-resume'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { parseTerminalAttachmentLaunchResult } from '../../../../shared/terminal-attachment-launch-result'
 import { terminalLaunchFacts } from '../../../../shared/agent-session-resume'
@@ -3550,12 +3547,7 @@ export function createRemoteRuntimePtyTransport(
             }>
           | undefined
         const hostAuthorityCreate = async (epoch = connectLifecycleEpoch) => {
-          const ensureArgs =
-            agentArgsOverride !== undefined
-              ? agentArgsOverride
-              : !typedResume && resumeToSend
-                ? legacyAgentTerminalResumeArgs(resumeToSend, launchAgentToSend!)
-                : launchConfigToSend?.agentArgs
+          const ensureArgs = agentArgsOverride
           const ompResumeFilePath =
             resumeToSend?.ompResumeFilePath ?? launchConfigToSend?.ompResumeFilePath
           const { keyboardOptions, providerSession: ensureProviderSession } =

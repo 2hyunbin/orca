@@ -115,7 +115,10 @@ export function buildMobileAiVaultResumeLaunch(args: {
       resume: {
         recipe: {
           source: 'current-inputs',
-          settings: agentResumeCurrentInputs({ ...args.settings, agentCmdOverrides: cmdOverrides })
+          settings: agentResumeCurrentInputs(args.session.agent, {
+            ...args.settings,
+            agentCmdOverrides: cmdOverrides
+          })
         },
         ...(args.session.agent === 'omp' && args.session.filePath
           ? { ompResumeFilePath: args.session.filePath }

@@ -3,7 +3,11 @@ import {
   agentProviderSessionsEqual,
   type SleepingAgentSessionRecord
 } from '../../../../shared/agent-session-resume'
-import type { RefusedPaneResume } from '../../../../shared/agent-status-types'
+import type {
+  AgentStatusIpcPayload,
+  RefusedPaneResume
+} from '../../../../shared/agent-status-types'
+import type { AgentSessionRecordStore } from '../../../runtime/agent-session-record-store'
 import {
   agentSessionLeasePossiblyWriting,
   listStructuredProviderSessionOwnership

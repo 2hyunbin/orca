@@ -61,6 +61,19 @@ export const SESSION_TAB_METHODS = [
         await assertLegacyAiVaultResumeCommandAllowed(params.command, () =>
           runtime.ensureStructuredAgentSessionHost()
         )
+      } else if (params.resume && params.launchAgent && params.resumeProviderSession) {
+        await assertLegacyAiVaultResumeCommandAllowed(
+          {
+            agent: params.launchAgent,
+            providerSession: params.resumeProviderSession,
+            ompResumeFilePath:
+              params.resume.ompResumeFilePath ??
+              (params.resume.recipe.source === 'saved'
+                ? params.resume.recipe.launchConfig?.ompResumeFilePath
+                : undefined)
+          },
+          () => runtime.ensureStructuredAgentSessionHost()
+        )
       }
       return runtime.createMobileSessionTerminal(params.worktree, {
         ...(params.sourceChatFork ? { sourceChatFork: params.sourceChatFork } : {}),

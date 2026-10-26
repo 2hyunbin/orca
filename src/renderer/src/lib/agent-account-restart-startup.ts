@@ -82,7 +82,7 @@ export function resolveAgentAccountRestartResumeStartup(
       recipe:
         launchConfig || !unrecordedLaunchUsesDefaults
           ? { source: 'saved', ...(launchConfig ? { launchConfig } : {}) }
-          : { source: 'current-inputs', settings: agentResumeCurrentInputs(state.settings) }
+          : { source: 'current-inputs', settings: agentResumeCurrentInputs(agent, state.settings) }
     },
     resumeProviderSession: providerSession
   }

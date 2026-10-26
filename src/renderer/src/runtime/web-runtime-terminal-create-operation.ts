@@ -114,15 +114,6 @@ export async function createWebRuntimeSessionTerminalResult(
       // Paired panes retain the default keyboard advertisement, including on Windows clients.
       const keyboardProtocol = buildDefaultTerminalOptions().vtExtensions?.kittyKeyboard
       const keyboardOptions = createAgentSessionKeyboardOptions(keyboardProtocol)
-      const createHostAuthority = createWebRuntimeAgentTerminalAuthority({
-        args,
-        agent,
-        agentArgsOverride,
-        environmentId,
-        callEnvironment,
-        keyboardOptions
-      })
-      const hostAuthority = createHostAuthority(args.resume)
       let legacyResume: ReturnType<typeof prepareLegacyAgentTerminalResume> | undefined
       const prepareLegacy = () =>
         args.resume
@@ -134,6 +125,18 @@ export async function createWebRuntimeSessionTerminalResult(
               cwd: args.cwd
             }))
           : args
+      const createHostAuthority = createWebRuntimeAgentTerminalAuthority(
+        {
+          args,
+          agent,
+          agentArgsOverride,
+          environmentId,
+          callEnvironment,
+          keyboardOptions
+        },
+        () => prepareLegacy().launchConfig
+      )
+      const hostAuthority = createHostAuthority(args.resume)
       const legacyCreate = async () => {
         if (resumeAttempt) {
           resumeAttempt.run = legacyCreate

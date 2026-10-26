@@ -233,11 +233,10 @@ function MobileAgentSessionHistoryPanelContent({
           return
         }
         setResumeMessage('Agent session queued.')
-        router.push(
-          `/h/${encodeURIComponent(hostId)}/session/${encodeURIComponent(attempt.worktreeId)}` as Parameters<
-            typeof router.push
-          >[0]
-        )
+        router.push({
+          pathname: '/h/[hostId]/session/[worktreeId]',
+          params: { hostId, worktreeId: attempt.worktreeId }
+        })
       } catch (err) {
         triggerError()
         setResumeMessage(err instanceof Error ? err.message : 'Failed to resume session.')

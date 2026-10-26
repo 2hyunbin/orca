@@ -64,7 +64,7 @@ describe('execution-host resume recipes', () => {
       agentDefaultEnv: { claude: { SETTINGS: 'selected' } },
       agentPermissionDefault: 'own'
     }
-    const snapshot = agentResumeCurrentInputs(selected)
+    const snapshot = agentResumeCurrentInputs('claude', selected)
     selected.agentDefaultEnv!.claude!.SETTINGS = 'later'
     const result = plan({ recipe: { source: 'current-inputs', settings: snapshot } })
     expect(result.launchCommand).toContain('selected-claude')
