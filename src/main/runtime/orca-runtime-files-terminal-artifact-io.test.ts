@@ -369,7 +369,7 @@ describe('RuntimeFileCommands', () => {
 
       await expect(
         resolveRemoteNativeChatArtifact(commands, '/home/me/report.json')
-      ).resolves.not.toHaveProperty('openTarget')
+      ).rejects.toThrow('outside an SSH workspace')
     })
   })
 })

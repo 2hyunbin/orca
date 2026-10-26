@@ -118,23 +118,25 @@ describe('RuntimeFileCommands', () => {
       expect(result.openTarget).toBeUndefined()
     })
 
+    // Why: this machine's home is the Windows user's, not the distro user's.
     it('refuses tilde paths when the workspace runs in WSL', async () => {
       Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
       const { commands } = createRuntimeFileCommands({
         path: String.raw`\\wsl.localhost\Ubuntu\work\repo`
       })
 
-      const result = await commands.resolveTerminalPath(
-        'id:wt-1',
-        '~/.ssh/config',
-        null,
-        'client-a',
-        null,
-        true,
-        { tabId: 'tab-1', sessionId: 'session-1' }
-      )
+      const result = await resolveTerminalArtifactPath(commands, '~/.bashrc')
 
       expect(result).toMatchObject({ relativePath: null, absolutePath: null, exists: false })
+    })
+
+    // Why: opening a FIFO or device blocking would stall a host threadpool thread.
+    it.skipIf(process.platform === 'win32')('refuses a device instead of granting it', async () => {
+      const { commands } = createRuntimeFileCommands({ path: '/repo' })
+
+      await expect(
+        commands.resolveTerminalPath('id:wt-1', '/dev/null', null, 'client-a')
+      ).rejects.toThrow('Only regular files and folders')
     })
 
     it('resolves a relative path against the terminal cwd, not a stale client cwd', async () => {
@@ -187,20 +189,9 @@ describe('RuntimeFileCommands', () => {
       const { commands, store } = createRuntimeFileCommands({ path: '/repo' })
       store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
 
-      const result = await commands.resolveTerminalPath(
-        'id:wt-1',
-        '/tmp/link-result.json',
-        null,
-        'client-a'
-      )
-
-      expect(result).toEqual({
-        worktree: 'wt-1',
-        relativePath: null,
-        absolutePath: '/tmp/link-result.json',
-        exists: false,
-        isDirectory: false
-      })
+      await expect(
+        commands.resolveTerminalPath('id:wt-1', '/tmp/link-result.json', null, 'client-a')
+      ).rejects.toThrow('outside an SSH workspace')
       expect(statMock).not.toHaveBeenCalled()
     })
   })

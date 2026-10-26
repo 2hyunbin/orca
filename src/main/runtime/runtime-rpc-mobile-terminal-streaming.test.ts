@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
 import { mkdtempSync } from 'node:fs'
 import { rm, writeFile } from 'node:fs/promises'
@@ -337,8 +338,9 @@ describe('OrcaRuntimeRpcServer', () => {
           openTarget: { kind: 'absolute-file', provider: 'local', grantId: expect.any(String) }
         }
       })
-      const openTarget = (tap.result as { openTarget: { absolutePath: string; grantId: string } })
-        .openTarget
+      const { openTarget } = z
+        .object({ openTarget: z.object({ absolutePath: z.string(), grantId: z.string() }) })
+        .parse(tap.result)
       sendEncryptedWsRequest(phone, {
         id: 'phone_read',
         method: 'files.readTerminalArtifact',

@@ -163,14 +163,16 @@ describe('RuntimeFileCommands', () => {
         resolveKnownWorkspaceFileTarget
       })
 
-      await commands.resolveTerminalPath(
-        'id:wt-1',
-        '/repo-b/docs/readme.md',
-        null,
-        undefined,
-        null,
-        true
-      )
+      await expect(
+        commands.resolveTerminalPath(
+          'id:wt-1',
+          '/repo-b/docs/readme.md',
+          null,
+          undefined,
+          null,
+          true
+        )
+      ).rejects.toThrow('outside an SSH workspace')
 
       expect(resolveKnownWorkspaceFileTarget).toHaveBeenCalledWith(
         '/repo-b/docs/readme.md',

@@ -47,6 +47,7 @@ vi.mock('./terminal-remote-file-download-open', () => ({
 }))
 
 installTerminalLinkTestEnvironment(doubles)
+Object.assign(storeState, { runtimeEnvironments: [{ id: 'env-1', name: 'build-box' }] })
 
 const serverWorkspace = {
   worktreeId: 'wt-feat',
@@ -165,7 +166,7 @@ describe('a link to this computer printed in a paired-server terminal', () => {
     expect(openFileMock).not.toHaveBeenCalled()
     expect(onOpenFailure).toHaveBeenCalledWith({
       verdict: 'unverifiable',
-      error: new Error('Update Orca on env-1 to open files outside its workspaces')
+      error: new Error('Update Orca on build-box to open files outside its workspaces')
     })
   })
 
@@ -191,8 +192,11 @@ describe('a link to this computer printed in a paired-server terminal', () => {
         if (!status?.ok) {
           return runtimeEnvironmentCallMock(args)
         }
+        // Why: hosts without cross-workspace search predate absolute-file grants too.
         const capabilities = status.result.capabilities?.filter(
-          (capability) => capability !== TERMINAL_PATH_CROSS_WORKSPACE_RUNTIME_CAPABILITY
+          (capability) =>
+            capability !== TERMINAL_PATH_CROSS_WORKSPACE_RUNTIME_CAPABILITY &&
+            capability !== TERMINAL_PATH_ABSOLUTE_FILES_RUNTIME_CAPABILITY
         )
         return { ...status, result: { ...status.result, capabilities } }
       }
@@ -221,7 +225,7 @@ describe('a link to this computer printed in a paired-server terminal', () => {
 
     expect(statMock).not.toHaveBeenCalled()
     expect(openFileMock).not.toHaveBeenCalled()
-    expect(onOpenFailure).toHaveBeenCalledWith(expect.objectContaining({ verdict: 'unverifiable' }))
+    expect(onOpenFailure).toHaveBeenCalledWith(expect.objectContaining({ verdict: 'missing' }))
   })
 
   it('opens a path the host granted read-only from the host, never from this computer', async () => {

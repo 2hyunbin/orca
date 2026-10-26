@@ -187,7 +187,7 @@ describe('RuntimeFileCommands', () => {
 
       await expect(
         resolveTerminalArtifactPath(commands, '//remote-host/tmp/result.json')
-      ).resolves.not.toHaveProperty('openTarget')
+      ).rejects.toThrow('outside an SSH workspace')
       await expect(
         commands.resolveTerminalPath(
           'id:wt-1',
@@ -196,29 +196,8 @@ describe('RuntimeFileCommands', () => {
           'client-a',
           'term-1'
         )
-      ).resolves.not.toHaveProperty('openTarget')
+      ).rejects.toThrow('outside an SSH workspace')
       expect(statMock).not.toHaveBeenCalled()
-    })
-
-    it('rejects host-qualified remote POSIX terminal links without a verified host match', async () => {
-      const { commands, store } = createRuntimeFileCommands({ path: '/home/me/repo' })
-      store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
-
-      const result = await commands.resolveTerminalPath(
-        'id:wt-1',
-        '//remote-host/tmp/result.json',
-        null,
-        'client-a'
-      )
-
-      expect(statMock).not.toHaveBeenCalled()
-      expect(result).toEqual({
-        worktree: 'wt-1',
-        relativePath: null,
-        absolutePath: '//remote-host/tmp/result.json',
-        exists: false,
-        isDirectory: false
-      })
     })
 
     it('translates WSL temp artifacts before granting the exact path', async () => {
@@ -231,6 +210,7 @@ describe('RuntimeFileCommands', () => {
       openMock.mockResolvedValue({
         stat: vi.fn(async () => ({
           isDirectory: () => false,
+          isFile: () => true,
           size: 2,
           dev: 1,
           ino: 2,

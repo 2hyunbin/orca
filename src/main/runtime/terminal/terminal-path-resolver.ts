@@ -12,6 +12,9 @@ import { isENOENT } from '../../ipc/filesystem/filesystem-path-containment'
 import type { RuntimeFileCommandHost } from '../files/file-command-host'
 import type { RuntimeTerminalArtifacts } from './artifacts/terminal-artifacts'
 
+const SSH_OUTSIDE_WORKSPACE_UNSUPPORTED_MESSAGE =
+  "Files outside an SSH workspace can't be opened from another device yet."
+
 type RuntimeTerminalPathHost = Pick<
   RuntimeFileCommandHost,
   | 'requireStore'
@@ -36,7 +39,8 @@ export class RuntimeTerminalPathResolver {
     clientId?: string,
     terminalHandle?: string | null,
     crossWorkspace?: boolean,
-    nativeChatContext?: RuntimeNativeChatFileContext | null
+    // Why: still sent by clients; any caller may open any host path, so the citing chat no longer matters.
+    _nativeChatContext?: RuntimeNativeChatFileContext | null
   ): Promise<RuntimeTerminalPathResolution> {
     // Why: an absent store fails as runtime_unavailable before target resolution.
     this.host.requireStore()
@@ -65,7 +69,7 @@ export class RuntimeTerminalPathResolver {
 
     // Never expand SSH/WSL home-relative grants using this machine's home.
     const isTilde = pathText.startsWith('~/') || pathText.startsWith('~\\')
-    if (isTilde && (connectionId || (nativeChatContext && parseWslPath(worktree.path)))) {
+    if (isTilde && (connectionId || parseWslPath(worktree.path))) {
       return empty
     }
     const expanded = isTilde ? resolveRuntimePath(homedir(), pathText.slice(2)) : pathText
@@ -115,10 +119,11 @@ export class RuntimeTerminalPathResolver {
         }
       }
 
-      // Why: any caller allowed this method can already run commands as this host's user, so no path is off limits.
+      // Why: grants read this machine; answering absent would let the client open its own same-path file instead.
       if (connectionId) {
-        return { ...empty, relativePath, absolutePath }
+        throw new Error(SSH_OUTSIDE_WORKSPACE_UNSUPPORTED_MESSAGE)
       }
+      // Why: any caller allowed this method can already run commands as this host's user, so no path is off limits.
       return await this.artifacts.resolveAbsoluteFileGrant({
         worktreeId: worktree.id,
         absolutePath,
