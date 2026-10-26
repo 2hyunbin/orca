@@ -95,9 +95,10 @@ export function addWslHostEnvironment(
   const persisted = PersistedRuntimeEnvironmentSchema.parse(environment)
   writeEnvironmentStore(userDataPath, {
     version: 1,
-    environments: [...readPersistedEnvironmentStore(userDataPath).environments, persisted].sort(
-      (a, b) => a.name.localeCompare(b.name)
-    )
+    environments: [
+      ...readPersistedEnvironmentStore(userDataPath, { recoverBlankStore: true }).environments,
+      persisted
+    ].sort((a, b) => a.name.localeCompare(b.name))
   })
   return resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), args.id)
 }

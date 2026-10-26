@@ -66,7 +66,7 @@ export function addManagedOrcadEnvironment(
   }
   const persisted = PersistedRuntimeEnvironmentSchema.parse(environment)
   const environments = [
-    ...readPersistedEnvironmentStore(userDataPath).environments,
+    ...readPersistedEnvironmentStore(userDataPath, { recoverBlankStore: true }).environments,
     persisted
   ].sort((a, b) => a.name.localeCompare(b.name))
   // Sidecar first: a crash between the writes leaves an ownerless entry the next write prunes,
