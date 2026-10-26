@@ -6,6 +6,7 @@ function deps(overrides: Partial<WslMoveHostReadinessDeps> = {}): WslMoveHostRea
   return {
     readRunningDistros: async () => ({ status: 'confirmed', distros: ['Ubuntu'] }),
     isHostReady: () => ready,
+    removalPending: () => false,
     hasHost: () => false,
     connect: vi.fn(async () => {
       ready = true
@@ -61,5 +62,26 @@ describe('prepareWslMoveHost (A1)', () => {
       }
     })
     expect(await prepareWslMoveHost(broken, 'Ubuntu')).toBe('failed')
+  })
+
+  // E11 (#33843): a host whose Remove is pending is never connected or added.
+  it('never connects or adds a host whose Remove is pending', async () => {
+    const pending = deps({ hasHost: () => true, removalPending: () => true })
+    expect(await prepareWslMoveHost(pending, 'Ubuntu')).toBe('failed')
+    expect(pending.connect).not.toHaveBeenCalled()
+    expect(pending.add).not.toHaveBeenCalled()
+  })
+
+  it('re-reads the pending Remove after the running-distro read', async () => {
+    let removing = false
+    const racing = deps({
+      readRunningDistros: async () => {
+        removing = true
+        return { status: 'confirmed', distros: ['Ubuntu'] }
+      },
+      removalPending: () => removing
+    })
+    expect(await prepareWslMoveHost(racing, 'Ubuntu')).toBe('failed')
+    expect(racing.add).not.toHaveBeenCalled()
   })
 })

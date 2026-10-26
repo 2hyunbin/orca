@@ -95,7 +95,8 @@ export class WslMoveOrchestrator {
     this.records = new Map(
       [...ports.load()].map(([key, record]) => [
         key,
-        settleWslMoveOrchestratorRecord(record, now, ports.finishedMove(record.distro) !== null)
+        // An unreadable journal says nothing about whether a move is finished: keep the record.
+        settleWslMoveOrchestratorRecord(record, now, this.readFinishedMove(record.distro) !== null)
       ])
     )
     for (const [key, record] of this.records) {
@@ -144,8 +145,13 @@ export class WslMoveOrchestrator {
     } finally {
       this.busy.delete(key)
     }
+    await this.replayQueued(key)
+  }
+
+  /** Runs the wake that arrived while the distro was busy, once it no longer is. */
+  private async replayQueued(key: string): Promise<void> {
     const queued = this.queued.get(key)
-    if (queued && !this.disposed) {
+    if (queued && !this.disposed && !this.busy.has(key)) {
       this.queued.delete(key)
       await this.run(key, queued.distro, queued.trigger)
     }
@@ -197,7 +203,10 @@ export class WslMoveOrchestrator {
     if (release.released) {
       this.commit(key, 'user', this.userActionRecord(current, action))
     }
-    return { record: this.recordFor(key, distro), release }
+    const result = { record: this.recordFor(key, distro), release }
+    // A wake that came in during the release runs now, as it would after any step.
+    await this.replayQueued(key)
+    return result
   }
 
   private userActionRecord(
@@ -222,6 +231,24 @@ export class WslMoveOrchestrator {
     )
   }
 
+  /** The newest finished move; `unknown` when the journal cannot be read. */
+  private readFinishedMove(distro: string): WslMoveFinishedMove | null | 'unknown' {
+    try {
+      return this.ports.finishedMove(distro)
+    } catch {
+      return 'unknown'
+    }
+  }
+
+  /**
+   * True when the record changed under an await (the user released the move, or chose Not now):
+   * the step's view is stale and must not overwrite the user's choice.
+   */
+  private changedUnder(key: string, seen: WslMoveOrchestratorRecord): boolean {
+    const current = this.records.get(key)
+    return current !== undefined && current !== seen
+  }
+
   private async step(
     key: string,
     distro: string,
@@ -229,16 +256,29 @@ export class WslMoveOrchestrator {
   ): Promise<void> {
     let record = this.recordFor(key, distro)
     // Before anything that could connect, add or move: even the user's Retry waits for the Remove.
-    if (this.ports.hostRemovalPending(distro)) {
+    let removalPending: boolean
+    try {
+      removalPending = this.ports.hostRemovalPending(distro)
+    } catch {
+      // An unreadable host record proves nothing either way; touch nothing this time.
+      return
+    }
+    if (removalPending) {
       this.commit(key, trigger, applyWslMoveHostRemovalPending(record, this.ports.now()))
       return
     }
     // A timer re-check leaves R38 to the triggers, so a deferred move never polls the registry.
-    const finished = trigger === 'timer' ? null : this.ports.finishedMove(distro)
+    const finished = trigger === 'timer' ? null : this.readFinishedMove(distro)
+    if (finished === 'unknown') {
+      return
+    }
     if (finished) {
       const verdict = await this.ports
         .checkMovedDistro(distro, finished)
         .catch((): WslMovedDistroVerdict => 'unknown')
+      if (this.changedUnder(key, record)) {
+        return
+      }
       record = this.commit(
         key,
         trigger,
@@ -258,17 +298,22 @@ export class WslMoveOrchestrator {
       const readiness = await this.ports
         .prepareHost(distro)
         .catch((): WslMoveHostReadiness => 'unverifiable')
-      if (readiness !== 'ready') {
+      if (readiness !== 'ready' || this.changedUnder(key, record)) {
         return
       }
     }
     const preview = await this.settle(() => this.ports.preview(distro))
+    if (this.changedUnder(key, record)) {
+      return
+    }
     record = this.commit(key, trigger, this.apply(record, preview, trigger), preview)
     if (record.state.kind !== 'moving') {
       return
     }
     const result = await this.settle(() => this.ports.start(distro))
-    this.commit(key, trigger, this.apply(record, result, trigger), result)
+    if (!this.changedUnder(key, record)) {
+      this.commit(key, trigger, this.apply(record, result, trigger), result)
+    }
   }
 
   /** A port that throws is a transient failure, never a lost record. */

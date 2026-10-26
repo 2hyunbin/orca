@@ -11,6 +11,8 @@ import type { WslMoveHostReadiness } from './wsl-move-orchestrator'
 export type WslMoveHostReadinessDeps = {
   readRunningDistros: () => Promise<WslRunningDistrosRead>
   isHostReady: (distro: string) => boolean
+  /** E11: a Remove that could not prove the server stopped; such a host is never touched. */
+  removalPending: (distro: string) => boolean
   hasHost: (distro: string) => boolean
   /** Connects an added host; called only for a confirmed-running distro. */
   connect: (distro: string) => Promise<void>
@@ -22,6 +24,9 @@ export async function prepareWslMoveHost(
   deps: WslMoveHostReadinessDeps,
   distro: string
 ): Promise<WslMoveHostReadiness> {
+  if (deps.removalPending(distro)) {
+    return 'failed'
+  }
   const running = await deps
     .readRunningDistros()
     .catch((): WslRunningDistrosRead => ({ status: 'unavailable' }))
@@ -34,6 +39,10 @@ export async function prepareWslMoveHost(
   }
   if (deps.isHostReady(distro)) {
     return 'ready'
+  }
+  // Re-read after the running-distro await: a Remove may have started meanwhile.
+  if (deps.removalPending(distro)) {
+    return 'failed'
   }
   try {
     if (deps.hasHost(distro)) {

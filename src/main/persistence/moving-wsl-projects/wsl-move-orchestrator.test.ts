@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { WslMoveUseLocallyResult } from '../../../shared/wsl-move/wsl-moved-project'
 import type {
   WslMoveBlocker,
   WslMovePreview,
@@ -596,6 +597,123 @@ describe('WslMoveOrchestrator', () => {
       expect(ports.start).not.toHaveBeenCalled()
       await orchestrator.userAction('Ubuntu', 'retry')
       expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
+    })
+  })
+
+  describe('re-review fixes (#33802)', () => {
+    const offered = (): Map<string, WslMoveOrchestratorRecord> =>
+      new Map([
+        [
+          wslMoveJournalKey('Ubuntu'),
+          {
+            distro: 'Ubuntu',
+            state: { kind: 'restore-offered' },
+            attempts: 0,
+            appVersion: '1.0.0',
+            updatedAt: 0
+          }
+        ]
+      ])
+    const unreadable = (): never => {
+      throw new Error('wsl_move_journal_unreadable')
+    }
+
+    // 1: an unreadable journal at startup must not escape the constructor.
+    it('starts with an unreadable journal and keeps an offered Restore', () => {
+      const orchestrator = new WslMoveOrchestrator(
+        fakePorts({ load: offered, finishedMove: unreadable })
+      )
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'restore-offered' })
+    })
+
+    it('touches nothing while the journal is unreadable', async () => {
+      const ports = fakePorts({ finishedMove: unreadable })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await expect(orchestrator.trigger('Ubuntu', 'connect')).resolves.toBeUndefined()
+      expect(ports.prepareHost).not.toHaveBeenCalled()
+      expect(ports.preview).not.toHaveBeenCalled()
+    })
+
+    // 2: a release by the user during a step must win over the step's stale view.
+    it('does not move a distro the user released while its preview was running', async () => {
+      let release: () => void = () => {}
+      const ports = fakePorts({
+        preview: vi.fn(
+          () =>
+            new Promise<WslMovePreview>((resolve) => {
+              release = () => resolve(ready('Ubuntu'))
+            })
+        )
+      })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      const step = orchestrator.trigger('Ubuntu', 'connect')
+      await vi.waitFor(() => expect(ports.preview).toHaveBeenCalled())
+      orchestrator.releasedByUser('Ubuntu')
+      release()
+      await step
+      expect(ports.start).not.toHaveBeenCalled()
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'parked', reason: 'declined' })
+    })
+
+    it('keeps a release made while the host was being readied', async () => {
+      let readied: () => void = () => {}
+      const ports = fakePorts({
+        prepareHost: vi.fn(
+          () =>
+            new Promise<'ready'>((resolve) => {
+              readied = () => resolve('ready')
+            })
+        )
+      })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      const step = orchestrator.trigger('Ubuntu', 'connect')
+      await vi.waitFor(() => expect(ports.prepareHost).toHaveBeenCalled())
+      orchestrator.releasedByUser('Ubuntu')
+      readied()
+      await step
+      expect(ports.preview).not.toHaveBeenCalled()
+    })
+
+    // 3: a wake queued during Restore's own busy section runs after it.
+    it('replays a wake that arrived during Restore', async () => {
+      let finishRelease: () => void = () => {}
+      let finished: { migrationId: string } | null = { migrationId: 'm1' }
+      const ports = fakePorts({
+        load: offered,
+        finishedMove: () => finished,
+        checkMovedDistro: vi.fn(async () => 'present' as const),
+        releaseFinishedMove: vi.fn(
+          () =>
+            new Promise<WslMoveUseLocallyResult>((resolve) => {
+              finishRelease = () => {
+                finished = null
+                resolve({
+                  released: true,
+                  distro: 'Ubuntu',
+                  repoIds: ['r1'],
+                  folderWorkspaceIds: []
+                })
+              }
+            })
+        )
+      })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      const restore = orchestrator.userAction('Ubuntu', 'restore')
+      await vi.waitFor(() => expect(ports.releaseFinishedMove).toHaveBeenCalled())
+      await orchestrator.trigger('Ubuntu', 'project-opened')
+      expect(ports.preview).not.toHaveBeenCalled()
+      finishRelease()
+      await restore
+      expect(ports.preview).toHaveBeenCalledTimes(1)
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
+    })
+
+    it('touches nothing when the host record cannot be read', async () => {
+      const ports = fakePorts({ hostRemovalPending: unreadable })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.trigger('Ubuntu', 'connect')
+      expect(ports.prepareHost).not.toHaveBeenCalled()
+      expect(orchestrator.list()).toEqual([])
     })
   })
 })

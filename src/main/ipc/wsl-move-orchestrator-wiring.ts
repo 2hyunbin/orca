@@ -140,7 +140,7 @@ function hostRemovalPending(userDataPath: string, distro: string): boolean {
   return !!record && 'pendingStop' in record && !!record.pendingStop
 }
 
-function prepareHost(distro: string): Promise<WslMoveHostReadiness> {
+function prepareHost(userDataPath: string, distro: string): Promise<WslMoveHostReadiness> {
   const service = getWslHostService()
   if (!service) {
     return Promise.resolve('failed')
@@ -150,6 +150,7 @@ function prepareHost(distro: string): Promise<WslMoveHostReadiness> {
     {
       readRunningDistros: readConfirmedRunningWslDistros,
       isHostReady,
+      removalPending: () => hostRemovalPending(userDataPath, distro),
       hasHost: () => service.recordForEnvironment(environmentId) !== null,
       connect: () => service.connect(environmentId),
       add: () => service.add({ distro, startIfStopped: false })
@@ -174,7 +175,7 @@ function createOrchestrator(
     now: () => Date.now(),
     appVersion: app.getVersion(),
     autoMoveEnabled: () => process.env[WSL_MOVE_ORCHESTRATOR_AUTO_ENV] !== '0',
-    prepareHost,
+    prepareHost: (distro) => prepareHost(userDataPath, distro),
     hostRemovalPending: (distro) => hostRemovalPending(userDataPath, distro),
     isHostReady,
     preview: async (distro) =>
@@ -311,8 +312,13 @@ export function registerWslMoveOrchestrator(
   if (!wslHostsGateOpen() || !getWslHostService() || orchestrator) {
     return
   }
-  const created = createOrchestrator(store, driverDeps)
-  orchestrator = created
-  followHostReadiness(created)
-  onWslMoveReleasedByUser((distro) => created.releasedByUser(distro))
+  // Registered from registerCoreHandlers: a throw here would skip every handler after it.
+  try {
+    const created = createOrchestrator(store, driverDeps)
+    orchestrator = created
+    followHostReadiness(created)
+    onWslMoveReleasedByUser((distro) => created.releasedByUser(distro))
+  } catch (error) {
+    console.warn('[wsl-move] Move orchestrator did not start:', error)
+  }
 }

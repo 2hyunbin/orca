@@ -84,14 +84,20 @@ const driver = vi.hoisted(() => ({
   }))
 }))
 vi.mock('../persistence/moving-wsl-projects/wsl-move-driver', () => driver)
+const journal = vi.hoisted(() => ({ unreadable: false }))
 vi.mock('../persistence/moving-wsl-projects/wsl-move-cutover-journal', () => ({
-  listWslMoveCutoverChain: () => []
+  listWslMoveCutoverChain: () => {
+    if (journal.unreadable) {
+      throw new Error('wsl_move_journal_unreadable')
+    }
+    return []
+  }
 }))
-const store = vi.hoisted(() => ({ reads: 0 }))
+const store = vi.hoisted(() => ({ reads: 0, records: new Map<string, unknown>() }))
 vi.mock('../persistence/moving-wsl-projects/wsl-move-orchestrator-store', () => ({
   readWslMoveOrchestratorRecords: () => {
     store.reads++
-    return new Map()
+    return store.records
   },
   writeWslMoveOrchestratorRecords: () => {}
 }))
@@ -150,6 +156,8 @@ beforeEach(() => {
   releases.listeners.length = 0
   deployments.clear()
   store.reads = 0
+  store.records = new Map()
+  journal.unreadable = false
   driver.previewWslMove.mockClear()
   driver.moveProjectsToWslHost.mockClear()
 })
@@ -305,6 +313,36 @@ describe('WSL move orchestrator wiring', () => {
     expect(driver.previewWslMove).not.toHaveBeenCalled()
     expect(await handlers.get('wslMoveOrchestrator:list')?.({})).toEqual([
       expect.objectContaining({ state: { kind: 'parked', reason: 'removal-pending' } })
+    ])
+  })
+
+  // Re-review 1: registerCoreHandlers calls this before many other handlers; it must not throw.
+  it('registers everything and keeps an offered Restore when the journal is unreadable', async () => {
+    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
+    journal.unreadable = true
+    store.records = new Map([
+      [
+        'local-wsl:ubuntu',
+        {
+          distro: 'Ubuntu',
+          state: { kind: 'restore-offered' },
+          attempts: 0,
+          appVersion: '1.0.0',
+          updatedAt: 0
+        }
+      ]
+    ])
+    await expect(register()).resolves.toBeUndefined()
+    for (const channel of [
+      'wslMoveOrchestrator:list',
+      'wslMoveOrchestrator:projectOpened',
+      'wslMoveOrchestrator:userAction',
+      'wslMoveOrchestrator:answerSleptPanes'
+    ]) {
+      expect(handlers.has(channel)).toBe(true)
+    }
+    expect(await handlers.get('wslMoveOrchestrator:list')?.({})).toEqual([
+      expect.objectContaining({ state: { kind: 'restore-offered' } })
     ])
   })
 })
