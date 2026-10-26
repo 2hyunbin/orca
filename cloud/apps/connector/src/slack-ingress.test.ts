@@ -379,4 +379,68 @@ describe('Slack event ingress', () => {
     })
     expect(await harness.database.query('SELECT * FROM connector_thread_context')).toEqual([])
   })
+
+  it('a held start gets teammates’ messages as context, and is released ahead of follow-ups whatever their receipt clocks say', async () => {
+    const harness = await linkedOwner()
+    const MENTION = '1800000000.000400'
+    await harness.message({ text: `<@${BOT}> fix this`, ts: MENTION, thread_ts: THREAD })
+    await harness.message({
+      user: TEAMMATE,
+      text: 'it is the cache',
+      ts: '1800000000.000500',
+      thread_ts: THREAD
+    })
+    await harness.edge.members.checkContextAuthors()
+    // Another instance with a clock a little behind routes the follow-up.
+    harness.advance(-1)
+    await harness.message({ text: 'go', ts: '1800000000.000600', thread_ts: THREAD })
+    harness.fake.respond('conversations.replies', Response.json({ ok: true, messages: [] }))
+    await harness.edge.starts.buildDue()
+    const [start] = await harness.poll()
+    expect(start).toMatchObject({ kind: 'start', prompt: 'fix this' })
+    await harness.machine.ack([{ deliveryId: start?.deliveryId, step: 'received' }])
+    const [send] = await harness.poll()
+    expect(send?.kind === 'send' ? send.text : '').toMatch(/\[Bob\] it is the cache\n\ngo$/)
+  })
+
+  it('reads a long thread page by page, keeping the first and the latest messages', async () => {
+    const harness = await linkedOwner()
+    await harness.message({
+      text: `<@${BOT}> fix this`,
+      ts: '1800000000.009000',
+      thread_ts: THREAD
+    })
+    const page = (from: number, count: number, cursor?: string) =>
+      Response.json({
+        ok: true,
+        messages: Array.from({ length: count }, (_, index) => ({
+          ts: `1800000000.${String(from + index).padStart(6, '0')}`,
+          user: TEAMMATE,
+          text: `m${from + index}`
+        })),
+        ...(cursor ? { response_metadata: { next_cursor: cursor } } : {})
+      })
+    harness.fake.respond('conversations.replies', page(100, 200, 'p2'), page(300, 30))
+    await harness.edge.starts.buildDue()
+    const [start] = await harness.poll()
+    const lines = (start?.kind === 'start' ? start.prompt : '').split('\n')
+    expect(lines.slice(1, 3)).toEqual(['[Bob] m100', '[Bob] m311'])
+    expect(lines.filter((line) => line.startsWith('[Bob]'))).toHaveLength(20)
+    expect(lines).toContain('[Bob] m329')
+  })
+
+  it('starts with the note when the thread is longer than it reads', async () => {
+    const harness = await linkedOwner()
+    await harness.message({
+      text: `<@${BOT}> fix this`,
+      ts: '1800000000.009000',
+      thread_ts: THREAD
+    })
+    const more = () =>
+      Response.json({ ok: true, messages: [], response_metadata: { next_cursor: 'more' } })
+    harness.fake.respond('conversations.replies', more(), more(), more(), more(), more())
+    await harness.edge.starts.buildDue()
+    const [start] = await harness.poll()
+    expect(start?.kind === 'start' ? start.prompt : '').toContain('couldn’t be read')
+  })
 })

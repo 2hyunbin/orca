@@ -67,16 +67,23 @@ export async function routeSlackMessage(
     )
     const threads = await threadsIn(transaction, { teamId, channelId, threadTs })
     const own = threads.find((thread) => thread.ownerUserId === userId)
-    const othersThreads = threads.filter((thread) => thread.ownerUserId !== userId)
     const externalId = `${teamId}:${channelId}:${threadTs}:${userId}`
-    const [pending] = await transaction.query(
-      `SELECT host_id, place_id FROM connector_slack_pending
-       WHERE external_id = ? AND kind = 'start'`,
-      [externalId]
+    // Starts still reading their thread are conversations here too, just not bound yet.
+    const held = await transaction.query(
+      `SELECT external_id, owner_user_id, host_id, place_id FROM connector_slack_pending
+       WHERE team_id = ? AND channel_id = ? AND thread_ts = ? AND kind = 'start'`,
+      [teamId, channelId, threadTs]
     )
+    const pending = held.find((row) => row.owner_user_id === userId)
+    const othersConversations = [
+      ...threads
+        .filter((thread) => thread.ownerUserId !== userId)
+        .map((thread) => thread.externalId),
+      ...held.filter((row) => row.owner_user_id !== userId).map((row) => String(row.external_id))
+    ]
     const addressed =
       own || pending || message.direct || mentionsBot(message.text, install.botUserId)
-    if (!addressed && othersThreads.length === 0) {
+    if (!addressed && othersConversations.length === 0) {
       return
     }
     const place = { teamId, channelId, threadTs }
@@ -98,13 +105,8 @@ export async function routeSlackMessage(
       return
     }
     // Context for every other owner's conversation here, whatever this message does for its author.
-    for (const thread of othersThreads) {
-      await keepTeammateContext(
-        transaction,
-        thread.externalId,
-        { ts, teamId, userId, text },
-        deps.now()
-      )
+    for (const conversation of othersConversations) {
+      await keepTeammateContext(transaction, conversation, { ts, teamId, userId, text }, deps.now())
     }
     if (!addressed) {
       return

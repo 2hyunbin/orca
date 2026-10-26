@@ -62,7 +62,8 @@ export function createSlackEdge(deps: {
     members,
     posts,
     queue: deps.queue,
-    api
+    api,
+    now
   })
   const refresh = async (
     transaction: CloudDatabase,
