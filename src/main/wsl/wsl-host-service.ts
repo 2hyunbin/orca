@@ -1,6 +1,6 @@
 /**
  * C7/E9: persist WSL hosts and connect them. A stopped distro boots only for an explicit
- * Add/Connect, or when its host becomes visible (focused). After a confirmed stop the host is
+ * Add/Connect, or when the user switches to one of its workspaces. After a confirmed stop the host is
  * parked: polls and visible work keep it down until the user acts or the distro runs again.
  */
 import { errorMessage } from '../../shared/error-message'
@@ -30,6 +30,9 @@ import type { WslOrcadConnection } from './wsl-orcad-connection'
 import { registerWslHost } from './wsl-host-registration'
 import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
 
+/** `stopped` and `unreachable` rest on a confirmed running list; `unavailable` could not read it. */
+export type WslHostReachability = 'available' | 'unreachable' | 'stopped' | 'unavailable'
+
 /** The WSL side the service drives: C3 holder, C5 connections, C6 liveness (or an e2e fake). */
 export type WslHostConnector = {
   listDistros(): Promise<WslHostDistroCandidate[]>
@@ -42,6 +45,8 @@ export type WslHostConnector = {
   get(distro: string): WslOrcadConnection | null
   /** Checks the paired server without starting a stopped or unconfirmed distro. */
   isReachable(distro: string, environmentId: string): Promise<boolean>
+  /** The same check, telling a confirmed-stopped distro from an unconfirmed one. */
+  reachability(distro: string, environmentId: string): Promise<WslHostReachability>
   disconnect(distro: string): Promise<void>
   /** Ends the host's terminals, orcad and its terminal daemon; never boots a stopped distro. */
   stopServer(distro: string, environmentId: string): Promise<WslHostServerStop>
@@ -200,7 +205,7 @@ export class WslHostService {
       return
     }
     if (enabled) {
-      this.setVisibleWork([...this.visible], new Set())
+      // Nothing boots here: the window re-reports its focused host, the only one that may (E9).
       return
     }
     this.disableGeneration += 1
@@ -229,42 +234,55 @@ export class WslHostService {
     await this.wsl.connect(record.distro, options)
   }
 
-  /** Serve existing connections; reconnect only for visible work, otherwise return a WSL-specific refusal rather than an unreachable-network error. */
+  /**
+   * A runtime call (a poll, a fetch) never boots a distro (E9). It reconnects only to a distro
+   * confirmed running and only for visible work; a confirmed stop parks the host.
+   */
   async ensureForRuntimeCall(environmentId: string): Promise<void> {
     const record = this.recordForEnvironment(environmentId)
     const connector = this.connector
-    if (!record || !connector || (await connector.isReachable(record.distro, environmentId))) {
+    if (!record || !connector) {
+      return
+    }
+    const reachability = await connector.reachability(record.distro, environmentId)
+    if (reachability === 'available') {
       return
     }
     const refusal = wslHostRunRefusal(this.deps)
     if (refusal || this.removing.has(environmentId)) {
       throw new Error(refusal?.message ?? WSL_HOST_REMOVING_MESSAGE)
     }
-    if (!this.visible.has(environmentId)) {
-      throw new Error(wslHostNotConnectedMessage(record.distro))
+    if (reachability === 'stopped') {
+      this.parked.add(environmentId)
     }
     if (this.parked.has(environmentId)) {
       throw new Error(wslHostStoppedMessage(record.distro))
     }
+    // Unconfirmed (running list unreadable) or not visible: refuse rather than risk a boot.
+    if (reachability !== 'unreachable' || !this.visible.has(environmentId)) {
+      throw new Error(wslHostNotConnectedMessage(record.distro))
+    }
     await connector.connect(record.distro)
   }
 
-  /** E9: an enabled automation came due with the host off; boots the distro once, lifting a park. */
-  async wakeForAutomation(environmentId: string): Promise<void> {
+  /**
+   * The user switched to a workspace on this host (or launch restored it focused): the one
+   * non-explicit act that may boot its distro, and it lifts a park.
+   */
+  focusHost(environmentId: string): void {
     const record = this.recordForEnvironment(environmentId)
     if (!record || !this.connector || !this.canRun() || this.removing.has(environmentId)) {
       return
     }
     this.parked.delete(environmentId)
-    await this.connector.connect(record.distro)
-  }
-
-  /** Whether the host's server answers now; never starts a stopped distro. */
-  async isConnected(environmentId: string): Promise<boolean> {
-    const record = this.recordForEnvironment(environmentId)
-    return record && this.connector
-      ? this.connector.isReachable(record.distro, environmentId)
-      : false
+    void this.connector
+      .reachability(record.distro, environmentId)
+      .then((reachability) =>
+        reachability === 'available' ? undefined : this.connector?.connect(record.distro)
+      )
+      .catch((error: unknown) => {
+        console.warn(`[wsl-hosts] Could not connect to ${record.distro}:`, error)
+      })
   }
 
   /** Whether anything may still be started for this distro (spawn guard). */
@@ -272,21 +290,9 @@ export class WslHostService {
     return this.adding.has(wslDistroHolderKey(distro)) || this.recordForDistro(distro) !== null
   }
 
-  setVisibleWork(environmentIds: readonly string[], previous = this.visible): void {
+  /** Hosts with open work across windows; this never connects anything by itself. */
+  setVisibleWork(environmentIds: readonly string[]): void {
     this.visible = new Set(environmentIds.filter((id) => !this.removing.has(id)))
-    if (!this.connector || !this.canRun()) {
-      return
-    }
-    for (const environmentId of this.visible) {
-      const record = !previous.has(environmentId) && this.recordForEnvironment(environmentId)
-      if (record) {
-        // Focusing the host is the user acting on it, which lifts a park.
-        this.parked.delete(environmentId)
-        this.ensureForRuntimeCall(environmentId).catch((error: unknown) => {
-          console.warn(`[wsl-hosts] Could not connect to ${record.distro}:`, error)
-        })
-      }
-    }
   }
 
   hasUserVisibleWork(distro: string): boolean {

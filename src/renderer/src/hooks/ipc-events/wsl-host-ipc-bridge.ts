@@ -72,12 +72,13 @@ export function registerWslHostIpcBridge(unsubs: (() => void)[]): void {
 
   let reported = ''
   let inputs: readonly unknown[] = []
+  let focusEntry = ''
   const focusedThisSession = new Set<string>()
   const report = (state: AppState): void => {
-    if (state.activeWorktreeId) {
-      focusedThisSession.add(state.activeWorktreeId)
-    }
     if (state.settings?.experimentalWslHosts !== true) {
+      // Focus while WSL hosts are off is not an act on a host; turning them on re-reports.
+      inputs = []
+      focusEntry = ''
       return
     }
     // Why: this runs on every store write; only these inputs can change the answer.
@@ -93,6 +94,20 @@ export function registerWslHostIpcBridge(unsubs: (() => void)[]): void {
       return
     }
     inputs = next
+    if (state.activeWorktreeId) {
+      focusedThisSession.add(state.activeWorktreeId)
+    }
+    const [focusedHost] = selectWslHostsWithVisibleWork(state)
+    const entry = focusedHost ? `${state.activeWorktreeId}\0${focusedHost}` : ''
+    // Switching to a workspace on a WSL host (or launch restoring one) is the user acting on it.
+    if (entry !== focusEntry) {
+      focusEntry = entry
+      if (focusedHost && typeof api.focusHost === 'function') {
+        void api.focusHost({ environmentId: focusedHost }).catch((error) => {
+          console.error('Failed to report the focused WSL host:', error)
+        })
+      }
+    }
     const environmentIds = selectWslHostsWithVisibleWork(state, focusedThisSession)
     const key = environmentIds.join('\n')
     if (key === reported) {

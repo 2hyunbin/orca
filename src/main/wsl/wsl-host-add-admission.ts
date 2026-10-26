@@ -16,7 +16,7 @@ export function wslHostNotConnectedMessage(distro: string): string {
 }
 
 export function wslHostStoppedMessage(distro: string): string {
-  return `${distro} was stopped. Reconnect it in Settings → Remote Orca Servers, or open one of its projects, to start it again.`
+  return `${distro} was stopped. Switch to one of its projects, or reconnect it in Settings → Remote Orca Servers, to start it again.`
 }
 
 /** Why no WSL host may run at all right now; null when they may. */
