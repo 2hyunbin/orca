@@ -1,4 +1,4 @@
-import { EpochMsSchema, OpaqueIdSchema } from '@orca-cloud/push-contract'
+import { EpochMsSchema, OpaqueIdSchema, SequenceSchema } from '@orca-cloud/push-contract'
 import { z } from 'zod'
 import { CONNECTOR_LIMITS } from './connector-limits.js'
 import { ConnectorConversationSchema } from './connector-wire-scalars.js'
@@ -67,8 +67,11 @@ export const ConnectorEventSchema = z.discriminatedUnion('kind', [
   })
 ])
 
+// seq counts batches from 0 in each host session; a retry resends the same body and seq. The cloud applies
+// a batch only above the session's high-water mark, so a late original never undoes newer state.
 export const ConnectorEventsRequestSchema = z.object({
   v: z.literal(1),
+  seq: SequenceSchema,
   events: z.array(ConnectorEventSchema).min(1)
 })
 
