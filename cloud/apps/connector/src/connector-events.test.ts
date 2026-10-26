@@ -149,6 +149,14 @@ describe('connector turn events', () => {
     expect((await events([{ kind: 'snapshot', conversations: [] }], 6)).status).toBe(401)
   })
 
+  it('prunes high-water marks a day after their last batch', async () => {
+    const { harness, machine, enqueue, events } = await setup()
+    await enqueue(machine.hostId)
+    await events([{ conversation, paneKey: 'pane-1', kind: 'turn-started', at: 100 }])
+    harness.advance(24 * 60 * 60_000 + 1)
+    await expect(harness.runtime.pruneEventMarks(24 * 60 * 60_000)).resolves.toBe(1)
+  })
+
   it("ignores events for another host's thread", async () => {
     const { harness, machine, enqueue, thread } = await setup()
     await enqueue(machine.hostId)

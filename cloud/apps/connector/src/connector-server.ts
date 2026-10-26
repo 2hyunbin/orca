@@ -234,6 +234,7 @@ export function createConnectorServer(
     signIns,
     inbox,
     waker,
-    queueDelivery: queue
+    queueDelivery: queue,
+    pruneEventMarks: (retentionMs: number) => threads.pruneEventMarks(database, retentionMs)
   }
 }

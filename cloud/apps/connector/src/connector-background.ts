@@ -32,6 +32,7 @@ const EXPIRY_SWEEP_INTERVAL_MS = 15_000
 const INBOX_PRUNE_INTERVAL_MS = 60_000
 // Settled rows keep only ids and results; this bounds how long even those stay.
 const INBOX_RETENTION_MS = 7 * 24 * 60 * 60_000
+const EVENT_MARK_RETENTION_MS = 24 * 60 * 60_000
 const CHALLENGE_PRUNE_INTERVAL_MS = 60_000
 const SESSION_PRUNE_INTERVAL_MS = 10 * 60_000
 const SIGN_IN_PRUNE_INTERVAL_MS = 10 * 60_000
@@ -45,6 +46,7 @@ export function startConnectorBackground(runtime: {
     expireDue(): Promise<{ hostId: string; externalId: string }[]>
     pruneSettled(retentionMs: number): Promise<number>
   }
+  pruneEventMarks(retentionMs: number): Promise<number>
 }): () => void {
   const stops = [
     every('inbox_expiry', EXPIRY_SWEEP_INTERVAL_MS, async () => {
@@ -55,6 +57,9 @@ export function startConnectorBackground(runtime: {
     }),
     every('inbox_retention', INBOX_PRUNE_INTERVAL_MS, () =>
       runtime.inbox.pruneSettled(INBOX_RETENTION_MS)
+    ),
+    every('event_marks', INBOX_PRUNE_INTERVAL_MS, () =>
+      runtime.pruneEventMarks(EVENT_MARK_RETENTION_MS)
     ),
     every('challenges', CHALLENGE_PRUNE_INTERVAL_MS, () => runtime.challenges.pruneExpired()),
     every('sessions', SESSION_PRUNE_INTERVAL_MS, () => runtime.sessions.pruneExpired()),

@@ -16,6 +16,15 @@ export type NewThread = {
 export class ConnectorThreads {
   constructor(private readonly now: () => number) {}
 
+  // A mark matters only while its connection lives (a session lasts an hour); this bounds the rest.
+  async pruneEventMarks(database: CloudDatabase, olderThanMs: number): Promise<number> {
+    const [result] = await database.query(
+      'DELETE FROM connector_event_marks WHERE updated_at < ?',
+      [this.now() - olderThanMs]
+    )
+    return Number(result?.changes ?? 0)
+  }
+
   // Binds the thread to its host on first sight; false when it already belongs to another host.
   async bind(transaction: CloudDatabase, thread: NewThread): Promise<boolean> {
     await transaction.query(
@@ -44,19 +53,20 @@ export class ConnectorThreads {
 
   // Idempotent by each event's identity: a resend writes the same state again or matches nothing.
   // Under the host lock (MachineSession.locked), so a replaced or revoked session writes nothing.
-  // A batch applies only above the session's high-water mark: a late original or a retry of an
+  // A batch applies only above its connection's high-water mark: a late original or a retry of an
   // applied batch changes nothing. False means it was dropped as stale.
   async applyEvents(
     transaction: CloudDatabase,
-    session: { hostId: string; sessionId: string },
+    connection: { hostId: string; connectionId: string },
     seq: number,
     events: ConnectorEvent[]
   ): Promise<boolean> {
-    const { hostId } = session
+    const { hostId } = connection
     const [advanced] = await transaction.query(
-      `UPDATE connector_sessions SET events_seq = ?
-       WHERE token_hash = ? AND host_fingerprint = ? AND (events_seq IS NULL OR events_seq < ?)`,
-      [seq, session.sessionId, hostId, seq]
+      `INSERT INTO connector_event_marks (connection_id, seq, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT (connection_id) DO UPDATE SET seq = excluded.seq, updated_at = excluded.updated_at
+       WHERE connector_event_marks.seq < excluded.seq`,
+      [connection.connectionId, seq, this.now()]
     )
     if (Number(advanced?.changes ?? 0) === 0) {
       return false

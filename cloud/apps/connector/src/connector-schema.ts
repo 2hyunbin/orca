@@ -51,11 +51,19 @@ CREATE TABLE IF NOT EXISTS connector_sessions (
   host_fingerprint TEXT NOT NULL,
   expires_at BIGINT NOT NULL,
   created_at BIGINT NOT NULL,
-  first_polled_at BIGINT,
-  events_seq BIGINT
+  first_polled_at BIGINT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS connector_sessions_host ON connector_sessions(host_fingerprint);
 CREATE INDEX IF NOT EXISTS connector_sessions_expires_at ON connector_sessions(expires_at);
+
+-- Events high-water mark per machine connection (today a host session's id). Kept apart from
+-- the session table so a different notion of connection only changes the key.
+CREATE TABLE IF NOT EXISTS connector_event_marks (
+  connection_id TEXT PRIMARY KEY,
+  seq BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS connector_event_marks_updated_at ON connector_event_marks(updated_at);
 
 CREATE TABLE IF NOT EXISTS connector_threads (
   external_id TEXT PRIMARY KEY,

@@ -123,7 +123,8 @@ export function registerMachineRoutes(
     const applied = await session.locked(context, (transaction, current) =>
       threads.applyEvents(
         transaction,
-        { hostId, sessionId: current.sessionId },
+        // The connection is the host session for now; only this key changes if that does.
+        { hostId, connectionId: current.sessionId },
         body.data.seq,
         body.data.events
       )
