@@ -9,7 +9,7 @@ import {
   persist,
   settingsModel,
   type SettingsPersistenceModel
-} from './settings-persistence-test-fixture'
+} from './__fixtures__/settings-persistence-test-fixture'
 import * as selection from '../../../../shared/source-control-launch-agent-selection'
 import * as lifts from '../../../../shared/source-control-action-permission-lift'
 import * as shell from '../../../../shared/tui-agent-startup-shell'
