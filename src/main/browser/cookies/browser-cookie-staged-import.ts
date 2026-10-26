@@ -12,6 +12,19 @@ const IMPORT_SCOPE_TABLE = 'orca_cookie_import_scope'
 const IMPORT_SCOPE_FORMAT_VERSION = 1
 export const SCOPED_COOKIE_IMPORT_FORMAT = `scoped-v${IMPORT_SCOPE_FORMAT_VERSION}`
 
+export class InvalidStagedCookieImportError extends Error {}
+
+export function isPermanentStagedCookieImportFailure(error: unknown): boolean {
+  if (error instanceof InvalidStagedCookieImportError) {
+    return true
+  }
+  if (typeof error !== 'object' || error === null || !('errcode' in error)) {
+    return false
+  }
+  // SQL/schema errors, corrupt images and non-databases cannot become usable on retry.
+  return typeof error.errcode === 'number' && [1, 11, 26].includes(error.errcode & 0xff)
+}
+
 type StagedHostKeyRow = { host_key: unknown }
 type StagedScopeRow = { domain: unknown; format_version: unknown }
 type SqliteColumnRow = { name: unknown }
@@ -66,12 +79,12 @@ function readImportedScope(
       typeof row.domain !== 'string' ||
       normalizeCookieImportDomain(row.domain) !== row.domain
     ) {
-      throw new Error('Staged cookie import has an invalid domain scope')
+      throw new InvalidStagedCookieImportError('Staged cookie import has an invalid domain scope')
     }
     scopeDomains.push(row.domain)
   }
   if (scopeDomains.length === 0) {
-    throw new Error('Staged cookie import has an invalid domain scope')
+    throw new InvalidStagedCookieImportError('Staged cookie import has an invalid domain scope')
   }
   return importedDomainScope(scopeDomains)
 }
@@ -149,7 +162,9 @@ export function applyScopedStagedCookieImport(
       liveColumns.length !== stagedColumns.length ||
       liveColumns.some((column, index) => column !== stagedColumns[index])
     ) {
-      throw new Error('Staged cookie import has an incompatible cookie schema')
+      throw new InvalidStagedCookieImportError(
+        'Staged cookie import has an incompatible cookie schema'
+      )
     }
     // Require schema parity to avoid dropping partition keys or guessing new column defaults.
     const columnList = liveColumns.map(quotedIdentifier).join(', ')

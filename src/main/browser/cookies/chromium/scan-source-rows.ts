@@ -5,6 +5,7 @@ import {
   normalizeCookieImportDomain,
   importedDomainScope
 } from '../browser-cookie-import-policy'
+import { isExpiredImportRow } from '../browser-cookie-import-write'
 import { prepareStagedCookiesForImport } from '../browser-cookie-staged-import'
 import {
   chromiumTimestampToUnix,
@@ -96,6 +97,10 @@ export function scanChromiumCookieRows(
     // Missing SameSite values use Chromium’s unspecified fallback.
     const sameSite = databaseSameSite(Number(sourceRow.samesite ?? -1))
     const expiresUtc = chromiumTimestampToUnix(sourceRow.expires_utc as bigint)
+    if (isExpiredImportRow({ expirationDate: expiresUtc > 0 ? expiresUtc : undefined })) {
+      context.skipped++
+      continue
+    }
     const partition = partitionBySourceRow.get(sourceRow)!
     // latin1 preserves raw cookie bytes without UTF-8 replacement.
     const value = decryptedValue.toString('latin1')

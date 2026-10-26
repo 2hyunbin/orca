@@ -4,7 +4,7 @@ import type {
 } from '../../../../shared/browser-workspace-types'
 import { browserSessionRegistry } from '../../browser-session-registry'
 import { summarizePartitionSkips } from '../browser-cookie-partition-summary'
-import { removeTransplantableCookies } from '../browser-cookie-import-clear'
+import { withCookieMutationLock } from '../browser-cookie-import-clear'
 import { openCookieClearStore } from '../browser-cookie-clear-store'
 import { writeImportedCookies, type SourceCookieToWrite } from '../browser-cookie-import-write'
 import { deriveUrl } from '../sources/browser-cookie-validation'
@@ -51,41 +51,36 @@ export async function finalizeChromiumCookieImport(
     diag(`  staging skipped: ${context.imported} cookies will load in-memory only`)
   }
 
-  // Use one CDP store for scoped removal and writes so both retain partition identities.
-  const cookieClearStore = openCookieClearStore(context.targetSession)
-  try {
-    await removeTransplantableCookies(
-      {
-        cookies: cookieClearStore,
-        snapshotClearIdentities: (cookies) => cookieClearStore.snapshotClearIdentities(cookies),
-        restoreClearIdentities: (identities) => cookieClearStore.restoreClearIdentities(identities)
-      },
-      // Skipped families must remain outside both removal and rollback snapshots.
-      context.nativePlan.skippedFamilies,
-      context.importScope
-    )
-    diag(
-      `  cleared existing cookies for ${context.domainSet.size} imported domains before loading ${context.decryptedCookies.length} imported cookies`
-    )
-
-    const writable: SourceCookieToWrite[] = []
-    for (const cookie of context.decryptedCookies) {
-      const url = deriveUrl(cookie.domain, cookie.secure)
-      if (!url) {
-        context.memoryFailed++
-        continue
+  await withCookieMutationLock(context.targetSession, async () => {
+    const cookieClearStore = openCookieClearStore(context.targetSession)
+    try {
+      const writable: SourceCookieToWrite[] = []
+      for (const cookie of context.decryptedCookies) {
+        const url = deriveUrl(cookie.domain, cookie.secure)
+        if (!url) {
+          context.memoryFailed++
+          continue
+        }
+        writable.push({ ...cookie, url })
       }
-      writable.push({ ...cookie, url })
+      // Continue live writes; rejected cookies may use staged cold-start replay.
+      const phase = await writeImportedCookies(cookieClearStore, writable, {
+        log: diag
+      })
+      context.memoryLoaded = phase.importedCount
+      context.memoryFailed += phase.writeRejected
+      context.skipped += phase.expired
+    } finally {
+      cookieClearStore.dispose()
     }
-    // Continue live writes; rejected cookies may use staged cold-start replay.
-    const phase = await writeImportedCookies(cookieClearStore, writable, {
-      stopOnFailure: false,
-      log: diag
-    })
-    context.memoryLoaded = phase.importedCount
-    context.memoryFailed += phase.writeRejected
-  } finally {
-    cookieClearStore.dispose()
+  })
+
+  if (context.memoryLoaded > 0) {
+    try {
+      await context.targetSession.cookies.flushStore()
+    } catch (error) {
+      diag(`  cookie flush failed: ${String(error)}`)
+    }
   }
 
   diag(
@@ -127,8 +122,12 @@ export async function finalizeChromiumCookieImport(
 
   const summary: BrowserCookieImportSummary = {
     totalCookies: context.sourceRows.length,
-    importedCookies: context.imported,
-    skippedCookies: context.skipped + context.integritySkipped + context.nonTransplantableSkipped,
+    importedCookies: context.memoryLoaded,
+    skippedCookies:
+      context.skipped +
+      context.integritySkipped +
+      context.nonTransplantableSkipped +
+      context.memoryFailed,
     ...(context.googleCookiesSkipped > 0
       ? { googleCookiesSkipped: context.googleCookiesSkipped }
       : {}),

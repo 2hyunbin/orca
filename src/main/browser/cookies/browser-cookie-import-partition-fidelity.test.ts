@@ -129,7 +129,7 @@ describe('validated import partition fidelity', () => {
     return filePath
   }
 
-  it('reports one unreadable cookie and one readable sibling withheld for safety', async () => {
+  it('reports the unreadable cookie and imports its readable sibling', async () => {
     const filePath = writeCookieFile([
       { domain: 'example.com', name: 'readable', value: 'synthetic' },
       {
@@ -145,11 +145,11 @@ describe('validated import partition fidelity', () => {
       throw new Error('Synthetic cookie import failed')
     }
     expect(result.summary).toMatchObject({
-      importedCookies: 0,
-      partitionSkippedCookies: 2,
-      partitionSkipBreakdown: { unreadableCookies: 1, preservedRelatedCookies: 1 }
+      importedCookies: 1,
+      partitionSkippedCookies: 1,
+      partitionSkipBreakdown: { unreadableCookies: 1, preservedRelatedCookies: 0 }
     })
-    expect(cookieWriteMock).not.toHaveBeenCalled()
+    expect(cookieWriteMock).toHaveBeenCalledOnce()
   })
 
   it('carries a complete partitionKey from a JSON export through to the write', async () => {
@@ -232,13 +232,13 @@ describe('validated import partition fidelity', () => {
     const result = await importCookiesFromFile(filePath, 'persist:test')
 
     expect(result.ok && result.summary).toMatchObject({
-      importedCookies: 0,
-      skippedCookies: 2,
-      partitionSkippedCookies: 2
+      importedCookies: 1,
+      skippedCookies: 1,
+      partitionSkippedCookies: 1
     })
     expect(targetJar).toEqual([expect.objectContaining({ name: 'live-session' })])
     expect(remove).not.toHaveBeenCalled()
-    expect(cookieWriteMock).not.toHaveBeenCalled()
+    expect(cookieWriteMock).toHaveBeenCalledOnce()
     expect(setPendingCookieImportMock).not.toHaveBeenCalled()
   })
 
@@ -310,21 +310,22 @@ describe('validated import partition fidelity', () => {
     }
     expect(targetJar).toEqual([
       expect.objectContaining({ name: 'apex-session', value: 'apex-live' }),
-      expect.objectContaining({ name: 'sub-session', value: 'sub-live' })
+      expect.objectContaining({ name: 'sub-session', value: 'sub-live' }),
+      expect.objectContaining({ name: 'stale-plain' })
     ])
-    expect(remove.mock.calls.map(([, name]) => name)).toEqual(['stale-plain'])
-    expect(cookieWriteMock).toHaveBeenCalledTimes(1)
+    expect(remove).not.toHaveBeenCalled()
+    expect(cookieWriteMock).toHaveBeenCalledTimes(2)
     expect(cookieWriteMock).toHaveBeenCalledWith(expect.objectContaining({ name: 'plain' }))
-    expect(cookieWriteMock).not.toHaveBeenCalledWith(
+    expect(cookieWriteMock).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'readable-sibling' })
     )
     expect(result.summary).toMatchObject({
       totalCookies: 3,
-      importedCookies: 1,
-      skippedCookies: 2,
-      partitionSkippedCookies: 2,
-      partitionSkipBreakdown: { unreadableCookies: 1, preservedRelatedCookies: 1 },
-      domains: ['plain.example']
+      importedCookies: 2,
+      skippedCookies: 1,
+      partitionSkippedCookies: 1,
+      partitionSkipBreakdown: { unreadableCookies: 1, preservedRelatedCookies: 0 },
+      domains: ['deep.sub.preserved.example', 'plain.example']
     })
     expect(result.summary.totalCookies).toBe(
       result.summary.importedCookies + result.summary.skippedCookies
@@ -456,8 +457,8 @@ describe('native Chromium import partition fidelity', () => {
     expect(cookieWriteMock).toHaveBeenCalledTimes(1)
     expect(cookieWriteMock.mock.calls[0][0].name).toBe('plain')
     expect(result.ok && result.summary?.partitionSkippedCookies).toBe(1)
-    expect(result.ok && result.summary?.importedCookies).toBe(1)
-    expect(result.ok && result.summary?.skippedCookies).toBe(1)
+    expect(result.ok && result.summary?.importedCookies).toBe(0)
+    expect(result.ok && result.summary?.skippedCookies).toBe(2)
     // A partition skip disables replay so a staged image cannot erase the preserved family.
     expect(setPendingCookieImportMock).not.toHaveBeenCalled()
   })

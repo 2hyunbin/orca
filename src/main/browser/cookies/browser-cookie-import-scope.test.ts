@@ -117,7 +117,7 @@ function chromeBrowser(cookiesPath: string): DetectedBrowser {
   }
 }
 
-describe('native cookie import clear scope', () => {
+describe('native cookie import preserves destination cookies', () => {
   let tmpDir: string
   let cookiesRemoveMock: ReturnType<typeof vi.fn>
   let sourceCookiesPath: string
@@ -166,14 +166,14 @@ describe('native cookie import clear scope', () => {
 
     expect(result.ok).toBe(true)
     const removedNames = cookiesRemoveMock.mock.calls.map(([, name]) => name)
-    expect(removedNames).toEqual(['user_session'])
-    expect(cookiesRemoveMock).toHaveBeenCalledWith('https://github.com/', 'user_session')
+    expect(removedNames).toEqual([])
+    expect(cookiesRemoveMock).not.toHaveBeenCalled()
     expect(removedNames).not.toContain('rack.session')
     expect(removedNames).not.toContain('SID')
     expect(removedNames).not.toContain('orphan')
   })
 
-  it('clears a subdomain of an imported domain, and nothing under a sibling registrable domain', async () => {
+  it('keeps extra destination paths and subdomains alongside imported values', async () => {
     sessionFromPartitionMock.mockReturnValue({
       cookies: {
         get: vi.fn().mockResolvedValue([
@@ -214,7 +214,7 @@ describe('native cookie import clear scope', () => {
     const result = await importCookiesFromBrowser(chromeBrowser(sourceCookiesPath), 'persist:test')
 
     expect(result.ok).toBe(true)
-    expect(cookiesRemoveMock.mock.calls.map(([, name]) => name)).toEqual(['gist-session'])
+    expect(cookiesRemoveMock).not.toHaveBeenCalled()
   })
 
   // Verify the on-disk image: in-memory assertions cannot cover cold-start replay.

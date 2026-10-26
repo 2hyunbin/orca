@@ -32,33 +32,10 @@ export async function prepareChromiumCookieImport(
   options: CookieImportOptions,
   targetSession: Session
 ): Promise<ChromiumImportPreparation> {
-  await targetSession.cookies.flushStore()
   // Ask Electron for its storage path; deriving it from an untrusted partition string permits traversal.
   const partitionDir = targetSession.getStoragePath()
-  if (!partitionDir) {
-    return {
-      result: { ok: false, reason: 'Target cookie database not found. Open a browser tab first.' }
-    }
-  }
-
   const partitionName = targetPartition.replace('persist:', '')
-  let liveCookiesPath = resolveChromiumCookiesPath(partitionDir)
-  // The probe initializes unused profiles and must share the import lock: imports can also write __init.
-  if (!liveCookiesPath) {
-    try {
-      await targetSession.cookies.set({ url: 'https://localhost', name: '__init', value: '1' })
-      await targetSession.cookies.remove('https://localhost', '__init')
-      await targetSession.cookies.flushStore()
-    } catch {
-      // Recheck the database path even if the initialization probe failed.
-    }
-    liveCookiesPath = resolveChromiumCookiesPath(partitionDir)
-  }
-  if (!liveCookiesPath) {
-    return {
-      result: { ok: false, reason: 'Target cookie database not found. Open a browser tab first.' }
-    }
-  }
+  const liveCookiesPath = partitionDir ? resolveChromiumCookiesPath(partitionDir) : null
 
   const stagingDir = join(app.getPath('userData'), 'cookie-import-staging')
   const partitionSegment = partitionName.replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -74,6 +51,9 @@ export async function prepareChromiumCookieImport(
   } else {
     try {
       mkdirSync(stagingDir, { recursive: true })
+      if (!liveCookiesPath) {
+        throw new Error('Target cookie database is not initialized')
+      }
       copyFileWithWindowsRetry(liveCookiesPath, stagingCookiesPath)
       stagingAvailable = true
     } catch (err) {
@@ -189,17 +169,6 @@ export async function prepareChromiumCookieImport(
     const partitionBySourceRow = new Map(
       partitionCandidates.map((candidate) => [candidate.sourceRow, candidate.partition])
     )
-    // An unnamed family cannot be protected from removal.
-    if (nativePlan.hasUnrepresentableSkip) {
-      return {
-        result: {
-          ok: false,
-          reason:
-            'Could not import: a cookie with an unreadable site partition has no registrable domain, so its existing session cannot be protected.'
-        }
-      }
-    }
-
     const needsSourceKey = sourceRows.some((sourceRow) => {
       const encrypted = sourceRow.encrypted_value
       if (!(encrypted instanceof Uint8Array) || encrypted.length === 0) {

@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdtempSync, rmSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -104,6 +104,8 @@ describe('scoped pending browser cookie imports', () => {
     ).close()
     createScopedStage()
     expect(existsSync(`${stagedPath}-wal`)).toBe(false)
+    const dormant = new Date(Date.now() - 30 * 24 * 60 * 60 * 1_000)
+    utimesSync(stagedPath, dormant, dormant)
 
     const changedLive = new DatabaseSync(livePath)
     changedLive
@@ -155,6 +157,82 @@ describe('scoped pending browser cookie imports', () => {
     expect(() => copyFileSync(stagedPath, `${stagedPath}.copy`)).not.toThrow()
   })
 
+  it('retries a transient failure, then consumes the stage once and preserves later site updates', () => {
+    createChromiumCookieTestDatabase(livePath, [
+      { domain: '.a.example.com', name: 'old-a', value: 'old' }
+    ]).close()
+    createScopedStage()
+    markPending()
+    const locked = new DatabaseSync(livePath)
+    locked.exec('BEGIN IMMEDIATE')
+    applyPending()
+    expect(existsSync(stagedPath)).toBe(true)
+    locked.exec('ROLLBACK')
+    locked.close()
+    applyPending()
+    expect(existsSync(stagedPath)).toBe(false)
+    const changed = new DatabaseSync(livePath)
+    changed.prepare("UPDATE cookies SET value = 'rotated' WHERE name = 'new-a'").run()
+    changed.close()
+    applyPending()
+    expect(readCookies(livePath)).toEqual([
+      { host_key: '.a.example.com', name: 'new-a', value: 'rotated' }
+    ])
+  })
+
+  it('expires an old transient failure while keeping the live jar intact', () => {
+    createChromiumCookieTestDatabase(livePath, [
+      { domain: '.a.example.com', name: 'old-a', value: 'old' }
+    ]).close()
+    createScopedStage()
+    markPending()
+    const old = new Date(Date.now() - 15 * 24 * 60 * 60 * 1_000)
+    utimesSync(stagedPath, old, old)
+    const locked = new DatabaseSync(livePath)
+    locked.exec('BEGIN IMMEDIATE')
+    applyPending()
+    locked.exec('ROLLBACK')
+    locked.close()
+    expect(existsSync(stagedPath)).toBe(false)
+    expect(loadBrowserSessionMeta(() => metaPath, PARTITION).pendingCookieImports).toEqual({})
+    expect(readCookies(livePath)).toEqual([
+      { host_key: '.a.example.com', name: 'old-a', value: 'old' }
+    ])
+  })
+
+  it('consumes a shipped scoped record when an inactive profile is first accessed after upgrading', () => {
+    createChromiumCookieTestDatabase(livePath, [
+      { domain: '.a.example.com', name: 'old-a', value: 'old' }
+    ]).close()
+    createScopedStage()
+    markPending()
+    applyPendingBrowserCookieImports({
+      resolveMetadataPath: () => join(tmpDir, 'other-profile-meta.json'),
+      defaultPartition: 'persist:other',
+      activeOrcaProfileId: 'other-profile'
+    })
+    expect(existsSync(stagedPath)).toBe(true)
+    applyPending()
+    expect(readCookies(livePath)).toEqual([
+      { host_key: '.a.example.com', name: 'new-a', value: 'imported' }
+    ])
+    expect(existsSync(stagedPath)).toBe(false)
+  })
+
+  it('removes a known scoped record whose marker is missing without touching the live jar', () => {
+    createChromiumCookieTestDatabase(livePath, [
+      { domain: '.a.example.com', name: 'sid', value: 'working' }
+    ]).close()
+    copyFileSync(livePath, stagedPath)
+    markPending()
+    applyPending()
+    expect(existsSync(stagedPath)).toBe(false)
+    expect(loadBrowserSessionMeta(() => metaPath, PARTITION).pendingCookieImports).toEqual({})
+    expect(readCookies(livePath)).toEqual([
+      { host_key: '.a.example.com', name: 'sid', value: 'working' }
+    ])
+  })
+
   it('copies a scoped image when the live cookie database no longer exists', () => {
     createChromiumCookieTestDatabase(livePath, [
       { domain: '.a.example.com', name: 'old-a', value: 'stale' },
@@ -181,26 +259,31 @@ describe('scoped pending browser cookie imports', () => {
     expect(existsSync(stagedPath)).toBe(false)
   })
 
-  it('keeps whole-image replay for legacy staged databases without a scope marker', () => {
-    createChromiumCookieTestDatabase(livePath, [
-      { domain: '.live.example', name: 'live', value: 'replaced' }
-    ]).close()
-    createChromiumCookieTestDatabase(stagedPath, [
-      { domain: '.legacy.example', name: 'legacy', value: 'pending' }
-    ]).close()
-    persistBrowserSessionMeta(() => metaPath, PARTITION, {
-      pendingCookieImports: { [PARTITION]: stagedPath },
-      pendingCookieDbPath: stagedPath
-    })
+  it.each(['string', 'top-level'])(
+    'expires an old legacy %s record without applying it over the live jar',
+    (format) => {
+      createChromiumCookieTestDatabase(livePath, [
+        { domain: '.live.example', name: 'live', value: 'replaced' }
+      ]).close()
+      createChromiumCookieTestDatabase(stagedPath, [
+        { domain: '.legacy.example', name: 'legacy', value: 'pending' }
+      ]).close()
+      const old = new Date(Date.now() - 15 * 24 * 60 * 60 * 1_000)
+      utimesSync(stagedPath, old, old)
+      persistBrowserSessionMeta(() => metaPath, PARTITION, {
+        pendingCookieImports: format === 'string' ? { [PARTITION]: stagedPath } : {},
+        pendingCookieDbPath: stagedPath
+      })
 
-    applyPending()
+      applyPending()
 
-    expect(readCookies(livePath)).toEqual([
-      { host_key: '.legacy.example', name: 'legacy', value: 'pending' }
-    ])
-    expect(existsSync(stagedPath)).toBe(false)
-    expect(loadBrowserSessionMeta(() => metaPath, PARTITION).pendingCookieImports).toEqual({})
-  })
+      expect(readCookies(livePath)).toEqual([
+        { host_key: '.live.example', name: 'live', value: 'replaced' }
+      ])
+      expect(existsSync(stagedPath)).toBe(false)
+      expect(loadBrowserSessionMeta(() => metaPath, PARTITION).pendingCookieImports).toEqual({})
+    }
+  )
 
   it('fails closed across cookie schema drift without mutating the live jar', () => {
     createChromiumCookieTestDatabase(livePath, [
@@ -217,10 +300,8 @@ describe('scoped pending browser cookie imports', () => {
     expect(readCookies(livePath)).toEqual([
       { host_key: '.a.example.com', name: 'old-a', value: 'keep-on-mismatch' }
     ])
-    expect(existsSync(stagedPath)).toBe(true)
-    expect(loadBrowserSessionMeta(() => metaPath, PARTITION).pendingCookieImports).toEqual({
-      [PARTITION]: { format: 'scoped-v1', path: stagedPath }
-    })
+    expect(existsSync(stagedPath)).toBe(false)
+    expect(loadBrowserSessionMeta(() => metaPath, PARTITION).pendingCookieImports).toEqual({})
   })
 
   it('fails closed on an unknown staged scope format', () => {
@@ -238,10 +319,8 @@ describe('scoped pending browser cookie imports', () => {
     expect(readCookies(livePath)).toEqual([
       { host_key: '.a.example.com', name: 'old-a', value: 'keep-on-unknown-format' }
     ])
-    expect(existsSync(stagedPath)).toBe(true)
-    expect(loadBrowserSessionMeta(() => metaPath, PARTITION).pendingCookieImports).toEqual({
-      [PARTITION]: { format: 'scoped-v1', path: stagedPath }
-    })
+    expect(existsSync(stagedPath)).toBe(false)
+    expect(loadBrowserSessionMeta(() => metaPath, PARTITION).pendingCookieImports).toEqual({})
   })
 
   it('leaves a future pending-import format untouched', () => {

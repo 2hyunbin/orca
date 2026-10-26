@@ -217,15 +217,14 @@ describe('Chromium import snapshot ownership', () => {
     expect(cleanupStates).toHaveLength(3)
   })
 
-  it('retires the snapshot when an unreadable partition has no preservable family', async () => {
+  it('retires the snapshot after skipping an unreadable partition without a registrable family', async () => {
     insertSourceCookie(false)
     sourceDatabase.exec(
       "UPDATE cookies SET host_key = 'com', top_frame_site_key = 'https://top.test', has_cross_site_ancestor = 2"
     )
-    expect(await importChromiumCookies(chromeBrowser(sourcePath), PARTITION)).toEqual({
-      ok: false,
-      reason:
-        'Could not import: a cookie with an unreadable site partition has no registrable domain, so its existing session cannot be protected.'
+    expect(await importChromiumCookies(chromeBrowser(sourcePath), PARTITION)).toMatchObject({
+      ok: true,
+      summary: { importedCookies: 0, skippedCookies: 1 }
     })
     expect(cleanupStates).toHaveLength(1)
     expectRefusalCleanup()
