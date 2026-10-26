@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as ExecCommandModule from '../../ssh/remote-exec/remote-exec-command'
-import type { OrcadMachineHomeProbe } from './orcad-machine-home-probe'
+import type { OrcadMachineHomeProbe } from './orcad-machine-home'
 import type { OrcadHostTransport } from '../../ssh/orcad-host-transport'
 import type { RemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 
@@ -43,14 +43,14 @@ vi.mock('../../ssh/remote-exec/remote-exec-command', async (importOriginal) => {
 })
 
 const { resolveOrcadMachineHome } = await import('../install/orcad-remote-context')
-const { decideOrcadMachineHome, orcadMachineOwnershipUnresolvedMessage } =
-  await import('./orcad-machine-home')
 const {
+  decideOrcadMachineHome,
   orcadMachineIdentity,
+  orcadMachineOwnershipUnresolvedMessage,
   parseOrcadMachineHomeProbe,
   ORCAD_MACHINE_CLAIM_FILENAME,
   ORCAD_MACHINE_HOMES_DIRNAME
-} = await import('./orcad-machine-home-probe')
+} = await import('./orcad-machine-home')
 const { ORCAD_MACHINE_CLAIM_ARBITER_DIRNAME } = await import('./orcad-machine-claim-command')
 const { computeRemoteInstallDir } = await import('../install/remote-versioned-install')
 const { ORCAD_INSTALL_MODEL } = await import('../install/remote-install-model')
@@ -97,9 +97,7 @@ type MachineOptions = {
   claimMoveError?: string
   /** Simulate stderr merged into stdout by an SSH gateway. */
   catStderrNoise?: string
-  /** Model a Linux machine with this /etc/machine-id instead of a Mac. */
-  linuxMachineId?: string
-  linuxBootId?: string
+  machineName?: string
 }
 
 /** Model macOS machines sharing one NFS home. */
@@ -156,27 +154,18 @@ function machine(name: string, hostname = name, options: MachineOptions = {}) {
       `echo '${options.catStderrNoise}' >&2; /bin/cat "$@"; s=$?; printf '%s' '${options.catStderrNoise}' >&2; exit $s`
     )
   }
-  if (options.linuxMachineId !== undefined) {
-    tool(
-      'cat',
-      [
-        `[ "$1" = /etc/machine-id ] && { echo ${options.linuxMachineId}; exit 0; }`,
-        `[ "$1" = /proc/sys/kernel/random/boot_id ] && { echo ${options.linuxBootId ?? bootOf(name)}; exit 0; }`,
-        'exec /bin/cat "$@"'
-      ].join('\n')
-    )
-  }
   const env = {
     ...process.env,
     HOME: home,
     PATH: `${bin}:${process.env.PATH ?? ''}`,
-    ORCA_TEST_MERGE_STDERR: options.catStderrNoise === undefined ? '0' : '1'
+    ORCA_TEST_MERGE_STDERR: options.catStderrNoise === undefined ? '0' : '1',
+    ORCA_MACHINE_NAME: options.machineName ?? ''
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocked execCommand reads only env.
   const conn = {
     env
   } as unknown as OrcadHostTransport
-  return { conn, host: options.linuxMachineId === undefined ? darwin : linux, env }
+  return { conn, host: darwin, env }
 }
 
 function loginHomeResult() {
@@ -187,32 +176,17 @@ function claimPath(): string {
   return join(home, '.orca-remote', ORCAD_MACHINE_CLAIM_FILENAME)
 }
 
-function bootOf(name: string): string {
-  return uuidOf(`boot-${name}`.slice(-16))
-}
-
-function legacyOwner(
-  name: string,
-  machineIdentity: string | null = uuidOf(name),
-  options: { dataRoot?: string; bootIdentity?: string } = {}
-): void {
-  const token = `token-${name}`
-  const dir = join(
-    options.dataRoot ?? join(home, '.orca'),
-    '.profile-state-access',
-    'participants',
-    token
-  )
+function legacyOwner(name: string, machineIdentity: string | null = uuidOf(name)): void {
+  const dir = join(home, '.orca', '.profile-state-access', 'participants', 'token')
   mkdirSync(dir, { recursive: true })
   writeFileSync(
-    join(dir, `${token}.owner`),
+    join(dir, 'token.owner'),
     JSON.stringify({
-      token,
+      token: 'token',
       pid: 4242,
       host: name,
       platform: 'darwin',
-      ...(machineIdentity === null ? {} : { machineIdentity }),
-      ...(options.bootIdentity ? { bootIdentity: options.bootIdentity } : {})
+      ...(machineIdentity === null ? {} : { machineIdentity })
     })
   )
 }
@@ -375,76 +349,23 @@ describe.runIf(POSIX)('resolveOrcadMachineHome on a home several machines share'
     expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
   })
 
-  it('gives Linux machines cloned with one machine-id each their own home (#32918)', async () => {
-    const mid = 'c'.repeat(32)
-    const cloned = { linuxMachineId: mid, homeSource: 'filer:/export/home' }
-    const a = machine('dev-a', 'dev-a', cloned)
-    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
-    legacyOwner('dev-a', mid, { bootIdentity: bootOf('dev-a') })
-
-    const b = machine('dev-b', 'dev-b', cloned)
-    const bHome = await resolveOrcadMachineHome(b, true)
-    expect(bHome.userDataDir).not.toBe(join(home, '.orca'))
-    legacyOwner('dev-b', mid, { dataRoot: bHome.userDataDir, bootIdentity: bootOf('dev-b') })
-    expect(await resolveOrcadMachineHome(b, true)).toEqual(bHome)
-    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
-
-    // A third clone must not take the second's home either.
-    const c = await resolveOrcadMachineHome(machine('dev-c', 'dev-c', cloned), true)
-    expect(new Set([join(home, '.orca'), bHome.userDataDir, c.userDataDir]).size).toBe(3)
-  })
-
-  it('stays on a login home claimed before hostnames were recorded when it runs there too', async () => {
-    const mid = 'c'.repeat(32)
-    const cloned = { linuxMachineId: mid, homeSource: 'filer:/export/home' }
-    const legacyClaim = machine('dev-a', 'dev-a', cloned)
-    expect(await resolveOrcadMachineHome(legacyClaim, true)).toEqual(loginHomeResult())
-    const claim = JSON.parse(readFileSync(claimPath(), 'utf8'))
-    writeFileSync(claimPath(), JSON.stringify({ schemaVersion: 1, machineKey: claim.machineKey }))
-    legacyOwner('dev-a', mid, { bootIdentity: bootOf('dev-a') })
-    legacyOwner('dev-b', mid, { bootIdentity: bootOf('dev-b') })
-
-    // Both clones already write ~/.orca: neither strands its state, and the server lock refuses one.
-    expect(await resolveOrcadMachineHome(machine('dev-b', 'dev-b', cloned), true)).toEqual(
+  it('gives a machine named in its environment its own home, even a clone of the claimer (#32918)', async () => {
+    // Clones copy their machine identity; only an explicit name separates them.
+    expect(await resolveOrcadMachineHome(machine('node-a', 'dev-a'), true)).toEqual(
       loginHomeResult()
     )
-    rmSync(join(home, '.orca', '.profile-state-access', 'participants', 'token-dev-b'), {
-      recursive: true
-    })
-    expect(
-      (await resolveOrcadMachineHome(machine('dev-b', 'dev-b', cloned), true)).orcadHome
-    ).not.toBe(home)
-  })
-
-  it('keeps a renamed Linux host, or one on a local disk, on its own install', async () => {
-    const mid = 'c'.repeat(32)
-    const nfs = { linuxMachineId: mid, homeSource: 'filer:/export/home' }
-    expect(await resolveOrcadMachineHome(machine('dev-a', 'dev-a', nfs), true)).toEqual(
+    expect(await resolveOrcadMachineHome(machine('node-a', 'dev-b'), true)).toEqual(
       loginHomeResult()
     )
-    legacyOwner('dev-a', mid, { bootIdentity: bootOf('dev-a') })
-    const renamed = { ...nfs, linuxBootId: bootOf('dev-a') }
-    expect(await resolveOrcadMachineHome(machine('dev-a', 'renamed', renamed), true)).toEqual(
+    const named = machine('node-a', 'dev-b', { machineName: 'dev-b' })
+    const namedHome = await resolveOrcadMachineHome(named, true)
+    expect(namedHome.userDataDir).toMatch(new RegExp(`^${home}/\\.orca-[a-f0-9]{8}$`))
+    expect(await resolveOrcadMachineHome(named, true)).toEqual(namedHome)
+    const other = machine('node-a', 'dev-c', { machineName: 'dev-c' })
+    expect((await resolveOrcadMachineHome(other, true)).userDataDir).not.toBe(namedHome.userDataDir)
+    expect(await resolveOrcadMachineHome(machine('node-a', 'dev-a'), true)).toEqual(
       loginHomeResult()
     )
-    const local = { linuxMachineId: mid, homeSource: '/dev/sda1' }
-    expect(await resolveOrcadMachineHome(machine('dev-a', 'rebooted-rename', local), true)).toEqual(
-      loginHomeResult()
-    )
-  })
-
-  it('leaves the login home to its live owner when a clone runs in this key’s machine home', async () => {
-    const mid = 'c'.repeat(32)
-    const cloned = { linuxMachineId: mid, homeSource: 'filer:/export/home' }
-    legacyOwner('dev-a', mid, { bootIdentity: bootOf('dev-a') })
-    const b = machine('dev-b', 'dev-b', cloned)
-    const bHome = await resolveOrcadMachineHome(b, true)
-    expect(bHome.orcadHome).not.toBe(home)
-    legacyOwner('dev-b', mid, { dataRoot: bHome.userDataDir, bootIdentity: bootOf('dev-b') })
-    expect(await resolveOrcadMachineHome(machine('dev-a', 'dev-a', cloned), true)).toEqual(
-      loginHomeResult()
-    )
-    expect(await resolveOrcadMachineHome(b, true)).toEqual(bHome)
   })
 
   it('keeps a renamed machine on its own install', async () => {
@@ -572,6 +493,7 @@ function probe(host: Host, overrides: Partial<Probe> = {}): Probe {
     machineHomeKeys: [],
     loginHomeInstalled: false,
     homeOnLocalDisk: false,
+    machineName: null,
     ...overrides
   }
 }
@@ -600,30 +522,22 @@ describe('decideOrcadMachineHome', () => {
     expect(orcadMachineIdentity(darwin, '', 'cafe-wifi')).toBeNull()
     const renamed = probe(darwin, {
       identity: orcadMachineIdentity(darwin, ioreg, 'cafe-wifi'),
-      dataRootOwners: [{ root: '.orca', host: 'home-wifi', machineIdentity: uuid.toLowerCase() }]
+      dataRootOwners: [{ host: 'home-wifi', machineIdentity: uuid.toLowerCase() }]
     })
     expect(decideOrcadMachineHome(renamed, darwin).kind).toBe('claim')
   })
 
   it('judges a data-root owner by machine-id, and by hostname only when it recorded none', () => {
     const other = probe(linux, {
-      dataRootOwners: [{ root: '.orca', host: 'node-a', machineIdentity: 'b'.repeat(32) }]
+      dataRootOwners: [{ host: 'node-a', machineIdentity: 'b'.repeat(32) }]
     })
     expect(decideOrcadMachineHome(other, linux).kind).toBe('machine-home')
     const renamed = probe(linux, {
-      dataRootOwners: [{ root: '.orca', host: 'old-name', machineIdentity: 'a'.repeat(32) }]
+      dataRootOwners: [{ host: 'old-name', machineIdentity: 'a'.repeat(32) }]
     })
     expect(decideOrcadMachineHome(renamed, linux).kind).toBe('claim')
-    // Another host and boot with this machine-id is a clone made from the same image.
-    const clone = probe(linux, {
-      identity: orcadMachineIdentity(linux, `${'a'.repeat(32)}\n${'1'.repeat(36)}`, 'node-a'),
-      dataRootOwners: [
-        { root: '.orca', host: 'node-b', machineIdentity: 'a'.repeat(32), bootIdentity: 'b' }
-      ]
-    })
-    expect(decideOrcadMachineHome(clone, linux).kind).toBe('machine-home')
     const unrecorded = probe(linux, {
-      dataRootOwners: [{ root: '.orca', host: 'node-b', machineIdentity: null }]
+      dataRootOwners: [{ host: 'node-b', machineIdentity: null }]
     })
     expect(decideOrcadMachineHome(unrecorded, linux).kind).toBe('machine-home')
   })
@@ -631,7 +545,7 @@ describe('decideOrcadMachineHome', () => {
   it('claims no install whose owner names neither its machine nor a matching hostname', () => {
     const uuid = '12345678-1234-1234-1234-123456789abc'
     const mac = orcadMachineIdentity(darwin, `"IOPlatformUUID" = "${uuid}"`, 'mac-b')
-    const otherMac = { root: '.orca', host: 'mac-a', machineIdentity: null }
+    const otherMac = { host: 'mac-a', machineIdentity: null }
     expect(
       decideOrcadMachineHome(probe(darwin, { identity: mac, dataRootOwners: [otherMac] }), darwin)
     ).toEqual({ kind: 'unresolved', machineKey: mac?.key, cause: 'unattributed-owner' })
@@ -641,9 +555,7 @@ describe('decideOrcadMachineHome', () => {
         darwin
       ).kind
     ).toBe('claim')
-    const nameless = probe(linux, {
-      dataRootOwners: [{ root: '.orca', host: null, machineIdentity: null }]
-    })
+    const nameless = probe(linux, { dataRootOwners: [{ host: null, machineIdentity: null }] })
     expect(decideOrcadMachineHome(nameless, linux).kind).toBe('unresolved')
   })
 
@@ -682,7 +594,7 @@ describe('decideOrcadMachineHome', () => {
     ).toBe('claim')
     const ownRunning = probe(linux, {
       ...stopped,
-      dataRootOwners: [{ root: '.orca', host: 'node-a', machineIdentity: 'a'.repeat(32) }]
+      dataRootOwners: [{ host: 'node-a', machineIdentity: 'a'.repeat(32) }]
     })
     expect(decideOrcadMachineHome(ownRunning, linux).kind).toBe('claim')
   })

@@ -2,6 +2,7 @@ import process from 'node:process'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import { readOrcadProcessIncarnation } from './orcad-process-start-time'
 import { OrcadInstanceLockError } from './orcad-data-root-privacy'
+import { ORCA_MACHINE_NAME_ENV } from '../../shared/orcad-managed-launch-env'
 import {
   orcadStaleLockReclaimCommand,
   type OrcadReclaimHintRuntime
@@ -73,8 +74,12 @@ export function orcadPeerPidIsJudgeableHere(
 }
 
 export const SEPARATE_CLONES_HINT =
-  'To run a server on each machine, give each its own ORCA_USER_DATA, or its own machine id ' +
-  '(sudo rm /etc/machine-id && sudo systemd-machine-id-setup).'
+  'To run Orca on both machines, give this one its own machine id ' +
+  '(sudo rm /etc/machine-id && sudo systemd-machine-id-setup, then reboot it), or give each ' +
+  `machine its own data: for Orca-managed SSH servers, set ${ORCA_MACHINE_NAME_ENV} to a name ` +
+  `unique to the machine in the environment SSH logins get (for example \`export ` +
+  `${ORCA_MACHINE_NAME_ENV}=$(hostname)\` near the top of ~/.bashrc), then reconnect; for ` +
+  '`orca serve`, set ORCA_USER_DATA.'
 
 export function orcadLockHolderUnverifiableError(lock: {
   holder: string

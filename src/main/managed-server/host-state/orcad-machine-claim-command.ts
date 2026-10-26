@@ -3,9 +3,9 @@ import { quotePosixShell } from '../../../shared/shell-argument-quoting'
 import { RELAY_REMOTE_DIR } from '../../ssh/remote-exec/remote-frame-protocol'
 import {
   ORCAD_MACHINE_CLAIM_FILENAME,
-  orcadMachineOwnerRecord,
+  ORCAD_MACHINE_CLAIM_SCHEMA_VERSION,
   parseOrcadMachineClaim
-} from './orcad-machine-home-probe'
+} from './orcad-machine-home'
 import { dfAvailableKb } from './remote-filesystem-space'
 import { joinRemotePath, type RemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 
@@ -38,8 +38,7 @@ const NEARLY_FULL_KB = 1024
 export function orcadMachineClaimCommand(
   host: RemoteHostPlatform,
   loginHome: string,
-  machineKey: string,
-  hostname: string | null = null
+  machineKey: string
 ): string {
   const remoteDir = (...parts: string[]): string =>
     quotePosixShell(joinRemotePath(host, loginHome, RELAY_REMOTE_DIR, ...parts))
@@ -54,7 +53,12 @@ export function orcadMachineClaimCommand(
   const arbiterClaim = remoteDir(ORCAD_MACHINE_CLAIM_ARBITER_DIRNAME, ORCAD_MACHINE_CLAIM_FILENAME)
   // mv into an existing directory nests the stage rather than replacing the arbiter.
   const nestedStage = remoteDir(ORCAD_MACHINE_CLAIM_ARBITER_DIRNAME, stageName)
-  const body = quotePosixShell(orcadMachineOwnerRecord(machineKey, hostname))
+  const body = quotePosixShell(
+    JSON.stringify({
+      schemaVersion: ORCAD_MACHINE_CLAIM_SCHEMA_VERSION,
+      machineKey
+    })
+  )
   const fail = (step: OrcadMachineClaimStep, detail = ''): string =>
     `orca_claim_fail ${step} ${detail || "''"}`
   return [
@@ -78,9 +82,7 @@ export function orcadMachineClaimCommand(
 
 export function readOrcadMachineClaimAnswer(
   output: string
-):
-  | { state: 'present'; machineKey: string; hostname: string | null }
-  | { state: 'failed'; message: string } {
+): { state: 'present'; machineKey: string } | { state: 'failed'; message: string } {
   const lines = output.split('\n').map((line) => line.trim())
   const failed = lines.find((line) => line.startsWith(`${ORCAD_MACHINE_CLAIM_FAILED} `))
   const base = `~/${RELAY_REMOTE_DIR}`

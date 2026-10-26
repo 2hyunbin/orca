@@ -5,7 +5,7 @@ import {
 } from '../../../shared/orcad-artifacts'
 import { quotePosixShell } from '../../../shared/shell-argument-quoting'
 import { RELAY_REMOTE_DIR } from '../../ssh/remote-exec/remote-frame-protocol'
-import { ORCAD_MACHINE_HOMES_DIRNAME } from '../host-state/orcad-machine-home-probe'
+import { ORCAD_MACHINE_HOMES_DIRNAME } from '../host-state/orcad-machine-home'
 
 /** POSIX shell glob words for orcad's pinned Node runtimes; machine homes may hold other architectures, so callers must self-test each match. */
 export function orcadPosixNodeRuntimeGlobs(): [string, string] {
