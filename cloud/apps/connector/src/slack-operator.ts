@@ -1,5 +1,6 @@
 import { parseArgs } from 'node:util'
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
+import { describeAccountHosts } from './connector-hosts.js'
 import { saveIdentity } from './connector-identities.js'
 import { SlackInstalls } from './slack-installs.js'
 
@@ -102,21 +103,8 @@ export async function runSlackOperator(
       )
       return `Linked ${slackUserId} in ${teamId}.`
     }
-    case 'hosts': {
-      const rows = await deps.database.query(
-        `SELECT host_id, host_name, orca_version, last_seen_at FROM connector_hosts
-         WHERE account_id = ? ORDER BY last_seen_at DESC`,
-        [required(values.account, 'account')]
-      )
-      return rows.length === 0
-        ? 'No machines have connected for this account.'
-        : rows
-            .map(
-              (row) =>
-                `${String(row.host_id)}  ${String(row.host_name)}  Orca ${String(row.orca_version)}  last seen ${new Date(Number(row.last_seen_at)).toISOString()}`
-            )
-            .join('\n')
-    }
+    case 'hosts':
+      return await describeAccountHosts(deps.database, required(values.account, 'account'))
     default:
       throw new Error(SLACK_OPERATOR_USAGE)
   }

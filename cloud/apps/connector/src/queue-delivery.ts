@@ -23,6 +23,7 @@ export async function queueDelivery(
   input: {
     thread: Omit<NewThread, 'accountId'>
     deliveryId: string
+    messageId?: string
     body: DeliveryBody
     held?: boolean
   }
@@ -41,6 +42,7 @@ export async function queueDelivery(
       hostId,
       conversation,
       deliveryId: input.deliveryId,
+      messageId: input.messageId,
       body: input.body,
       held: input.held ?? false
     })

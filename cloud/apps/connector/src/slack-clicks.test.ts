@@ -92,7 +92,7 @@ describe('Slack prompt cards', () => {
     expect(await harness.deliveries()).toEqual([
       expect.objectContaining({
         kind: 'answer',
-        deliveryId: answerDeliveryId(EXTERNAL_ID, 'p1'),
+        deliveryId: answerDeliveryId(conversation, 'p1'),
         promptId: 'p1',
         optionId: 'reject_once'
       })

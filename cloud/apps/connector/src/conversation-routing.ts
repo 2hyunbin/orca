@@ -203,7 +203,9 @@ async function deliver(
       hostId: target.hostId,
       placeId: target.placeId
     },
-    deliveryId: messageKey,
+    // Unique per host across sources, as acknowledgements name a delivery by id alone.
+    deliveryId: `${message.source}:${messageKey}`,
+    messageId: message.messageId,
     body: target.body,
     held: target.held ?? false
   })

@@ -81,7 +81,7 @@ export class ThreadPosts {
     // The owner's own answer to the shown prompt, matched by its id.
     const shown = pendingPrompt(thread.row)
     const answer = shown
-      ? await ownerActionState(transaction, hostId, answerDeliveryId(externalId, shown.promptId))
+      ? await ownerActionState(transaction, hostId, answerDeliveryId(conversation, shown.promptId))
       : null
     const offered = await refreshPromptCards(
       transaction,

@@ -32,8 +32,10 @@ export type AnswerablePrompt = Extract<ConnectorPendingPrompt, { kind: 'approval
 
 // One answer per prompt, so repeated presses are inbox duplicates. Hashed, so any contract-valid
 // conversation and prompt ids still make a delivery id within its 128 limit.
-export const answerDeliveryId = (externalId: string, promptId: string) =>
-  `answer:${createHash('sha256').update(`${externalId}\0${promptId}`).digest('hex')}`
+export const answerDeliveryId = (conversation: ConnectorConversation, promptId: string) =>
+  `answer:${createHash('sha256')
+    .update(`${conversation.source}\0${conversation.externalId}\0${promptId}`)
+    .digest('hex')}`
 
 export function pendingPrompt(thread: SqlRow): ConnectorPendingPrompt | undefined {
   return typeof thread.pending_prompt === 'string'
@@ -134,7 +136,7 @@ export async function applyOwnerAction(
   }
   const queued = await queue(transaction, {
     thread: target,
-    deliveryId: answerDeliveryId(conversation.externalId, action.promptId),
+    deliveryId: answerDeliveryId(conversation, action.promptId),
     body: { kind: 'answer', promptId: action.promptId, optionId: action.optionId }
   })
   return queued === 'queued'

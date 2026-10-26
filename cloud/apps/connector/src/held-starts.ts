@@ -24,24 +24,23 @@ export class HeldStarts {
   async buildDue(): Promise<void> {
     const { database, inbox, adapter } = this.deps
     const rows = await database.query(
-      `SELECT i.host_id, i.delivery_id, i.payload, t.workspace_id, t.container_id, t.thread_id
+      `SELECT i.host_id, i.delivery_id, i.message_id, i.payload, t.workspace_id, t.container_id,
+         t.thread_id
        FROM connector_inbox i
        JOIN connector_threads t
          ON t.source = i.source AND t.external_id = i.external_id AND t.host_id = i.host_id
-       WHERE i.source = ? AND i.state = 'held' AND i.expires_at > ?
+       WHERE i.source = ? AND i.state = 'held' AND i.message_id IS NOT NULL AND i.expires_at > ?
        ORDER BY i.expires_at LIMIT ?`,
       [adapter.source, this.deps.now(), STARTS_PER_PASS]
     )
     for (const row of rows) {
-      const deliveryId = String(row.delivery_id)
       const prompt = await adapter.heldStartPrompt({
         place: threadPlace(row),
-        // Routing keys a delivery by its message: workspace:container:message id.
-        messageId: deliveryId.slice(deliveryId.lastIndexOf(':') + 1),
+        messageId: String(row.message_id),
         request: HeldPayloadSchema.parse(JSON.parse(String(row.payload))).prompt
       })
       await database.transaction((transaction) =>
-        inbox.attach(transaction, String(row.host_id), deliveryId, prompt)
+        inbox.attach(transaction, String(row.host_id), String(row.delivery_id), prompt)
       )
     }
   }

@@ -71,7 +71,7 @@ describe('Slack event ingress', () => {
     expect(deliveries).toEqual([
       expect.objectContaining({
         kind: 'start',
-        deliveryId: `${TEAM}:${CHANNEL}:${THREAD}`,
+        deliveryId: `slack:${TEAM}:${CHANNEL}:${THREAD}`,
         conversation: { source: 'slack', externalId: EXTERNAL_ID },
         agent: 'claude',
         placeId: 'pl_orca',
@@ -603,7 +603,7 @@ describe('Slack event ingress', () => {
     expect(deliveries).toEqual([
       expect.objectContaining({
         kind: 'start',
-        deliveryId: `${TEAM}:${CHANNEL}:1800000300.000100`,
+        deliveryId: `slack:${TEAM}:${CHANNEL}:1800000300.000100`,
         placeId: 'pl_orca',
         prompt: 'retry now'
       })
@@ -611,8 +611,8 @@ describe('Slack event ingress', () => {
     expect(
       await harness.database.query('SELECT delivery_id, state FROM connector_inbox ORDER BY seq')
     ).toEqual([
-      { delivery_id: `${TEAM}:${CHANNEL}:1800000000.000400`, state: 'expired' },
-      { delivery_id: `${TEAM}:${CHANNEL}:1800000300.000100`, state: 'leased' }
+      { delivery_id: `slack:${TEAM}:${CHANNEL}:1800000000.000400`, state: 'expired' },
+      { delivery_id: `slack:${TEAM}:${CHANNEL}:1800000300.000100`, state: 'leased' }
     ])
   })
 })

@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS connector_inbox (
   delivery_id TEXT NOT NULL,
   source TEXT NOT NULL,
   external_id TEXT NOT NULL,
+  message_id TEXT,
   seq BIGINT NOT NULL,
   kind TEXT NOT NULL,
   payload TEXT,

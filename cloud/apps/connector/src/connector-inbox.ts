@@ -50,6 +50,8 @@ export class ConnectorInbox {
       hostId: string
       conversation: ConnectorConversation
       deliveryId: string
+      // The source message it carries, which a held start reads its thread up to.
+      messageId?: string
       body: DeliveryBody
       held?: boolean
     }
@@ -59,15 +61,16 @@ export class ConnectorInbox {
     const { kind, ...payload } = body
     const [inserted] = await transaction.query(
       `INSERT INTO connector_inbox
-       (host_id, delivery_id, source, external_id, seq, kind, payload, state, expires_at,
-        created_at)
-       SELECT ?, ?, ?, ?, COALESCE(MAX(seq), 0) + 1, ?, ?, ?, ?, ?
+       (host_id, delivery_id, source, external_id, message_id, seq, kind, payload, state,
+        expires_at, created_at)
+       SELECT ?, ?, ?, ?, ?, COALESCE(MAX(seq), 0) + 1, ?, ?, ?, ?, ?
        FROM connector_inbox WHERE host_id = ?
        ON CONFLICT (host_id, delivery_id) DO NOTHING`,
       [
         hostId,
         deliveryId,
         ...conversationKey(conversation),
+        input.messageId ?? null,
         kind,
         JSON.stringify(payload),
         input.held ? 'held' : 'pending',

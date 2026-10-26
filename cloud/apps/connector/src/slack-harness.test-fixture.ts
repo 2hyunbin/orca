@@ -193,7 +193,7 @@ export async function createSlackHarness(slack: Partial<SlackConfig> = {}) {
 
 export const THREAD = '1800000000.000100'
 export const EXTERNAL_ID = `${TEAM}:${CHANNEL}:${THREAD}:${OWNER}`
-export const conversation = { source: 'slack', externalId: EXTERNAL_ID }
+export const conversation = { source: 'slack' as const, externalId: EXTERNAL_ID }
 export const TURN = 1_800_000_001_000
 
 // A linked owner's conversation, its start handed to their machine.
