@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { openCloudNotifications, type CloudDatabase } from '@orca-cloud/cloud-database'
-import { CONNECTOR_PATHS } from '@orca-cloud/connector-contract'
+import { CONNECTOR_PATHS, ConnectorHelloResponseSchema } from '@orca-cloud/connector-contract'
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import pg from 'pg'
 import type { ConnectorConfig } from './config.js'
@@ -149,12 +149,12 @@ export async function createConnectorHarness(
       machineId,
       expiresAt,
       call,
-      hello: (helloRev = 1) =>
-        call(
+      // The status, and the revision the cloud assigned when it took the hello.
+      hello: async () => {
+        const response = await call(
           CONNECTOR_PATHS.hello,
           {
             v: 1,
-            helloRev,
             contract: 1,
             hostName: 'build-box',
             platform: 'linux',
@@ -166,7 +166,13 @@ export async function createConnectorHarness(
             projects: []
           },
           'PUT'
-        ),
+        )
+        const helloRev =
+          response.status === 200
+            ? ConnectorHelloResponseSchema.parse(await response.json()).helloRev
+            : null
+        return { status: response.status, helloRev }
+      },
       poll: async (helloRev = 1) => {
         const response = await call(CONNECTOR_PATHS.poll, { v: 1, helloRev })
         const body: unknown = await response.json()

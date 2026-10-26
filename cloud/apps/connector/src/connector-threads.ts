@@ -90,6 +90,22 @@ export class ConnectorThreads {
               entry.conversation.externalId
             ]
           )
+          // A newer turn than the cloud knows: older starts and ends still queued behind this snapshot
+          // then change nothing. Its own end, if it ended, follows and settles it.
+          if (entry.turnId !== undefined) {
+            await transaction.query(
+              `UPDATE connector_threads SET open_turn_id = ?, turn_state = ?, turn_stop_reason = NULL
+               WHERE ${ON_BOUND_PANE} AND (open_turn_id IS NULL OR open_turn_id < ?)`,
+              [
+                entry.turnId,
+                entry.working ? 'working' : 'unverifiable',
+                hostId,
+                entry.conversation.externalId,
+                entry.paneKey,
+                entry.turnId
+              ]
+            )
+          }
         }
         continue
       }

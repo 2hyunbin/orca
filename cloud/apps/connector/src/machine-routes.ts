@@ -7,6 +7,7 @@ import {
   ConnectorHelloRequestSchema,
   ConnectorPollRequestSchema,
   type ConnectorDelivery,
+  type ConnectorHelloResponse,
   type ConnectorPollResponse
 } from '@orca-cloud/connector-contract'
 import type { Context, Hono, MiddlewareHandler } from 'hono'
@@ -64,11 +65,11 @@ export function registerMachineRoutes(
       return context.json({ error: 'client_too_old' }, 426)
     }
     const host = context.get('host')
-    await database.transaction(async (transaction) => {
+    const helloRev = await database.transaction(async (transaction) => {
       await lockConnectorHost(transaction, host.hostId)
-      await hosts.recordHello(transaction, host, body.data)
+      return await hosts.recordHello(transaction, host, body.data)
     })
-    return context.body(null, 204)
+    return context.json({ helloRev } satisfies ConnectorHelloResponse, 200)
   })
 
   app.post(CONNECTOR_PATHS.poll, limitBody, async (context) => {

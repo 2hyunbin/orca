@@ -23,9 +23,6 @@ export const ConnectorProjectSchema = z.object({
 
 export const ConnectorHelloRequestSchema = z.object({
   v: z.literal(1),
-  // Rises across restarts on one install (the machine sends max(previous + 1, now in ms)), so the cloud
-  // never keeps an older process's hello over a newer one.
-  helloRev: SequenceSchema,
   contract: z.number().int().positive(),
   ...ConnectorHostDescription,
   agents: CapabilityList,
@@ -34,5 +31,10 @@ export const ConnectorHelloRequestSchema = z.object({
   projects: z.array(ConnectorProjectSchema)
 })
 
+// Every hello gets a revision above every earlier one for this machine, assigned by the cloud. Polls, acks
+// and events carry it; an older one changes nothing.
+export const ConnectorHelloResponseSchema = z.object({ helloRev: SequenceSchema })
+
 export type ConnectorProject = z.infer<typeof ConnectorProjectSchema>
 export type ConnectorHelloRequest = z.infer<typeof ConnectorHelloRequestSchema>
+export type ConnectorHelloResponse = z.infer<typeof ConnectorHelloResponseSchema>

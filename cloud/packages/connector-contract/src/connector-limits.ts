@@ -13,5 +13,9 @@ export const CONNECTOR_LIMITS = {
   leasedExpiryGraceMs: 30_000,
   // The machine refuses a delivery with less than this left before its deadline.
   minDeadlineLeftMs: 10_000,
-  maxLastAssistantMessageBytes: 8 * 1024
+  maxLastAssistantMessageBytes: 8 * 1024,
+  // The cloud refuses a larger request body with 413.
+  maxRequestBytes: 256 * 1024,
+  // One event's JSON, so any single event fits in an events request.
+  maxEventBytes: 192 * 1024
 } as const

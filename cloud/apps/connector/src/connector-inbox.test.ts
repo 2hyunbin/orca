@@ -40,7 +40,7 @@ async function setup(
 ) {
   const harness = await createConnectorHarness({}, options)
   const machine = await harness.machine('user-1', machineOptions)
-  expect((await machine.hello()).status).toBe(204)
+  expect(await machine.hello()).toEqual({ status: 200, helloRev: 1 })
   const enqueue = (externalId: string, deliveryId: string, body: DeliveryBody) =>
     harness.runtime.queueDelivery({
       thread: {
@@ -84,7 +84,7 @@ describe('connector inbox', () => {
     const harness = await createConnectorHarness()
     const machine = await harness.machine()
     expect((await machine.poll()).status).toBe(409)
-    await machine.hello(1)
+    await machine.hello()
     expect((await machine.poll(2)).status).toBe(409)
     expect((await machine.poll(1)).status).toBe(200)
   })
@@ -151,7 +151,7 @@ describe('connector inbox', () => {
     expect((await poll()).unsettled).toBeUndefined()
 
     // The machine restarts: a new hello, then its first poll.
-    await machine.hello(2)
+    await machine.hello()
     const first = ConnectorPollResponseSchema.parse((await machine.poll(2)).body)
     expect(first.unsettled).toEqual([
       { deliveryId: 'a1', conversation: { source: 'slack', externalId: 'a' } }
@@ -199,7 +199,7 @@ describe('connector inbox', () => {
     await enqueue('a', 'a1', START)
     await poll()
     await machine.ack([{ deliveryId: 'a1', step: 'received' }])
-    await machine.hello(2)
+    await machine.hello()
     fault.arm()
     expect((await machine.poll(2)).status).toBe(500)
     const retry = ConnectorPollResponseSchema.parse((await machine.poll(2)).body)
@@ -213,7 +213,7 @@ describe('connector inbox', () => {
     const held = machine.poll(1)
     await new Promise((resolve) => setTimeout(resolve, 100))
     const startedAt = Date.now()
-    expect((await machine.hello(2)).status).toBe(204)
+    expect((await machine.hello()).status).toBe(200)
     expect((await held).status).toBe(409)
     expect(Date.now() - startedAt).toBeLessThan(5_000)
   })
@@ -223,7 +223,7 @@ describe('connector inbox', () => {
     await enqueue('a', 'a1', START)
     await poll()
     expect((await machine.ack([{ deliveryId: 'a1', step: 'received' }], 2)).status).toBe(409)
-    await machine.hello(2)
+    await machine.hello()
     expect((await machine.ack([{ deliveryId: 'a1', step: 'received' }], 1)).status).toBe(204)
     const [row] = await harness.database.query(
       "SELECT state FROM connector_inbox WHERE delivery_id = 'a1'"
@@ -244,12 +244,12 @@ describe('connector inbox', () => {
       })
       await enqueue('a', 'a1', START)
       await poll()
-      const hello = machine.hello(2)
+      const hello = machine.hello()
       await gate.atStatement
       const late = machine.ack([{ deliveryId: 'a1', step: 'received' }], 1)
       await new Promise((resolve) => setTimeout(resolve, 200))
       gate.release()
-      expect((await hello).status).toBe(204)
+      expect((await hello).status).toBe(200)
       expect((await late).status).toBe(204)
       harness.advance(CONNECTOR_LIMITS.leaseMs)
       const first = ConnectorPollResponseSchema.parse((await machine.poll(2)).body)
@@ -257,25 +257,31 @@ describe('connector inbox', () => {
     }
   )
 
+  it('gives each hello the next revision, and only the newest is current', async () => {
+    const { machine } = await setup()
+    expect(await machine.hello()).toEqual({ status: 200, helloRev: 2 })
+    expect((await machine.poll(1)).status).toBe(409)
+    expect((await machine.poll(2)).status).toBe(200)
+  })
+
   // SQLite runs one transaction at a time, so only Postgres can race two hellos.
   it.skipIf(!process.env.ORCA_CONNECTOR_TEST_DATABASE_URL)(
-    'keeps the newer hello when an older one waited on it',
+    'gives racing hellos distinct revisions',
     async () => {
       let gate!: ReturnType<typeof pauseBefore>
-      const { harness, machine } = await setup({
+      const { machine } = await setup({
         wrapDatabase: (database) => {
           gate = pauseBefore(database, 'INSERT INTO connector_hosts', 1)
           return gate.database
         }
       })
-      const newer = machine.hello(3)
+      const first = machine.hello()
       await gate.atStatement
-      const older = machine.hello(2)
+      const second = machine.hello()
       await new Promise((resolve) => setTimeout(resolve, 200))
       gate.release()
-      expect([(await newer).status, (await older).status]).toEqual([204, 204])
-      const [host] = await harness.database.query('SELECT hello_rev FROM connector_hosts')
-      expect(Number(host?.hello_rev)).toBe(3)
+      const revs = [(await first).helloRev, (await second).helloRev]
+      expect(revs).toEqual([2, 3])
       expect((await machine.poll(3)).status).toBe(200)
     }
   )
