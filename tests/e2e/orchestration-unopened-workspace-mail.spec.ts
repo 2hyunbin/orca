@@ -109,8 +109,11 @@ async function findUnopenedWorktree(
 }
 
 async function readSummary(worker: BackgroundWorker): Promise<RuntimeTerminalSummary | undefined> {
-  const listed = await worker.client.call<RuntimeTerminalListResult>('terminal.list')
-  return listed.result.terminals.find((entry) => entry.handle === worker.handle)
+  // A pane mounting the terminal briefly refuses the listing (terminal_surface_ownership_unavailable).
+  const listed = await worker.client
+    .call<RuntimeTerminalListResult>('terminal.list')
+    .catch(() => null)
+  return listed?.result.terminals.find((entry) => entry.handle === worker.handle)
 }
 
 async function waitForObservedTitle(worker: BackgroundWorker, title: string): Promise<void> {
