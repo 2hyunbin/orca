@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionOptionDescriptor } from './native-chat-session-options'
+import {
+  sessionOptionDispatchUnconfirmed,
+  type SessionOptionDescriptor
+} from './native-chat-session-options'
 import { mergeDiscoveredAuthoritativeModels } from './agent-session-option-catalog'
 import {
   CLAUDE_SESSION_OPTION_CATALOG,
   CODEX_SESSION_OPTION_CATALOG
 } from './agent-session-option-catalog-claude-codex'
+import { CURSOR_SESSION_OPTION_CATALOG } from './agent-session-option-catalog-gemini-cursor'
 import { GROK_SESSION_OPTION_CATALOG } from './agent-session-option-catalog-grok'
 import { resolveAgentSessionOptionLaunch } from './agent-session-option-launch'
 import {
@@ -22,13 +26,36 @@ function claudeRecord(): NativeChatSessionOptionRecord {
 }
 
 describe('buildNativeChatSessionOptionSnapshot', () => {
+  // Both lanes emit dispatched; only an explicit transport distinguishes their descriptors.
+  it.each(['catalog', 'agent-session'] as const)(
+    'stamps every descriptor with the %s transport it was built for',
+    (liveTransport) => {
+      const record = claudeRecord()
+      record.model = { value: 'sonnet', source: 'dispatched' }
+      const snapshot = buildNativeChatSessionOptionSnapshot({
+        catalog: CLAUDE_SESSION_OPTION_CATALOG,
+        models: CLAUDE_SESSION_OPTION_CATALOG.models,
+        record,
+        mode: 'live',
+        modelLabel: 'Model',
+        liveTransport
+      })
+      expect(snapshot.length).toBeGreaterThan(1)
+      expect(snapshot.every((descriptor) => descriptor.transport === liveTransport)).toBe(true)
+      const dispatched = snapshot.filter((descriptor) => descriptor.valueSource === 'dispatched')
+      expect(dispatched.length).toBeGreaterThan(0)
+      expect(dispatched.every(sessionOptionDispatchUnconfirmed)).toBe(liveTransport === 'catalog')
+    }
+  )
+
   it('offers every catalog model with the current value unknown', () => {
     const snapshot = buildNativeChatSessionOptionSnapshot({
       catalog: CLAUDE_SESSION_OPTION_CATALOG,
       models: CLAUDE_SESSION_OPTION_CATALOG.models,
       record: claudeRecord(),
       mode: 'live',
-      modelLabel: 'Model'
+      modelLabel: 'Model',
+      liveTransport: 'catalog'
     })
     expect(snapshot).toHaveLength(1)
     const model = snapshot[0]!
@@ -50,15 +77,15 @@ describe('buildNativeChatSessionOptionSnapshot', () => {
       models: CLAUDE_SESSION_OPTION_CATALOG.models,
       record,
       mode: 'live',
-      modelLabel: 'Model'
+      modelLabel: 'Model',
+      liveTransport: 'catalog'
     })
     expect(snapshot.map((descriptor) => descriptor.id)).toEqual(['model', 'effort'])
     expect(snapshot[0]).toMatchObject({ valueSource: 'dispatched' })
   })
 
   it('renders exactly the models it is given, without self-healing the tracked one', () => {
-    // The builder no longer appends the tracked model itself — reconciling it is
-    // the caller's job (withTrackedNativeChatModel), so every row is a real choice.
+    // Callers reconcile tracked models with withTrackedNativeChatModel; builders must list actual choices only.
     const record = claudeRecord()
     record.model = { value: 'experimental-model', source: 'reported' }
     const snapshot = buildNativeChatSessionOptionSnapshot({
@@ -66,7 +93,8 @@ describe('buildNativeChatSessionOptionSnapshot', () => {
       models: CLAUDE_SESSION_OPTION_CATALOG.models,
       record,
       mode: 'live',
-      modelLabel: 'Model'
+      modelLabel: 'Model',
+      liveTransport: 'catalog'
     })
     const model = snapshot[0]!
     if (model.kind.type !== 'select') {
@@ -84,7 +112,8 @@ describe('buildNativeChatSessionOptionSnapshot', () => {
         models: [],
         record: claudeRecord(),
         mode: 'live',
-        modelLabel: 'Model'
+        modelLabel: 'Model',
+        liveTransport: 'catalog'
       })
     ).toEqual([])
   })
@@ -136,7 +165,8 @@ describe('buildNativeChatSessionOptionSnapshot', () => {
         models: reconciled,
         record,
         mode: 'live',
-        modelLabel: 'Model'
+        modelLabel: 'Model',
+        liveTransport: 'catalog'
       })
       const model = snapshot[0]!
       if (model.kind.type !== 'select') {
@@ -175,9 +205,7 @@ describe('buildNativeChatSessionOptionSnapshot', () => {
     })
 
     it('re-injects a grok seed model an authoritative discovery dropped', () => {
-      // Reconciliation alone never un-picks: the PTY surface untracks a retired id
-      // when an authoritative discovery lands (see native-chat-pty-session-options),
-      // while this shared layer keeps a pre-discovery persisted pick labelled.
+      // PTY retires picks after authoritative discovery; shared reconciliation retains labeled pre-discovery selections.
       const record = createNativeChatSessionOptionRecord('grok')
       record.model = { value: 'grok-4.5', source: 'dispatched' }
       const discovered = mergeDiscoveredAuthoritativeModels(GROK_SESSION_OPTION_CATALOG.models, [
@@ -197,7 +225,8 @@ describe('buildNativeChatSessionOptionSnapshot', () => {
         models: reconciled,
         record,
         mode: 'live',
-        modelLabel: 'Model'
+        modelLabel: 'Model',
+        liveTransport: 'catalog'
       })
       expect(snapshot.map((descriptor) => descriptor.id)).toEqual(['model', 'effort'])
       expect(resolveAgentSessionOptionLaunch('grok', { model: 'grok-4.5' }).args).toEqual([
@@ -209,13 +238,14 @@ describe('buildNativeChatSessionOptionSnapshot', () => {
     })
   })
 
-  it('routes Codex model changes through its typed TUI picker', () => {
+  it('describes Codex model changes as agent-picker actions', () => {
     const snapshot = buildNativeChatSessionOptionSnapshot({
       catalog: CODEX_SESSION_OPTION_CATALOG,
       models: CODEX_SESSION_OPTION_CATALOG.models,
       record: createNativeChatSessionOptionRecord('codex'),
       mode: 'live',
-      modelLabel: 'Model'
+      modelLabel: 'Model',
+      liveTransport: 'catalog'
     })
     expect(snapshot[0]).toMatchObject({ settable: true })
     expect(snapshot[0]?.action).toEqual({ type: 'agent-picker' })
@@ -233,7 +263,8 @@ describe('buildNativeChatSessionOptionSnapshot', () => {
       models: CLAUDE_SESSION_OPTION_CATALOG.models,
       record,
       mode: 'live',
-      modelLabel: 'Model'
+      modelLabel: 'Model',
+      liveTransport: 'catalog'
     })
     const fastMode = snapshot.find((descriptor) => descriptor.id === 'fastMode')
     expect(fastMode).toMatchObject({ action: { type: 'toggle-command' } })
@@ -250,29 +281,28 @@ describe('defaults on load', () => {
       models,
       record: createNativeChatSessionOptionRecord('grok'),
       mode,
-      modelLabel: 'Model'
+      modelLabel: 'Model',
+      liveTransport: 'catalog'
     })
 
   it('shows the default model before anything is picked', () => {
     const model = grokDraft()[0]!
     expect(model).toMatchObject({ id: 'model', valueSource: 'default' })
-    expect(model.kind.type === 'select' ? model.kind.currentValue : null).toBe('grok-4.6')
+    expect(model.kind.type === 'select' ? model.kind.currentValue : null).toBe('grok-4.7')
   })
 
   it('offers the effort row under that default model without naming its value', () => {
-    // `grok --help` documents no default for --reasoning-effort, and with no model
-    // picked the launch sends the flag nowhere, so grok's own choice is unknowable.
+    // Grok documents no effort default and unpicked launches emit no flag, so the CLI choice is unknown.
     const effort = grokDraft().find((descriptor) => descriptor.id === 'effort')
     expect(effort).toMatchObject({ valueSource: 'unknown' })
     expect(effort?.kind.type === 'select' ? effort.kind.currentValue : null).toBeUndefined()
   })
 
   it('names the CLI default in a live session too, where the picker actually renders', () => {
-    // No tracked model means no `-m` was emitted, so the CLI is running its own
-    // default — as true of a running session as of a draft.
+    // No tracked model means no -m was sent; the running CLI uses its own default too.
     const live = grokDraft(GROK_SESSION_OPTION_CATALOG.models, 'live')
     expect(live[0]).toMatchObject({ id: 'model', valueSource: 'default' })
-    expect(live[0]!.kind.type === 'select' ? live[0]!.kind.currentValue : null).toBe('grok-4.6')
+    expect(live[0]!.kind.type === 'select' ? live[0]!.kind.currentValue : null).toBe('grok-4.7')
     expect(live.find((descriptor) => descriptor.id === 'effort')).toMatchObject({
       valueSource: 'unknown'
     })
@@ -299,7 +329,8 @@ describe('defaults on load', () => {
       ],
       record,
       mode: 'draft',
-      modelLabel: 'Model'
+      modelLabel: 'Model',
+      liveTransport: 'catalog'
     })
     expect(snapshot[0]).toMatchObject({ valueSource: 'dispatched' })
     expect(snapshot[0]!.kind.type === 'select' ? snapshot[0]!.kind.currentValue : null).toBe(
@@ -308,14 +339,14 @@ describe('defaults on load', () => {
   })
 
   it('shows no default for an agent whose isDefault is only decorative', () => {
-    // Claude's real default comes from the account and the user's settings, and an
-    // untouched draft sends no --model, so naming the seed's `sonnet` would be a guess.
+    // Claude’s account/settings choose its real default; untouched launches send no --model, so seeded sonnet is unproven.
     const snapshot = buildNativeChatSessionOptionSnapshot({
       catalog: CLAUDE_SESSION_OPTION_CATALOG,
       models: CLAUDE_SESSION_OPTION_CATALOG.models,
       record: claudeRecord(),
       mode: 'draft',
-      modelLabel: 'Model'
+      modelLabel: 'Model',
+      liveTransport: 'catalog'
     })
     expect(CLAUDE_SESSION_OPTION_CATALOG.models.some((model) => model.isDefault)).toBe(true)
     expect(CLAUDE_SESSION_OPTION_CATALOG.defaultModelIsCliDefault).toBeUndefined()
@@ -332,18 +363,81 @@ describe('defaults on load', () => {
       models: CLAUDE_SESSION_OPTION_CATALOG.models,
       record,
       mode: 'draft',
-      modelLabel: 'Model'
+      modelLabel: 'Model',
+      liveTransport: 'catalog'
     })
     const effort = snapshot.find((descriptor) => descriptor.id === 'effort')
     expect(effort).toMatchObject({ valueSource: 'default' })
-    expect(effort?.kind.type === 'select' ? effort.kind.currentValue : null).toBeDefined()
+    expect(effort?.kind.type === 'select' ? effort.kind.currentValue : null).toBe('high')
+  })
+})
+
+describe('a boolean option always carries a value to render', () => {
+  // Cursor defaults thinking true; omitting the display value would falsely render the switch off.
+  function cursorSnapshot(mode: 'draft' | 'live'): SessionOptionDescriptor[] {
+    const record = createNativeChatSessionOptionRecord('cursor')
+    record.model = { value: 'claude-opus-4-8', source: 'reported' }
+    return buildNativeChatSessionOptionSnapshot({
+      catalog: CURSOR_SESSION_OPTION_CATALOG,
+      models: CURSOR_SESSION_OPTION_CATALOG.models,
+      record,
+      mode,
+      modelLabel: 'Model',
+      liveTransport: mode === 'live' ? 'agent-session' : 'catalog'
+    })
+  }
+  const thinkingOf = (mode: 'draft' | 'live'): SessionOptionDescriptor | undefined =>
+    cursorSnapshot(mode).find((descriptor) => descriptor.id === 'thinking')
+
+  it('resolves an unreported live boolean to the catalog default, not to off', () => {
+    // Switches cannot display unknown; resolve to the same default used by composed dispatch.
+    const thinking = thinkingOf('live')
+    expect(thinking?.kind.type).toBe('boolean')
+    expect(thinking?.kind.type === 'boolean' ? thinking.kind.currentValue : null).toBe(true)
   })
 
-  it('does not turn a shown default into a launch flag', () => {
-    // Display is not authorization: only a persisted pick may emit `-m`.
-    expect(resolveAgentSessionOptionLaunch('grok', undefined)).toEqual({
-      args: [],
-      appliedValues: {}
+  it('keeps provenance on its own track when it resolves that value', () => {
+    // Resolved display values are not agent confirmation; keep provenance unknown/default for pills.
+    expect(thinkingOf('live')).toMatchObject({ valueSource: 'unknown' })
+    expect(thinkingOf('draft')).toMatchObject({ valueSource: 'default' })
+  })
+
+  it('resolves a tracked boolean to the tracked value, not the catalog default', () => {
+    const record = createNativeChatSessionOptionRecord('cursor')
+    record.model = { value: 'claude-opus-4-8', source: 'reported' }
+    record.valuesByModel['claude-opus-4-8'] = { thinking: { value: false, source: 'reported' } }
+    const snapshot = buildNativeChatSessionOptionSnapshot({
+      catalog: CURSOR_SESSION_OPTION_CATALOG,
+      models: CURSOR_SESSION_OPTION_CATALOG.models,
+      record,
+      mode: 'live',
+      modelLabel: 'Model',
+      liveTransport: 'agent-session'
+    })
+    const thinking = snapshot.find((descriptor) => descriptor.id === 'thinking')
+    expect(thinking?.kind.type === 'boolean' ? thinking.kind.currentValue : null).toBe(false)
+    expect(thinking).toMatchObject({ valueSource: 'reported' })
+  })
+
+  it('leaves a select able to render nothing selected', () => {
+    // Only the boolean kind resolves: a radio group can show no selection
+    // truthfully, so nothing forces a value onto it.
+    const effort = cursorSnapshot('live')!.find((descriptor) => descriptor.id === 'effort')
+    expect(effort?.kind.type === 'select' ? effort.kind.currentValue : null).toBeUndefined()
+    expect(effort).toMatchObject({ valueSource: 'unknown' })
+  })
+
+  it('includes composed launch defaults only when requested', () => {
+    // Composed model uses caller picks, never display descriptors; resolving a switch cannot alter dispatch.
+    expect(resolveAgentSessionOptionLaunch('cursor', { model: 'claude-opus-4-8' })).toEqual({
+      args: ['--model', 'claude-opus-4-8-thinking-high'],
+      appliedValues: { model: 'claude-opus-4-8', thinking: true, effort: 'high' }
+    })
+    expect(
+      resolveAgentSessionOptionLaunch('cursor', { model: 'claude-opus-4-8' }, [], false)
+    ).toEqual({
+      args: ['--model', 'claude-opus-4-8'],
+      appliedValues: { model: 'claude-opus-4-8' }
     })
   })
 })

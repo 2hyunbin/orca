@@ -3,6 +3,7 @@ import {
   decodeTerminalStreamFrame,
   decodeTerminalStreamJson,
   decodeTerminalStreamText,
+  decodeTerminalInputAck,
   type TerminalStreamFrame
 } from '../../../shared/terminal-stream-protocol'
 import { deliverTerminalDataWithDeferredCredit } from '@/lib/pane-manager/terminal-delivery-credit'
@@ -25,34 +26,43 @@ export abstract class RemoteRuntimeTerminalBinaryController extends RemoteRuntim
       this.failConnection(new Error('Remote terminal stream received a malformed frame.'))
       return
     }
+    const isOutput =
+      frame.opcode === TerminalStreamOpcode.Output ||
+      frame.opcode === TerminalStreamOpcode.OutputSpan
     const stream = this.streams.get(frame.streamId)
     if (!stream) {
-      if (
-        frame.opcode === TerminalStreamOpcode.Output ||
-        frame.opcode === TerminalStreamOpcode.OutputSpan
-      ) {
+      if (isOutput) {
         // Why: the renderer already disposed this stream; unsubscribe releases server credit that cannot reach a parser.
         this.sendFrame(frame.streamId, TerminalStreamOpcode.Unsubscribe)
       }
       return
     }
-    if (
-      (frame.opcode === TerminalStreamOpcode.Output ||
-        frame.opcode === TerminalStreamOpcode.OutputSpan) &&
-      shouldDropE2eRemoteTerminalOutput(stream, frame.payload.byteLength)
-    ) {
+    if (isOutput && shouldDropE2eRemoteTerminalOutput(stream, frame.payload.byteLength)) {
       this.queueOutputAcknowledgement(stream, frame.payload.byteLength)
       return
     }
-    stream.watchdog.recordInbound()
+    // Control frames prove transport activity, not delivery of command output.
+    stream.watchdog.recordInbound(isOutput)
     if (frame.opcode === TerminalStreamOpcode.WriteUnavailable) {
       stream.callbacks.onWriteUnavailable?.()
       return
     }
-    if (
-      frame.opcode === TerminalStreamOpcode.Output ||
-      frame.opcode === TerminalStreamOpcode.OutputSpan
-    ) {
+    if (frame.opcode === TerminalStreamOpcode.PausedOutputDropped) {
+      if (!stream.supportsPausedOutputDropNotice) {
+        return
+      }
+      stream.pausedOutputGapExpected = true
+      stream.callbacks.onPausedOutputDropped?.()
+      return
+    }
+    if (frame.opcode === TerminalStreamOpcode.InputAck) {
+      if (!stream.supportsInputAck) {
+        return
+      }
+      stream.callbacks.onInputAck?.(frame.seq, decodeTerminalInputAck(frame.payload))
+      return
+    }
+    if (isOutput) {
       this.handleOutputFrame(frame, stream)
       return
     }
@@ -86,8 +96,7 @@ export abstract class RemoteRuntimeTerminalBinaryController extends RemoteRuntim
         : decodeTerminalStreamText(frame.payload)
     const deliverOutput = (): void => {
       if (!validSpan) {
-        // Why: rendering malformed span JSON would expose protocol framing
-        // as terminal text and lose its raw sequence accounting.
+        // Malformed span JSON is framing, not terminal text; rendering it also corrupts raw sequence accounting.
         this.requestResyncSnapshot(stream)
         return
       }
@@ -95,14 +104,8 @@ export abstract class RemoteRuntimeTerminalBinaryController extends RemoteRuntim
         frame.opcode === TerminalStreamOpcode.OutputSpan && typeof span?.rawLength === 'number'
           ? span.rawLength
           : data.length
-      // Why: a resync snapshot is authoritative; discard live output while
-      // it is in flight, but still return transport credit in finally.
-      if (stream.resyncInFlight) {
-        return
-      }
       const seq = typeof frame.seq === 'number' && frame.seq > 0 ? frame.seq : undefined
-      // Why: older servers replay snapshot-covered buffered chunks after a
-      // requested recovery; rendering them would duplicate the recovered tail.
+      // Older servers replay snapshot-covered chunks; ignore them or duplicate recovered output.
       if (
         typeof seq === 'number' &&
         typeof stream.recoverySnapshotSeq === 'number' &&
@@ -110,11 +113,18 @@ export abstract class RemoteRuntimeTerminalBinaryController extends RemoteRuntim
       ) {
         return
       }
-      if (this.detectOutputGap(stream, seq, rawLength)) {
+      const resyncInFlight = stream.resyncInFlight
+      // Keep live paint during recovery to avoid round-trip freezes (#18488). Keep expectedSeq at the gap so missing recovery remains retryable.
+      if (
+        !resyncInFlight &&
+        !stream.pausedOutputGapExpected &&
+        this.detectOutputGap(stream, seq, rawLength)
+      ) {
         this.requestResyncSnapshot(stream)
         return
       }
-      if (typeof seq === 'number') {
+      if (typeof seq === 'number' && !resyncInFlight) {
+        stream.pausedOutputGapExpected = false
         stream.expectedSeq = seq
         stream.commandProbeBaselineSeq = undefined
       }

@@ -4,7 +4,6 @@ const callMock = vi.hoisted(() => vi.fn())
 const getTerminalHandleMock = vi.hoisted(() => vi.fn())
 const originalTerminalHandle = process.env.ORCA_TERMINAL_HANDLE
 
-// Why: isolate flag-to-RPC mapping; printResult only writes output.
 vi.mock('../format', () => ({ printResult: vi.fn() }))
 vi.mock('../selectors', () => ({ getTerminalHandle: getTerminalHandleMock }))
 
@@ -27,7 +26,7 @@ describe('orchestration task-create CLI mapping', () => {
 
   it('passes PowerShell-stripped deps through to the runtime', async () => {
     callMock
-      .mockResolvedValueOnce({ result: { terminal: { handle: 'term_creator' } } })
+      .mockResolvedValueOnce({ result: { identity: { handle: 'term_creator', live: true } } })
       .mockResolvedValueOnce({ result: { task: { id: 'task_2', status: 'pending' } } })
 
     await ORCHESTRATION_HANDLERS['orchestration task-create']({

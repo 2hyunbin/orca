@@ -1,43 +1,51 @@
-import {
-  budgetPressurePolicy,
-  journalTailCanShedRows,
-  journalTailIsReadyToCompact,
-  type JournalCompactionPolicy
-} from './journal-compaction'
-import { journalBlobFileSize, putJournalBlob, removeJournalBlob } from './journal-blob-store'
-import { appendJournalRows } from './journal-log-file'
-import { blobDigestsInBody } from './journal-reducer'
-import { journalDirectoryBytes } from './journal-physical-quota'
-import type { JournalLifecycleAdmission } from './journal-lifecycle-admission'
-import { journalRowByteLength, type JournalRow } from './journal-row-schema'
-import {
-  AgentSessionJournalError,
-  assertJournalFence,
-  assertJournalWritable,
-  type JournalAppendBudget
-} from './journal-write-guards'
+import type Database from '../../sqlite/sync-database'
+import { insertJournalRow } from './journal-row-table'
+import type { JournalHostDatabase } from './journal-host-database'
+import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
+import type { JournalRow } from './journal-row-schema'
+import { assertJournalFence, assertJournalWritable } from './journal-write-guards'
+import type { JournalWriteBody } from './journal-write-queue'
 
-type JournalBlob = { digest: string; payload: string }
+/** Write receipts in the row transaction; notify synchronously after COMMIT, never rollback. */
+export type JournalOperationReceipt = {
+  write: (db: Database.Database, row?: JournalRow) => void
+  committed: () => void
+}
+
+export function composeJournalOperationReceipts(
+  ...receipts: JournalOperationReceipt[]
+): JournalOperationReceipt {
+  return {
+    write: (db, row) => receipts.forEach((receipt) => receipt.write(db, row)),
+    committed: () => receipts.forEach((receipt) => receipt.committed())
+  }
+}
+
+export function writeReceiptIfChanged<T>(
+  run: (db: Database.Database) => T,
+  changed: (result: T) => boolean,
+  receipt?: JournalOperationReceipt
+): (db: Database.Database) => T {
+  return (db) => {
+    const result = run(db)
+    if (receipt && changed(result)) {
+      receipt.write(db)
+    }
+    return result
+  }
+}
 
 export type JournalRowWriterDeps = {
-  journalDir: string
   sessionId: string
-  budget: JournalAppendBudget
-  lifecycleAdmission: JournalLifecycleAdmission
-  autoCompact: boolean
-  compaction: JournalCompactionPolicy
   now: () => number
-  serialize: <T>(run: () => Promise<T>) => Promise<T>
+  serialize: <T>(run: JournalWriteBody<T>) => Promise<T>
+  database: () => JournalHostDatabase
   readOnly: () => boolean
-  setReadOnly: (readOnly: boolean) => void
-  physicalBytes: () => number
   highestFence: () => number
   nextSequence: () => number
-  tailRows: () => readonly JournalRow[]
-  referencedBlobDigests: () => ReadonlySet<string>
-  compact: (now: number, policy: JournalCompactionPolicy) => Promise<void>
-  commit: (row: JournalRow, physicalBytes: number) => void
-  appendRows?: (journalDir: string, rows: readonly JournalRow[]) => Promise<void>
+  commit: (rows: readonly JournalRow[], savedAt: number) => void
+  /** Streamed-text-only revisions may skip per-commit fsync; settlement makes them durable. */
+  streamedTextRevision?: (row: JournalRow) => boolean
 }
 
 export class JournalRowWriter {
@@ -45,144 +53,79 @@ export class JournalRowWriter {
 
   enqueue(
     build: (seq: number, ts: number) => JournalRow,
-    blobs: readonly JournalBlob[] = []
+    receipt?: JournalOperationReceipt
   ): Promise<JournalRow> {
-    return this.deps.serialize(async () => {
+    return this.deps.serialize(() => {
       assertJournalWritable(this.deps.readOnly(), this.deps.sessionId)
-      const ts = this.deps.now()
-      const row = build(this.deps.nextSequence(), ts)
+      const savedAt = this.deps.now()
+      const row = build(this.deps.nextSequence(), savedAt)
       assertJournalFence(row.fence, this.deps.highestFence())
-      // The in-memory counter is an optimization, not the quota source of
-      // truth: a prior crash may have left a durable-write temp beside the
-      // finals, and a concurrent/retried opener may have materialized files
-      // after the last commit callback. Recount before any speculative write
-      // so the peak check includes those bytes.
-      let physicalBytes = Math.max(
-        this.deps.physicalBytes(),
-        await journalDirectoryBytes(this.deps.journalDir)
+      this.deps.database().transaction(
+        (db) => {
+          insertJournalRow(db, this.deps.sessionId, row, savedAt)
+          receipt?.write(db, row)
+        },
+        !receipt && this.streamed([row])
       )
-      const admission = this.deps.lifecycleAdmission.prepare(row, physicalBytes)
-      const newBlobs = await uniqueNewBlobs(this.deps.journalDir, blobs)
-      const blobBytes = newBlobs.reduce(
-        (total, blob) => total + Buffer.byteLength(blob.payload, 'utf8'),
-        0
-      )
-      const budgetCompaction = budgetPressurePolicy(this.deps.compaction)
-      let effectiveSize = physicalBytes + blobBytes + admission.protectedBytes
-      if (
-        this.deps.autoCompact &&
-        this.deps.budget.wouldExceedSize(row, effectiveSize) &&
-        journalTailCanShedRows(this.deps.tailRows(), budgetCompaction, ts)
-      ) {
-        await this.deps.compact(ts, budgetCompaction)
-        physicalBytes = this.deps.physicalBytes()
-        effectiveSize = physicalBytes + blobBytes + admission.protectedBytes
-      }
-      const lifecycleRateCheckpoint = admission.lifecycleCovered
-        ? this.deps.budget.checkpoint()
-        : null
-      const appendRateCheckpoint = this.deps.budget.checkpoint()
-      let committed = false
-      let appendMayHaveLanded = false
-      try {
-        if (admission.lifecycleCovered) {
-          this.deps.budget.assertReservedLifecycle(row, effectiveSize)
-        } else {
-          this.deps.budget.assert(row, ts, effectiveSize)
-        }
-        const appendedBytes = blobBytes + journalRowByteLength(row)
-        if (
-          physicalBytes + appendedBytes >
-          this.deps.budget.maxSessionBytes - admission.protectedBytes
-        ) {
-          throw new AgentSessionJournalError(
-            'journal_bound_exceeded',
-            `agent-session journal for ${this.deps.sessionId} reached its ${this.deps.budget.maxSessionBytes}-byte physical bound`
-          )
-        }
-        await this.commitFiles(row, newBlobs, () => {
-          appendMayHaveLanded = true
-        })
-        physicalBytes += appendedBytes
-        this.deps.commit(row, physicalBytes)
-        this.deps.lifecycleAdmission.commit(admission)
-        committed = true
-      } catch (error) {
-        if (!committed && lifecycleRateCheckpoint) {
-          this.deps.budget.restore(lifecycleRateCheckpoint)
-        }
-        if (!committed && !appendMayHaveLanded) {
-          this.deps.budget.restore(appendRateCheckpoint)
-        }
-        throw error
-      }
-      if (
-        this.deps.autoCompact &&
-        journalTailIsReadyToCompact(this.deps.tailRows(), this.deps.compaction, ts)
-      ) {
-        await this.deps.compact(ts, this.deps.compaction)
-      }
+      // Adopt durable sequence state before fallible work: nonthrowing receipt ledger, then fold.
+      receipt?.committed()
+      this.deps.commit([row], savedAt)
       return row
     })
   }
 
-  private async commitFiles(
-    row: JournalRow,
-    blobs: readonly JournalBlob[],
-    markAppendLanded: () => void
-  ): Promise<void> {
-    const persisted: string[] = []
-    let appendMayHaveLanded = false
-    try {
-      for (const blob of blobs) {
-        await putJournalBlob(this.deps.journalDir, blob.digest, blob.payload)
-        persisted.push(blob.digest)
-      }
-      appendMayHaveLanded = true
-      markAppendLanded()
-      await (this.deps.appendRows ?? appendJournalRows)(this.deps.journalDir, [row])
-    } catch (error) {
-      if (appendMayHaveLanded) {
-        this.deps.setReadOnly(true)
-        throw error
-      }
-      const retained = this.referencedBlobDigestsIncludingTail()
-      for (const digest of persisted) {
-        if (!retained.has(digest)) {
-          await removeJournalBlob(this.deps.journalDir, digest)
-        }
-      }
-      throw error
-    }
+  /** Plan on the write lane and commit all rows atomically; receiptRow identifies the receipt target. */
+  enqueueRows(
+    plan: () => readonly ((seq: number, ts: number) => JournalRow)[],
+    receipt?: JournalOperationReceipt,
+    receiptRow?: (rows: readonly JournalRow[]) => JournalRow | undefined
+  ): Promise<JournalRow[]> {
+    return this.deps.serialize(() => this.writeRows(plan, receipt, receiptRow))
   }
 
-  private referencedBlobDigestsIncludingTail(): Set<string> {
-    const retained = new Set(this.deps.referencedBlobDigests())
-    for (const row of this.deps.tailRows()) {
-      if (row.kind === 'item') {
-        blobDigestsInBody(row.body, retained)
-      } else if (row.kind === 'lifecycle-batch') {
-        for (const mutation of row.mutations) {
-          if (mutation.kind === 'item') {
-            blobDigestsInBody(mutation.body, retained)
-          }
+  /** Caller must already own the write lane. */
+  writeRows(
+    plan: () => readonly ((seq: number, ts: number) => JournalRow)[],
+    receipt?: JournalOperationReceipt,
+    receiptRow?: (rows: readonly JournalRow[]) => JournalRow | undefined
+  ): JournalRow[] {
+    assertJournalWritable(this.deps.readOnly(), this.deps.sessionId)
+    const first = this.deps.nextSequence()
+    const ts = this.deps.now()
+    const rows = plan().map((build, index) => build(first + index, ts))
+    if (rows.length === 0) {
+      return rows
+    }
+    for (const row of rows) {
+      assertJournalFence(row.fence, this.deps.highestFence())
+    }
+    this.deps.database().transaction(
+      (db) => {
+        for (const row of rows) {
+          insertJournalRow(db, this.deps.sessionId, row, ts)
         }
-      }
-    }
-    return retained
+        receipt?.write(db, receiptRow?.(rows))
+      },
+      !receipt && this.streamed(rows)
+    )
+    receipt?.committed()
+    this.deps.commit(rows, ts)
+    return rows
   }
-}
 
-async function uniqueNewBlobs(
-  journalDir: string,
-  blobs: readonly JournalBlob[]
-): Promise<JournalBlob[]> {
-  const unique = new Map(blobs.map((blob) => [blob.digest, blob]))
-  const result: JournalBlob[] = []
-  for (const blob of unique.values()) {
-    if ((await journalBlobFileSize(journalDir, blob.digest)) === null) {
-      result.push(blob)
-    }
+  /** Serialize sequence assignment, durable write and replay-equivalent folding. */
+  append(
+    build: (seq: number, ts: number) => JournalRow,
+    receipt?: JournalOperationReceipt
+  ): Promise<AgentJournalCursor> {
+    return this.enqueue(build, receipt).then((row) => ({
+      epoch: row.epoch,
+      sequence: row.seq
+    }))
   }
-  return result
+
+  private streamed(rows: readonly JournalRow[]): boolean {
+    const { streamedTextRevision } = this.deps
+    return streamedTextRevision !== undefined && rows.every((row) => streamedTextRevision(row))
+  }
 }

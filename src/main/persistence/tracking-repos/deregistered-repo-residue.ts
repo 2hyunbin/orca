@@ -1,39 +1,70 @@
 import type { PersistedState } from '../../../shared/persisted-state-types'
-import { getWorktreeIdFromHostIdentity } from '../../../shared/worktree/host-qualified-identity'
+import {
+  getExecutionHostIdFromWorktreeHostIdentity,
+  getWorktreeIdFromHostIdentity
+} from '../../../shared/worktree/host-qualified-identity'
+import { parseExecutionHostId } from '../../../shared/execution-host'
+import { addWorkspaceSessionWorktreeOwners } from '../restoring-sessions/session-worktree-ownership'
 import { splitWorktreeId } from '../../../shared/worktree/id'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { SESSION_FIELDS_PRUNED_BY_OWNER_KEY } from '../../orca-profiles/profile-project-session-field-disposition'
 import { ownerKeyWorktreeIds } from '../../orca-profiles/profile-project-worktree-identity'
 
-/**
- * Repo ids that still own persisted rows but no longer appear in `state.repos`.
- *
- * Why nothing else finds them: every other sweeper is gated on the repo still being registered, so
- * deregistering a project stranded the rows it owned permanently — including a paired client's
- * mirror of a remote host's session partition, which no local repo removal can reach (#17776).
- */
+/** Paired-host catalogs live on the remote host. */
+const isPairedHost = (hostId: string | null | undefined): boolean =>
+  parseExecutionHostId(hostId)?.kind === 'runtime'
+
+function ownerKeyRepoIds(ownerKey: string | null | undefined): string[] {
+  return ownerKey
+    ? ownerKeyWorktreeIds(ownerKey).flatMap((worktreeId) => {
+        const repoId = splitWorktreeId(worktreeId)?.repoId
+        return repoId ? [repoId] : []
+      })
+    : []
+}
+
+/** Retain paired-host rows: their absent local catalog cannot prove deletion before pairing (#17776). */
 export function collectDeregisteredRepoIds(state: PersistedState): Set<string> {
   const liveRepoIds = new Set(state.repos.map((repo) => repo.id))
+  const retainOwner = (ownerKey: string | null | undefined): void => {
+    for (const repoId of ownerKeyRepoIds(ownerKey)) {
+      liveRepoIds.add(repoId)
+    }
+  }
+  // This walker requires the shape but uses only addOwner.
+  const retainCollector = { owners: new Set<string>(), addOwner: retainOwner }
+  for (const [hostId, session] of Object.entries(state.workspaceSessionsByHostId ?? {})) {
+    if (session && isPairedHost(hostId)) {
+      addWorkspaceSessionWorktreeOwners(session, retainCollector)
+    }
+  }
+  for (const [worktreeId, meta] of Object.entries(state.worktreeMeta)) {
+    if (isPairedHost(meta.hostId)) {
+      retainOwner(worktreeId)
+    }
+  }
+  for (const alias of Object.keys(state.worktreeIdentityAliases ?? {})) {
+    if (isPairedHost(getExecutionHostIdFromWorktreeHostIdentity(alias))) {
+      retainOwner(getWorktreeIdFromHostIdentity(alias))
+    }
+  }
+  // Staged imports own recovery rows before repo registration.
+  for (const staged of state.orcadMigrationStagedCatalogs ?? []) {
+    for (const repo of staged.manifest.payload.repositories) {
+      liveRepoIds.add(repo.id)
+    }
+  }
   const orphanRepoIds = new Set<string>()
-  // Only a full `<repoId>::<path>` locator seeds the set. A bare key -- a folder workspace id, a
-  // repo-keyed topology revision, a test-shaped locator -- cannot be told apart from a repo id, and
-  // guessing wrong here deletes live session state.
+  // Only full repo::path locators prove repo identity; bare folder/revision keys could delete live sessions.
   const addWorktreeId = (worktreeId: string | null | undefined): void => {
     const repoId = worktreeId ? splitWorktreeId(worktreeId)?.repoId : undefined
     if (repoId && !liveRepoIds.has(repoId)) {
       orphanRepoIds.add(repoId)
     }
   }
-  /**
-   * Seed from an owner key, which can read as two different locators (see `ownerKeyWorktreeIds`).
-   * All or nothing: if either reading names a live repo the key is that repo's, and seeding the
-   * other reading would hand the removal pass -- which accepts either -- a live row to delete.
-   */
+  /** Ambiguous owner keys seed removal only when neither reading names a live repo. */
   const addOwnerKey = (ownerKey: string): void => {
-    const repoIds = ownerKeyWorktreeIds(ownerKey).flatMap((worktreeId) => {
-      const repoId = splitWorktreeId(worktreeId)?.repoId
-      return repoId ? [repoId] : []
-    })
+    const repoIds = ownerKeyRepoIds(ownerKey)
     if (repoIds.length > 0 && repoIds.every((repoId) => !liveRepoIds.has(repoId))) {
       for (const repoId of repoIds) {
         orphanRepoIds.add(repoId)
@@ -41,9 +72,7 @@ export function collectDeregisteredRepoIds(state: PersistedState): Set<string> {
     }
   }
 
-  // Deliberately not seeded from `sparsePresetsByRepo` or `retiredWorktreeNamesByRepo`: both are
-  // bounded, and dropping a retired-name row would let a re-added repo reissue a name onto a cwd
-  // that still holds a prior occupant's agent state.
+  // Retain bounded presets/name registries; reissuing retired names could collide with old agent state.
   for (const worktreeId of Object.keys(state.worktreeMeta)) {
     addWorktreeId(worktreeId)
   }
@@ -84,7 +113,7 @@ export function collectDeregisteredRepoIds(state: PersistedState): Set<string> {
     for (const ownerKey of Object.keys(session.browserTabsByWorktree ?? {})) {
       addOwnerKey(ownerKey)
     }
-    // Pruned by bespoke rules rather than by owner key, so the loop above never reaches them.
+    // These references bypass owner-indexed pruning and need explicit collection.
     for (const ownerKey of [
       session.activeWorktreeId,
       session.activeWorkspaceKey,
@@ -94,14 +123,15 @@ export function collectDeregisteredRepoIds(state: PersistedState): Set<string> {
         addOwnerKey(ownerKey)
       }
     }
-    // Not seeded from `terminalTopologyRevisionByRepoId`: its keys are bare repo ids by contract,
-    // and a bare key is exactly what `addWorktreeId` refuses to trust. Rows there are removed once
-    // any locator seeds their repo id, which every repo that ever opened a terminal has.
+    // Bare repo-keyed revisions cannot prove ownership; locator evidence seeds their eventual cleanup.
     for (const record of Object.values(session.sleepingAgentSessionsByPaneKey ?? {})) {
       addWorktreeId(record.worktreeId)
     }
     for (const tombstone of Object.values(session.terminalSurfaceTombstonesByPaneKey ?? {})) {
       addWorktreeId(tombstone.worktreeId)
+    }
+    for (const record of Object.values(session.closedTerminalTabTombstonesByTabId ?? {})) {
+      addWorktreeId(record.worktreeId)
     }
   }
   return orphanRepoIds

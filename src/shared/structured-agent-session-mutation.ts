@@ -1,4 +1,9 @@
 import { sha256 } from './sha256'
+import type {
+  StructuredAgentSessionFirstMessage,
+  StructuredAgentSessionResumeSource
+} from './structured-agent-session-create'
+import type { StructuredAgentId } from './agent-session-provider-handle'
 
 function canonicalize(value: unknown): string {
   if (value === null || typeof value !== 'object') {
@@ -24,6 +29,43 @@ export function structuredAgentSessionPayloadFingerprint(input: {
     )
   )
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+export function structuredAgentSessionDomainFingerprint(input: {
+  domain: string
+  sessionId: string
+  fields: Record<string, unknown>
+}): string {
+  return structuredAgentSessionPayloadFingerprint({
+    method: input.domain,
+    sessionId: input.sessionId,
+    fields: input.fields
+  })
+}
+
+export function structuredAgentSessionCreateFingerprint(input: {
+  sessionId: string
+  worktree: string
+  agent: StructuredAgentId
+  resumeFrom?: StructuredAgentSessionResumeSource
+  tabId?: string
+  firstMessage?: StructuredAgentSessionFirstMessage
+  options?: Readonly<Record<string, string>>
+}): string {
+  return structuredAgentSessionPayloadFingerprint({
+    method: 'agentSession.create',
+    sessionId: input.sessionId,
+    fields: {
+      worktree: input.worktree,
+      agent: input.agent,
+      // Dropping undefined preserves blank-create digests; resume intent must not replay as blank create.
+      resumeFrom: input.resumeFrom,
+      // Include tabId in the host digest; retries replay its recorded host-owned ID.
+      tabId: input.tabId,
+      firstMessage: input.firstMessage,
+      options: input.options
+    }
+  })
 }
 
 export function createStructuredAgentSessionOperationId(

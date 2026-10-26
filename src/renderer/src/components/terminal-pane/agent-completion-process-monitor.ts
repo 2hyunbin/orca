@@ -2,7 +2,15 @@ import {
   enqueueAgentProcessInspection,
   type InspectionPriority
 } from './agent-process-inspection-queue'
-import type { RecognizedAgentProcess } from '../../../../shared/agent-process-recognition'
+import {
+  recognizeAgentProcess,
+  type RecognizedAgentProcess
+} from '../../../../shared/agent-process-recognition'
+import { isShellProcess } from '../../../../shared/shell-process-detection'
+import {
+  clientOnlyUnverifiableInspection,
+  isClientOnlyUnverifiableInspection
+} from '../../../../shared/terminal-process-inspection'
 import type { ProcessMonitorOptions } from './agent-completion-process-types'
 import { createAgentCompletionPollScheduler } from './agent-completion-poll-scheduler'
 import {
@@ -18,7 +26,6 @@ export function createAgentCompletionProcessMonitor({
   establishAgentEvidence,
   clearAgentRunEvidence,
   hasPendingHookDone,
-  hasPendingCodexAttention,
   dispatchCompletion
 }: ProcessMonitorOptions) {
   const remoteInspection: RemoteInspectionState = {
@@ -47,7 +54,7 @@ export function createAgentCompletionProcessMonitor({
     createAgentCompletionPollScheduler({ options, state, pendingTitle, requestInspection })
 
   function handleRecognizedProcess(process: RecognizedAgentProcess): void {
-    state.pendingProcessExitAgent = null
+    state.pendingProcessExit = null
     const replayIdentity = identityScope.getLast()
     if (
       !state.lastForegroundAgent &&
@@ -101,20 +108,57 @@ export function createAgentCompletionProcessMonitor({
     enqueueAgentProcessInspection({
       priority,
       canRun: () => !state.disposed,
-      // Local reads all resolve out of one process-table capture; remote ones each cost their
-      // own execution-host round trip and stay admitted one at a time.
+      // Local reads share one capture; remote reads consume separate host round trips.
       sharesHostObservation: options.isRemotePtyId?.(ptyId) !== true,
       run: async () => {
         let inspectedRecognizedAgent = false
         let inspectionSucceeded = false
         try {
-          const result = await (expectedIncarnationIdAtRequest
-            ? options.inspectProcess(options.getSettings(), ptyId, {
-                expectedIncarnationId: expectedIncarnationIdAtRequest
-              })
-            : options.inspectProcess(options.getSettings(), ptyId))
+          // Only local cadence reads may omit evidence; pending-title and remote decisions require the full capture.
+          const inspectOptions = {
+            ...(expectedIncarnationIdAtRequest
+              ? { expectedIncarnationId: expectedIncarnationIdAtRequest }
+              : {}),
+            ...(priority === 'cadence' && options.isRemotePtyId?.(ptyId) !== true
+              ? { steadyState: true }
+              : {})
+          }
+          let result = await (Object.keys(inspectOptions).length > 0
+            ? options.inspectProcess(ptyId, inspectOptions)
+            : options.inspectProcess(ptyId))
+          // A stale shell cache must not retire a live agent and disable its mouse reporting (#29996).
+          if (
+            options.isRemotePtyId?.(ptyId) !== true &&
+            options.confirmForegroundProcess &&
+            state.lastForegroundAgent &&
+            state.hasAgentRunEvidence &&
+            !isClientOnlyUnverifiableInspection(result) &&
+            result.childProcessEvidence !== 'unverifiable' &&
+            !result.hasChildProcesses &&
+            !recognizeAgentProcess(result.foregroundProcess)
+          ) {
+            const processSessionAtConfirmation = state.processSession
+            const foregroundProcess = await options.confirmForegroundProcess(ptyId)
+            // Another foreground reader can replace the agent while this check is pending.
+            if (state.processSession !== processSessionAtConfirmation) {
+              return
+            }
+            result =
+              foregroundProcess === null
+                ? clientOnlyUnverifiableInspection('foreground_unconfirmed')
+                : {
+                    ...result,
+                    foregroundProcess,
+                    // An unlisted shell name (-zsh, wsl.exe) that matches the cached read is still exit evidence.
+                    hasChildProcesses:
+                      !isShellProcess(foregroundProcess) &&
+                      foregroundProcess !== result.foregroundProcess
+                  }
+          }
           if (
             !state.disposed &&
+            options.isLive() &&
+            options.getPtyId() === ptyId &&
             generationAtRequest === state.inspectionGeneration &&
             (options.getExpectedIncarnationId?.() ?? null) === expectedIncarnationIdAtRequest
           ) {
@@ -131,7 +175,6 @@ export function createAgentCompletionProcessMonitor({
                 identityScope,
                 clearAgentRunEvidence,
                 hasPendingHookDone,
-                hasPendingCodexAttention,
                 scheduleNextPoll,
                 handleRecognizedProcess,
                 dispatchCompletion,
@@ -141,7 +184,7 @@ export function createAgentCompletionProcessMonitor({
             inspectionSucceeded = true
           }
         } catch {
-          state.pendingProcessExitAgent = null
+          state.pendingProcessExit = null
           state.consecutiveInspectionErrors += 1
         } finally {
           state.inspectionInFlight = false
@@ -178,6 +221,11 @@ export function createAgentCompletionProcessMonitor({
     requestInspection,
     scheduleNextPoll,
     clearPollTimer,
+    observeRecognizedProcess: (process: RecognizedAgentProcess) => {
+      if (!state.disposed) {
+        handleRecognizedProcess(process)
+      }
+    },
     start: () => {
       state.pollTrackingStarted = true
       scheduleNextPoll()

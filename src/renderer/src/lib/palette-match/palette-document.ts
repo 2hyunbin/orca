@@ -1,6 +1,7 @@
 import {
   indexPaletteFields,
   type PaletteFieldSource,
+  type PaletteEvidenceFieldSource as IndexedPaletteEvidenceFieldSource,
   type PaletteIndexedField
 } from './indexed-field'
 import type { MatchRange } from './normalized-text'
@@ -18,17 +19,12 @@ export type PaletteEvidenceUnit = {
   accessibilityLabel: string
 }
 
-export type PaletteEvidenceFieldSource = PaletteFieldSource & {
-  evidenceId: string
+export type PaletteEvidenceFieldSource = IndexedPaletteEvidenceFieldSource & {
   /** Offset of this field's text inside its unit's rendered text. */
   renderOffset: number
 }
 
-/**
- * A `left/right` token may cover two visible fields at once, e.g. `orca/main`
- * meaning repo + branch. Both halves must hit or the token falls back to a
- * literal match inside one field.
- */
+/** Composite left/right tokens must prove both visible fields; otherwise match literally within one field. */
 export type PaletteCompositePair = { leftFieldId: string; rightFieldId: string }
 
 export type PaletteDocument = {
@@ -39,7 +35,6 @@ export type PaletteDocument = {
   renderOffsetByFieldId: ReadonlyMap<string, number>
   /** Visible identity fields, cached because they carry the whole-query check. */
   visibleFields: readonly PaletteIndexedField[]
-  fieldsByEvidenceId: ReadonlyMap<string, readonly PaletteIndexedField[]>
   fieldById: ReadonlyMap<string, PaletteIndexedField>
 }
 
@@ -65,34 +60,26 @@ export function buildPaletteDocument(input: PaletteDocumentInput): PaletteDocume
     if (!fields.length) {
       continue
     }
-    // Why first-wins, matching indexPaletteFields: it keeps the first entry's fields, so
-    // overwriting the unit here would pair one record's rendered text with another's
-    // match offsets — highlights landing outside the string the row actually shows.
+    // Keep first evidence units with first indexed fields or text and highlight offsets would come from different records.
     if (evidenceUnits.has(entry.unit.id)) {
       continue
     }
     evidenceUnits.set(entry.unit.id, entry.unit)
     for (const field of fields) {
       evidenceSources.push(field)
-      renderOffsetByFieldId.set(field.id, field.renderOffset)
+      if (!renderOffsetByFieldId.has(field.id)) {
+        renderOffsetByFieldId.set(field.id, field.renderOffset)
+      }
     }
   }
 
   const fields = indexPaletteFields([...input.visibleFields, ...evidenceSources])
-  const fieldsByEvidenceId = new Map<string, PaletteIndexedField[]>()
   const visibleFields: PaletteIndexedField[] = []
   const fieldById = new Map<string, PaletteIndexedField>()
   for (const field of fields) {
     fieldById.set(field.id, field)
     if (!field.evidenceId) {
       visibleFields.push(field)
-      continue
-    }
-    const bucket = fieldsByEvidenceId.get(field.evidenceId)
-    if (bucket) {
-      bucket.push(field)
-    } else {
-      fieldsByEvidenceId.set(field.evidenceId, [field])
     }
   }
 
@@ -106,7 +93,6 @@ export function buildPaletteDocument(input: PaletteDocumentInput): PaletteDocume
     evidenceUnits,
     renderOffsetByFieldId,
     visibleFields,
-    fieldsByEvidenceId,
     fieldById
   }
 }
@@ -127,17 +113,18 @@ export type PaletteSupportingEvidence = {
 }
 
 export type PaletteDocumentRank = {
-  /** 0 when a recognized exact intent (such as a task URL) produced this row. */
-  exactIntent: number
-  /** Tokens whose chosen assignment only matched container fields. */
+  /** 0 recognized destination, 1 eligible equality, 2 structured, 3 fallback. */
+  destination: number
+  recovery: number
+  wordMatch: number
+  coverage: number
+  /** Tokens proved only by container fields; fewer preserves direct-match relevance. */
   containerOnlyTokenCount: number
-  /** 0 equality, 1 prefix, 2 word boundary, 3 none — whole query in visible text. */
-  wholeQuery: number
-  worstQuality: number
-  /** 0 when every token landed on visible identity text. */
-  usesSupportingEvidence: number
-  fuzzyTokenCount: number
-  fieldHopCount: number
+  /** Tokens that required compact or typo recovery; fewer breaks equal-severity ties. */
+  recoveryTokenCount: number
+  strength: number
+  /** 0 prefix, 1 later word boundary, 2 distributed/other. */
+  placement: number
 }
 
 export type PaletteDocumentMatch = {
@@ -149,20 +136,70 @@ export type PaletteDocumentMatch = {
 }
 
 const RANK_KEYS: readonly (keyof PaletteDocumentRank)[] = [
-  'exactIntent',
+  'destination',
+  'recovery',
+  'wordMatch',
+  'coverage',
   'containerOnlyTokenCount',
-  'wholeQuery',
-  'worstQuality',
-  'usesSupportingEvidence',
-  'fuzzyTokenCount',
-  'fieldHopCount'
+  'recoveryTokenCount',
+  'strength',
+  'placement'
 ]
 
-export function comparePaletteDocumentRank(a: PaletteDocumentRank, b: PaletteDocumentRank): number {
-  for (const key of RANK_KEYS) {
-    if (a[key] !== b[key]) {
-      return a[key] - b[key]
+const SEMANTIC_RANK_KEYS: readonly (keyof PaletteDocumentRank)[] = [
+  'destination',
+  'recovery',
+  'wordMatch',
+  'coverage',
+  'containerOnlyTokenCount',
+  'recoveryTokenCount',
+  'strength'
+]
+
+function compareRankKeys(
+  a: PaletteDocumentRank,
+  b: PaletteDocumentRank,
+  keys: readonly (keyof PaletteDocumentRank)[]
+): number {
+  for (const key of keys) {
+    const difference = a[key] - b[key]
+    if (difference !== 0) {
+      return difference
     }
   }
   return 0
+}
+
+export function comparePaletteSemanticRank(a: PaletteDocumentRank, b: PaletteDocumentRank): number {
+  return compareRankKeys(a, b, SEMANTIC_RANK_KEYS)
+}
+
+export function comparePaletteDocumentRank(a: PaletteDocumentRank, b: PaletteDocumentRank): number {
+  return compareRankKeys(a, b, RANK_KEYS)
+}
+
+export function createRecognizedPaletteRank(): PaletteDocumentRank {
+  return {
+    destination: 0,
+    recovery: 0,
+    wordMatch: 0,
+    coverage: 0,
+    containerOnlyTokenCount: 0,
+    recoveryTokenCount: 0,
+    strength: 0,
+    placement: 0
+  }
+}
+
+export function createPaletteFallbackRank(): PaletteDocumentRank {
+  return {
+    destination: 3,
+    recovery: 0,
+    wordMatch: 0,
+    coverage: 0,
+    containerOnlyTokenCount: 0,
+    recoveryTokenCount: 0,
+    strength: 0,
+    placement: 0
+  }
 }

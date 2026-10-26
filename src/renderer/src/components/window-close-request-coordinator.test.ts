@@ -22,7 +22,6 @@ vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 
 describe('window-close-request-coordinator', () => {
   const confirmWindowClose = vi.fn()
-  const cancelWindowClose = vi.fn()
   const unregisterFns: (() => void)[] = []
 
   const addGuard = (guard: () => boolean | Promise<boolean>): void => {
@@ -31,14 +30,12 @@ describe('window-close-request-coordinator', () => {
 
   beforeEach(() => {
     confirmWindowClose.mockClear()
-    cancelWindowClose.mockClear()
     vi.mocked(toast.error).mockClear()
-    // Why: dispatch falls back to the preload bridge when no rich handler is
-    // registered; stub just the surface it touches.
+    // Without a rich close handler, dispatch uses only this preload fallback surface.
     const windowTarget = new EventTarget() as EventTarget & {
-      api: { ui: { cancelWindowClose: () => void; confirmWindowClose: () => void } }
+      api: { ui: { confirmWindowClose: () => void } }
     }
-    windowTarget.api = { ui: { cancelWindowClose, confirmWindowClose } }
+    windowTarget.api = { ui: { confirmWindowClose } }
     ;(globalThis as unknown as { window: typeof windowTarget }).window = windowTarget
   })
 
@@ -49,8 +46,7 @@ describe('window-close-request-coordinator', () => {
   })
 
   it('has no handler by default, so the App root falls back to confirming the close', () => {
-    // Why: on the no-workspace landing page Terminal is not mounted, so no rich
-    // handler is registered and the App-root subscription must close directly.
+    // Terminal is absent on the landing page; App must still service close directly.
     expect(getWindowCloseRequestHandler()).toBeNull()
   })
 
@@ -66,7 +62,6 @@ describe('window-close-request-coordinator', () => {
     expect(getWindowCloseRequestHandler()).toBeNull()
   })
 
-  // The #5144 contract: a close request must always be acted on.
   it('confirms the close directly when no rich handler is registered (no-workspace path)', async () => {
     await dispatchWindowCloseRequest({ isQuitting: true })
 
@@ -98,10 +93,9 @@ describe('window-close-request-coordinator', () => {
       { once: true }
     )
 
-    await dispatchWindowCloseRequest({ isQuitting: true, requestId: 42 })
+    await dispatchWindowCloseRequest({ isQuitting: true })
 
     expect(confirmWindowClose).not.toHaveBeenCalled()
-    expect(cancelWindowClose).toHaveBeenCalledWith(42)
     expect(toast.error).toHaveBeenCalledWith(
       'Quit canceled: the session snapshot could not be saved (sendSync payload rejected).'
     )
@@ -134,12 +128,10 @@ describe('window-close-request-coordinator', () => {
     await dispatchWindowCloseRequest({ isQuitting: false })
 
     expect(handler).toHaveBeenCalledWith({ isQuitting: false })
-    // Why: confirmation is the rich handler's responsibility (after save dialogs
-    // / running-process checks) — dispatch must not short-circuit it.
+    // Only the rich handler confirms after save/process guards; dispatch must not bypass them.
     expect(confirmWindowClose).not.toHaveBeenCalled()
   })
 
-  // Pre-close guards (e.g. unsaved Settings prompt drafts).
   it('cancels the close — no confirm, no handler — when a guard vetoes', async () => {
     const handler = vi.fn()
     setWindowCloseRequestHandler(handler)
@@ -183,7 +175,6 @@ describe('window-close-request-coordinator', () => {
     addGuard(guard)
 
     const first = dispatchWindowCloseRequest({ isQuitting: true })
-    // Second request arrives while the first guard's dialog is still open.
     await dispatchWindowCloseRequest({ isQuitting: true })
     expect(guard).toHaveBeenCalledTimes(1)
 
@@ -217,26 +208,5 @@ describe('window-close-request-coordinator', () => {
       })
     ).toThrow('listener exploded')
     expect(isWindowCloseCheckpointInProgress()).toBe(false)
-  })
-
-  it('tells main the quit was abandoned when a guard vetoes', () => {
-    // A guard veto never reaches beforeunload, so without this signal main cannot distinguish
-    // "still deciding" from "the user said no" — and a relaunch deferred to `quit` stays armed.
-    return (async () => {
-      registerWindowCloseGuard(() => false)
-      await dispatchWindowCloseRequest({ isQuitting: true })
-      expect(cancelWindowClose).toHaveBeenCalledTimes(1)
-      expect(confirmWindowClose).not.toHaveBeenCalled()
-    })()
-  })
-
-  it('names the request it is abandoning so main cannot mistake it for a later one', () => {
-    // The correlation is only real if the sender supplies the id; an undefined id bypasses the
-    // numeric check in main and lets a stale cancel clear the current quit.
-    return (async () => {
-      registerWindowCloseGuard(() => false)
-      await dispatchWindowCloseRequest({ isQuitting: true, requestId: 7 })
-      expect(cancelWindowClose).toHaveBeenCalledWith(7)
-    })()
   })
 })

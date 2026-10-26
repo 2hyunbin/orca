@@ -1,24 +1,32 @@
 import { execFile as execFileCb } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { promisify } from 'node:util'
+import { psLocaleEnvironment } from './ps-locale-environment'
 import {
+  captureDarwinProcessTable,
+  resetDarwinProcessTableCaptureForTests
+} from './darwin-process-table-capture'
+import {
+  PROCESS_TABLE_SNAPSHOT_MAX_STALENESS_MS,
   PS_ARGS,
   PS_MAX_BUFFER_BYTES,
   ProcessTableCaptureError,
+  SHELL_FOREGROUND_PS_ARGS,
   parseProcessTableRows,
+  parseShellForegroundRows,
   parseStrictProcessTableRows,
   type ProcessTableRow
 } from './process-table-snapshot'
 
-export { PS_ARGS, PS_MAX_BUFFER_BYTES }
+export { PROCESS_TABLE_SNAPSHOT_MAX_STALENESS_MS, PS_ARGS, PS_MAX_BUFFER_BYTES }
 
 const execFile = promisify(execFileCb)
 
-/** Columns used by the evidence reader. Keep command last so its spaces survive parsing. */
-export const PS_TIMEOUT_MS = 3000
-const DEFAULT_SNAPSHOT_TTL_MS = 500
+// command= costs 1.15s for 1,948 idle processes, 1.3–6s at load 27; 3s failed 6/20 captures.
+// Allow 15s for identity reads on busy hosts while bounding wedged ps.
+export const PS_TIMEOUT_MS = 15_000
 
-type Snapshot<T> = { value: T; capturedAtMs: number }
+type Snapshot<T> = { value: T; capturedAtMs: number; completedAtMs: number }
 
 type ProcessTableSnapshotReaderDeps<T> = {
   runPs: () => Promise<T>
@@ -35,18 +43,21 @@ export function createProcessTableSnapshotReader<T = string>(
   getFreshSnapshot: () => Promise<T>
   reset: () => void
 } {
-  const ttlMs = deps.ttlMs ?? DEFAULT_SNAPSHOT_TTL_MS
+  const ttlMs = deps.ttlMs ?? PROCESS_TABLE_SNAPSHOT_MAX_STALENESS_MS
   let cached: Snapshot<T> | null = null
   let inFlight: Promise<T> | null = null
   let sequence = 0
   let freshQueued: { promise: Promise<T>; startSequence: number | null } | null = null
 
   async function runSnapshot(): Promise<T> {
+    // Stamp evidence age at capture start, TTL at completion: slow captures must remain old yet still coalesce
+    // instead of spawning one whole-machine ps per caller on loaded hosts.
+    const capturedAtMs = deps.now()
     const promise = deps.runPs()
     inFlight = promise
     try {
       const value = await promise
-      cached = { value, capturedAtMs: deps.now() }
+      cached = { value, capturedAtMs, completedAtMs: deps.now() }
       return value
     } finally {
       if (inFlight === promise) {
@@ -56,7 +67,7 @@ export function createProcessTableSnapshotReader<T = string>(
   }
 
   async function getSnapshot(): Promise<T> {
-    if (cached && deps.now() - cached.capturedAtMs < ttlMs) {
+    if (cached && deps.now() - cached.completedAtMs < ttlMs) {
       return cached.value
     }
     if (inFlight) {
@@ -198,64 +209,84 @@ function assertWholeCapture(stdout: string): string {
   return stdout
 }
 
+/** Field 22 (`starttime`) of `/proc/<pid>/stat`, read past the parenthesised comm. */
+export function parseLinuxProcStatStartTime(stat: string): string | null {
+  const closingParen = stat.lastIndexOf(')')
+  if (closingParen === -1) {
+    return null
+  }
+  const tail = stat
+    .slice(closingParen + 1)
+    .trim()
+    .split(/\s+/)
+  return tail[19] || null
+}
+
 /** Read Linux's stable PID start-time ticks without spawning another process. */
 async function readLinuxProcessStartTimes(
   rows: readonly ProcessTableRow[]
-): Promise<ReadonlyMap<number, string> | undefined> {
-  if (process.platform !== 'linux') {
-    return undefined
-  }
+): Promise<ReadonlyMap<number, string>> {
   const candidates = rows.filter((row) => row.tty !== undefined && row.tty !== '?')
   const starts = await Promise.all(
     candidates.map(async (row) => {
       try {
-        const stat = await readFile(`/proc/${row.pid}/stat`, 'utf8')
-        const closingParen = stat.lastIndexOf(')')
-        if (closingParen === -1) {
-          return null
-        }
-        const tail = stat
-          .slice(closingParen + 1)
-          .trim()
-          .split(/\s+/)
-        const startTime = tail[19]
+        const startTime = parseLinuxProcStatStartTime(
+          await readFile(`/proc/${row.pid}/stat`, 'utf8')
+        )
         return startTime ? ([row.pid, startTime] as const) : null
       } catch {
         return null
       }
     })
   )
-  const result = new Map<number, string>()
-  for (const entry of starts) {
-    if (entry) {
-      result.set(entry[0], entry[1])
+  return new Map(starts.filter((entry) => entry !== null))
+}
+
+async function captureProcessTable(args: readonly string[], timeout = PS_TIMEOUT_MS) {
+  let stdout: string
+  try {
+    ;({ stdout } = await execFile('ps', [...args], {
+      encoding: 'utf-8',
+      env: psLocaleEnvironment(),
+      timeout,
+      maxBuffer: PS_MAX_BUFFER_BYTES
+    }))
+  } catch (error) {
+    // A ceiling hit is truncation, not absence: name it in the domain vocabulary.
+    if ((error as { code?: unknown } | null)?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+      throw new ProcessTableCaptureError('capture_truncated')
     }
+    throw error
   }
-  return result
+  return assertWholeCapture(stdout)
 }
 
 const processTableReader = createProcessTableSnapshotReader<ProcessTableCapture>({
   runPs: async () => {
-    let stdout: string
-    try {
-      ;({ stdout } = await execFile('ps', [...PS_ARGS], {
-        encoding: 'utf-8',
-        timeout: PS_TIMEOUT_MS,
-        maxBuffer: PS_MAX_BUFFER_BYTES
-      }))
-    } catch (error) {
-      // A ceiling hit is truncation, not absence: name it in the domain vocabulary.
-      if ((error as { code?: unknown } | null)?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
-        throw new ProcessTableCaptureError('capture_truncated')
-      }
-      throw error
+    const stdout =
+      process.platform === 'darwin'
+        ? await captureDarwinProcessTable(captureProcessTable, assertWholeCapture, PS_TIMEOUT_MS)
+        : await captureProcessTable(PS_ARGS)
+    if (process.platform !== 'linux') {
+      return createProcessTableCapture(stdout)
     }
-    const baseCapture = createProcessTableCapture(assertWholeCapture(stdout))
-    const startTimesByPid = await readLinuxProcessStartTimes(baseCapture.lenient())
-    return createProcessTableCapture(stdout, startTimesByPid, process.platform === 'linux')
+    const startTimesByPid = await readLinuxProcessStartTimes(parseProcessTableRows(stdout))
+    return createProcessTableCapture(stdout, startTimesByPid, true)
   },
   now: () => Date.now()
 })
+
+// Separate shell reader avoids macOS terminal-name costs and waiting on full captures it cannot use.
+const shellForegroundReader = createProcessTableSnapshotReader<ProcessTableRow[]>({
+  runPs: async () => parseShellForegroundRows(await captureProcessTable(SHELL_FOREGROUND_PS_ARGS)),
+  now: () => Date.now()
+})
+
+export async function getFreshShellForegroundSnapshot(): Promise<ProcessTableRow[]> {
+  return process.platform === 'darwin'
+    ? shellForegroundReader.getFreshSnapshot()
+    : getFreshProcessTableSnapshot()
+}
 
 export async function getProcessTableSnapshot(): Promise<ProcessTableRow[]> {
   return (await processTableReader.getSnapshot()).lenient()
@@ -269,17 +300,39 @@ export async function getStrictProcessTableSnapshot(): Promise<ProcessTableRow[]
   return (await processTableReader.getSnapshot()).strict()
 }
 
+/** Evidence needs current observations, unlike identity probes that wait up to 15s. Idle command= costs ~1.15s/1,948 processes;
+ * 2s freshness ceiling minus up to 500ms cached age and transit leaves 1.2s. Slower captures fail age gates anyway
+ * (measured 4–18.6s at load 46, 2.5–9s on a 2,002-process laptop), so return unverifiable promptly. */
+export const PROCESS_TABLE_EVIDENCE_BUDGET_MS = 1_200
+
+/** Bound only this wait; leave shared identity captures running to fill the cache instead of spawning another expensive ps. */
+export async function withEvidenceBudget<T>(pending: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new ProcessTableCaptureError('capture_over_budget')),
+          PROCESS_TABLE_EVIDENCE_BUDGET_MS
+        )
+      })
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export async function getStrictProcessTableSnapshotWithAge(): Promise<{
   rows: ProcessTableRow[]
   capturedAgeMs: number
 }> {
-  const snapshot = await processTableReader.getSnapshotWithAge()
+  const snapshot = await withEvidenceBudget(processTableReader.getSnapshotWithAge())
   return { rows: snapshot.value.strict(), capturedAgeMs: snapshot.capturedAgeMs }
 }
 
-/** How much older than its own await a TTL-cached capture may be. */
-export const PROCESS_TABLE_SNAPSHOT_MAX_STALENESS_MS = DEFAULT_SNAPSHOT_TTL_MS
-
 export function resetProcessTableSnapshotForTests(): void {
   processTableReader.reset()
+  shellForegroundReader.reset()
+  resetDarwinProcessTableCaptureForTests()
 }

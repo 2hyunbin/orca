@@ -1,4 +1,6 @@
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
+import { dropRetirementProofsForLiveSurfaces } from '../../shared/terminal-retirement-proof-ledger'
+import { orderMobileSessionTabsByGroups } from './mobile-session-tab-merge'
 import type {
   RuntimeMobileSessionProjectionHost,
   RuntimeMobileSessionProjectionInput
@@ -41,17 +43,15 @@ export function finalizeRuntimeMobileSessionTabsResult(
     ...(snapshot.tabGroupLayout !== undefined ? { tabGroupLayout } : {}),
     ...(snapshot.retiredTerminalSurfaces
       ? {
-          retiredTerminalSurfaces: snapshot.retiredTerminalSurfaces.filter(
-            (retired) =>
-              !snapshot.tabs.some(
-                (tab) =>
-                  tab.type === 'terminal' &&
-                  tab.parentTabId === retired.parentTabId &&
-                  tab.leafId === retired.leafId
-              )
+          retiredTerminalSurfaces: dropRetirementProofsForLiveSurfaces(
+            snapshot.retiredTerminalSurfaces,
+            snapshot.tabs
           )
         }
       : {}),
-    tabs: normalizedTabs
+    // Follow group order: merged runtime-kept chat tabs otherwise append to clients' visible strip.
+    tabs: tabGroups
+      ? orderMobileSessionTabsByGroups(normalizedTabs, tabGroups, tabGroupLayout)
+      : normalizedTabs
   }
 }

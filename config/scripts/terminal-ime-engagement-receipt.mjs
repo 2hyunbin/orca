@@ -1,19 +1,13 @@
-/**
- * The proof that a native IME run was real.
- *
- * Playwright reports a skipped test as a pass, so every documented way this harness fails open —
- * an unset ORCA_E2E_NATIVE_IBUS_HANGUL, a renamed test the grep no longer selects, a stale
- * ibus-daemon that wins the XIM selection and leaves the session with no engine — produces a
- * green run that exercised nothing. The specs append a receipt only after they have observed
- * real composition events, and the runner requires one per expected test.
- */
+// Skipped/misselected Playwright tests and stale IBus can exit green without composing text; require a receipt from every pinned test after real composition.
 
 export const IME_ENGAGEMENT_RECEIPT_ENV = 'ORCA_E2E_IME_ENGAGEMENT_RECEIPT'
 
 /** The tests that must each leave a receipt. Pinned so deleting one cannot quietly shrink the lane. */
 export const EXPECTED_NATIVE_IME_TESTS = [
   'forwards the issue exact-byte sequence without loss or duplication',
-  'forwards the issue sentence stress sequence without leaked ASCII'
+  'forwards the issue sentence stress sequence without leaked ASCII',
+  'a digit typed right after a Hangul syllable reaches the pty',
+  'confirms native Hangul notes before a deliberate Enter saves'
 ]
 
 function parseReceipts(text) {
@@ -31,10 +25,7 @@ function parseReceipts(text) {
   return entries
 }
 
-/**
- * Returns the reasons a run must not be trusted. An empty array means an input method
- * demonstrably composed text for every expected test.
- */
+// Empty failure list proves real input method composed in every expected test.
 export function verifyImeEngagementReceipts(text, expectedTests = EXPECTED_NATIVE_IME_TESTS) {
   const entries = parseReceipts(text ?? '')
   const problems = []
@@ -60,8 +51,7 @@ export function verifyImeEngagementReceipts(text, expectedTests = EXPECTED_NATIV
       )
       continue
     }
-    // Why both: compositionstart alone fires for a bare keypress under some engines, and a
-    // Hangul update alone would not prove the composition lifecycle ran.
+    // Require start plus Hangul update: bare keypress can emit start alone, while update alone does not prove full lifecycle.
     if (!(entry.compositionStart > 0)) {
       problems.push(`"${test}" recorded no compositionstart — the IME never engaged`)
     }

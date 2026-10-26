@@ -1,13 +1,50 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  MAX_QUICK_COMMANDS,
   OrcaRuntimeService,
   applyAgentStatusHooksEnabledMock,
   electronMocks
 } from '../orca-runtime-test-mocks.spec'
 import { deferred, store } from '../orca-runtime-test-fixtures.spec'
+import { RuntimeClientSettingsController } from '../runtime-client-settings'
+import { reconcileClaudeAgentViewMock } from '../orca-runtime-test-mocks/setup.spec'
 
 describe('OrcaRuntimeService', () => {
+  it.each([true, false])(
+    'awaits navigation-only updates from paired clients (%s)',
+    async (enabled) => {
+      let settings = { ...store.getSettings(), claudeSubagentNavigationEnabled: !enabled }
+      const controller = new RuntimeClientSettingsController({
+        getSettings: () => settings,
+        updateSettings: (updates) => {
+          settings = { ...settings, ...updates }
+        }
+      })
+      const gate = deferred<void>()
+      reconcileClaudeAgentViewMock.mockImplementationOnce(() => gate.promise)
+      const complete = vi.fn()
+      const pending = controller.update({ claudeSubagentNavigationEnabled: enabled }).then(complete)
+      await vi.waitFor(() =>
+        expect(reconcileClaudeAgentViewMock).toHaveBeenLastCalledWith(settings)
+      )
+      expect(complete).not.toHaveBeenCalled()
+      gate.resolve()
+      await pending
+      expect(complete).toHaveBeenCalledOnce()
+    }
+  )
+
+  it.each([true, false])('projects the single Chat UI switch to older clients (%s)', (enabled) => {
+    const controller = new RuntimeClientSettingsController({
+      getSettings: () => ({ ...store.getSettings(), experimentalNativeChat: enabled }),
+      updateSettings: () => undefined
+    })
+    expect(controller.get()).toMatchObject({
+      experimentalNativeChat: enabled,
+      experimentalStructuredNativeChat: enabled,
+      openAgentTabsInChatByDefault: false
+    })
+  })
+
   it('projects runtime-backed settings to paired clients', () => {
     const terminalQuickCommands = [
       {
@@ -30,6 +67,7 @@ describe('OrcaRuntimeService', () => {
         compactWorktreeCards: true,
         minimaxGroupId: 'group-42',
         minimaxUsageModels: 'general,abab6.5',
+        minimaxEndpoint: 'cn',
         terminalQuickCommands
       })
     } as never)
@@ -39,7 +77,9 @@ describe('OrcaRuntimeService', () => {
       experimentalNewWorktreeCardStyle: true,
       compactWorktreeCards: true,
       minimaxGroupId: 'group-42',
-      minimaxUsageModels: 'general,abab6.5'
+      minimaxUsageModels: 'general,abab6.5',
+      // Omission silently selects overseas and reports the wrong region.
+      minimaxEndpoint: 'cn'
     })
     expect(runtime.getClientSettings()).not.toHaveProperty('terminalQuickCommands')
     expect(runtime.getClientSettings().hostSettingOverrides).toEqual({
@@ -84,8 +124,80 @@ describe('OrcaRuntimeService', () => {
     expect(runtime.getClientSettings()).not.toHaveProperty('terminalQuickCommands')
   })
 
-  it('rejects a concurrent add after the quick command limit is reached', () => {
-    const terminalQuickCommands = Array.from({ length: MAX_QUICK_COMMANDS }, (_, index) => ({
+  it('applies native-chat option deltas atomically on the runtime host', () => {
+    let settings = {
+      ...store.getSettings(),
+      nativeChatSessionOptions: {
+        claude: { model: 'opus', valuesByModel: { opus: { effort: 'high' } } }
+      }
+    }
+    const updateSettings = vi.fn((updates: Partial<typeof settings>) => {
+      settings = { ...settings, ...updates }
+    })
+    const runtime = new OrcaRuntimeService({
+      ...store,
+      getSettings: () => settings,
+      updateSettings
+    } as never)
+
+    runtime.updateClientNativeChatSessionOptions({
+      type: 'apply-picks',
+      agent: 'codex',
+      picks: [
+        { modelId: 'gpt-fast', optionId: 'model', value: 'gpt-fast' },
+        { modelId: 'gpt-fast', optionId: 'effort', value: 'low' }
+      ]
+    })
+    runtime.updateClientNativeChatSessionOptions({
+      type: 'apply-picks',
+      agent: 'claude',
+      picks: [{ modelId: 'sonnet', optionId: 'model', value: 'sonnet' }]
+    })
+
+    expect(settings.nativeChatSessionOptions).toEqual({
+      claude: {
+        model: 'sonnet',
+        valuesByModel: { opus: { effort: 'high' } }
+      },
+      codex: {
+        model: 'gpt-fast',
+        valuesByModel: { 'gpt-fast': { effort: 'low' } }
+      }
+    })
+    expect(updateSettings).toHaveBeenCalledTimes(2)
+  })
+
+  it('compares retired models against the host record at mutation time', () => {
+    let settings = {
+      ...store.getSettings(),
+      nativeChatSessionOptions: { grok: { model: 'grok-5' } }
+    }
+    const updateSettings = vi.fn((updates: Partial<typeof settings>) => {
+      settings = { ...settings, ...updates }
+    })
+    const runtime = new OrcaRuntimeService({
+      ...store,
+      getSettings: () => settings,
+      updateSettings
+    } as never)
+
+    runtime.updateClientNativeChatSessionOptions({
+      type: 'clear-model-if-missing',
+      agent: 'grok',
+      availableModelIds: ['grok-5']
+    })
+    expect(updateSettings).not.toHaveBeenCalled()
+
+    runtime.updateClientNativeChatSessionOptions({
+      type: 'clear-model-if-missing',
+      agent: 'grok',
+      availableModelIds: ['grok-4.5']
+    })
+    expect(settings.nativeChatSessionOptions).toEqual({ grok: {} })
+  })
+
+  it('preserves concurrent additions after forty quick commands', () => {
+    const terminalQuickCommands = Array.from({ length: 40 }, (_, index) => ({
       id: `command-${index}`,
       label: `Command ${index}`,
       action: 'terminal-command' as const,
@@ -93,27 +205,25 @@ describe('OrcaRuntimeService', () => {
       appendEnter: true,
       scope: { type: 'global' as const }
     }))
-    const updateSettings = vi.fn()
+    let settings = { ...store.getSettings(), terminalQuickCommands }
+    const updateSettings = vi.fn((updates: Partial<typeof settings>) => {
+      settings = { ...settings, ...updates }
+    })
     const runtime = new OrcaRuntimeService({
       ...store,
-      getSettings: () => ({ ...store.getSettings(), terminalQuickCommands }),
+      getSettings: () => settings,
       updateSettings
     } as never)
 
-    expect(() =>
-      runtime.updateClientTerminalQuickCommands({
-        type: 'upsert',
-        command: {
-          id: 'one-too-many',
-          label: 'One too many',
-          action: 'terminal-command',
-          command: 'true',
-          appendEnter: true,
-          scope: { type: 'global' }
-        }
-      })
-    ).toThrow('Quick command limit reached')
-    expect(updateSettings).not.toHaveBeenCalled()
+    const first = { ...terminalQuickCommands[0], id: 'desktop-addition' }
+    const second = { ...terminalQuickCommands[0], id: 'mobile-addition' }
+    runtime.updateClientTerminalQuickCommands({ type: 'upsert', command: first })
+    expect(runtime.updateClientTerminalQuickCommands({ type: 'upsert', command: second })).toEqual([
+      ...terminalQuickCommands,
+      first,
+      second
+    ])
+    expect(settings.terminalQuickCommands).toEqual([...terminalQuickCommands, first, second])
   })
 
   it('accepts runtime-backed setting updates from paired clients', async () => {
@@ -122,7 +232,8 @@ describe('OrcaRuntimeService', () => {
       experimentalNewWorktreeCardStyle: false,
       compactWorktreeCards: false,
       minimaxGroupId: '',
-      minimaxUsageModels: 'general'
+      minimaxUsageModels: 'general',
+      minimaxEndpoint: 'overseas'
     }
     const updateSettings = vi.fn((updates: Partial<typeof settings>) => {
       settings = { ...settings, ...updates }
@@ -139,20 +250,23 @@ describe('OrcaRuntimeService', () => {
         experimentalNewWorktreeCardStyle: true,
         compactWorktreeCards: true,
         minimaxGroupId: 'group-42',
-        minimaxUsageModels: 'general,abab6.5'
+        minimaxUsageModels: 'general,abab6.5',
+        minimaxEndpoint: 'cn'
       })
     ).toMatchObject({
       experimentalNewWorktreeCardStyle: true,
       compactWorktreeCards: true,
       minimaxGroupId: 'group-42',
-      minimaxUsageModels: 'general,abab6.5'
+      minimaxUsageModels: 'general,abab6.5',
+      minimaxEndpoint: 'cn'
     })
     expect(updateSettings).toHaveBeenCalledWith(
       {
         experimentalNewWorktreeCardStyle: true,
         compactWorktreeCards: true,
         minimaxGroupId: 'group-42',
-        minimaxUsageModels: 'general,abab6.5'
+        minimaxUsageModels: 'general,abab6.5',
+        minimaxEndpoint: 'cn'
       },
       { notifyListeners: true }
     )
@@ -160,7 +274,8 @@ describe('OrcaRuntimeService', () => {
       experimentalNewWorktreeCardStyle: true,
       compactWorktreeCards: true,
       minimaxGroupId: 'group-42',
-      minimaxUsageModels: 'general,abab6.5'
+      minimaxUsageModels: 'general,abab6.5',
+      minimaxEndpoint: 'cn'
     })
   })
 

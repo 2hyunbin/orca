@@ -12,7 +12,7 @@ import { BranchEntryRow } from './branch-entry-row'
 import { SectionHeader } from './section-header'
 import { formatSourceControlRefLabel } from '../panel/branch-context-stats'
 import { SourceControlBranchTreeDirectoryRow } from './tree-directory-rows'
-import { SourceControlVirtualFileList } from './virtual-file-list'
+import { VirtualizedList } from '../../../virtualized-list'
 
 export function SourceControlBranchSection({
   branchSummary,
@@ -57,10 +57,7 @@ export function SourceControlBranchSection({
 }): React.JSX.Element {
   const baseRef = branchSummary.baseRef?.trim()
   const fileCount = filteredBranchEntries.length
-  // Why: the heading counts files that differ from the compare base, not every
-  // file the branch ever touched — a rebased branch makes the two read alike.
-  // A narrowing filter changes what the number means, so the label goes silent
-  // rather than claim the filtered count is the branch total.
+  // Counts measure current base differences, not historical touches; omit the total label when filters narrow the list.
   const countTitle =
     baseRef && fileCount === totalBranchEntryCount
       ? fileCount === 1
@@ -91,8 +88,8 @@ export function SourceControlBranchSection({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="h-auto px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+            size="xs"
+            className="px-1.5 text-muted-foreground hover:text-foreground"
             onClick={(e) => {
               e.stopPropagation()
               if (currentWorktreeId && worktreePath && branchSummary) {
@@ -106,7 +103,7 @@ export function SourceControlBranchSection({
       />
       {!collapsedSections.has('branch') &&
         (sourceControlViewMode === 'tree' ? (
-          <SourceControlVirtualFileList
+          <VirtualizedList
             rows={visibleBranchTreeRows}
             scrollElement={fileListScrollElement}
             getRowKey={(node) => node.key}
@@ -138,7 +135,7 @@ export function SourceControlBranchSection({
             }}
           />
         ) : (
-          <SourceControlVirtualFileList
+          <VirtualizedList
             rows={filteredBranchEntries}
             scrollElement={fileListScrollElement}
             getRowKey={(entry) => `branch:${entry.path}`}

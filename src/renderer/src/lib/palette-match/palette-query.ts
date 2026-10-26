@@ -4,9 +4,7 @@ import { normalizePaletteText } from './normalized-text'
 export const PALETTE_QUERY_MAX_TOKENS = 16
 
 const DIGIT = /\p{N}/u
-// Why symbols count as content: an emoji is \p{So} and an arrow is \p{Sm}, so a
-// letters-and-digits test would classify `🚀` as punctuation and drop the token —
-// and the palette input expands `:rocket:` into exactly that.
+// Emoji/arrow symbols are query content; punctuation-only filtering must preserve the palette’s :rocket: expansion.
 const ALPHANUMERIC = /[\p{L}\p{N}\p{S}\p{Extended_Pictographic}]/u
 const LETTERS_ONLY = /^\p{L}+$/u
 const LATIN_OR_DIGIT = /^[\p{Script=Latin}\p{Nd}]$/u
@@ -31,7 +29,13 @@ export type PaletteQueryToken = {
 export type PreparedPaletteQuery =
   | { state: 'empty' }
   | { state: 'invalid'; reason: 'too-large' | 'too-many-tokens' }
-  | { state: 'ready'; normalized: string; tokens: readonly PaletteQueryToken[] }
+  | {
+      state: 'ready'
+      normalized: string
+      tokens: readonly PaletteQueryToken[]
+      /** Count before duplicate-token removal; destination recognition uses the complete query. */
+      tokenCountBeforeDeduplication: number
+    }
 
 function splitComponents(text: string): string[] {
   const components: string[] = []
@@ -74,18 +78,12 @@ export function createPaletteQueryToken(text: string, index: number): PaletteQue
   }
 }
 
-/**
- * Folds the query once per keystroke and splits it on whitespace only —
- * punctuation stays inside tokens so `08-13` and `orca/main` survive intact.
- */
+/** Fold per keystroke and split only whitespace so identifier punctuation survives within tokens. */
 export function preparePaletteQuery(query: string): PreparedPaletteQuery {
   if (isWorktreePaletteQueryTooLarge(query)) {
     return { state: 'invalid', reason: 'too-large' }
   }
-  // Why collapse runs: field text is always single-spaced, so an uncollapsed double
-  // space can never satisfy the whole-query equality/prefix tier and the exact-name
-  // match silently loses its rank. Safe here — this string feeds only scoreWholeQuery
-  // and carries no offset mapping back into the source text.
+  // Field text is single-spaced, and this value has no source-offset mapping to preserve.
   const normalized = normalizePaletteText(query).normalized.replace(/ +/g, ' ').trim()
   if (!normalized) {
     return { state: 'empty' }
@@ -93,21 +91,27 @@ export function preparePaletteQuery(query: string): PreparedPaletteQuery {
 
   const seen = new Set<string>()
   const tokens: PaletteQueryToken[] = []
-  for (const raw of normalized.split(' ')) {
+  const rawTokens = normalized.split(' ').filter(Boolean)
+  for (const raw of rawTokens) {
     if (!raw || seen.has(raw)) {
       continue
     }
     seen.add(raw)
     tokens.push(createPaletteQueryToken(raw, tokens.length))
+    if (tokens.length > PALETTE_QUERY_MAX_TOKENS) {
+      return { state: 'invalid', reason: 'too-many-tokens' }
+    }
   }
 
   if (!tokens.length) {
     return { state: 'empty' }
   }
-  if (tokens.length > PALETTE_QUERY_MAX_TOKENS) {
-    return { state: 'invalid', reason: 'too-many-tokens' }
+  return {
+    state: 'ready',
+    normalized,
+    tokens,
+    tokenCountBeforeDeduplication: rawTokens.length
   }
-  return { state: 'ready', normalized, tokens }
 }
 
 export function isLetterOnlyWord(word: string): boolean {

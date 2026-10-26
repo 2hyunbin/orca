@@ -4,37 +4,30 @@ import {
   type SelfInitiatedTreeKillScope
 } from './crash-reporting/self-initiated-tree-kill-log'
 import { readOrcaChromiumProcessPids } from './orca-chromium-process-pids'
+import { setProcessTreeKillGate } from '@orca/process-host/process-tree-kill-gate'
 
-/**
- * Gate every main-process tree-kill through one decision: refuse the pid when
- * Electron is currently accounting for it, otherwise put it on the record.
- *
- * Why a shared gate rather than a check inside `terminateWindowsProcessTree`:
- * the codex and claude account-login teardowns run their own `taskkill /T /F`
- * with different lifetimes (one sync, one with its own timeout ladder), so a
- * guard that only lived in the tree-kill helper would cover one of three
- * families. Returns false when the caller must not kill.
- *
- * Electron main only, by construction. `terminateWindowsProcessTree` also runs
- * in the standalone daemon (the `pty-descendant-sweep` site), where
- * `readOrcaChromiumProcessPids()` is empty and this always admits. That is not
- * the gap it looks like: the daemon reaches that taskkill only through
- * `classifyWindowsTreeKillTarget`, whose ancestry walk ends at the daemon's own
- * pid, and no Chromium process descends from the daemon. See
- * `orca-chromium-process-pids.ts`.
- */
+/** Refusal forbids only the PID-based tree walk; callers must still kill the root through its handle. */
 export function admitSelfInitiatedTreeKill(target: {
   pid: number
   site: string
   scope: SelfInitiatedTreeKillScope
 }): boolean {
-  // Why: no PTY root, codex root or git child is ever one of our own Chromium
-  // processes, so a pid that is means the caller is about to kill a renderer,
-  // the GPU or the browser itself (#10680).
-  if (readOrcaChromiumProcessPids().has(target.pid)) {
-    recordRefusedOwnChromiumTreeKill(target)
-    return false
+  // Windows PID reuse can target Chromium; POSIX groups contain only processes assigned to them (#10680).
+  const isOwnChromiumPid =
+    target.scope === 'win-taskkill-tree' && readOrcaChromiumProcessPids().has(target.pid)
+  try {
+    if (isOwnChromiumPid) {
+      recordRefusedOwnChromiumTreeKill(target)
+    } else {
+      recordSelfInitiatedTreeKill(target)
+    }
+  } catch {
+    // Recording failures must neither interrupt termination nor change the guard’s decision.
   }
-  recordSelfInitiatedTreeKill(target)
-  return true
+  return !isOwnChromiumPid
+}
+
+/** Shared kill sites cannot import main; install the same guard through their hook. */
+export function installMainProcessTreeKillGate(): void {
+  setProcessTreeKillGate((kill) => admitSelfInitiatedTreeKill(kill))
 }

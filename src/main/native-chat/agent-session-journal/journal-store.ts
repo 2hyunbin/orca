@@ -1,196 +1,183 @@
-// Append-only journal store for one agent session.
+// Each session owns its fold and queue; all statements use the host's shared database connection.
 
+import type { AgentJournalDispatchRejection } from '../../../shared/agent-session-failure-words'
 import { randomUUID } from 'node:crypto'
+import { createJournalPublicReader } from './journal-public-read'
 import type {
   AgentJournalAcceptanceReceipt,
   AgentJournalCursor,
   AgentJournalItemBody,
   AgentJournalItemIdentity,
+  AgentJournalRenderItem,
   AgentJournalSnapshot,
   AgentJournalSubmission,
+  AgentJournalThreadGoal,
+  AgentJournalTurnLifecycle,
   AgentSessionJournalIdentity
 } from '../../../shared/agent-session-journal-types'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
+import type { AgentSessionContextUsage } from '../../../shared/agent-session-context-usage'
+import { latestStructuredAgentContextFacts } from '../../../shared/structured-agent-session-context-usage'
 import {
-  compactJournal,
-  DEFAULT_JOURNAL_COMPACTION_POLICY,
-  type JournalCompactionPolicy
-} from './journal-compaction'
-import type { JournalReplacementItem } from './journal-epoch-replacement'
+  newestStructuredAgentSessionTurnBySequence,
+  runningStructuredAgentSessionTurnItemBySequence
+} from '../../../shared/structured-agent-session-live-turn'
 import { readJournalSince } from './journal-cursor'
-import type { JournalLoad } from './journal-open'
-import { DEFAULT_JOURNAL_PAYLOAD_LIMITS } from './journal-payload-bounds'
-import { markJournalPendingSubmissionsUnknown } from './journal-pending-submission-recovery'
+import type { JournalHostDatabase } from './journal-host-database'
+import { journalRowsAfterReader, type JournalLoad } from './journal-open'
+import {
+  markJournalPendingSubmissionsUnknown,
+  rejectJournalPendingSubmissions,
+  rejectJournalQueuedSubmissions
+} from './journal-pending-submission-recovery'
 import {
   applyJournalRow,
   createJournalReducerState,
-  referencedBlobDigests,
-  renderJournalState,
   resolveJournalItemId,
   type JournalReducerState
 } from './journal-reducer'
-import {
-  journalDispatchRowBuilder,
-  journalSubmissionRowBuilder,
-  journalTombstoneRowBuilder
-} from './journal-row-builders'
+import { journalTombstoneRowBuilder } from './journal-row-builders'
 import type {
   AgentSessionJournalOptions,
   JournalAppendResult,
-  JournalBlobInput,
   JournalItemAppendOptions,
+  JournalItemLinkageVisitor,
   JournalLifecycleBatchInput,
+  JournalPlannedLifecycleBatchInput,
   JournalReadSince,
+  JournalSubmissionConsume,
   JournalSubmissionInput,
   JournalTombstoneInput,
   ResolveDispatchInput
 } from './journal-store-contracts'
-import type { AgentJournalEpochReason, JournalRow } from './journal-row-schema'
-import { assertJournalWritable, JournalAppendBudget } from './journal-write-guards'
-import { journalDirectoryBytes } from './journal-physical-quota'
-import type { JournalLifecycleReservation } from './journal-lifecycle-capacity'
-import { JournalLifecycleAdmission } from './journal-lifecycle-admission'
-import { JournalRowWriter } from './journal-row-writer'
-import { JournalEpochController } from './journal-epoch-controller'
-import { journalStoreLoadedFields, openJournalStoreState } from './journal-store-open'
-import { JournalItemAppender } from './journal-item-appender'
-import { JournalLifecycleBatchAppender } from './journal-lifecycle-batch-appender'
+import type { JournalQueuedMessages, JournalQueuePlan } from './journal-queued-messages'
+import {
+  journalQueueResumeRowBuilder,
+  journalQueueReopenRowBuilder,
+  journalStopEventRowBuilder
+} from './journal-stop-and-resume-rows'
+import type { AgentJournalEpochReason, JournalStopEvent, JournalRow } from './journal-row-schema'
+import type { JournalOperationReceipt, JournalRowWriter } from './journal-row-writer'
+import type { JournalSubmissionWriter } from './journal-submission-writer'
+import type { JournalEpochController } from './journal-epoch-controller'
+import { JournalWriteQueue } from './journal-write-queue'
+import { journalItemExecutionFence, journalItemProvenance } from './journal-item-provenance'
+import { createJournalStoreCollaborators } from './journal-store-collaborators'
+import type { JournalItemAppender } from './journal-item-appender'
+import type { JournalLifecycleBatchAppender } from './journal-lifecycle-batch-appender'
+import type { JournalStepWriter } from './journal-step-writer'
+import type { JournalStopMarks } from './journal-stop-marks'
+import type { JournalContextController } from './journal-context-controller'
+import type { JournalStopAcceptor } from './journal-stop-acceptance'
+import { journalThreadGoalSource, type JournalThreadGoalSource } from './journal-thread-goal-source'
 
 export { AgentSessionJournalError } from './journal-write-guards'
 
 export class AgentSessionJournal {
   private readonly identity: AgentSessionJournalIdentity
-  private readonly journalDir: string
-  private readonly budget: JournalAppendBudget
-  private readonly compaction: JournalCompactionPolicy
-  private readonly autoCompact: boolean
+  private readonly database: JournalHostDatabase
   private readonly now: () => number
   private readonly mintEpoch: () => string
-  private readonly loaded: JournalLoad | null | undefined
 
   private state: JournalReducerState
-  private tailRows: JournalRow[] = []
-  private compactedThrough = 0
-  private sizeBytes = 0
-  private readOnly = false
-  private malformedRows = 0
-  private readonly lifecycleAdmission: JournalLifecycleAdmission
+  private readonly readPublic = createJournalPublicReader()
+  private openedThrough: AgentJournalCursor = { epoch: '', sequence: 0 }
+  private reopenUnmarked: AgentJournalCursor | null = null
+  private onCommitted: ((rows?: readonly JournalRow[]) => void) | null = null
+  private readonly queue: JournalWriteQueue
   private readonly rowWriter: JournalRowWriter
   private readonly epochController: JournalEpochController
   private readonly itemAppender: JournalItemAppender
   private readonly lifecycleBatchAppender: JournalLifecycleBatchAppender
-  /** Serializes sequence assignment with the durable write behind it. */
-  private writes: Promise<unknown> = Promise.resolve()
+  private readonly submissionWriter: JournalSubmissionWriter
+  private readonly stepWriter: JournalStepWriter
+  private readonly restore: () => Promise<void>
+  /** Queued cards never count as owed work. */
+  readonly queuedMessages: JournalQueuedMessages
+  readonly stopMarks: JournalStopMarks
+  readonly stops: JournalStopAcceptor
+  readonly context: JournalContextController
 
   constructor(options: AgentSessionJournalOptions) {
     this.identity = options.identity
-    this.journalDir = options.journalDir
-    this.budget = new JournalAppendBudget(
-      options.identity.sessionId,
-      options.limits ?? DEFAULT_JOURNAL_PAYLOAD_LIMITS
-    )
-    this.autoCompact = options.autoCompact ?? true
-    this.compaction = options.compaction ?? DEFAULT_JOURNAL_COMPACTION_POLICY
+    this.database = options.database
     this.now = options.now ?? (() => Date.now())
     this.mintEpoch = options.mintEpoch ?? randomUUID
-    this.loaded = options.loaded
     this.state = createJournalReducerState(options.identity.sessionId, '')
-    this.lifecycleAdmission = new JournalLifecycleAdmission(
-      options.identity.sessionId,
-      this.budget.maxSessionBytes,
-      (itemId) => resolveJournalItemId(this.state, itemId),
-      this.budget.maxAppendsPerWindow
-    )
-    this.rowWriter = new JournalRowWriter({
-      journalDir: this.journalDir,
-      sessionId: options.identity.sessionId,
-      budget: this.budget,
-      lifecycleAdmission: this.lifecycleAdmission,
-      autoCompact: this.autoCompact,
-      compaction: this.compaction,
-      now: this.now,
-      serialize: (run) => this.serializeWrite(run),
-      readOnly: () => this.readOnly,
-      setReadOnly: (readOnly) => {
-        this.readOnly = readOnly
-      },
-      physicalBytes: () => this.sizeBytes,
-      highestFence: () => this.state.highestFence,
-      nextSequence: () => this.state.lastSequence + 1,
-      tailRows: () => this.tailRows,
-      referencedBlobDigests: () => referencedBlobDigests(this.state),
-      compact: (now, policy) => this.compact(now, policy),
-      commit: (row, physicalBytes) => {
-        applyJournalRow(this.state, row)
-        this.tailRows.push(row)
-        this.sizeBytes = physicalBytes
-      }
-    })
-    this.epochController = new JournalEpochController({
+    this.queue = new JournalWriteQueue(options.identity.sessionId)
+    const collaborators = createJournalStoreCollaborators({
       identity: this.identity,
-      journalDir: this.journalDir,
-      budget: this.budget,
-      compaction: this.compaction,
       now: this.now,
       mintEpoch: this.mintEpoch,
-      serialize: (run) => this.serializeWrite(run),
-      readOnly: () => this.readOnly,
-      setReadOnly: (readOnly) => {
-        this.readOnly = readOnly
+      serialize: (run) => this.queue.serialize(run),
+      database: () => this.database,
+      state: () => this.state,
+      readOnly: () => this.database.readOnly,
+      cursor: this.cursor,
+      adopt: (loaded) => {
+        this.adoptLoadedJournal(loaded)
+        this.onCommitted?.()
       },
-      highestFence: () => this.state.highestFence,
-      cursor: this.cursor,
-      adopt: (loaded) => this.adoptLoadedJournal(loaded)
-    })
-    this.itemAppender = new JournalItemAppender({
+      commit: (rows, savedAt) => {
+        for (const row of rows) {
+          applyJournalRow(this.state, row, savedAt)
+        }
+        this.onCommitted?.(rows)
+      },
+      notifyCommitted: () => this.onCommitted?.([]),
       journal: () => this,
-      state: () => this.state,
-      enqueue: (build, blobs) => this.enqueue(build, blobs)
+      enqueue: (build, receipt) => this.rowWriter.enqueue(build, receipt)
     })
-    this.lifecycleBatchAppender = new JournalLifecycleBatchAppender({
-      state: () => this.state,
-      cursor: this.cursor,
-      enqueue: (build) => this.enqueue(build)
-    })
-  }
-
-  get isReadOnly(): boolean {
-    return this.readOnly
+    this.rowWriter = collaborators.rowWriter
+    this.epochController = collaborators.epochController
+    this.itemAppender = collaborators.itemAppender
+    this.lifecycleBatchAppender = collaborators.lifecycleBatchAppender
+    this.submissionWriter = collaborators.submissionWriter
+    this.stepWriter = collaborators.stepWriter
+    this.queuedMessages = collaborators.queuedMessages
+    this.stopMarks = collaborators.stopMarks
+    this.stops = collaborators.stops
+    this.restore = collaborators.restore
+    this.context = collaborators.context
   }
 
   get epoch(): string {
     return this.state.epoch
   }
 
-  get directory(): string {
-    return this.journalDir
+  get agent(): AgentSessionJournalIdentity['agent'] {
+    return this.identity.agent
   }
 
-  /** Highest sequence folded into the snapshot; rows at or below it are no
-   *  longer individually replayable. */
-  get compactionBoundary(): number {
-    return this.compactedThrough
+  /** Only rows from this handle's opening epoch can predate the open. */
+  wroteBeforeOpen(sequence: number | undefined): boolean {
+    return (
+      sequence !== undefined &&
+      this.state.epoch === this.openedThrough.epoch &&
+      sequence <= this.openedThrough.sequence
+    )
+  }
+
+  /** Fallback reopen boundary until its mark is written; each new handle marks again. */
+  reopenFloor(): AgentJournalCursor | null {
+    return this.reopenUnmarked
   }
 
   async open(): Promise<void> {
-    await openJournalStoreState({
-      journalDir: this.journalDir,
-      sessionId: this.identity.sessionId,
-      maxBytes: this.budget.maxSessionBytes,
-      loaded: this.loaded,
-      start: () => this.epochController.start('session_created', 0),
-      adopt: (loaded) => this.adoptLoadedJournal(loaded),
-      tailRows: () => this.tailRows,
-      snapshot: this.snapshot,
-      rebuildLifecycle: (snapshot, bytes) => this.lifecycleAdmission.rebuild(snapshot, bytes),
-      appendDisclosure: (identity, body, fence) => this.appendItem(identity, body, { fence }),
-      highestFence: () => this.state.highestFence,
-      malformedRows: () => this.malformedRows,
-      readOnly: () => this.readOnly,
-      setPhysicalBytes: (bytes) => {
-        this.sizeBytes = bytes
-      }
-    })
+    await this.restore()
+    this.openedThrough = this.cursor()
+  }
+
+  /** Refuse future writes and drain admitted ones; the host retains database ownership. */
+  close(): Promise<void> {
+    this.queuedMessages.editLeases.dispose()
+    this.queue.markClosed()
+    return this.queue.drain()
+  }
+
+  /** One nonthrowing listener; undefined rows mean adopted history, an empty array means metadata. */
+  observeCommits(listener: (rows?: readonly JournalRow[]) => void): void {
+    this.onCommitted = listener
   }
 
   cursor = (): AgentJournalCursor => ({
@@ -198,167 +185,191 @@ export class AgentSessionJournal {
     sequence: this.state.lastSequence
   })
 
-  snapshot = (): AgentJournalSnapshot => renderJournalState(this.state)
+  snapshot = (): AgentJournalSnapshot => this.publicRead().snapshot
+
+  publicRead = () =>
+    this.readPublic(this.state, this.queuedMessages.displayState(), this.queuedMessages.revision())
+
+  /** Visit without allocating/sorting a snapshot. */
+  visitItems = (
+    visit: (itemId: string, sequence: number, body: AgentJournalItemBody) => void
+  ): void => {
+    for (const item of this.state.items.values()) {
+      visit(item.itemId, item.sequence, item.body)
+    }
+  }
+
+  itemBody = (itemId: string): AgentJournalItemBody | null =>
+    this.state.items.get(itemId)?.body ?? null
+
+  /** Host-only stopped-history IDs carried by each send. */
+  stoppedHistoryCarried = (): ReadonlyMap<string, readonly string[]> =>
+    this.state.stoppedHistoryCarried
+
+  item = (itemId: string): AgentJournalRenderItem | null => this.state.items.get(itemId) ?? null
+
+  visitItemsWithLinkage = (visit: JournalItemLinkageVisitor): void => {
+    for (const item of this.state.items.values()) {
+      visit(item.itemId, item.sequence, item.body, item)
+    }
+  }
+
+  /** Read the journal's running turn without allocating a snapshot; host projection decides current work. */
+  runningTurn = (): { item: AgentJournalRenderItem; turnId: string } | null =>
+    runningStructuredAgentSessionTurnItemBySequence(this.state.items.values())
+
+  newestTurn = (): AgentJournalTurnLifecycle | null =>
+    newestStructuredAgentSessionTurnBySequence(this.state.items.values())
+
+  threadGoalSource = (): JournalThreadGoalSource =>
+    journalThreadGoalSource(this.state.items.values())
+
+  /** Read across the journal, beyond any client's loaded page. */
+  threadGoal = (): AgentJournalThreadGoal | null => this.threadGoalSource().goal
+
+  /** Read across the journal, beyond any client's loaded page. */
+  contextUsage = (): AgentSessionContextUsage =>
+    latestStructuredAgentContextFacts(this.state.items.values())
+
+  /** Includes activity from revisions/tombstones absent from rendered items. */
+  lastActivityAt = (): number => this.state.lastActivityAt
+
+  /** Prefer later execution ownership for reusable children, otherwise creation provenance. */
+  itemFence = (itemId: string): number | undefined => journalItemExecutionFence(this.state, itemId)
+
+  /** Preserve both provenance fields during rebuild. */
+  itemProvenance = (itemId: string) => journalItemProvenance(this.state, itemId)
+
+  /** Excludes client actions and recovery bookkeeping. */
+  lastProviderActivityAt = (fence: number) => this.state.providerActivityAt.get(fence)
 
   submissions = (): AgentJournalSubmission[] => [...this.state.submissions.values()]
 
-  pendingSubmissions = (): AgentJournalSubmission[] =>
-    this.submissions().filter((entry) => entry.dispatchState === 'pending')
+  historyOrigin = () => this.state.historyOrigin
 
-  /** The durable answer to "did my send land?" — a reconnecting client asking
-   *  again gets this instead of re-sending. */
+  submission = (clientMessageId: string) => this.state.submissions.get(clientMessageId)
+
+  pendingSubmissions = () => this.submissions().filter((entry) => entry.dispatchState === 'pending')
+
+  /** Reconnecting clients read durable acceptance instead of resending. */
   receiptFor = (clientMessageId: string): AgentJournalAcceptanceReceipt | null =>
     this.state.receipts.get(clientMessageId) ?? null
 
   canonicalItemId = (itemId: string): string => resolveJournalItemId(this.state, itemId)
 
-  reserveLifecycleCapacity(token: JournalLifecycleReservation): Promise<boolean> {
-    return this.serializeCapacityMutation(async () => {
-      this.sizeBytes = await journalDirectoryBytes(this.journalDir)
-      return this.lifecycleAdmission.reserve(token, this.sizeBytes)
-    })
+  /** Read after all preceding writes and before later ones. */
+  readInOrder<T>(read: () => T): Promise<T> {
+    return this.queue.readInOrder(read)
   }
 
-  transferLifecycleCapacity(fromId: string, toId: string): Promise<boolean> {
-    return this.serializeCapacityMutation(() => this.lifecycleAdmission.transfer(fromId, toId))
+  readSince(cursor: AgentJournalCursor, limit?: number): JournalReadSince {
+    const { sessionId } = this.identity
+    const rowsAfter = journalRowsAfterReader(this.database.db, sessionId, this.state.epoch, limit)
+    return readJournalSince({ state: this.state, rowsAfter }, cursor, () => this.cursor())
   }
 
-  releaseLifecycleCapacity(id: string): Promise<void> {
-    return this.serializeCapacityMutation(() => this.lifecycleAdmission.release(id))
-  }
-
-  lifecycleCapacityState = (): { reservedBytes: number; reservedAppendSlots: number } =>
-    this.lifecycleAdmission.state
-
-  readSince(cursor: AgentJournalCursor): JournalReadSince {
-    return readJournalSince(
-      { state: this.state, tailRows: this.tailRows, readOnly: this.readOnly },
-      cursor,
-      () => this.cursor()
-    )
-  }
-
-  /** Upsert by stable identity. The revision is assigned here so a caller
-   *  cannot accidentally publish a revision the reducer will drop. */
+  /** Assign revisions here so callers cannot publish reducer-stale upserts. */
   appendItem(
     identity: AgentJournalItemIdentity,
     body: AgentJournalItemBody,
-    options: JournalItemAppendOptions = { fence: 0 }
+    options: JournalItemAppendOptions,
+    receipt?: JournalOperationReceipt
   ): Promise<JournalAppendResult> {
-    return this.itemAppender.append(identity, body, options)
+    return this.itemAppender.append(identity, body, options, receipt)
   }
 
-  /** Blob-before-row admission on the same serialized path as sequence assignment. */
-  appendItemWithBlobs(
-    identity: AgentJournalItemIdentity,
-    body: AgentJournalItemBody,
-    blobs: readonly JournalBlobInput[],
-    options: JournalItemAppendOptions = { fence: 0 }
-  ): Promise<JournalAppendResult> {
-    return this.itemAppender.appendWithBlobs(identity, body, blobs, options)
-  }
+  /** Resolve on the write lane; null appends nothing. */
+  appendResolvedItem: JournalItemAppender['appendResolved'] = (resolve, options) =>
+    this.itemAppender.appendResolved(resolve, options)
 
   appendTombstone(
     identity: AgentJournalItemIdentity,
-    options: JournalTombstoneInput
+    { fence }: JournalTombstoneInput
   ): Promise<AgentJournalCursor> {
     const itemId = agentJournalItemKey(identity)
-    return this.enqueue(journalTombstoneRowBuilder(() => this.state, itemId, options.fence)).then(
-      (row) => ({ epoch: row.epoch, sequence: row.seq })
-    )
+    return this.rowWriter.append(journalTombstoneRowBuilder(() => this.state, itemId, fence))
+  }
+
+  appendStopEvent(event: Omit<JournalStopEvent, 'at'>, fence: number): Promise<AgentJournalCursor> {
+    return this.rowWriter.append(journalStopEventRowBuilder(() => this.state, event, fence))
+  }
+
+  appendQueueResume(fence: number, receipt?: JournalOperationReceipt): Promise<AgentJournalCursor> {
+    const build = journalQueueResumeRowBuilder(() => this.state, fence)
+    return this.rowWriter.append(build, receipt)
+  }
+
+  appendQueueReopen(fence: number, since?: number): Promise<AgentJournalCursor> {
+    return this.rowWriter.append(journalQueueReopenRowBuilder(() => this.state, fence, since))
+  }
+
+  /** Mark preexisting cards; failed writes retain a conservative reopenFloor and throw. */
+  async markQueueReopen(fence: number, since?: number): Promise<void> {
+    if (this.queuedMessages.awaitReopenMark()) {
+      const sequence = since ?? this.state.lastSequence + 1
+      this.reopenUnmarked = { epoch: this.state.epoch, sequence }
+      await this.appendQueueReopen(fence, since)
+      this.reopenUnmarked = null
+    }
   }
 
   appendLifecycleBatch(input: JournalLifecycleBatchInput): Promise<AgentJournalCursor> {
     return this.lifecycleBatchAppender.append(input)
   }
 
-  /**
-   * Write-ahead submission row. It is durable before the caller dispatches
-   * anything, and it doubles as the optimistic user bubble so an accepted echo
-   * reconciles into an existing slot instead of appending a second copy.
-   */
-  appendSubmission(input: JournalSubmissionInput): Promise<AgentJournalCursor> {
-    return this.enqueue(
-      journalSubmissionRowBuilder(() => this.state, this.identity.providerHandle, input)
-    ).then((row) => ({ epoch: row.epoch, sequence: row.seq }))
+  appendPlannedLifecycleBatch = (input: JournalPlannedLifecycleBatchInput) =>
+    this.lifecycleBatchAppender.appendPlanned(input)
+
+  appendSteps: JournalStepWriter['append'] = (steps) => this.stepWriter.append(steps)
+
+  appendSubmission(
+    input: JournalSubmissionInput,
+    consume?: JournalSubmissionConsume,
+    receipt?: JournalOperationReceipt
+  ): Promise<AgentJournalCursor> {
+    return this.submissionWriter.append(input, consume, receipt)
   }
 
-  /**
-   * Advance a submission to exactly one of accepted / rejected / unknown.
-   *
-   * Accepting REQUIRES the provider identity rather than a free-form id: the
-   * adopted key is what the provider's echo will upsert into, so a mismatched
-   * string here would silently give the user a second copy of their own message.
-   */
-  resolveDispatch(input: ResolveDispatchInput): Promise<AgentJournalCursor> {
-    return this.enqueue(journalDispatchRowBuilder(() => this.state, input)).then((row) => ({
-      epoch: row.epoch,
-      sequence: row.seq
-    }))
+  resolveDispatch(
+    input: ResolveDispatchInput,
+    cards?: () => JournalQueuePlan
+  ): Promise<AgentJournalCursor> {
+    return this.submissionWriter.resolveDispatch(input, cards)
   }
 
-  /** On restart every `pending` submission becomes `unknown` before the session
-   *  accepts a writer. Orca never re-sends on the user's behalf. */
-  async markPendingSubmissionsUnknown(fence: number): Promise<string[]> {
-    return markJournalPendingSubmissionsUnknown(this, fence)
+  acceptLate: JournalSubmissionWriter['acceptLate'] = (i) => this.submissionWriter.acceptLate(i)
+
+  /** Retire unanswered sends after their execution owner ended, without assuming delivery. */
+  async markPendingSubmissionsUnknown(fence: number, reason?: string): Promise<string[]> {
+    return markJournalPendingSubmissionsUnknown(this, fence, reason)
   }
 
-  async compact(
-    now = this.now(),
-    policy: JournalCompactionPolicy = this.compaction
-  ): Promise<void> {
-    assertJournalWritable(this.readOnly, this.identity.sessionId)
-    const result = await compactJournal({
-      journalDir: this.journalDir,
-      state: this.state,
-      tailRows: this.tailRows,
-      policy,
-      now,
-      maxSessionBytes: this.budget.maxSessionBytes,
-      sessionId: this.identity.sessionId
-    })
-    this.tailRows = result.tailRows
-    this.compactedThrough = result.compactedThrough
-    this.state.oldestSequence = result.oldestSequence
-    this.sizeBytes = await journalDirectoryBytes(this.journalDir)
+  /** Failed initialization proves handed-over but unanswered sends never ran. */
+  async rejectPendingSubmissions(
+    fence: number,
+    rejection: AgentJournalDispatchRejection
+  ): Promise<string[]> {
+    return rejectJournalPendingSubmissions(this, fence, rejection)
   }
 
-  /** The escape hatch for corruption, an unreconcilable prefix, a forked handle,
-   *  and an unreadable schema. It invalidates every cursor; clients reload. */
+  rejectQueuedSubmissions = (
+    fence: number,
+    rejection: AgentJournalDispatchRejection,
+    which?: (submission: AgentJournalSubmission) => boolean
+  ): Promise<string[]> => rejectJournalQueuedSubmissions(this, fence, rejection, which)
+
+  /** Epoch rollover invalidates every client cursor. */
   async rollEpoch(reason: AgentJournalEpochReason, fence: number): Promise<AgentJournalCursor> {
     return this.epochController.roll(reason, fence)
   }
 
   replaceEpochItems(
-    reason: AgentJournalEpochReason,
-    fence: number,
-    items: readonly JournalReplacementItem[]
+    ...args: Parameters<JournalEpochController['replace']>
   ): Promise<AgentJournalCursor> {
-    return this.epochController.replace(reason, fence, items)
+    return this.epochController.replace(...args)
   }
 
   private adoptLoadedJournal(loaded: JournalLoad): void {
-    Object.assign(this, journalStoreLoadedFields(loaded))
-  }
-
-  /**
-   * Assign the next sequence, make the row durable, and fold it through the
-   * SAME reducer replay uses — all inside one serialized step, so concurrent
-   * callers cannot interleave and mint the same sequence.
-   */
-  private enqueue(
-    build: (seq: number, ts: number) => JournalRow,
-    blobs: readonly JournalBlobInput[] = []
-  ): Promise<JournalRow> {
-    return this.rowWriter.enqueue(build, blobs)
-  }
-
-  private serializeCapacityMutation = <T>(runMutation: () => Promise<T> | T): Promise<T> =>
-    this.serializeWrite(async () => runMutation())
-
-  private serializeWrite<T>(runWrite: () => Promise<T>): Promise<T> {
-    const run = this.writes.then(runWrite)
-    this.writes = run.catch(() => undefined)
-    return run
+    this.state = loaded.state
   }
 }

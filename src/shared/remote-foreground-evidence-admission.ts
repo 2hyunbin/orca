@@ -17,11 +17,7 @@ export type RemoteForegroundEvidenceAdmission = {
   knownAuthorityGenerations?: ReadonlySet<string>
 }
 
-/**
- * Admit only a host record tied to the currently attached PTY incarnation.
- * Transport failures intentionally pass `undefined` and produce no synthetic
- * host record.
- */
+/** Require current PTY-incarnation host evidence; transport failures supply undefined, never synthetic host records. */
 export function admitRemoteForegroundEvidence(
   value: unknown,
   admission: RemoteForegroundEvidenceAdmission
@@ -40,7 +36,9 @@ export function admitRemoteForegroundEvidence(
     0,
     admission.receivedAtMonotonic - admission.requestStartedAtMonotonic
   )
-  if (value.capturedAgeMs + receiveDelay > REMOTE_FOREGROUND_EVIDENCE_MAX_AGE_MS) {
+  // Use max, never sum: ps duration is inside receiveDelay and also included in host capturedAgeMs. Summing charged capture twice
+  // (1200ms host + 1300ms round trip falsely exceeded 2s). Sweep gates differ: post-listing planning time is nonoverlapping and additive.
+  if (Math.max(value.capturedAgeMs, receiveDelay) > REMOTE_FOREGROUND_EVIDENCE_MAX_AGE_MS) {
     return null
   }
   if (

@@ -2,17 +2,24 @@ import {
   AGENT_STATUS_STALE_AFTER_MS,
   type AgentStatusOrchestrationContext
 } from '../../shared/agent-status-types'
+import type { FleetAgentStatusEvidence } from '../../shared/orchestration-fleet-agent-status-evidence'
 import { buildOrchestrationTaskDisplayMetadata } from '../../shared/orchestration-task-display'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import type { OrchestrationCompatibilityTerminalAuthority } from './runtime-terminal-contracts'
 import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import type { OrchestrationDb } from './orchestration/db'
-import { runtimeWorktreeIdsEqual } from './runtime-worktree-path-identity'
+import {
+  buildWorkerAttentionContext,
+  projectWorkerAttentionContext
+} from './orchestration/worker-attention-context'
+import { worktreeIdsEqual } from '../../shared/worktree/id'
+import type { PtyPaneOf } from './terminal/surface/pty-pane-query'
 
 type RuntimeAgentOrchestrationDependencies = {
   getDb(): OrchestrationDb | null
   getLeaves(): Iterable<RuntimeLeafRecord>
   getPtys(): Iterable<RuntimePtyWorktreeRecord>
+  paneOf: PtyPaneOf
   issueLeafHandle(leaf: RuntimeLeafRecord): string
   issuePtyHandle(pty: RuntimePtyWorktreeRecord): string
   makePaneKey(leaf: RuntimeLeafRecord): string
@@ -20,6 +27,7 @@ type RuntimeAgentOrchestrationDependencies = {
   getHandleForPaneKey(paneKey: string): string | null
   getPaneKey(handle: string): string | null
   getDispatchAuthority(handle: string): OrchestrationCompatibilityTerminalAuthority | null
+  getAgentStatusSnapshot(): readonly FleetAgentStatusEvidence[]
 }
 
 export class RuntimeAgentOrchestrationProjection {
@@ -31,6 +39,11 @@ export class RuntimeAgentOrchestrationProjection {
       return undefined
     }
     const contexts: Record<string, AgentStatusOrchestrationContext> = {}
+    const evidenceByPaneKey = new Map(
+      this.deps.getAgentStatusSnapshot().map((evidence) => [evidence.activity.paneKey, evidence])
+    )
+    // Batch attention queries below; per-pane reads would repeat every 16ms publication.
+    const batchAttention = typeof db.getWorkerAttentionFactsForDispatches === 'function'
     const queriedHandles = new Set<string>()
     for (const leaf of this.deps.getLeaves()) {
       if (!leaf.ptyId) {
@@ -38,13 +51,19 @@ export class RuntimeAgentOrchestrationProjection {
       }
       const handle = this.deps.issueLeafHandle(leaf)
       queriedHandles.add(handle)
-      const context = this.getForHandle(handle, db)
+      const paneKey = this.deps.makePaneKey(leaf)
+      const context = this.getForHandle(handle, db, {
+        paneKey,
+        evidence: evidenceByPaneKey.get(paneKey),
+        deferAttention: batchAttention
+      })
       if (context) {
-        contexts[this.deps.makePaneKey(leaf)] = context
+        contexts[paneKey] = context
       }
     }
     for (const pty of this.deps.getPtys()) {
-      if (!pty.paneKey || contexts[pty.paneKey]) {
+      const { paneKey } = this.deps.paneOf(pty)
+      if (!paneKey || contexts[paneKey]) {
         continue
       }
       const handle = this.deps.issuePtyHandle(pty)
@@ -52,19 +71,56 @@ export class RuntimeAgentOrchestrationProjection {
         continue
       }
       queriedHandles.add(handle)
-      const context = this.getForHandle(handle, db)
+      const context = this.getForHandle(handle, db, {
+        paneKey,
+        evidence: evidenceByPaneKey.get(paneKey),
+        deferAttention: batchAttention
+      })
       if (context) {
-        contexts[pty.paneKey] = context
+        contexts[paneKey] = context
       }
     }
-    return Object.keys(contexts).length > 0 ? contexts : undefined
+    const entries = Object.entries(contexts)
+    if (entries.length === 0) {
+      return undefined
+    }
+    if (batchAttention) {
+      const now = Date.now()
+      const factsByDispatch = db.getWorkerAttentionFactsForDispatches(
+        entries.map(([, context]) => context.dispatchId),
+        now
+      )
+      for (const [paneKey, context] of entries) {
+        const facts = factsByDispatch.get(context.dispatchId)
+        if (facts) {
+          contexts[paneKey] = {
+            ...context,
+            attention: projectWorkerAttentionContext({
+              facts,
+              isRoot: facts.isRoot,
+              evidence: evidenceByPaneKey.get(paneKey),
+              now
+            })
+          }
+        }
+      }
+    }
+    return contexts
   }
 
   getForHandle(
     handle: string,
-    db = this.deps.getDb()
+    db = this.deps.getDb(),
+    options: {
+      // Handles are process-local; pane identity still names the Dispatch after restart.
+      paneKey?: string
+      evidence?: FleetAgentStatusEvidence
+      deferAttention?: boolean
+    } = {}
   ): AgentStatusOrchestrationContext | undefined {
-    const dispatch = db?.getActiveDispatchForTerminal?.(handle) ?? this.getRecent(handle, db)
+    const { paneKey, evidence, deferAttention = false } = options
+    const dispatch =
+      db?.getActiveDispatchForTerminal?.(handle, paneKey) ?? this.getRecent(handle, db)
     if (!dispatch) {
       return undefined
     }
@@ -92,7 +148,7 @@ export class RuntimeAgentOrchestrationProjection {
       legacyActiveRun &&
       handleWorktreeId &&
       coordinatorWorktreeId &&
-      runtimeWorktreeIdsEqual(coordinatorWorktreeId, handleWorktreeId)
+      worktreeIdsEqual(coordinatorWorktreeId, handleWorktreeId)
         ? legacyActiveRun
         : undefined
     const coordinatorHandle = runCoordinatorHandle ?? scopedLegacyRun?.coordinator_handle
@@ -122,32 +178,78 @@ export class RuntimeAgentOrchestrationProjection {
       task.creator_dispatch_process_incarnation === task.created_by_process_incarnation &&
       parsePaneKey(task.creator_dispatch_pane_key)?.leafId === storedCreatorPane?.leafId
     )
-    const currentCreatorHandle =
+    // Durable Run membership identifies the creator; live incarnation/handle checks only decide mutation authority.
+    const creatorLineageInRun = Boolean(
       owningRun?.legacy === 0 &&
       task?.created_by_run_generation === owningRun.consumer_generation &&
-      task.created_by_process_incarnation === creatorAuthority?.processIncarnation &&
-      sameCreatorPane &&
+      creatorPaneKey &&
       (paneRun
         ? paneRun.id === owningRun.id &&
           paneRun.consumer_generation === task.created_by_run_generation
         : sameRunCreatorDispatch)
+    )
+    const currentCreatorHandle =
+      creatorLineageInRun &&
+      task?.created_by_process_incarnation === creatorAuthority?.processIncarnation &&
+      sameCreatorPane
         ? (creatorPaneHandle ?? undefined)
         : undefined
-    const parentHandle =
-      currentCreatorHandle ??
-      (coordinatorHandle && coordinatorHandle !== handle ? coordinatorHandle : undefined)
-    const parentPaneKey = parentHandle ? this.deps.getPaneKey(parentHandle) : undefined
+    const coordinator = this.resolveLivePane(
+      coordinatorHandle,
+      owningRun?.legacy === 0 ? owningRun.coordinator_pane_key : null
+    )
+    const creator = currentCreatorHandle
+      ? {
+          handle: currentCreatorHandle,
+          paneKey: this.deps.getPaneKey(currentCreatorHandle) ?? undefined
+        }
+      : creatorLineageInRun
+        ? this.resolveLivePane(creatorPaneHandle, creatorPaneKey ?? null)
+        : undefined
+    const coordinatorIsSelf =
+      coordinator.handle === handle ||
+      (paneKey !== undefined &&
+        coordinator.paneKey !== undefined &&
+        coordinator.paneKey === paneKey)
+    // Why: a creator whose pane is gone still has a coordinator to nest under.
+    const parent = creator?.handle ? creator : coordinatorIsSelf ? {} : coordinator
+    const attention =
+      !deferAttention && db && typeof db.getWorkerAttentionFacts === 'function'
+        ? buildWorkerAttentionContext({ db, dispatch, task, evidence })
+        : undefined
     return {
       taskId: dispatch.task_id,
       dispatchId: dispatch.id,
       dispatchStatus: dispatch.status,
       ...(display.taskTitle ? { taskTitle: display.taskTitle } : {}),
       ...(display.displayName ? { displayName: display.displayName } : {}),
-      ...(parentHandle ? { parentTerminalHandle: parentHandle } : {}),
-      ...(parentPaneKey ? { parentPaneKey } : {}),
-      ...(coordinatorHandle ? { coordinatorHandle } : {}),
-      ...(orchestrationRunId ? { orchestrationRunId } : {})
+      ...(parent.handle ? { parentTerminalHandle: parent.handle } : {}),
+      ...(parent.paneKey ? { parentPaneKey: parent.paneKey } : {}),
+      ...(coordinator.handle ? { coordinatorHandle: coordinator.handle } : {}),
+      ...(orchestrationRunId ? { orchestrationRunId } : {}),
+      ...(attention ? { attention } : {})
     }
+  }
+
+  /** Never publish stale process-local handles; re-resolve the durable pane key, retaining it while offline so restored rows can nest again. */
+  private resolveLivePane(
+    storedHandle: string | null | undefined,
+    storedPaneKey: string | null
+  ): { handle?: string; paneKey?: string } {
+    if (storedHandle && this.deps.getWorktreeId(storedHandle) !== null) {
+      return {
+        handle: storedHandle,
+        paneKey: this.deps.getPaneKey(storedHandle) ?? storedPaneKey ?? undefined
+      }
+    }
+    if (!storedPaneKey) {
+      return {}
+    }
+    const liveHandle = this.deps.getHandleForPaneKey(storedPaneKey)
+    if (!liveHandle) {
+      return { paneKey: storedPaneKey }
+    }
+    return { handle: liveHandle, paneKey: this.deps.getPaneKey(liveHandle) ?? storedPaneKey }
   }
 
   private getRecent(handle: string, db: OrchestrationDb | null) {

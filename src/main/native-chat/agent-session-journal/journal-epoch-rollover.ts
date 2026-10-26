@@ -1,58 +1,70 @@
-// Opening a new epoch.
-//
-// The snapshot is what names the live epoch, so it is published BEFORE the log
-// is reset. A crash mid-rollover therefore leaves stale-epoch rows behind the
-// new snapshot, which `loadJournal` drops — the reverse order would leave a
-// journal whose log no longer matches any epoch anyone can name.
+// Delete and replace epochs atomically; retaining superseded rows would grow history without bound.
 
-import { AGENT_SESSION_JOURNAL_SCHEMA_VERSION } from '../../../shared/agent-session-journal-types'
-import type { AgentSessionProviderHandle } from '../../../shared/agent-session-journal-types'
-import { compactJournal } from './journal-compaction'
-import { applyJournalRow, createJournalReducerState } from './journal-reducer'
-import type { AgentJournalEpochReason, JournalRow } from './journal-row-schema'
-import { journalRowByteLength } from './journal-row-schema'
+import { journalRowSchemaVersion } from '../../../shared/agent-session-journal-types'
+import type { AgentSessionJournalIdentity } from '../../../shared/agent-session-journal-types'
+import { agentSessionJournalProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import type { JournalHostDatabase } from './journal-host-database'
 import type { JournalLoad } from './journal-open'
-import { DEFAULT_JOURNAL_PAYLOAD_LIMITS } from './journal-payload-bounds'
+import { applyJournalRow, createJournalReducerState } from './journal-reducer'
+import { buildJournalQueueRow } from './journal-queue-events'
+import type { JournalQueueRestatement } from './journal-queued-messages'
+import {
+  deleteJournalEpochRows,
+  insertJournalRow,
+  publishJournalSessionEpoch,
+  readJournalSessionEpoch
+} from './journal-row-table'
+import type { AgentJournalEpochReason, JournalRow } from './journal-row-schema'
 
-export async function publishNewEpoch(input: {
-  journalDir: string
-  sessionId: string
-  providerHandle: AgentSessionProviderHandle
+export function publishNewEpoch(input: {
+  database: JournalHostDatabase
+  identity: AgentSessionJournalIdentity
   epoch: string
   reason: AgentJournalEpochReason
   fence: number
   now: number
-  maxSessionBytes?: number
-}): Promise<JournalLoad> {
+  /** Unhanded cards wait again; replacement submissions may relink them. */
+  queue: JournalQueueRestatement
+  /** Adopt committed state before fallible follow-up work. */
+  onPublished: (loaded: JournalLoad) => void
+}): void {
   const row: JournalRow = {
     kind: 'epoch',
     reason: input.reason,
-    providerHandle: input.providerHandle,
-    v: AGENT_SESSION_JOURNAL_SCHEMA_VERSION,
+    providerHandle: agentSessionJournalProviderHandle(input.identity),
+    // Body-free epoch rows must remain readable by older hosts.
+    v: journalRowSchemaVersion([]),
     epoch: input.epoch,
     seq: 1,
     fence: input.fence,
     ts: input.now
   }
-  const state = createJournalReducerState(input.sessionId, input.epoch)
-  await compactJournal({
-    journalDir: input.journalDir,
-    state,
-    tailRows: [row],
-    policy: { minTailRows: 1, retainTailMs: Number.POSITIVE_INFINITY },
-    now: input.now,
-    maxSessionBytes: input.maxSessionBytes ?? DEFAULT_JOURNAL_PAYLOAD_LIMITS.maxSessionBytes,
-    sessionId: input.sessionId
-  })
+
+  const { sessionId } = input.identity
+  const state = createJournalReducerState(sessionId, input.epoch)
   applyJournalRow(state, row)
-  state.oldestSequence = 1
-  return {
-    state,
-    tailRows: [row],
-    compactedThrough: 0,
-    readOnly: false,
-    corrupt: false,
-    malformedRows: 0,
-    sizeBytes: journalRowByteLength(row)
+  const rows: JournalRow[] = [row]
+  for (const { messageId, change } of input.queue.cards) {
+    if (change) {
+      const card = buildJournalQueueRow(state, messageId, change, state.lastSequence + 1, input.now)
+      applyJournalRow(state, card)
+      rows.push(card)
+    }
   }
+  input.database.transaction((db) => {
+    const retired = readJournalSessionEpoch(db, sessionId)
+    if (retired !== null) {
+      deleteJournalEpochRows(db, sessionId, retired)
+    }
+    for (const each of rows) {
+      insertJournalRow(db, sessionId, each)
+    }
+    input.queue.receipt.write(db)
+    publishJournalSessionEpoch(db, input.identity, input.epoch)
+  })
+
+  // Adopt committed state before fallible work can leave writers targeting the deleted epoch.
+  input.queue.receipt.committed()
+  state.oldestSequence = 1
+  input.onPublished({ state, newer: null, damage: null })
 }

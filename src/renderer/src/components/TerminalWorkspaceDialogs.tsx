@@ -17,13 +17,13 @@ export function TerminalWorkspaceDialogs({
   controller: TerminalController
 }): React.JSX.Element {
   const {
-    cancelWindowCloseDialog,
-    confirmWindowCloseDialog,
+    confirmNativeWindowClose,
     handleSaveDialogCancel,
     handleSaveDialogDiscard,
     handleSaveDialogSave,
     saveDialogFile,
     saveDialogFileId,
+    setWindowCloseDialogOpen,
     windowCloseDialogKind,
     windowCloseDialogOpen
   } = controller
@@ -73,7 +73,7 @@ export function TerminalWorkspaceDialogs({
         open={windowCloseDialogOpen}
         onOpenChange={(open) => {
           if (!open) {
-            cancelWindowCloseDialog()
+            setWindowCloseDialogOpen(false)
           }
         }}
       >
@@ -95,7 +95,12 @@ export function TerminalWorkspaceDialogs({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={cancelWindowCloseDialog}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setWindowCloseDialogOpen(false)}
+            >
               {translate('auto.components.Terminal.f82e9f02df', 'Cancel')}
             </Button>
             <Button
@@ -103,7 +108,10 @@ export function TerminalWorkspaceDialogs({
               variant="destructive"
               size="sm"
               autoFocus
-              onClick={confirmWindowCloseDialog}
+              onClick={() => {
+                setWindowCloseDialogOpen(false)
+                confirmNativeWindowClose()
+              }}
             >
               {translate('auto.components.Terminal.73768427cf', 'Close')}
             </Button>

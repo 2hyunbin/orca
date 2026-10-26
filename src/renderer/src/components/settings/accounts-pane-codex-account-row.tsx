@@ -1,6 +1,7 @@
 import { Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import type { CodexRateLimitAccountsState } from '../../../../shared/managed-account-types'
 import { translate } from '@/i18n/i18n'
+import { getCodexAccountDisplayDetail } from '@/lib/codex-account-display-label'
 import { selectCodexProviderAccount } from '@/runtime/runtime-provider-accounts-client'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
@@ -28,7 +29,7 @@ export function renderCodexAccountRow(
     isRemoteAccountScope,
     runCodexAccountAction,
     setRemoveCodexTarget,
-    settings
+    accountOwner
   } = model
   const isActive = providerAccountIsActiveInView(
     account,
@@ -36,8 +37,7 @@ export function renderCodexAccountRow(
     accountRuntime,
     accountVisibilityOptions
   )
-  // Why: same remote gate as the section-level warning — the
-  // desktop's rate-limit poll says nothing about server accounts.
+  // Desktop rate-limit polls cannot describe remote-owned account auth.
   const accountAuthWarning = isRemoteAccountScope
     ? null
     : getCodexAccountAuthWarning({
@@ -48,6 +48,7 @@ export function renderCodexAccountRow(
         accountId: account.id
       })
   const needsReauthentication = Boolean(accountAuthWarning)
+  const accountDetail = getCodexAccountDisplayDetail(account, codexAccounts.accounts)
   const isReauthing = codexAction === `reauth:${account.id}`
   const isRemoving = codexAction === `remove:${account.id}`
   const isBusy = codexAction !== 'idle' || accountRuntimeUnavailable
@@ -71,7 +72,7 @@ export function renderCodexAccountRow(
             void runCodexAccountAction(
               `select:${account.id}`,
               () =>
-                selectCodexProviderAccount(settings, {
+                selectCodexProviderAccount(accountOwner, {
                   accountId: account.id,
                   ...accountRuntimeView
                 }),
@@ -111,6 +112,12 @@ export function renderCodexAccountRow(
               needsReauthentication ? 'text-destructive' : 'text-muted-foreground'
             }`}
           >
+            {accountDetail ? (
+              <>
+                <span className="min-w-0 break-words">{accountDetail}</span>
+                <span className="shrink-0 opacity-50">•</span>
+              </>
+            ) : null}
             {needsReauthentication ? (
               <span className="truncate">
                 {translate(
@@ -118,20 +125,14 @@ export function renderCodexAccountRow(
                   'Codex reported this sign-in is out of date'
                 )}
               </span>
-            ) : account.workspaceLabel ? (
-              <span className="truncate">{account.workspaceLabel}</span>
             ) : null}
-            {needsReauthentication || account.workspaceLabel ? (
-              <span className="shrink-0 opacity-50">•</span>
-            ) : null}
+            {needsReauthentication ? <span className="shrink-0 opacity-50">•</span> : null}
             <span className="shrink-0">{formatAccountTimestamp(account.lastAuthenticatedAt)}</span>
           </div>
         </button>
 
         <div className="flex shrink-0 items-center justify-end gap-1 max-md:w-full max-md:flex-wrap">
-          {/* Why: selecting an account is the primary action in this row.
-          Keeping maintenance actions visually lighter prevents re-auth/remove
-          controls from overpowering the selection affordance in a dense list. */}
+          {/* Keep maintenance actions lighter so account selection remains primary in dense lists. */}
           <Button
             variant="ghost"
             size="xs"

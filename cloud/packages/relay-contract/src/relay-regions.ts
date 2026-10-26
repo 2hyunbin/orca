@@ -8,6 +8,12 @@ export type RelayRegion = z.infer<typeof RelayRegionSchema>
 
 export const RELAY_DEFAULT_REGION: RelayRegion = 'us-central1'
 
+// Explicit segments must match Terraform; satisfies forces new regions to define metrics or skew-alert denominators silently omit them.
+export const RELAY_REGION_METRIC_SEGMENTS = {
+  'us-central1': 'UsCentral1',
+  'asia-east2': 'AsiaEast2'
+} as const satisfies Record<RelayRegion, string>
+
 const RelayProbeOriginSchema = z.string().url().max(2_048).refine(isCanonicalHttpsOrigin)
 
 export const RelayRegionCatalogResponseSchema = z

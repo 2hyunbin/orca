@@ -122,7 +122,8 @@ describe('Codex WSL scan gate', () => {
     await expect(
       resolveSessionFilePath('codex', 'session-id', {
         transcriptPath: `${WSL_SESSIONS_DIR}\\2026\\rollout-1-session-id.jsonl`,
-        codexSessionsDirs: [DEBIAN_SESSIONS_DIR]
+        codexSessionsDirs: [DEBIAN_SESSIONS_DIR],
+        wslDistro: 'Ubuntu'
       })
     ).rejects.toBe(refusal)
     expect(mocks.walk).not.toHaveBeenCalled()
@@ -173,8 +174,7 @@ describe('Codex WSL scan gate', () => {
     ).rejects.toBe(abortReason)
   })
 
-  // The scan layer's own waiter already wins this race; the resolver's post-catch
-  // signal check is the backstop if that ever stops holding.
+  // Scan cancellation normally wins; the resolver’s post-catch check remains a backstop.
   it('reports the abort, not a refusal, when a scanned root is aborted mid-scan', async () => {
     const controller = new AbortController()
     const abortReason = new Error('caller went away')

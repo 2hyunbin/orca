@@ -8,6 +8,7 @@ import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import { emitCmdJRowIndexJump } from '@/lib/cmd-j-row-index-jump'
 import WorktreeJumpPalette from './WorktreeJumpPalette'
+import { encodePaletteIdentity } from '@/lib/palette-match/palette-ranking'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import {
   LEAF_ID,
@@ -58,8 +59,7 @@ vi.mock('@/components/cmd-j/palette-host-badge', () => ({
   getPaletteHostBadge: () => null
 }))
 
-// Why: activation reaches into window.api and the whole worktree-reveal path; the palette's own
-// contract is which result it hands over, so stub the boundary and assert on that.
+// Stub activation at its boundary; the palette contract is which result it hands over.
 const { activateWorkspaceTabPaletteResult } = vi.hoisted(() => ({
   activateWorkspaceTabPaletteResult: vi.fn((_result: unknown) => ({ status: 'activated' }) as const)
 }))
@@ -72,8 +72,7 @@ vi.mock('@/components/ui/command', async () => {
   return {
     Command: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     CommandGroup: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    // Why the commandProps passthrough: cmdk resolves Enter against its `value`, so the controlled
-    // value is the only honest stand-in for "what would Enter activate" without mounting real cmdk.
+    // Pass controlled cmdk value through so Enter-target assertions reflect actual selection.
     CommandDialog: ({
       children,
       open,
@@ -176,9 +175,11 @@ async function renderPalette(overrides: Partial<AppState>): Promise<void> {
 }
 
 function getWorktreeRows(): string[] {
-  return [...testContainer.querySelectorAll<HTMLElement>('[data-command-item^="worktree:"]')].map(
-    (node) => node.textContent ?? ''
-  )
+  return [
+    ...testContainer.querySelectorAll<HTMLElement>(
+      `[data-command-item^="${encodePaletteIdentity(['worktree'])}"]`
+    )
+  ].map((node) => node.textContent ?? '')
 }
 
 function getRenderedRowIds(): string[] {
@@ -195,13 +196,26 @@ function getCommandValue(): string {
 }
 
 function getTabRowIds(): string[] {
-  return [...testContainer.querySelectorAll<HTMLElement>('[data-command-item^="workspace-tab:"]')]
+  return [
+    ...testContainer.querySelectorAll<HTMLElement>(
+      `[data-command-item^="${encodePaletteIdentity(['workspace-tab'])}"]`
+    )
+  ]
     .map((node) => node.dataset.commandItem ?? '')
-    .map((id) => id.replace('workspace-tab:', ''))
+    .map(
+      (id) =>
+        Object.values(useAppStore.getState().unifiedTabsByWorktree)
+          .flat()
+          .find(
+            (tab) => encodePaletteIdentity(['workspace-tab', '', tab.worktreeId, tab.id]) === id
+          )?.id ?? ''
+    )
 }
 function getTabRowShortcutDigits(): string[] {
   return [
-    ...testContainer.querySelectorAll<HTMLElement>('[data-command-item^="workspace-tab:"]')
+    ...testContainer.querySelectorAll<HTMLElement>(
+      `[data-command-item^="${encodePaletteIdentity(['workspace-tab'])}"]`
+    )
   ].flatMap((row) =>
     [...row.querySelectorAll<HTMLElement>('span')]
       .map((node) => node.textContent ?? '')
@@ -238,20 +252,21 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     await renderPalette(makeRecentTabState())
 
     const rows = getRenderedRowIds().filter((id) => id.length > 0)
-    expect(rows[0]).toMatch(/^workspace-tab:/)
-    expect(rows.some((id) => id.startsWith('worktree:'))).toBe(true)
+    expect(rows[0].startsWith(encodePaletteIdentity(['workspace-tab']))).toBe(true)
+    expect(rows.some((id) => id.startsWith(encodePaletteIdentity(['worktree'])))).toBe(true)
     expect(testContainer.textContent).toContain('Recent Chats & Terminals')
-    expect(testContainer.textContent).toContain('Recent Worktrees')
+    expect(testContainer.textContent).toContain('Recent Workspaces')
   })
 
   it('keeps duplicate persisted tab ids as separate recent rows and digit targets', async () => {
     await renderPalette(makeDuplicateRecentTabState())
 
     expect(
-      getRenderedRowIds().filter(
-        (id) => id === 'workspace-tab:tab-duplicate' || id.includes(':workspace-tab:tab-duplicate')
-      )
-    ).toEqual(['workspace-tab:tab-duplicate', 'palette-dup:1:workspace-tab:tab-duplicate'])
+      getRenderedRowIds().filter((id) => id.startsWith(encodePaletteIdentity(['workspace-tab'])))
+    ).toEqual([
+      encodePaletteIdentity(['workspace-tab', 'ssh:alpha', 'wt-alpha', 'tab-duplicate']),
+      encodePaletteIdentity(['workspace-tab', 'ssh:beta', 'wt-beta', 'tab-duplicate'])
+    ])
 
     await act(async () => {
       emitCmdJRowIndexJump(1)
@@ -267,9 +282,8 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     await renderPalette(makeManyTabState(12))
 
     expect(getTabRowIds()).toHaveLength(6)
-    expect(testContainer.textContent).toContain('Recent Worktrees')
-    // Why: the worktree section shrinks against the recent rows so the list holds at 10 total —
-    // it must never uncap, not even for the frame before the order snapshot lands.
+    expect(testContainer.textContent).toContain('Recent Workspaces')
+    // Maintain the 10-row total cap even before the order snapshot arrives.
     expect(getWorktreeRows().length).toBeLessThanOrEqual(4)
   })
   it('shows more recent chats and terminals from the empty-query view', async () => {
@@ -310,8 +324,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     await renderPalette(makeManyTabState(12))
     const before = getTabRowIds()
 
-    // Why: closing the whole first page stands in for any mid-open narrowing (a filter chip does the
-    // same thing) — the section must fall through to the next ranked rows, not render empty.
+    // Narrowing away the first page must expose later ranked rows rather than an empty section.
     await act(async () => {
       useAppStore.setState({
         unifiedTabsByWorktree: {
@@ -358,9 +371,11 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     await flushEffects()
 
     const rows = getRenderedRowIds().filter((id) => id.length > 0)
-    expect(rows[0]).toBe('workspace-tab:tab-host')
-    expect(rows).toContain('worktree:wt-weak')
-    expect(getCommandValue()).toBe('workspace-tab:tab-host')
+    expect(rows[0]).toBe(encodePaletteIdentity(['workspace-tab', '', 'wt-host', 'tab-host']))
+    expect(rows).toContain(encodePaletteIdentity(['worktree', '|wt-weak']))
+    expect(getCommandValue()).toBe(
+      encodePaletteIdentity(['workspace-tab', '', 'wt-host', 'tab-host'])
+    )
   })
 
   it('selects the new first result when cmdk reports the deferred list selection', async () => {
@@ -370,20 +385,23 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
       setCommandQuery?.('improve')
     })
     await flushEffects()
-    expect(getCommandValue()).toBe('worktree:wt-weak')
+    expect(getCommandValue()).toBe(encodePaletteIdentity(['worktree', '|wt-weak']))
 
     await act(async () => {
       setCommandQuery?.('perf')
-      setCommandSelection?.('worktree:wt-weak')
+      setCommandSelection?.(encodePaletteIdentity(['worktree', '|wt-weak']))
     })
     await flushEffects()
 
-    expect(getRenderedRowIds().find((id) => id.length > 0)).toBe('workspace-tab:tab-host')
-    expect(getCommandValue()).toBe('workspace-tab:tab-host')
+    expect(getRenderedRowIds().find((id) => id.length > 0)).toBe(
+      encodePaletteIdentity(['workspace-tab', '', 'wt-host', 'tab-host'])
+    )
+    expect(getCommandValue()).toBe(
+      encodePaletteIdentity(['workspace-tab', '', 'wt-host', 'tab-host'])
+    )
   })
 
-  // Why: after typing, arrow moves must stick. Dropping onValueChange while cmdk already
-  // advanced its internal cursor made the next ArrowDown a no-op (Object.is short-circuit).
+  // Honor onValueChange after ranking; cmdk’s advanced internal cursor otherwise makes the next ArrowDown a no-op.
   it('keeps arrow selection after the typed query ranking has committed', async () => {
     await renderPalette(makeTypedRelevanceState())
 
@@ -391,7 +409,9 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
       setCommandQuery?.('perf')
     })
     await flushEffects()
-    expect(getCommandValue()).toBe('workspace-tab:tab-host')
+    expect(getCommandValue()).toBe(
+      encodePaletteIdentity(['workspace-tab', '', 'wt-host', 'tab-host'])
+    )
 
     const rows = getRenderedRowIds().filter((id) => id.length > 0)
     expect(rows.length).toBeGreaterThan(1)
@@ -421,15 +441,14 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     await flushEffects()
 
     const firstRow = getRenderedRowIds().find((id) => id.length > 0)
-    expect(firstRow).toBe('worktree:wt-strong')
+    expect(firstRow).toBe(encodePaletteIdentity(['worktree', '|wt-strong']))
   })
 
   it('ranks a typed query by match position inside the worktree section', async () => {
     await renderPalette({
       worktreesByRepo: {
         'repo-1': [
-          // Why this order: smart sort keeps the input order here, so a promoted prefix hit can only
-          // come from relevance re-ranking.
+          // Preserve input order under smart sort so only relevance ranking can promote the prefix hit.
           makeWorktree('wt-word-a', 'improve-agent-dashboard-performance'),
           makeWorktree('wt-word-b', 'rc-perf-update-channels'),
           makeWorktree('wt-prefix', 'perf-diff-tighten')
@@ -443,12 +462,13 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     })
     await flushEffects()
 
-    // Why word-b beats word-a despite input order: `perf` is a whole word in
-    // `rc-perf-update-channels` but only a prefix of `performance`.
-    expect(getRenderedRowIds().filter((id) => id.startsWith('worktree:'))).toEqual([
-      'worktree:wt-prefix',
-      'worktree:wt-word-b',
-      'worktree:wt-word-a'
+    // Whole-word perf outranks the prefix in performance despite input order.
+    expect(
+      getRenderedRowIds().filter((id) => id.startsWith(encodePaletteIdentity(['worktree'])))
+    ).toEqual([
+      encodePaletteIdentity(['worktree', '|wt-prefix']),
+      encodePaletteIdentity(['worktree', '|wt-word-b']),
+      encodePaletteIdentity(['worktree', '|wt-word-a'])
     ])
   })
 
@@ -462,8 +482,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
       showSleepingWorkspaces: true
     })
 
-    // Why this shape: a filter chip that drops every open tab lands here too, and uncapping used to
-    // mount one row per workspace.
+    // Dropping all recent tabs must retain the workspace cap, not mount every workspace.
     expect(getTabRowIds()).toEqual([])
     expect(getWorktreeRows()).toHaveLength(10)
     expect(testContainer.textContent).toContain('4 more')
@@ -478,8 +497,10 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     })
 
     expect(getTabRowIds()).toEqual([])
-    // Why: cmdk claims the first row it sees, which before hydration is a worktree.
-    const firstWorktreeId = getRenderedRowIds().find((id) => id.startsWith('worktree:'))
+    // Before hydration, cmdk auto-selects the first workspace it sees.
+    const firstWorktreeId = getRenderedRowIds().find((id) =>
+      id.startsWith(encodePaletteIdentity(['worktree']))
+    )
     expect(firstWorktreeId).toBeDefined()
     await act(async () => {
       setCommandSelection?.(firstWorktreeId ?? '')
@@ -496,10 +517,11 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
 
     const [topRowId] = getTabRowIds()
     expect(getTabRowIds()).toHaveLength(2)
-    // Enter has to follow the rows up: ⌘1 already points at the first recent chat.
-    expect(getCommandValue()).toBe(`workspace-tab:${topRowId}`)
+    expect(getCommandValue()).toBe(
+      getRenderedRowIds().find((id) => id.startsWith(encodePaletteIdentity(['workspace-tab'])))
+    )
 
-    // Why here: an empty snapshot also left the digit chords addressing nothing until reopen.
+    // Empty snapshots must not leave digit shortcuts unbound until reopen.
     await act(async () => {
       emitCmdJRowIndexJump(0)
     })
@@ -518,9 +540,11 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
       unifiedTabsByWorktree: {}
     })
 
-    const worktreeIds = getRenderedRowIds().filter((id) => id.startsWith('worktree:'))
+    const worktreeIds = getRenderedRowIds().filter((id) =>
+      id.startsWith(encodePaletteIdentity(['worktree']))
+    )
     expect(worktreeIds.length).toBeGreaterThan(1)
-    // Why the second row: only a selection that differs from the auto-picked head proves the user moved it.
+    // Use a non-first row to prove the user moved selection.
     const movedTo = worktreeIds[1]
     await act(async () => {
       setCommandSelection?.(movedTo)
@@ -539,18 +563,31 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     expect(getCommandValue()).toBe(movedTo)
   })
 
-  it('re-ranks once when terminal entities hydrate after unified tabs', async () => {
-    // Why split hydration: unified tabs can land before tabsByWorktree; without a re-capture every
-    // row ranks IDLE. A deliberate second-row highlight must survive that one re-rank.
+  it('preserves visit ordering and selection when terminal entities hydrate', async () => {
     const hydrated = makeRecentTabState({
       agentStatusByPaneKey: {
         [makePaneKey('term-alpha', LEAF_ID)]: makeAgentEntry('term-alpha', 'blocked', Date.now())
       },
-      lastVisitedAtByWorktreeId: { 'wt-beta': Date.now() }
+      unifiedTabsByWorktree: {
+        'wt-alpha': [
+          {
+            ...makeUnifiedTab('tab-alpha', 'wt-alpha', 'term-alpha', 'Alpha chat'),
+            lastFocusedAt: Date.now() - 3 * 86400_000
+          }
+        ],
+        'wt-beta': [
+          {
+            ...makeUnifiedTab('tab-beta', 'wt-beta', 'term-beta', 'Beta chat'),
+            lastFocusedAt: Date.now()
+          }
+        ]
+      }
     })
     await renderPalette({ ...hydrated, tabsByWorktree: {} })
     expect(getTabRowIds()).toEqual(['tab-beta', 'tab-alpha'])
-    const movedTo = `workspace-tab:${getTabRowIds()[1]}`
+    const movedTo = getRenderedRowIds().filter((id) =>
+      id.startsWith(encodePaletteIdentity(['workspace-tab']))
+    )[1]
     await act(async () => {
       setCommandSelection?.(movedTo)
     })
@@ -559,13 +596,12 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
       useAppStore.setState({ tabsByWorktree: hydrated.tabsByWorktree } as Partial<AppState>)
     })
     await flushEffects()
-    expect(getTabRowIds()).toEqual(['tab-alpha', 'tab-beta'])
+    expect(getTabRowIds()).toEqual(['tab-beta', 'tab-alpha'])
     expect(getCommandValue()).toBe(movedTo)
   })
 
   it('admits a high-signal current tab whose terminal entity hydrates late', async () => {
-    // Why: with no tabsByWorktree entity the current tab's badge is unknowable, so membership is
-    // too — an attention-ready capture there would freeze it out of Recent for the whole open.
+    // Wait for the terminal entity before freezing attention membership or late current tabs stay excluded for the whole open.
     const hydrated = makeRecentTabState({
       activeWorktreeId: 'wt-alpha',
       activeTabType: 'terminal',
@@ -587,23 +623,49 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     expect(getTabRowIds()).toEqual(['tab-alpha', 'tab-beta'])
   })
 
-  it('ranks a blocked agent above a more recently visited idle tab', async () => {
+  it('ranks a recently visited idle tab above a three-day-old blocked tab', async () => {
     await renderPalette(
       makeRecentTabState({
         agentStatusByPaneKey: {
           [makePaneKey('term-alpha', LEAF_ID)]: makeAgentEntry('term-alpha', 'blocked', Date.now())
         },
-        lastVisitedAtByWorktreeId: { 'wt-beta': Date.now() }
+        unifiedTabsByWorktree: {
+          'wt-alpha': [
+            {
+              ...makeUnifiedTab('tab-alpha', 'wt-alpha', 'term-alpha', 'Alpha chat'),
+              lastFocusedAt: Date.now() - 3 * 86400_000
+            }
+          ],
+          'wt-beta': [
+            {
+              ...makeUnifiedTab('tab-beta', 'wt-beta', 'term-beta', 'Beta chat'),
+              lastFocusedAt: Date.now()
+            }
+          ]
+        }
       })
     )
 
-    expect(getTabRowIds()).toEqual(['tab-alpha', 'tab-beta'])
+    expect(getTabRowIds()).toEqual(['tab-beta', 'tab-alpha'])
   })
 
   it('freezes the order captured on open while statuses keep changing', async () => {
     await renderPalette(
       makeRecentTabState({
-        lastVisitedAtByWorktreeId: { 'wt-beta': Date.now() }
+        unifiedTabsByWorktree: {
+          'wt-alpha': [
+            {
+              ...makeUnifiedTab('tab-alpha', 'wt-alpha', 'term-alpha', 'Alpha chat'),
+              lastFocusedAt: Date.now() - 3 * 86400_000
+            }
+          ],
+          'wt-beta': [
+            {
+              ...makeUnifiedTab('tab-beta', 'wt-beta', 'term-beta', 'Beta chat'),
+              lastFocusedAt: Date.now()
+            }
+          ]
+        }
       })
     )
 
@@ -629,8 +691,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     })
     await flushEffects()
 
-    // Why closed-then-reopened: the palette stays mounted, and the open effect clears the query one
-    // commit after the snapshot effect — so a naive capture would freeze the Alpha-only subset.
+    // The retained palette clears queries after the snapshot effect; reopening must not freeze an old query’s subset.
     await act(async () => {
       useAppStore.setState({ activeModal: undefined } as Partial<AppState>)
     })
@@ -645,20 +706,6 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     expect(getTabRowIds()).toHaveLength(2)
   })
 
-  it('excludes the idle current tab from the recent section', async () => {
-    await renderPalette(
-      makeRecentTabState({
-        activeWorktreeId: 'wt-alpha',
-        activeTabType: 'terminal',
-        activeTabId: 'term-alpha',
-        activeTabIdByWorktree: { 'wt-alpha': 'term-alpha' },
-        activeTabTypeByWorktree: { 'wt-alpha': 'terminal' }
-      })
-    )
-
-    expect(getTabRowIds()).toEqual(['tab-beta'])
-  })
-
   it('keeps the current tab in recent when its agent needs permission', async () => {
     await renderPalette(
       makeRecentTabState({
@@ -670,46 +717,26 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
         agentStatusByPaneKey: {
           [makePaneKey('term-alpha', LEAF_ID)]: makeAgentEntry('term-alpha', 'blocked', Date.now())
         },
-        lastVisitedAtByWorktreeId: { 'wt-beta': Date.now() }
-      })
-    )
-
-    // Why: high-signal current tabs stay scannable (ask-question / permission badge) even though
-    // idle "where you are" rows are still dropped.
-    expect(getTabRowIds()).toEqual(['tab-alpha', 'tab-beta'])
-    expect(testContainer.textContent).toContain('Current Tab')
-  })
-
-  it('keeps the current tab in recent when its agent is working', async () => {
-    await renderPalette(
-      makeRecentTabState({
-        activeWorktreeId: 'wt-alpha',
-        activeTabType: 'terminal',
-        activeTabId: 'term-alpha',
-        activeTabIdByWorktree: { 'wt-alpha': 'term-alpha' },
-        activeTabTypeByWorktree: { 'wt-alpha': 'terminal' },
-        agentStatusByPaneKey: {
-          [makePaneKey('term-alpha', LEAF_ID)]: makeAgentEntry('term-alpha', 'working', Date.now())
+        unifiedTabsByWorktree: {
+          'wt-alpha': [
+            {
+              ...makeUnifiedTab('tab-alpha', 'wt-alpha', 'term-alpha', 'Alpha chat'),
+              lastFocusedAt: Date.now() - 3 * 86400_000
+            }
+          ],
+          'wt-beta': [
+            {
+              ...makeUnifiedTab('tab-beta', 'wt-beta', 'term-beta', 'Beta chat'),
+              lastFocusedAt: Date.now()
+            }
+          ]
         }
       })
     )
 
-    expect(getTabRowIds()).toContain('tab-alpha')
-  })
-
-  it('keeps the current tab in recent when it has unread activity', async () => {
-    await renderPalette(
-      makeRecentTabState({
-        activeWorktreeId: 'wt-alpha',
-        activeTabType: 'terminal',
-        activeTabId: 'term-alpha',
-        activeTabIdByWorktree: { 'wt-alpha': 'term-alpha' },
-        activeTabTypeByWorktree: { 'wt-alpha': 'terminal' },
-        unreadTerminalTabs: { 'term-alpha': true }
-      })
-    )
-
-    expect(getTabRowIds()).toContain('tab-alpha')
+    // Attention on the current tab still earns a row; idle current tabs do not.
+    expect(getTabRowIds()).toEqual(['tab-beta', 'tab-alpha'])
+    expect(testContainer.textContent).toContain('Current Tab')
   })
 
   it.each([undefined, true])('excludes current terminal outcomes', async (interrupted) => {
@@ -728,8 +755,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
       })
     )
 
-    // Why: a completion you watched land needs no row — `done` outlives the unread auto-ack by the
-    // whole 30m staleness window, so the slot goes to a workspace off screen instead.
+    // Viewed completion stays done for 30 minutes after auto-ack; it must not displace offscreen news.
     expect(getTabRowIds()).toEqual(['tab-beta'])
   })
 
@@ -742,7 +768,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
       })
     )
 
-    // Why: `done` only stops earning *entry* for the tab on screen — elsewhere it is still news.
+    // Offscreen completion still earns entry.
     expect(getTabRowIds()).toContain('tab-alpha')
   })
 
@@ -754,12 +780,37 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
         activeTabId: 'term-alpha',
         activeTabIdByWorktree: { 'wt-alpha': 'term-alpha' },
         activeTabTypeByWorktree: { 'wt-alpha': 'terminal' },
-        // Why pane-keyed only: the narrower marker (unacked completion in one pane) is its own
-        // inclusion input — unreadTerminalTabs stays empty here.
+        // Exercise pane-only unacknowledged completion independently of unreadTerminalTabs.
         unreadAgentCompletionPanes: { [makePaneKey('term-alpha', LEAF_ID)]: true }
       })
     )
 
     expect(getTabRowIds()).toContain('tab-alpha')
+  })
+
+  it('keeps the recent section under a sidebar-seeded repository filter and refreshes on clear', async () => {
+    const secondRepo = { ...makeRepo(), id: 'repo-2', path: '/repos/repo-2', displayName: 'Repo 2' }
+    await renderPalette({
+      ...makeRecentTabState(),
+      repos: [makeRepo(), secondRepo],
+      worktreesByRepo: {
+        'repo-1': [makeWorktree('wt-alpha', 'Alpha workspace')],
+        'repo-2': [makeWorktree('wt-beta', 'Beta workspace', { repoId: 'repo-2' })]
+      },
+      filterRepoIds: ['repo-1']
+    })
+
+    // The seeded filter narrows the recent rows instead of dropping the section.
+    expect(testContainer.textContent).toContain('Recent Chats & Terminals')
+    expect(getTabRowIds()).toEqual(['tab-alpha'])
+
+    await act(async () => {
+      ;[...testContainer.querySelectorAll('button')]
+        .find((button) => button.textContent?.includes('Clear all'))
+        ?.click()
+    })
+    await flushEffects()
+
+    expect(getTabRowIds()).toEqual(expect.arrayContaining(['tab-alpha', 'tab-beta']))
   })
 })

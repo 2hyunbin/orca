@@ -13,7 +13,8 @@ export type RemoteTerminalStreamWatchdog = {
   recordOutputAcknowledged: (bytes: number) => void
   completeCommandResponseProbe: () => void
   recordCommandInput: (text: string) => void
-  recordInbound: () => void
+  /** Only live output answers a pending command; control frames prove transport activity alone. */
+  recordInbound: (carriesOutput: boolean) => void
   dispose: () => void
 }
 
@@ -23,7 +24,7 @@ export function createRemoteTerminalStreamWatchdog(
   let responseTimer: ReturnType<typeof setTimeout> | null = null
   let deliveryTimer: ReturnType<typeof setTimeout> | null = null
   let outstandingDeliveryBytes = 0
-  // Why separate from parse credit: the host reopens its window on ACK frames, so bytes parsed but not yet ACKed are still the credit whose loss stops output.
+  // Host credit reopens on ACK frames; parsed-but-unacked bytes remain credit whose loss can stall output.
   let unacknowledgedBytes = 0
   let deliveryPendingSinceMs: number | null = null
   let lastInboundAtMs = Date.now()
@@ -59,7 +60,7 @@ export function createRemoteTerminalStreamWatchdog(
       reason
     })
   }
-  // Why anchored, never restarted: a deadline re-armed by sibling settles is postponed forever, and one cleared at zero parse credit can only re-arm from inbound output — which is what the stall stops.
+  // Anchor deadline: sibling settles must not postpone it forever, and clearing at zero parse credit would require the very inbound output a stall blocks.
   const syncDeliveryTimer = (): void => {
     if (disposed || outstandingDeliveryBytes + unacknowledgedBytes <= 0) {
       clearDeliveryTimer()
@@ -111,9 +112,11 @@ export function createRemoteTerminalStreamWatchdog(
         REMOTE_TERMINAL_COMMAND_RESPONSE_TIMEOUT_MS
       )
     },
-    recordInbound() {
+    recordInbound(carriesOutput) {
       lastInboundAtMs = Date.now()
-      clearResponseTimer()
+      if (carriesOutput) {
+        clearResponseTimer()
+      }
     },
     dispose() {
       disposed = true

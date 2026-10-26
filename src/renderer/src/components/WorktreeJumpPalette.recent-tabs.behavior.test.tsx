@@ -8,6 +8,7 @@ import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import { emitCmdJRowIndexJump } from '@/lib/cmd-j-row-index-jump'
 import WorktreeJumpPalette from './WorktreeJumpPalette'
+import { encodePaletteIdentity } from '@/lib/palette-match/palette-ranking'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import {
   LEAF_ID,
@@ -55,8 +56,7 @@ vi.mock('@/components/cmd-j/palette-host-badge', () => ({
   getPaletteHostBadge: () => null
 }))
 
-// Why: activation reaches into window.api and the whole worktree-reveal path; the palette's own
-// contract is which result it hands over, so stub the boundary and assert on that.
+// Stub activation at its boundary; the palette contract is which result it hands over.
 const { activateWorkspaceTabPaletteResult } = vi.hoisted(() => ({
   activateWorkspaceTabPaletteResult: vi.fn((_result: unknown) => ({ status: 'activated' }) as const)
 }))
@@ -69,8 +69,7 @@ vi.mock('@/components/ui/command', async () => {
   return {
     Command: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     CommandGroup: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    // Why the commandProps passthrough: cmdk resolves Enter against its `value`, so the controlled
-    // value is the only honest stand-in for "what would Enter activate" without mounting real cmdk.
+    // Pass controlled cmdk value through so Enter-target assertions reflect actual selection.
     CommandDialog: ({
       children,
       open,
@@ -177,9 +176,20 @@ function getRenderedRowIds(): string[] {
 }
 
 function getTabRowIds(): string[] {
-  return [...testContainer.querySelectorAll<HTMLElement>('[data-command-item^="workspace-tab:"]')]
+  return [
+    ...testContainer.querySelectorAll<HTMLElement>(
+      `[data-command-item^="${encodePaletteIdentity(['workspace-tab'])}"]`
+    )
+  ]
     .map((node) => node.dataset.commandItem ?? '')
-    .map((id) => id.replace('workspace-tab:', ''))
+    .map(
+      (id) =>
+        Object.values(useAppStore.getState().unifiedTabsByWorktree)
+          .flat()
+          .find(
+            (tab) => encodePaletteIdentity(['workspace-tab', '', tab.worktreeId, tab.id]) === id
+          )?.id ?? ''
+    )
 }
 
 describe('WorktreeJumpPalette recent chats & terminals', () => {
@@ -283,8 +293,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     })
     await flushEffects()
 
-    // Why frozen: membership shares the open-time snapshot with the row order, so a late arrival
-    // can't insert a row under the cursor and renumber ⌘1–6. It joins on the next open.
+    // Freeze membership/order per open so late arrivals cannot move rows or digit shortcuts under the cursor.
     expect(getTabRowIds()).toEqual(['tab-beta'])
   })
 
@@ -312,7 +321,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     })
     await flushEffects()
 
-    // Why: a frozen row must retain its live badge while staying in its original slot.
+    // Frozen rows keep live badges without moving their slots.
     expect(getTabRowIds()).toContain('tab-alpha')
     expect(testContainer.textContent).toContain('Alpha chat')
     expect(document.querySelector('[data-slot=tooltip-trigger]')?.textContent).toContain('Working')
@@ -343,7 +352,6 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     })
     await flushEffects()
 
-    // Why: completion changes the frozen row's badge without removing its reserved slot.
     expect(getTabRowIds()).toContain('tab-alpha')
     expect(document.querySelector('[data-slot=tooltip-trigger]')?.textContent).toContain('Done')
   })
@@ -351,7 +359,20 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
   it('activates the row a digit chord addresses while open', async () => {
     await renderPalette(
       makeRecentTabState({
-        lastVisitedAtByWorktreeId: { 'wt-beta': Date.now() }
+        unifiedTabsByWorktree: {
+          'wt-alpha': [
+            {
+              ...makeUnifiedTab('tab-alpha', 'wt-alpha', 'term-alpha', 'Alpha chat'),
+              lastFocusedAt: Date.now() - 3 * 86400_000
+            }
+          ],
+          'wt-beta': [
+            {
+              ...makeUnifiedTab('tab-beta', 'wt-beta', 'term-beta', 'Beta chat'),
+              lastFocusedAt: Date.now()
+            }
+          ]
+        }
       })
     )
 
@@ -403,7 +424,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
       })
     )
 
-    // Why: require the setter so this cannot silently exercise the empty-query section.
+    // Require actual typed-query state; otherwise the test could silently exercise empty-query results.
     const applyQuery = setCommandQuery
     if (!applyQuery) {
       throw new Error('CommandInput never installed a query setter')
@@ -413,11 +434,10 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     })
     await flushEffects()
 
-    // Why: searching for a tab is exactly when its status matters — the pip must survive the query.
     expect(getTabRowIds()).toContain('tab-alpha')
     expect(getTabRowIds()).not.toContain('tab-beta')
     const alphaRow = testContainer.querySelector<HTMLElement>(
-      '[data-command-item="workspace-tab:tab-alpha"]'
+      `[data-command-item="${encodePaletteIdentity(['workspace-tab', '', 'wt-alpha', 'tab-alpha'])}"]`
     )
     expect(alphaRow?.querySelector('[data-slot=tooltip-trigger]')?.textContent).toContain('Working')
   })
@@ -435,7 +455,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     expect(rows.length).toBeGreaterThan(1)
   })
 
-  it('labels a folder workspace row with its display name, not a branch', async () => {
+  it('labels a branchless main worktree row with its display name', async () => {
     await renderPalette(
       makeRecentTabState({
         worktreesByRepo: {

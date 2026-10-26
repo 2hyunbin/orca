@@ -1,17 +1,11 @@
-// Hydrating a journal from a bridge-era transcript.
-//
-// This reuses the existing per-agent transcript decoders verbatim — a second
-// parser would drift from the one the live view already uses. The decoders
-// return a render model with no identity, so the import wraps them: the wrapper
-// reads an identity anchor off the SAME raw line, then delegates the content.
-//
-// Import always opens a fresh epoch. The imported timeline is a best-effort
-// reconstruction with import-scoped identities for most providers, so it must
-// never be spliced into a sequence space that a structured session is also
-// writing; a later structured resume rolls the epoch again and rebuilds.
+// Build a fresh epoch: import-scoped legacy identities cannot safely share structured sequence space.
 
+import {
+  adoptedTranscriptSourceObserver,
+  validateAdoptedOpenCodeSource,
+  type AdoptedTranscriptSource
+} from './adopted-transcript-source'
 import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
 import type { AgentType } from '../../../shared/agent-status-types'
 import type {
   AgentJournalCursor,
@@ -28,55 +22,46 @@ import {
   decodeOmpTranscriptLine
 } from '../transcript-line-decoders'
 import { decodeTranscriptStream } from '../transcript-stream-lines'
+import { readOpenCodeNativeChatTranscriptFull } from '../transcript-opencode'
+import { boundSubagentEntryId } from '../subagent-entry-id-bounds'
 import { createLegacyIdentityTracker } from './journal-legacy-identity'
+import { createPiTranscriptCollector } from './journal-pi-active-branch'
+import { createNewestItemWindow } from './journal-newest-item-window'
 import type { JournalReplacementItem } from './journal-epoch-replacement'
 import {
   boundInlineText,
-  boundPayload,
   boundToolInput,
-  DEFAULT_JOURNAL_PAYLOAD_LIMITS,
   type JournalPayloadLimits
 } from './journal-payload-bounds'
 import type { AgentSessionJournal } from './journal-store'
 
+export const LEGACY_IMPORT_BLOCK_LIMITS: JournalPayloadLimits = { inlineHeadBytes: 16 * 1024 }
+
 export type LegacyImportOptions = ResolveSessionFileOptions & {
-  /** Resolve directly to this file, skipping path discovery. */
   filePath?: string
+  source?: AdoptedTranscriptSource
   limits?: JournalPayloadLimits
   decodedMessageIdentities?: true
 }
 
-const MAX_LEGACY_IMPORT_SOURCE_BYTES = 16 * 1024 * 1024
+const MAX_LEGACY_IMPORT_RECORD_BYTES = 16 * 1024 * 1024
+// Keep only recent history in memory; the provider resumes the complete source transcript.
+const MAX_LEGACY_IMPORT_RETAINED_BYTES = 16 * 1024 * 1024
+const MAX_LEGACY_IMPORT_SUBAGENTS = 64
 
 export type LegacyImportResult =
-  | { ok: true; epoch: string; cursor: AgentJournalCursor; imported: number }
+  | {
+      ok: true
+      epoch: string
+      cursor: AgentJournalCursor
+      imported: number
+      replaced: boolean
+    }
   | { ok: false; error: string }
 
-export async function appendLegacyTranscriptMessages(input: {
-  journal: AgentSessionJournal
-  agent: AgentType
-  sessionId: string
-  fence: number
-  messages: NativeChatMessage[]
-}): Promise<number> {
-  let appended = 0
-  for (const message of input.messages) {
-    const mapped = legacyItemBody(message, DEFAULT_JOURNAL_PAYLOAD_LIMITS)
-    await input.journal.appendItemWithBlobs(
-      {
-        provider: 'legacy',
-        agent: input.agent,
-        sessionId: input.sessionId,
-        recordId: message.id
-      },
-      mapped.body,
-      mapped.blobs,
-      { fence: input.fence, observedAt: message.timestamp ?? undefined }
-    )
-    appended += 1
-  }
-  return appended
-}
+type PreparedLegacyImport =
+  | { ok: true; items: JournalReplacementItem[]; sourceEmpty: boolean }
+  | { ok: false; error: string }
 
 export async function importLegacyTranscriptIntoJournal(input: {
   journal: AgentSessionJournal
@@ -85,11 +70,33 @@ export async function importLegacyTranscriptIntoJournal(input: {
   fence: number
   options?: LegacyImportOptions
 }): Promise<LegacyImportResult> {
+  const prepared = await prepareLegacyTranscriptImport(input)
+  if (!prepared.ok) {
+    return prepared
+  }
+  if (prepared.items.length === 0) {
+    const current = input.journal.cursor()
+    return { ok: true, epoch: current.epoch, cursor: current, imported: 0, replaced: false }
+  }
+  const cursor = await input.journal.replaceEpochItems('legacy_import', input.fence, prepared.items)
+  return { ok: true, epoch: cursor.epoch, cursor, imported: prepared.items.length, replaced: true }
+}
+
+export async function prepareLegacyTranscriptImport(input: {
+  agent: AgentType
+  sessionId: string
+  options?: LegacyImportOptions
+}): Promise<PreparedLegacyImport> {
   const options = input.options ?? {}
-  const limits = options.limits ?? DEFAULT_JOURNAL_PAYLOAD_LIMITS
-  const transcriptAgent = resolveNativeChatTranscriptAgent(input.agent)
+  const limits = options.limits ?? LEGACY_IMPORT_BLOCK_LIMITS
+  // OMP retained Pi's format, so its decoder also reads Pi sessions.
+  const transcriptAgent =
+    input.agent === 'pi' ? 'omp' : resolveNativeChatTranscriptAgent(input.agent)
   if (!transcriptAgent) {
     return { ok: false, error: `Unsupported agent for journal import: ${input.agent}` }
+  }
+  if (transcriptAgent === 'opencode') {
+    return prepareOpenCodeImport({ ...input, limits })
   }
   const filePath =
     options.filePath ?? (await resolveSessionFilePath(input.agent, input.sessionId, options))
@@ -97,53 +104,84 @@ export async function importLegacyTranscriptIntoJournal(input: {
     return { ok: false, error: `No transcript found for ${input.agent} session ${input.sessionId}` }
   }
 
-  // Refuse an oversized source before decoding any prefix. Importing a prefix
-  // would make the restored timeline look complete while silently omitting
-  // later records; callers can retry after reducing the source or quota.
   try {
-    const sourceBytes = (await stat(filePath)).size
-    if (sourceBytes > MAX_LEGACY_IMPORT_SOURCE_BYTES) {
-      return {
-        ok: false,
-        error: `Legacy transcript exceeds the ${MAX_LEGACY_IMPORT_SOURCE_BYTES}-byte import bound`
-      }
-    }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
-  }
-
-  let decoded: { messages: NativeChatMessage[]; identities: AgentJournalItemIdentity[] }
-  try {
-    decoded = await decodeWithIdentities({
+    const { items, consumedBytes } = await decodeReplacementItems({
       filePath,
       transcriptAgent,
       agent: input.agent,
       sessionId: input.sessionId,
-      decodedMessageIdentities: options.decodedMessageIdentities
+      source: options.source,
+      decodedMessageIdentities: options.decodedMessageIdentities,
+      limits
     })
+    return { ok: true, items, sourceEmpty: consumedBytes === 0 }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
+}
 
-  if (decoded.identities.length !== decoded.messages.length) {
-    return { ok: false, error: 'Legacy transcript identity coverage is incomplete' }
-  }
-  const replacement: JournalReplacementItem[] = []
-  for (const [index, message] of decoded.messages.entries()) {
-    const identity = decoded.identities[index]
-    if (!identity) {
-      continue
+// OpenCode database message IDs are stable; reuse the existing transcript reader.
+async function prepareOpenCodeImport(input: {
+  agent: AgentType
+  sessionId: string
+  options?: LegacyImportOptions
+  limits: JournalPayloadLimits
+}): Promise<PreparedLegacyImport> {
+  const dbPath = input.options?.filePath
+  if (input.options?.source) {
+    if (!dbPath) {
+      return { ok: false, error: 'The conversation database is unavailable.' }
     }
-    const mapped = legacyItemBody(message, limits)
-    replacement.push({
-      identity,
-      body: mapped.body,
-      blobs: mapped.blobs,
-      observedAt: message.timestamp ?? undefined
-    })
+    try {
+      await validateAdoptedOpenCodeSource(dbPath, input.options.source)
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
   }
-  const cursor = await input.journal.replaceEpochItems('legacy_import', input.fence, replacement)
-  return { ok: true, epoch: cursor.epoch, cursor, imported: decoded.messages.length }
+  const read = await readOpenCodeNativeChatTranscriptFull(
+    input.sessionId,
+    dbPath ? { resolveDbPath: async () => dbPath } : {}
+  )
+  if ('error' in read) {
+    return { ok: false, error: read.error }
+  }
+  const identities = read.messages.map((message): AgentJournalItemIdentity => ({
+    provider: 'legacy',
+    agent: input.agent,
+    sessionId: input.sessionId,
+    recordId: message.id
+  }))
+  const items = replacementItems(read.messages, identities, input.limits)
+  return { ok: true, items, sourceEmpty: read.sourceEmpty === true }
+}
+
+function replacementItems(
+  messages: readonly NativeChatMessage[],
+  identities: readonly AgentJournalItemIdentity[],
+  limits: JournalPayloadLimits
+): JournalReplacementItem[] {
+  const replacement: JournalReplacementItem[] = []
+  for (const [index, message] of messages.entries()) {
+    const identity = identities[index]
+    if (identity) {
+      replacement.push(replacementItem(message, identity, limits))
+    }
+  }
+  return replacement
+}
+
+function replacementItem(
+  message: NativeChatMessage,
+  identity: AgentJournalItemIdentity,
+  limits: JournalPayloadLimits
+): JournalReplacementItem {
+  return {
+    identity,
+    body: legacyItemBody(message, limits),
+    observedAt: message.timestamp ?? undefined,
+    // Imported history belongs to no active generation, even when saved rows claim to be running.
+    ownerFence: 0
+  }
 }
 
 const TRANSCRIPT_DECODERS = {
@@ -153,114 +191,127 @@ const TRANSCRIPT_DECODERS = {
   omp: decodeOmpTranscriptLine
 } as const
 
-/** Run the real decoder while recording an identity anchor per emitted message,
- *  index-aligned with `messages`. */
-async function decodeWithIdentities(input: {
+/** Bound during decode so memory follows retained history rather than source-file size. */
+async function decodeReplacementItems(input: {
   filePath: string
   transcriptAgent: keyof typeof TRANSCRIPT_DECODERS
   agent: AgentType
   sessionId: string
   decodedMessageIdentities?: true
-}): Promise<{ messages: NativeChatMessage[]; identities: AgentJournalItemIdentity[] }> {
+  source?: AdoptedTranscriptSource
+  limits: JournalPayloadLimits
+}): Promise<{ items: JournalReplacementItem[]; consumedBytes: number }> {
+  const source = input.source
+    ? adoptedTranscriptSourceObserver({
+        agent: input.agent,
+        filePath: input.filePath,
+        source: input.source,
+        maxSourceBytes: MAX_LEGACY_IMPORT_RECORD_BYTES
+      })
+    : null
   const tracker = createLegacyIdentityTracker({
     transcriptAgent: input.transcriptAgent,
     agent: input.agent,
     sessionId: input.sessionId
   })
   const decode = TRANSCRIPT_DECODERS[input.transcriptAgent]
-  const identities: AgentJournalItemIdentity[] = []
+  const toItem = (message: NativeChatMessage, identity: AgentJournalItemIdentity) =>
+    replacementItem(message, identity, input.limits)
+  const retained = createNewestItemWindow(MAX_LEGACY_IMPORT_RETAINED_BYTES)
+  const pi =
+    input.agent === 'pi'
+      ? createPiTranscriptCollector(toItem, (line, lineIndex) => tracker.identify(line, lineIndex))
+      : null
   let lineIndex = 0
-
-  const stream = createReadStream(input.filePath, { encoding: 'utf-8' })
-  const { messages } = await decodeTranscriptStream(
-    stream,
-    input.filePath,
-    0,
-    (line, fallbackId) => {
-      const trackedIdentity = tracker.identify(line, lineIndex)
-      lineIndex += 1
-      const message = decode(line, fallbackId)
-      if (message) {
-        identities.push(
-          input.decodedMessageIdentities
-            ? {
-                provider: 'legacy',
-                agent: input.agent,
-                sessionId: input.sessionId,
-                recordId: message.id
-              }
-            : trackedIdentity
-        )
-      }
-      return message
-    },
-    true
-  )
-  return { messages, identities }
+  try {
+    const { consumedBytes } = await decodeTranscriptStream(
+      createReadStream(input.filePath),
+      input.filePath,
+      0,
+      (line, fallbackId) => {
+        source?.observe(line)
+        const currentLineIndex = lineIndex
+        lineIndex += 1
+        if (pi) {
+          pi.record(line, fallbackId, currentLineIndex)
+          return null
+        }
+        const message = decode(line, fallbackId)
+        if (message) {
+          retained.push(
+            toItem(
+              message,
+              input.decodedMessageIdentities
+                ? {
+                    provider: 'legacy',
+                    agent: input.agent,
+                    sessionId: input.sessionId,
+                    recordId: message.id
+                  }
+                : tracker.identify(line, currentLineIndex)
+            )
+          )
+        }
+        return null
+      },
+      true,
+      MAX_LEGACY_IMPORT_RECORD_BYTES
+    )
+    if (consumedBytes > 0) {
+      await source?.validate()
+    }
+    if (pi) {
+      await pi.project(retained.push)
+    }
+    return { items: retained.items(), consumedBytes }
+  } finally {
+    pi?.close()
+  }
 }
 
-type MappedLegacyItem = {
-  body: AgentJournalItemBody
-  blobs: { digest: string; payload: string }[]
-}
-
-/**
- * A message whose only content is a tool invocation becomes a tool-call item so
- * the reducer renders it as one. Everything else stays a message item with its
- * blocks bounded in place.
- */
-function legacyItemBody(
+export function legacyItemBody(
   message: NativeChatMessage,
-  limits: JournalPayloadLimits
-): MappedLegacyItem {
+  limits?: JournalPayloadLimits
+): AgentJournalItemBody {
   const only = message.blocks.length === 1 ? message.blocks[0] : undefined
   if (only?.type === 'tool-call') {
+    // Bound adoption before epoch publication; catch-up uses whole-batch admission.
     return {
-      // Legacy transcripts are untrusted and can contain arbitrarily large
-      // tool arguments. Keep them on the same bounded path as live events
-      // before the replacement epoch is staged or published.
-      body: {
-        kind: 'tool-call',
-        name: only.name,
-        input: boundToolInput(only.input, limits),
-        state: 'completed'
-      },
-      blobs: []
-    }
-  }
-  if (only?.type === 'tool-result') {
-    const output = boundPayload(only.output, limits)
-    return {
-      body: {
-        kind: 'tool-call',
-        name: 'tool-result',
-        input: null,
-        state: only.isError ? 'failed' : 'completed',
-        output
-      },
-      blobs: output.truncated ? [{ digest: output.digest, payload: only.output }] : []
+      kind: 'tool-call',
+      name: only.name,
+      input: limits ? boundToolInput(only.input, limits) : only.input,
+      ...(only.callId !== undefined ? { callId: only.callId } : {}),
+      state: 'completed'
     }
   }
   return {
-    body: {
-      kind: 'message',
-      role: message.role,
-      blocks: message.blocks.map((block) => boundBlock(block, limits))
-    },
-    blobs: []
+    kind: 'message',
+    role: message.role,
+    blocks: limits ? message.blocks.map((block) => boundBlock(block, limits)) : message.blocks
   }
 }
 
-/** Inline block text keeps only a bounded head plus an explicit marker. No blob
- *  is written: the marker carries the digest and byte length, and the source
- *  transcript remains the full copy — a blob here would be unreferenced by the
- *  render model and pruned at the next compaction. */
+/** Bound every bulk-bearing block, including mixed-message tool calls; the transcript retains full content. */
 function boundBlock(block: NativeChatBlock, limits: JournalPayloadLimits): NativeChatBlock {
   if (block.type === 'text') {
     return { ...block, text: boundInlineText(block.text, limits).text }
   }
   if (block.type === 'tool-result') {
     return { ...block, output: boundInlineText(block.output, limits).text }
+  }
+  if (block.type === 'tool-call') {
+    return { ...block, input: boundToolInput(block.input, limits) }
+  }
+  if (block.type === 'subagent-group') {
+    return {
+      ...block,
+      agents: block.agents.slice(0, MAX_LEGACY_IMPORT_SUBAGENTS).map((agent) => ({
+        ...agent,
+        // Digest-based roster IDs keep children with shared prefixes distinct.
+        id: boundSubagentEntryId(agent.id),
+        label: boundInlineText(agent.label, limits).text
+      }))
+    }
   }
   return block
 }

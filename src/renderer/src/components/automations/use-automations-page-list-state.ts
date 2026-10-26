@@ -4,9 +4,12 @@ import { buildExternalAutomationListEntries } from './external-automation-list-e
 import { externalAutomationScopeEntries } from './external-automation-scope-gating'
 import { externalAutomationUncheckedNotice } from './external-automation-unchecked-hosts'
 import {
+  buildAutomationListViewItems,
   filterAutomationListRows,
-  filterExternalAutomationListEntries
+  filterExternalAutomationListEntries,
+  sortAutomationListViewItems
 } from './automation-list-view'
+import { getIntlLocale } from '@/i18n/i18n'
 import { unscopedAutomationListRows } from './automation-list-row-identity'
 import { useAutomationHostCatalog } from './use-automation-host-catalog'
 import { useAutomationListSearch } from './use-automation-list-search'
@@ -28,6 +31,7 @@ export function useAutomationsPageListState({
     failedAuthorityKeys,
     listSearchQuery,
     listFilter,
+    listSort,
     selectedRowKey,
     selectedExternalKey,
     selectedAutomationRuns,
@@ -42,7 +46,6 @@ export function useAutomationsPageListState({
     [hostCatalog.entries, hostCatalog.resolution]
   )
   const scopedExternal = useScopedExternalAutomations({
-    catalogEntries: hostCatalog.entries,
     scopeEntries: externalScopeEntries
   })
   const unscopedRows = useMemo(() => unscopedAutomationListRows(automations), [automations])
@@ -129,6 +132,20 @@ export function useAutomationsPageListState({
     () => externalAutomationUncheckedNotice(scopedExternal.failures, hostCatalog.entries),
     [hostCatalog.entries, scopedExternal.failures]
   )
+  // Pass locale into the sort memo because collation can change without row writes.
+  const sortLocale = getIntlLocale()
+  const sortedListItems = useMemo(
+    () =>
+      sortAutomationListViewItems(
+        buildAutomationListViewItems({
+          rows: filteredRows,
+          externalEntries: filteredExternalAutomationEntries
+        }),
+        listSort,
+        sortLocale
+      ),
+    [filteredExternalAutomationEntries, filteredRows, listSort, sortLocale]
+  )
 
   return {
     hostCatalog,
@@ -146,6 +163,7 @@ export function useAutomationsPageListState({
     isListSearchQueryTooLarge,
     filteredRows,
     filteredExternalAutomationEntries,
+    sortedListItems,
     hasListItems,
     hasFilteredListItems,
     searchCounts,

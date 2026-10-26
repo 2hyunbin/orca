@@ -1,3 +1,4 @@
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import { refreshLocalRuntimeCapabilities } from '../local-runtime-capabilities'
@@ -9,11 +10,24 @@ import {
   refreshLocalStructuredSessionTabs,
   restoreLocalStructuredSessionTabsOnce
 } from './inventory-refresh'
-import { applyStructuredSessionTabSnapshots } from './snapshot-apply'
+import { recheckUnconfirmedStructuredAgentLaunches } from '../../lib/agent-session/launch/structured-agent-session-launch-unconfirmed-recheck'
+import { scheduleRetiredEpochRepair } from './retired-epoch-repair'
+import {
+  applyStructuredSessionTabSnapshots,
+  type StructuredSessionSnapshotApplyOptions
+} from './snapshot-apply'
+
+// Inject refresh to avoid a dependency cycle back from snapshot apply through repair.
+const REPAIR_DROPPED_EPOCHS: StructuredSessionSnapshotApplyOptions = {
+  onRetiredEpochDrop: (worktreeId, publicationEpoch) =>
+    scheduleRetiredEpochRepair(worktreeId, publicationEpoch, (generation) =>
+      refreshLocalStructuredSessionTabs(generation, { authoritative: true })
+    )
+}
 
 type SessionTabsEvent =
   | (RuntimeMobileSessionTabsResult & { type: 'snapshot' | 'updated' })
-  | { type: 'snapshots'; snapshots: RuntimeMobileSessionTabsResult[] }
+  | { type: 'snapshots'; snapshots: RuntimeMobileSessionTabsResult[]; authoritative?: boolean }
   | { type: 'end' }
 
 export async function startLocalStructuredSessionTabsSync(args: {
@@ -72,8 +86,7 @@ export async function startLocalStructuredSessionTabsSync(args: {
           return
         }
         if (!response.ok) {
-          // A streaming RPC can terminate with an error response before its
-          // handle resolves; fence that generation and retry the subscription.
+          // Streaming errors can precede handle resolution; fence that generation and retry.
           subscriptionGeneration += 1
           handle?.unsubscribe()
           if (activeHandle === handle) {
@@ -84,9 +97,14 @@ export async function startLocalStructuredSessionTabsSync(args: {
         }
         const event = response.result as SessionTabsEvent
         if (event.type === 'snapshots') {
-          applyStructuredSessionTabSnapshots(event.snapshots)
+          applyStructuredSessionTabSnapshots(event.snapshots, undefined, {
+            ...REPAIR_DROPPED_EPOCHS,
+            authoritative: event.authoritative === true
+          })
+          // Each subscription opens with one census: the host is reachable again.
+          recheckUnconfirmedStructuredAgentLaunches(LOCAL_EXECUTION_HOST_ID)
         } else if (event.type === 'snapshot' || event.type === 'updated') {
-          applyStructuredSessionTabSnapshots([event])
+          applyStructuredSessionTabSnapshots([event], undefined, REPAIR_DROPPED_EPOCHS)
         } else if (event.type === 'end' && generation === subscriptionGeneration) {
           // Reattach with one refresh so a runtime-restart boundary cannot strand stale tabs.
           subscriptionGeneration += 1

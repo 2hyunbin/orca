@@ -42,21 +42,17 @@ export function bindBrowserPageWebviewListeners({
     activeLoadFailureRef,
     recoveryNavigationValidationRef,
     keepAddressBarFocusRef,
-    paneZoomLevelRef,
     viewportPresetIdRef,
     onUpdatePageStateRef,
     setGuestRecoveryGeneration,
-    setBrowserZoomPercent,
     focusAddressBarNow,
     syncNavigationState,
     syncBrowserAnnotationViewportBridge,
     faviconUrlRef,
     addressBarInputRef,
     lastKnownWebviewUrlRef,
-    trackNextLoadingEventRef,
-    clearBrowserPageAnnotationsRef,
+    invalidateBrowserAnnotationDocumentRef,
     onSetUrlRef,
-    setPendingAnnotationPayload,
     setBrowserOverlayViewport,
     setAddressBarValue,
     addBrowserHistoryEntryRef,
@@ -82,11 +78,9 @@ export function bindBrowserPageWebviewListeners({
       activeLoadFailureRef,
       recoveryNavigationValidationRef,
       keepAddressBarFocusRef,
-      paneZoomLevelRef,
       viewportPresetIdRef,
       onUpdatePageStateRef,
       setGuestRecoveryGeneration,
-      setBrowserZoomPercent,
       focusAddressBarNow,
       syncNavigationState,
       syncBrowserAnnotationViewportBridge
@@ -102,13 +96,11 @@ export function bindBrowserPageWebviewListeners({
       addressBarInputRef,
       activeLoadFailureRef,
       lastKnownWebviewUrlRef,
-      trackNextLoadingEventRef,
       keepAddressBarFocusRef,
       recoveryNavigationValidationRef,
-      clearBrowserPageAnnotationsRef,
+      invalidateBrowserAnnotationDocumentRef,
       onUpdatePageStateRef,
       onSetUrlRef,
-      setPendingAnnotationPayload,
       setBrowserOverlayViewport,
       setAddressBarValue,
       focusAddressBarNow
@@ -116,6 +108,7 @@ export function bindBrowserPageWebviewListeners({
 
   const {
     handleDidStartNavigation,
+    handleDidRedirectNavigation,
     handleFullDidNavigate,
     handleDidNavigateInPage,
     handleTitleUpdate,
@@ -125,6 +118,7 @@ export function bindBrowserPageWebviewListeners({
     webview,
     browserTabId,
     browserTabUrl,
+    invalidateBrowserAnnotationDocumentRef,
     recoveryNavigationValidationRef,
     activeLoadFailureRef,
     lastKnownWebviewUrlRef,
@@ -149,6 +143,7 @@ export function bindBrowserPageWebviewListeners({
   webview.addEventListener('focus', dismissAddressBarSuggestions)
   webview.addEventListener('did-start-loading', handleDidStartLoading)
   webview.addEventListener('did-start-navigation', handleDidStartNavigation)
+  webview.addEventListener('did-redirect-navigation', handleDidRedirectNavigation)
   webview.addEventListener('did-stop-loading', handleDidStopLoading)
   // Why: close find only on full 'did-navigate', not the shared handler, which also fires on SPA in-page hash/pushState changes.
   const handleFindCloseOnNavigate = (): void => {
@@ -164,10 +159,9 @@ export function bindBrowserPageWebviewListeners({
   webview.addEventListener('console-message', handleAnnotationViewportMessage)
 
   if (needsInitialNavigation) {
-    // Why: set src only after listeners attach so a fast localhost failure isn't missed; only non-blank tabs show the loading indicator.
+    // Why: set src only after listeners attach so a fast localhost failure isn't missed.
     const initialUrl =
       normalizeBrowserNavigationUrl(initialBrowserUrlRef.current) ?? ORCA_BROWSER_BLANK_URL
-    trackNextLoadingEventRef.current = initialUrl !== ORCA_BROWSER_BLANK_URL
     lastKnownWebviewUrlRef.current = initialUrl
     webview.src = initialUrl
   } else if (isPaintableRef.current) {
@@ -186,6 +180,7 @@ export function bindBrowserPageWebviewListeners({
     webview.removeEventListener('focus', dismissAddressBarSuggestions)
     webview.removeEventListener('did-start-loading', handleDidStartLoading)
     webview.removeEventListener('did-start-navigation', handleDidStartNavigation)
+    webview.removeEventListener('did-redirect-navigation', handleDidRedirectNavigation)
     webview.removeEventListener('did-stop-loading', handleDidStopLoading)
     webview.removeEventListener('did-navigate', handleFullDidNavigate)
     webview.removeEventListener('did-navigate', handleFindCloseOnNavigate)

@@ -2,6 +2,7 @@ import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-typ
 import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
 import { callRuntimeEnvironmentWithRevision } from './runtime-rpc-environment-call'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
+import { getSessionTabsRuntimeIdFromResponse } from './web-session-tabs-sync/publisher-identity-fences'
 import {
   cacheRetainedSurfaces,
   claimSurfaces,
@@ -10,21 +11,26 @@ import {
   isStableAdoptionFailure,
   mergeAdoptionResponse,
   mergeFailedAdoption,
-  retainedSharesClaimedTab
+  readClientSessionSnapshotAfterAdoption,
+  retainedSharesClaimedTab,
+  type TerminalOrphanRecoveryCall
 } from './web-session-terminal-orphan-recovery-adoption'
 import {
   buildTopologyCandidates,
-  isRemovedSnapshot,
-  isValidReadySurface,
   prepareTerminalOrphanRecovery,
   mergeRetainedTerminalSurfaces,
   captureTerminalRecoveryTopologyToken,
-  surfaceKey,
-  terminalRowsBySurface,
   type AnyRecoverySurface,
   type TerminalOrphanRecoveryState
 } from './web-session-terminal-orphan-recovery-surface'
+import {
+  isRemovedSnapshot,
+  isValidReadySurface,
+  surfaceKey,
+  terminalRowsBySurface
+} from './web-session-terminal-orphan-recovery-surface-index'
 import { resolveTerminalOrphanInventory } from './web-session-terminal-orphan-recovery-inventory'
+import { suppressCancelledStructuredSessionTabs } from './structured-agent-session-tab-retirement'
 import { resolvePersistedTerminalSurfaces } from './web-session-terminal-orphan-recovery-pane'
 import {
   clearCachedSurfaceResolutions,
@@ -39,22 +45,17 @@ import {
   clearTerminalRecoveryRpcLaneForTests,
   runInTerminalRecoveryRpcLane
 } from './web-session-terminal-orphan-recovery-rpc-lane'
-import { isWebTerminalSurfaceTabId, toHostSessionTabId } from './web-terminal-surface-id'
+import { isWebTerminalSurfaceTabId, toHostSessionTabId } from '../../../shared/terminal-surface-id'
 import { buildWebTerminalOrphanTopologyProposal } from './web-session-terminal-orphan-topology'
-
-export type { TerminalOrphanRecoveryState } from './web-session-terminal-orphan-recovery-surface'
-
-type RuntimeCall = (args: {
-  selector: string
-  method: string
-  params: unknown
-  timeoutMs: number
-  expectedEnvironmentPairingRevision?: number
-}) => Promise<RuntimeRpcResponse<unknown>>
+import {
+  clearRetainedTerminalRetirementProofsForTests,
+  mergeRetainedTerminalRetirementProofs
+} from './web-session-terminal-retirement-proof-ledger'
 
 export type TerminalOrphanRecoveryOptions = {
   expectedEnvironmentPairingRevision?: number
-  call?: RuntimeCall
+  expectedRuntimeId?: string
+  call?: TerminalOrphanRecoveryCall
   /** Reads live renderer topology so an RPC cannot apply a stale local claim. */
   getCurrentState?: () => TerminalOrphanRecoveryState
 }
@@ -71,8 +72,9 @@ async function recoverTerminalOrphans(
   state: TerminalOrphanRecoveryState,
   snapshot: RuntimeMobileSessionTabsResult,
   environmentId: string,
-  call: RuntimeCall,
+  call: TerminalOrphanRecoveryCall,
   expectedEnvironmentPairingRevision: number | undefined,
+  expectedRuntimeId: string | undefined,
   isCurrent: () => boolean,
   getCurrentState: (() => TerminalOrphanRecoveryState) | undefined
 ): Promise<RuntimeMobileSessionTabsResult | null> {
@@ -180,13 +182,11 @@ async function recoverTerminalOrphans(
   if (!isCurrent()) {
     return null
   }
-  // Adoption mutates host ownership. If the local pane disappeared or moved
-  // while it was in flight, never publish the response against old topology.
+  // Adoption mutates host ownership; discard replies if local pane topology moved/disappeared during RPC.
   if (!localTopologyIsCurrent()) {
     return null
   }
-  // A lane refusal (queue pressure or supersession) is transient. Do not
-  // turn it into an inventory retain entry that would suppress the next frame.
+  // Lane pressure/supersession is transient; caching inventory retain would suppress the next retry.
   if (adoptionResponse === null) {
     return retainAfterAdoptionFailure(false)
   }
@@ -194,8 +194,7 @@ async function recoverTerminalOrphans(
     return retainAfterAdoptionFailure(isStableAdoptionFailure(thrownAdoptionError))
   }
   if (!isRpcResponse(adoptionResponse)) {
-    // A malformed envelope/result is a stable protocol incompatibility for
-    // this exact semantic frame, so bounded deduplication is safe.
+    // Malformed results are stable protocol faults for this semantic frame; bounded deduplication is safe.
     return retainAfterAdoptionFailure(true)
   }
   if (!isCurrent()) {
@@ -208,12 +207,24 @@ async function recoverTerminalOrphans(
     return retainAfterAdoptionFailure(true)
   }
   if (adoptionResponse.result.snapshot.worktree !== snapshot.worktree) {
-    // A valid response for another worktree is stale routing evidence; retry
-    // on the next replay instead of pinning this surface as a protocol fault.
+    // Another worktree’s valid reply is stale routing, not protocol incompatibility; retry on replay.
     return retainAfterAdoptionFailure(false)
   }
 
-  const adoptedSnapshot = adoptionResponse.result.snapshot
+  const adoptedSnapshot = await readClientSessionSnapshotAfterAdoption({
+    environmentId,
+    worktreeId: snapshot.worktree,
+    expectedEnvironmentPairingRevision,
+    expectedRuntimeId: expectedRuntimeId ?? getSessionTabsRuntimeIdFromResponse(adoptionResponse),
+    call,
+    isCurrent: isRecoveryCurrent
+  })
+  if (!isRecoveryCurrent()) {
+    return null
+  }
+  if (!adoptedSnapshot) {
+    return retainAfterAdoptionFailure(false)
+  }
   const adoptedRows = terminalRowsBySurface(adoptedSnapshot)
   const missingClaims = claimedSurfaces.filter((surface) => {
     const rows = adoptedRows.get(surfaceKey(surface.tabId, surface.leafId))
@@ -224,18 +235,23 @@ async function recoverTerminalOrphans(
 }
 
 function normalizeOptions(
-  optionsOrCall: TerminalOrphanRecoveryOptions | RuntimeCall | undefined
+  optionsOrCall: TerminalOrphanRecoveryOptions | TerminalOrphanRecoveryCall | undefined
 ): TerminalOrphanRecoveryOptions {
   return typeof optionsOrCall === 'function' ? { call: optionsOrCall } : (optionsOrCall ?? {})
 }
 
 export function recoverWebSessionTerminalOrphansBeforeApply(
   state: TerminalOrphanRecoveryState,
-  snapshot: RuntimeMobileSessionTabsResult,
+  frame: RuntimeMobileSessionTabsResult,
   environmentId: string,
-  optionsOrCall?: TerminalOrphanRecoveryOptions | RuntimeCall
+  optionsOrCall?: TerminalOrphanRecoveryOptions | TerminalOrphanRecoveryCall
 ): Promise<RuntimeMobileSessionTabsResult | null> {
   const options = normalizeOptions(optionsOrCall)
+  // Every delta enters here; recover previously sent proofs per the negotiated ledger contract.
+  const snapshot = suppressCancelledStructuredSessionTabs(
+    mergeRetainedTerminalRetirementProofs(environmentId, frame),
+    { kind: 'environment', environmentId }
+  )
   const key = recoveryKey(
     environmentId,
     snapshot.worktree,
@@ -263,12 +279,11 @@ export function recoverWebSessionTerminalOrphansBeforeApply(
     return Promise.resolve(snapshot)
   }
   if (prepared.candidates.length === 0 && prepared.unresolved.length === 0) {
-    // Preserve stale off-tree evidence while superseding any older recovery
-    // queued for this worktree.
+    // Supersede queued recovery but retain stale off-tree evidence.
     supersedeTerminalRecovery(key)
     return Promise.resolve(mergeRetainedTerminalSurfaces(snapshot, prepared.retained))
   }
-  const call: RuntimeCall =
+  const call: TerminalOrphanRecoveryCall =
     options.call ??
     ((args) =>
       callRuntimeEnvironmentWithRevision({
@@ -285,6 +300,7 @@ export function recoverWebSessionTerminalOrphansBeforeApply(
       environmentId,
       call,
       options.expectedEnvironmentPairingRevision,
+      options.expectedRuntimeId,
       isCurrent,
       options.getCurrentState
     )
@@ -295,4 +311,5 @@ export function clearWebSessionTerminalOrphanRecoveryForTests(): void {
   clearTerminalRecoveryQueues()
   clearCachedSurfaceResolutions()
   clearTerminalRecoveryRpcLaneForTests()
+  clearRetainedTerminalRetirementProofsForTests()
 }

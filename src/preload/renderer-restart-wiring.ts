@@ -12,33 +12,42 @@ import {
   ORCA_UPDATER_QUIT_AND_INSTALL_STARTED_EVENT
 } from '../shared/updater-renderer-events'
 
+type AppRestartState = { committed: boolean; pending: boolean }
+const appRestartStates = new WeakMap<EventTarget, AppRestartState>()
+
+function appRestartState(eventTarget: EventTarget): AppRestartState {
+  let state = appRestartStates.get(eventTarget)
+  if (!state) {
+    state = { committed: false, pending: false }
+    appRestartStates.set(eventTarget, state)
+  }
+  return state
+}
+
 export function registerRendererRestartIpcRelays(
   ipcRenderer: Pick<IpcRenderer, 'on'>,
   eventTarget: EventTarget,
-  relay: Pick<UpdaterQuitAbortRelay, 'handleStatus' | 'abort'>,
-  requestUpdaterInstall?: () => Promise<void>
+  relay: Pick<UpdaterQuitAbortRelay, 'handleStatus' | 'abort'>
 ): void {
   ipcRenderer.on('updater:status', (_event, status: UpdateStatus) => {
     relay.handleStatus(status)
   })
-  // Why: main abandons some installs without an error status, and only this tells the renderer.
+  // Main can abandon an install without emitting an error status.
   ipcRenderer.on('updater:quitAndInstallAborted', () => {
     relay.abort()
   })
+  ipcRenderer.on('app:restart-committed', () => {
+    appRestartState(eventTarget).committed = true
+  })
   ipcRenderer.on('window:unload-prevented', () => {
+    // A quit veto cannot reopen a profile whose maintenance has already committed.
+    if (appRestartState(eventTarget).committed) {
+      return
+    }
     eventTarget.dispatchEvent(new Event(ORCA_RENDERER_UNLOAD_PREVENTED_EVENT))
     eventTarget.dispatchEvent(new Event(ORCA_APP_RESTART_ABORTED_EVENT))
   })
-  // Why: a quit deferred during macOS staging still needs the normal hot-exit checkpoint.
-  ipcRenderer.on('updater:quitAndInstallRequested', () => {
-    void requestUpdaterInstall?.().catch((error) => {
-      console.error('[updater] Deferred install preparation failed:', error)
-    })
-  })
 }
-
-// Why: downloaded status and a deferred request can land together; one latch must own both.
-let updaterInstallAttempt: Promise<void> | null = null
 
 export async function prepareAndInvokeUpdaterInstall(
   eventTarget: EventTarget,
@@ -46,47 +55,53 @@ export async function prepareAndInvokeUpdaterInstall(
   invoke: () => Promise<void>,
   awaitCheckpoint: () => Promise<void>
 ): Promise<void> {
-  if (updaterInstallAttempt) {
-    return updaterInstallAttempt
-  }
-  const attempt = (async (): Promise<void> => {
-    await prepareRendererForAppRestart(eventTarget, {
-      startedEventName: ORCA_UPDATER_QUIT_AND_INSTALL_STARTED_EVENT,
-      abortedEventName: ORCA_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT,
-      awaitCheckpoint
-    })
-    relay.markPrepared()
-    try {
-      await invoke()
-    } catch (error) {
-      relay.abort()
-      throw error
-    }
-  })()
-  updaterInstallAttempt = attempt
-  try {
-    await attempt
-  } finally {
-    if (updaterInstallAttempt === attempt) {
-      updaterInstallAttempt = null
-    }
-  }
-}
-
-export async function prepareAndInvokeAppRestart(
-  eventTarget: EventTarget,
-  invoke: () => Promise<unknown>,
-  awaitCheckpoint: () => Promise<void>
-): Promise<void> {
   await prepareRendererForAppRestart(eventTarget, {
-    startedEventName: ORCA_APP_RESTART_STARTED_EVENT,
-    abortedEventName: ORCA_APP_RESTART_ABORTED_EVENT,
+    startedEventName: ORCA_UPDATER_QUIT_AND_INSTALL_STARTED_EVENT,
+    abortedEventName: ORCA_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT,
     awaitCheckpoint
   })
+  relay.markPrepared()
   try {
     await invoke()
   } catch (error) {
-    eventTarget.dispatchEvent(new Event(ORCA_APP_RESTART_ABORTED_EVENT))
+    relay.abort()
     throw error
+  }
+}
+
+export async function prepareAndInvokeAppRestart<T>(
+  eventTarget: EventTarget,
+  invoke: () => Promise<T>,
+  awaitCheckpoint: () => Promise<void>,
+  willRestart: (result: T) => boolean = () => true
+): Promise<T> {
+  const state = appRestartState(eventTarget)
+  if (state.pending) {
+    throw new Error('App restart preparation is already in progress')
+  }
+  state.pending = true
+  try {
+    if (!state.committed) {
+      await prepareRendererForAppRestart(eventTarget, {
+        startedEventName: ORCA_APP_RESTART_STARTED_EVENT,
+        abortedEventName: ORCA_APP_RESTART_ABORTED_EVENT,
+        awaitCheckpoint
+      })
+    }
+    try {
+      const result = await invoke()
+      if (!state.committed && !willRestart(result)) {
+        eventTarget.dispatchEvent(new Event(ORCA_APP_RESTART_ABORTED_EVENT))
+      }
+      return result
+    } catch (error) {
+      // A failed profile move can require recovery after its writer has already closed.
+      if (!state.committed) {
+        eventTarget.dispatchEvent(new Event(ORCA_APP_RESTART_ABORTED_EVENT))
+      }
+      throw error
+    }
+  } finally {
+    state.pending = false
   }
 }

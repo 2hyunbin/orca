@@ -4,9 +4,10 @@ import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 
 const skillsDir = resolve(import.meta.dirname, '../../skills')
-// Why: the Agent Skills spec caps `description` at 1024 chars and conforming installers
-// reject the whole skill (#17935); the frontmatter is what the installer parses, so check it.
+// Check installer-parsed frontmatter: Agent Skills caps description at 1024 chars and rejects whole skill on overflow (#17935).
 const MAX_DESCRIPTION_LENGTH = 1024
+// Check raw text: NVIDIA/Cowork reject HTML-like description placeholders even in backticks; move placeholders to body (compound-engineering #602).
+const ANGLE_BRACKET_TOKEN = /<[A-Za-z][\w.-]*>/u
 
 function readDescription(skillName) {
   const skillMarkdown = readFileSync(join(skillsDir, skillName, 'SKILL.md'), 'utf8')
@@ -35,5 +36,14 @@ describe('bundled skill descriptions', () => {
       description.length,
       `${name}: description is ${description.length} chars`
     ).toBeLessThanOrEqual(MAX_DESCRIPTION_LENGTH)
+  })
+
+  it.each(skillNames)('%s keeps angle-bracket placeholders out of its description', (name) => {
+    const token = ANGLE_BRACKET_TOKEN.exec(readDescription(name) ?? '')
+
+    expect(
+      token?.[0],
+      `${name}: rephrase or move "${token?.[0] ?? ''}" into the skill body`
+    ).toBeUndefined()
   })
 })

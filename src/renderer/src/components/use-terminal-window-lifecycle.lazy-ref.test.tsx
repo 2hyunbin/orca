@@ -1,19 +1,11 @@
 // @vitest-environment happy-dom
 
-/**
- * `collectBrowserWebviewIds` walks every browser page and tab across every worktree. It used to sit
- * in a `useRef(...)` argument, so `Terminal` paid for the whole walk on every render and threw the
- * result away. Pin the invocation count to the mount count, not the render count.
- */
+/** Collect browser webview IDs once per mount; eager useRef arguments previously walked every page/tab on every render. */
 import { useState } from 'react'
 import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const collectBrowserWebviewIdsCalls = vi.hoisted(() => ({ count: 0 }))
-const closeRequestHandlerRef = vi.hoisted(() => ({
-  current: null as ((data: { isQuitting: boolean; requestId?: number }) => void) | null
-}))
-const proceedToNativeWindowCloseMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../store', () => {
   const state = {
@@ -34,7 +26,7 @@ vi.mock('../store/slices/browser-webview-cleanup', () => ({
     void args
     return new Set<string>()
   },
-  destroyRemovedBrowserWebview: vi.fn()
+  destroyWebviewsRemovedFromStore: vi.fn()
 }))
 
 vi.mock('@/lib/updater-beforeunload', () => ({
@@ -44,9 +36,7 @@ vi.mock('@/lib/shutdown-checkpoint-guard', () => ({
   preventUnloadAndScheduleShutdownCheckpointReset: vi.fn()
 }))
 vi.mock('./window-close-request-coordinator', () => ({
-  setWindowCloseRequestHandler: (handler: typeof closeRequestHandlerRef.current) => {
-    closeRequestHandlerRef.current = handler
-  }
+  setWindowCloseRequestHandler: vi.fn()
 }))
 
 const { useTerminalWindowLifecycle } = await import('./use-terminal-window-lifecycle')
@@ -55,7 +45,7 @@ const controller = {
   activeBrowserTabId: null,
   activeTabType: 'terminal',
   activeWorktreeBrowserTabIdsKey: '',
-  proceedToNativeWindowClose: proceedToNativeWindowCloseMock,
+  proceedToNativeWindowClose: () => {},
   queueEditorCloseRequests: () => {},
   renderedActiveWorktreeId: null,
   setActiveBrowserTab: () => {},
@@ -75,8 +65,6 @@ function Host(): null {
 afterEach(() => {
   cleanup()
   collectBrowserWebviewIdsCalls.count = 0
-  closeRequestHandlerRef.current = null
-  proceedToNativeWindowCloseMock.mockReset()
   bumpRender = null
 })
 
@@ -90,13 +78,5 @@ describe('useTerminalWindowLifecycle browser-webview id seed', () => {
     }
 
     expect(collectBrowserWebviewIdsCalls.count).toBe(1)
-  })
-
-  it('forwards requestId when a clean close proceeds natively', () => {
-    render(<Host />)
-
-    closeRequestHandlerRef.current?.({ isQuitting: true, requestId: 42 })
-
-    expect(proceedToNativeWindowCloseMock).toHaveBeenCalledWith(true, 42)
   })
 })

@@ -1,24 +1,18 @@
-import { isExplicitAgentStatusFresh } from '@/lib/agent-status'
-import type { RetainedAgentEntry } from '@/store/slices/agent-status'
-import {
-  AGENT_STATUS_STALE_AFTER_MS,
-  type AgentStatusEntry,
-  type AgentStatusOrchestrationContext,
-  type AgentStatusState,
-  type MigrationUnsupportedPtyEntry
+import { freshActivityLiveAgentState } from './activity-event-state'
+import type { RetainedAgentEntry } from '@/store/slices/agent-status/agent-status-contract'
+import type {
+  AgentStatusEntry,
+  AgentStatusOrchestrationContext,
+  MigrationUnsupportedPtyEntry
 } from '../../../../shared/agent-status-types'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { StructuredChatTabNames } from '@/runtime/structured-chat-tab-name'
 import type { Repo } from '../../../../shared/repo-types'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { Tab } from '../../../../shared/tab-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import type {
-  ActivityEvent,
-  ActivityHookLiveAgentState,
-  ActivityLiveAgentSnapshot,
-  ActivityLiveAgentState
-} from './activity-thread-types'
+import type { ActivityEvent, ActivityLiveAgentSnapshot } from './activity-thread-types'
 import { capActivityEvents } from './activity-event-cap'
 import { newestActivityHistoryEntries } from './activity-pane-events'
 import {
@@ -37,28 +31,8 @@ import {
 
 export { createActivityEventBuildCache, type ActivityEventBuildCache, newestActivityHistoryEntries }
 
-function isActivityHookLiveAgentState(
-  state: AgentStatusState
-): state is ActivityHookLiveAgentState {
-  return state === 'working' || state === 'blocked' || state === 'waiting'
-}
-
-function freshActivityLiveAgentState(
-  entry: AgentStatusEntry,
-  now: number
-): ActivityLiveAgentState | null {
-  if (
-    !isActivityHookLiveAgentState(entry.state) ||
-    !isExplicitAgentStatusFresh(entry, now, AGENT_STATUS_STALE_AFTER_MS)
-  ) {
-    return null
-  }
-  return entry.state === 'working' && entry.workingMode === 'monitoring'
-    ? 'monitoring'
-    : entry.state
-}
-
 export type BuildActivityEventsArgs = {
+  chatNames: StructuredChatTabNames
   agentStatusByPaneKey: Record<string, AgentStatusEntry>
   runtimeAgentOrchestrationByPaneKey?: Record<string, AgentStatusOrchestrationContext>
   migrationUnsupportedByPtyId?: Record<string, MigrationUnsupportedPtyEntry>
@@ -81,18 +55,24 @@ export function buildActivityEvents(
 ): {
   events: ActivityEvent[]
   liveAgentByPaneKey: Record<string, ActivityLiveAgentSnapshot>
+  paneEntryByPaneKey: Record<string, AgentStatusEntry>
 } {
   const events: ActivityEvent[] = []
+  const paneEntryByPaneKey: Record<string, AgentStatusEntry> = {}
   const seenEventIds = new Set<string>()
-  const tabContext = buildActivityTabContext(args.tabsByWorktree, args.unifiedTabsByWorktree)
+  const tabContext = buildActivityTabContext(
+    args.tabsByWorktree,
+    args.unifiedTabsByWorktree,
+    args.chatNames
+  )
   const tabHostIndex = buildActivityTabHostIndex(args.unifiedTabsByWorktree)
   const ownerCache = new Map<string, ActivityEventOwner>()
   const liveAgentByPaneKey: Record<string, ActivityLiveAgentSnapshot> = {}
   const seenCacheKeys = cache ? new Set<string>() : null
 
-  const pushPaneEvents = (paneEvents: ActivityEvent[]): void => {
-    // Why: a paneKey can appear in more than one source (live + retained overlap);
-    // event ids stay globally unique so the first source wins, as before.
+  const pushPaneEvents = (paneEvents: ActivityEvent[], rowEntry: AgentStatusEntry): void => {
+    // Live/retained sources can overlap; keep globally unique event IDs with first-source precedence.
+    paneEntryByPaneKey[rowEntry.paneKey] ??= rowEntry
     for (const event of paneEvents) {
       if (seenEventIds.has(event.id)) {
         continue
@@ -120,10 +100,13 @@ export function buildActivityEvents(
       ownerCache
     )
     const orchestration = args.runtimeAgentOrchestrationByPaneKey?.[paneKey]
-    // Why: live status is separate from history; a fresh working turn updates the thread without counting as an unread done/blocked/waiting event.
-    // The freshness check runs on the raw entry (orchestration merges never change state/timing fields).
+    // Only fresh raw live state proves working; history and orchestration enrichment cannot establish liveness.
     const liveState = freshActivityLiveAgentState(entry, args.now)
-    const { events: paneEvents, live } = resolvePaneBuild(
+    const {
+      events: paneEvents,
+      live,
+      rowEntry
+    } = resolvePaneBuild(
       {
         cacheKey: `live:${paneKey}`,
         source: entry,
@@ -144,7 +127,7 @@ export function buildActivityEvents(
     if (live) {
       liveAgentByPaneKey[paneKey] = live
     }
-    pushPaneEvents(paneEvents)
+    pushPaneEvents(paneEvents, rowEntry)
   }
 
   appendUnsupportedAndRetainedEvents({
@@ -158,7 +141,7 @@ export function buildActivityEvents(
     pushPaneEvents
   })
 
-  // Why: evict panes gone from every source so the cache can't outgrow the live state maps.
+  // Evict panes absent from every source so caches cannot outgrow live maps.
   if (cache && seenCacheKeys) {
     for (const cacheKey of cache.panes.keys()) {
       if (!seenCacheKeys.has(cacheKey)) {
@@ -166,5 +149,5 @@ export function buildActivityEvents(
       }
     }
   }
-  return { events: capActivityEvents(events), liveAgentByPaneKey }
+  return { events: capActivityEvents(events), liveAgentByPaneKey, paneEntryByPaneKey }
 }

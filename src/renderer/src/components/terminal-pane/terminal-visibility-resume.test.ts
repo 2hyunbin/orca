@@ -9,11 +9,8 @@ vi.mock('@/lib/pane-manager/pane-manager-registry', () => ({
   resetAndRefreshAllTerminalWebglAtlases: vi.fn()
 }))
 const presentPaneViewport = vi.fn()
-const presentPaneViewportPreservingSynchronizedOutput = vi.fn()
 vi.mock('@/lib/pane-manager/pane-webgl-renderer', () => ({
-  presentPaneViewport: (pane: unknown) => presentPaneViewport(pane),
-  presentPaneViewportPreservingSynchronizedOutput: (pane: unknown) =>
-    presentPaneViewportPreservingSynchronizedOutput(pane)
+  presentPaneViewport: (pane: unknown) => presentPaneViewport(pane)
 }))
 vi.mock('@/lib/pane-manager/pane-terminal-output-scheduler', () => ({
   flushTerminalOutput: vi.fn(),
@@ -70,6 +67,7 @@ function resumeArgs(manager: FakeManager, shouldUseLightTabResume: boolean) {
   return {
     manager: manager as never as PaneManager,
     isActive: true,
+    isChatViewMode: false,
     wasVisible: false,
     shouldUseLightTabResume,
     captureViewportPositions: vi.fn(() => new Map()),
@@ -88,9 +86,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
   })
 
   it('schedules an atlas-preserving present on a light tab reveal', () => {
-    // The light path is the "click the tab that was not open" gesture: it has
-    // no rendering resume or fit, so without this repaint a hidden-while-
-    // working pane keeps compositing pre-hide pixels.
+    // Light reveal does not resume/fit; it still needs present so pre-hide pixels cannot remain composited.
     const manager = createManager()
     resumeTerminalVisibility(resumeArgs(manager, true))
 
@@ -156,9 +152,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
   })
 
   it('rebuilds the atlas synchronously when a heavy reveal repaired a dpr mismatch', async () => {
-    // A repaired backing store leaves the shared atlas holding glyphs rasterized
-    // at the old dpr. Waiting two frames for the settled rebuild would paint
-    // those wrong-size glyphs first, so this path stays synchronous.
+    // DPR changes invalidate shared atlas glyph sizes too; repair before the next paint instead of waiting two frames.
     const pane = { terminal: {} }
     const manager = createManager()
     manager.getPanes.mockReturnValue([pane])
@@ -172,13 +166,12 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     expect(repairPaneWebglCanvasDprMismatch).toHaveBeenCalledWith(pane)
     expect(resetAndRefreshAllTerminalWebglAtlases).toHaveBeenCalledTimes(1)
     expect(resetAndRefreshAllTerminalWebglAtlases).toHaveBeenCalledWith('visibility-resume-dpr')
-    expect(presentPaneViewportPreservingSynchronizedOutput).not.toHaveBeenCalled()
+    expect(presentPaneViewport).not.toHaveBeenCalled()
     expect(manager.scheduleRevealRepaint).toHaveBeenCalledTimes(1)
   })
 
   it('presents immediately on a heavy reveal so no pre-hide pixels survive the settle', async () => {
-    // Without this present the canvas composites pre-hide pixels until the
-    // settled rebuild lands two frames later, which under load is not two frames.
+    // Present now; settled rebuilding may take longer than two frames under load.
     const pane = { terminal: {} }
     const manager = createManager()
     manager.getPanes.mockReturnValue([pane])
@@ -188,7 +181,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
 
     resumeTerminalVisibility(resumeArgs(manager, false))
 
-    expect(presentPaneViewportPreservingSynchronizedOutput).toHaveBeenCalledWith(pane)
+    expect(presentPaneViewport).toHaveBeenCalledWith(pane)
     // The expensive registry-wide rebuild is still deferred to the settled frame.
     expect(resetAndRefreshAllTerminalWebglAtlases).not.toHaveBeenCalled()
     expect(manager.scheduleRevealRepaint).toHaveBeenCalledTimes(1)
@@ -200,6 +193,32 @@ describe('resumeTerminalVisibility reveal repaint', () => {
 
     expect(manager.fitAllRevealedPanes).not.toHaveBeenCalled()
     expect(manager.fitAllPanes).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['light', true],
+    ['heavy', false]
+  ])('does not focus the covered terminal on a %s chat reveal', async (_path, lightResume) => {
+    const manager = createManager()
+    const args = resumeArgs(manager, lightResume)
+    args.isChatViewMode = true
+    const { focusActivePane } = vi.mocked(await import('./pane-helpers'))
+
+    resumeTerminalVisibility(args)
+
+    expect(focusActivePane).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['light', true],
+    ['heavy', false]
+  ])('keeps focusing an active terminal on a %s reveal', async (_path, lightResume) => {
+    const manager = createManager()
+    const { focusActivePane } = vi.mocked(await import('./pane-helpers'))
+
+    resumeTerminalVisibility(resumeArgs(manager, lightResume))
+
+    expect(focusActivePane).toHaveBeenCalledWith(manager)
   })
 
   it('checks each pane for a stale WebGL backing on a light tab reveal', () => {
@@ -216,8 +235,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
   })
 
   it('flushes hidden-era metric options on reveal and refits the light path', () => {
-    // A font change while hidden must land and refit on reveal, or cols/rows
-    // stay pinned to the old metrics.
+    // Flush hidden font changes and refit or grid dimensions retain stale metrics.
     const manager = createManager()
     manager.getPanes.mockReturnValue([{ terminal: {} }])
     flushDeferredPaneMetricOptionsIfMeasurable.mockReturnValueOnce(true)
@@ -233,6 +251,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     recoverVisibleTerminalWindowWake({
       manager: manager as never as PaneManager,
       isActive: true,
+      isChatViewMode: false,
       clearGlyphAtlases: false
     })
 
@@ -240,9 +259,22 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     expect(manager.fitAllPanes).not.toHaveBeenCalled()
   })
 
+  it('does not focus the covered terminal during chat window-wake recovery', async () => {
+    const manager = createManager()
+    const { focusActivePane } = vi.mocked(await import('./pane-helpers'))
+
+    recoverVisibleTerminalWindowWake({
+      manager: manager as never as PaneManager,
+      isActive: true,
+      isChatViewMode: true,
+      clearGlyphAtlases: false
+    })
+
+    expect(focusActivePane).not.toHaveBeenCalled()
+  })
+
   it('repairs WebGL canvas backing-store dpr on window wake', () => {
-    // Clamshell undock: dpr changes while the pane stayed "visible" with a
-    // stale backing store; tab-reveal is not in the path.
+    // Undock can change DPR without hiding the pane, so tab reveal never repairs it.
     const first = { terminal: { name: 'pane-a' } }
     const second = { terminal: { name: 'pane-b' } }
     const manager = createManager()
@@ -252,6 +284,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     recoverVisibleTerminalWindowWake({
       manager: manager as never as PaneManager,
       isActive: true,
+      isChatViewMode: false,
       clearGlyphAtlases: false
     })
 
@@ -275,6 +308,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     recoverVisibleTerminalWindowWake({
       manager: manager as never as PaneManager,
       isActive: true,
+      isChatViewMode: false,
       clearGlyphAtlases: false
     })
 
@@ -314,6 +348,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     recoverVisibleTerminalWindowWake({
       manager: manager as never as PaneManager,
       isActive: true,
+      isChatViewMode: false,
       clearGlyphAtlases: false
     })
 
@@ -330,6 +365,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     recoverVisibleTerminalWindowWake({
       manager: manager as never as PaneManager,
       isActive: true,
+      isChatViewMode: false,
       clearGlyphAtlases: false
     })
 
@@ -341,6 +377,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     recoverVisibleTerminalWindowWake({
       manager: manager as never as PaneManager,
       isActive: false,
+      isChatViewMode: false,
       clearGlyphAtlases: true
     })
 
@@ -356,6 +393,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     recoverVisibleTerminalWindowWake({
       manager: manager as never as PaneManager,
       isActive: false,
+      isChatViewMode: false,
       clearGlyphAtlases: true
     })
 
@@ -363,12 +401,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
   })
 
   it('keeps the warm glyph atlas on plain-refocus recovery', async () => {
-    // Deliberate reversal of the #6354 focus-clear: wiping the shared atlas on
-    // every refocus forces a mass re-rasterization that can hit xterm's atlas
-    // page-merge race (#4480) and garble streaming panes. Focus recovery must
-    // resume rendering and present WITHOUT the atlas-clearing reveal repaint —
-    // scheduleRevealRepaint runs shared-atlas recovery, so the refocus path
-    // must route to the atlas-preserving present instead.
+    // Plain refocus must preserve the atlas: shared clears trigger mass rasterization and page-merge races that garble streaming panes (#4480).
     const { resetAndRefreshAllTerminalWebglAtlases } = vi.mocked(
       await import('@/lib/pane-manager/pane-manager-registry')
     )
@@ -376,6 +409,7 @@ describe('resumeTerminalVisibility reveal repaint', () => {
     recoverVisibleTerminalWindowWake({
       manager: manager as never as PaneManager,
       isActive: false,
+      isChatViewMode: false,
       clearGlyphAtlases: false
     })
 

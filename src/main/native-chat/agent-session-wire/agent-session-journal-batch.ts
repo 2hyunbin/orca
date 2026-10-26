@@ -1,26 +1,28 @@
-// Rows appended since a cursor, projected into what a subscriber must apply.
-//
-// The batch carries each touched item at its CURRENT reduced state rather than
-// the raw rows: a client that applies the same batch twice converges, and a
-// provider echo that was adopted into a submission slot arrives under the slot
-// key instead of appearing as a second copy of the user's own message.
+// Project touched items at current reduced state for idempotent delivery; adopted echoes retain submission keys.
 
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
-import type { AgentJournalSnapshot } from '../../../shared/agent-session-journal-types'
+import { compareAgentJournalItems } from '../../../shared/agent-session-journal-position'
+import type {
+  AgentJournalRenderItem,
+  AgentJournalSnapshot,
+  AgentJournalSubmission
+} from '../../../shared/agent-session-journal-types'
 import type { AgentSessionJournalBatch } from '../../../shared/agent-session-wire'
+import { isStructuredAgentSessionStopNote } from './structured-agent-session-command-turn'
 import { findSequenceGap } from '../agent-session-journal/journal-cursor'
-import type { JournalRow } from '../agent-session-journal/journal-row-schema'
+import {
+  isJournalStopOrResumeRow,
+  type JournalRow
+} from '../agent-session-journal/journal-row-schema'
 
 export type JournalBatchProjection =
   | { ok: true; batch: AgentSessionJournalBatch }
-  /** A missing sequence means the tail lost a row; the subscriber reloads
-   *  rather than rendering a timeline with a hole in it. */
+  /** Reload on gaps instead of rendering partial history. */
   | { ok: false; reset: 'journal_gap' }
 
 export function projectJournalBatch(input: {
   rows: readonly JournalRow[]
   snapshot: AgentJournalSnapshot
-  /** Sequence the subscriber has already applied. */
   afterSequence: number
   canonicalItemId?: (itemId: string) => string
 }): JournalBatchProjection {
@@ -31,7 +33,7 @@ export function projectJournalBatch(input: {
   if (gap) {
     return { ok: false, reset: 'journal_gap' }
   }
-  const aliases = submissionAliases(input.snapshot)
+  const aliases = submissionAliases(input.snapshot.submissions)
   const touchedItemIds = new Set<string>()
   const touchedClientMessageIds = new Set<string>()
   for (const row of input.rows) {
@@ -45,23 +47,43 @@ export function projectJournalBatch(input: {
       }
       continue
     }
+    if (isJournalStopOrResumeRow(row)) {
+      // Stop/Resume markers are host-only; publish derived queue pauses separately.
+      continue
+    }
     if (row.kind === 'item' || row.kind === 'tombstone') {
       touchedItemIds.add(
         input.canonicalItemId?.(row.itemId) ?? aliases.get(row.itemId) ?? row.itemId
       )
       continue
     }
-    if (row.kind === 'submission' || row.kind === 'dispatch') {
-      touchedClientMessageIds.add(row.clientMessageId)
-      touchedItemIds.add(agentJournalSubmissionKey(row.clientMessageId))
+    // Queue attempt annotations can change the linked send’s display.
+    const attempt =
+      row.kind === 'queue' && row.change.op === 'queued' ? row.change.attempt : undefined
+    const clientMessageId =
+      row.kind === 'submission' || row.kind === 'dispatch'
+        ? row.clientMessageId
+        : attempt === undefined
+          ? undefined
+          : input.snapshot.submissions.find((submission) => submission.clientMessageId === attempt)
+              ?.clientMessageId
+    if (clientMessageId !== undefined) {
+      touchedClientMessageIds.add(clientMessageId)
+      touchedItemIds.add(agentJournalSubmissionKey(clientMessageId))
     }
   }
 
-  const live = new Map(input.snapshot.items.map((item) => [item.itemId, item]))
+  const live = liveItemsById(input.snapshot.items)
+  const notes = stopNotesByTurn(input.snapshot.items)
+  for (const itemId of touchedItemIds) {
+    for (const noteId of notes.get(itemId) ?? []) {
+      touchedItemIds.add(noteId)
+    }
+  }
   const items = [...touchedItemIds]
     .map((itemId) => live.get(itemId))
     .filter((item) => item !== undefined)
-    .sort((a, b) => a.sequence - b.sequence)
+    .sort(compareAgentJournalItems)
   return {
     ok: true,
     batch: {
@@ -75,18 +97,71 @@ export function projectJournalBatch(input: {
   }
 }
 
-/**
- * Provider item id → the submission slot that adopted it, rebuilt from the
- * snapshot's own accepted submissions. This mirrors the alias the reducer
- * writes on an accepted dispatch; deriving it here keeps the projection a pure
- * function of published state instead of reaching into reducer internals.
- */
-function submissionAliases(snapshot: AgentJournalSnapshot): Map<string, string> {
+// Snapshot arrays invalidate these indexes; catch-up pages and byte-shrink retries reuse them.
+const liveItemsByTimeline = new WeakMap<
+  readonly AgentJournalRenderItem[],
+  ReadonlyMap<string, AgentJournalRenderItem>
+>()
+const aliasesBySubmissions = new WeakMap<
+  readonly AgentJournalSubmission[],
+  ReadonlyMap<string, string>
+>()
+const stopNotesByTimeline = new WeakMap<
+  readonly AgentJournalRenderItem[],
+  ReadonlyMap<string, readonly string[]>
+>()
+
+function stopNotesByTurn(
+  items: readonly AgentJournalRenderItem[]
+): ReadonlyMap<string, readonly string[]> {
+  const cached = stopNotesByTimeline.get(items)
+  if (cached) {
+    return cached
+  }
+  const notes = new Map<string, string[]>()
+  for (const item of items) {
+    // Re-emit projected Stop notes on turn removal even if their failure field is already absent.
+    if (
+      item.body.kind === 'status' &&
+      item.turnScope?.kind === 'turn' &&
+      isStructuredAgentSessionStopNote(item.itemId)
+    ) {
+      const turnItemId = item.turnScope.turnItemId
+      const ids = notes.get(turnItemId) ?? []
+      ids.push(item.itemId)
+      notes.set(turnItemId, ids)
+    }
+  }
+  stopNotesByTimeline.set(items, notes)
+  return notes
+}
+
+function liveItemsById(
+  items: readonly AgentJournalRenderItem[]
+): ReadonlyMap<string, AgentJournalRenderItem> {
+  const cached = liveItemsByTimeline.get(items)
+  if (cached) {
+    return cached
+  }
+  const live = new Map(items.map((item) => [item.itemId, item]))
+  liveItemsByTimeline.set(items, live)
+  return live
+}
+
+/** Derive aliases from published acceptance so projection stays independent of reducer internals. */
+function submissionAliases(
+  submissions: readonly AgentJournalSubmission[]
+): ReadonlyMap<string, string> {
+  const cached = aliasesBySubmissions.get(submissions)
+  if (cached) {
+    return cached
+  }
   const aliases = new Map<string, string>()
-  for (const submission of snapshot.submissions) {
+  for (const submission of submissions) {
     if (submission.dispatchState === 'accepted' && submission.providerItemId) {
       aliases.set(submission.providerItemId, agentJournalSubmissionKey(submission.clientMessageId))
     }
   }
+  aliasesBySubmissions.set(submissions, aliases)
   return aliases
 }

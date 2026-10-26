@@ -1,5 +1,6 @@
 import {
   AGENT_SESSION_BOUNDARY_RUNTIME_CAPABILITY,
+  AGENT_STATUS_RESTORED_UNCONFIRMED_RUNTIME_CAPABILITY,
   type RuntimeCapability
 } from '../../../../shared/protocol-version'
 import type {
@@ -8,26 +9,73 @@ import type {
   RuntimeMobileSessionTabsSnapshot
 } from '../../../../shared/runtime-types'
 import type { TabGroupLayoutNode } from '../../../../shared/tab-types'
-import { structuredNativeChatProjectionEnabled } from './structured-agent-session-policy'
+import {
+  clientRendersStructuredAgent,
+  supportsStructuredAgentSessions
+} from './structured-agent-session-policy'
 
 type SessionTabsPayload = RuntimeMobileSessionTabsResult | RuntimeMobileSessionTabsSnapshot
+
+/** Capped at 128px / one line in every shipped mobile build, so ~15-18 characters render. */
+export const STRUCTURED_CHAT_UPDATE_REQUIRED_TAB_TITLE = 'Update to view'
+export const CLAUDE_STRUCTURED_CHAT_DESKTOP_ONLY_TAB_TITLE = 'Open on desktop'
+
+function clientCanRenderStructuredAgentSessionTab(
+  tab: RuntimeMobileSessionAgentTab,
+  clientCapabilities: readonly RuntimeCapability[] | undefined
+): boolean {
+  // Legacy clients render only Claude/Codex chats; require explicit support for other agents to avoid empty panes.
+  return clientRendersStructuredAgent(clientCapabilities, tab.agent)
+}
+
+function resolveMobileStructuredChatFallbackTitle(
+  tab: RuntimeMobileSessionAgentTab,
+  args: {
+    clientKind: 'mobile' | 'runtime' | undefined
+    clientCapabilities: readonly RuntimeCapability[] | undefined
+  }
+): string | null {
+  if (
+    args.clientKind !== 'mobile' ||
+    clientCanRenderStructuredAgentSessionTab(tab, args.clientCapabilities)
+  ) {
+    return null
+  }
+  return tab.agent === 'claude'
+    ? CLAUDE_STRUCTURED_CHAT_DESKTOP_ONLY_TAB_TITLE
+    : STRUCTURED_CHAT_UPDATE_REQUIRED_TAB_TITLE
+}
 
 export function projectSessionTabAgentStatus<TPayload extends SessionTabsPayload>(
   payload: TPayload,
   clientKind: 'mobile' | 'runtime' | undefined,
-  clientCapabilities: readonly RuntimeCapability[] | undefined,
-  structuredNativeChatEnabled?: boolean
+  clientCapabilities: readonly RuntimeCapability[] | undefined
 ): TPayload {
-  const structuredVisible = structuredNativeChatProjectionEnabled({
-    clientKind,
-    clientCapabilities,
-    structuredNativeChatEnabled
-  })
-  let projected = structuredVisible ? payload : projectAgentSessionTabsOut(payload, () => true)
-  if (structuredVisible && clientKind !== undefined) {
-    projected = projectAgentSessionTabsOut(projected, (tab) => tab.agent !== 'codex')
+  const structuredVisible = supportsStructuredAgentSessions({ clientKind, clientCapabilities })
+  let projected: TPayload
+  if (clientKind === 'mobile') {
+    // Keep an actionable fallback row so the chat is discoverable; retaining it needs no layout repair.
+    projected = projectUnsupportedAgentSessionTabTitles(payload, {
+      clientKind,
+      clientCapabilities
+    })
+  } else {
+    projected = structuredVisible ? payload : projectAgentSessionTabsOut(payload, () => true)
+    // Gate chat rows by client rendering support or selection opens neither chat nor terminal.
+    if (structuredVisible && clientKind !== undefined) {
+      projected = projectAgentSessionTabsOut(
+        projected,
+        (tab) => !clientCanRenderStructuredAgentSessionTab(tab, clientCapabilities)
+      )
+    }
   }
-  // Why: only paired runtimes have legacy `done` completion side effects; mobile must keep its row without changing the exact v2 auth shape.
+  if (
+    clientKind !== undefined &&
+    !clientCapabilities?.includes(AGENT_STATUS_RESTORED_UNCONFIRMED_RUNTIME_CAPABILITY)
+  ) {
+    projected = projectRestoredAgentStatusAsLegacyDone(projected)
+  }
+  // Legacy done completion applies only to paired runtimes; mobile retains rows without changing v2 authentication.
   if (
     clientKind !== 'runtime' ||
     clientCapabilities?.includes(AGENT_SESSION_BOUNDARY_RUNTIME_CAPABILITY)
@@ -45,6 +93,63 @@ export function projectSessionTabAgentStatus<TPayload extends SessionTabsPayload
     return legacyTab
   })
   return changed ? ({ ...projected, tabs } as TPayload) : projected
+}
+
+/** What hosts published for a restored turn before clients could read it as unverifiable. */
+function projectRestoredAgentStatusAsLegacyDone<TPayload extends SessionTabsPayload>(
+  payload: TPayload
+): TPayload {
+  let changed = false
+  const tabs = payload.tabs.map((tab) => {
+    if (tab.type !== 'terminal' || tab.agentStatus?.restoredUnconfirmed !== true) {
+      return tab
+    }
+    changed = true
+    const { restoredUnconfirmed: _restored, ...legacyStatus } = tab.agentStatus
+    return { ...tab, agentStatus: { ...legacyStatus, state: 'done' as const, prompt: '' } }
+  })
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only terminal tabs' agentStatus changed; every other TPayload field is spread through unchanged.
+  return changed ? ({ ...payload, tabs } as TPayload) : payload
+}
+
+function projectUnsupportedAgentSessionTabTitles<TPayload extends SessionTabsPayload>(
+  payload: TPayload,
+  args: {
+    clientKind: 'mobile'
+    clientCapabilities: readonly RuntimeCapability[] | undefined
+  }
+): TPayload {
+  let changed = false
+  const tabs = payload.tabs.map((tab) => {
+    if (tab.type !== 'agent-session') {
+      return tab
+    }
+    const title = resolveMobileStructuredChatFallbackTitle(tab, args)
+    if (title === null) {
+      return tab
+    }
+    changed = true
+    return { ...tab, title }
+  })
+  return changed ? ({ ...payload, tabs } as TPayload) : payload
+}
+
+export function assertAgentSessionTabDestructiveMutationSupported(
+  payload: SessionTabsPayload,
+  tabId: string,
+  clientKind: 'mobile' | 'runtime' | undefined,
+  clientCapabilities: readonly RuntimeCapability[] | undefined
+): void {
+  if (clientKind === undefined) {
+    return
+  }
+  const tab = payload.tabs.find((candidate) => candidate.id === tabId)
+  if (
+    tab?.type === 'agent-session' &&
+    !clientCanRenderStructuredAgentSessionTab(tab, clientCapabilities)
+  ) {
+    throw new Error('structured_agent_session_unsupported')
+  }
 }
 
 function projectAgentSessionTabsOut<TPayload extends SessionTabsPayload>(

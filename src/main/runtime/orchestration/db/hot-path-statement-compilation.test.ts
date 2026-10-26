@@ -15,7 +15,7 @@ const WORKER_PANE = 'tab_w:leaf_w'
 const IDLE_HANDLE = 'term_idle'
 const IDLE_PANE = 'tab_i:leaf_i'
 
-// Why: mirrors SyncDatabase's `isStatementCacheable` — aggregate `(*)` is fine, any other `*` is not.
+// Match SyncDatabase cacheability: allow aggregate (*), reject other wildcards.
 const WILDCARD_PROJECTION = /(?<!\(\s*)\*/
 
 const openDatabases: OrchestrationDb[] = []
@@ -89,6 +89,7 @@ function buildProjection(db: OrchestrationDb): RuntimeAgentOrchestrationProjecti
     getDb: () => db,
     getLeaves: () => leaves,
     getPtys: () => [],
+    paneOf: () => ({ tabId: null, paneKey: null, recordedAtGraphSequence: 0 }),
     issueLeafHandle: (leaf) => handleByLeaf.get(leaf) ?? '',
     issuePtyHandle: () => '',
     makePaneKey: (leaf) => paneByLeaf.get(leaf) ?? '',
@@ -101,7 +102,8 @@ function buildProjection(db: OrchestrationDb): RuntimeAgentOrchestrationProjecti
             paneKey: COORDINATOR_PANE,
             processIncarnation: 'inc_1'
           } as OrchestrationCompatibilityTerminalAuthority)
-        : null
+        : null,
+    getAgentStatusSnapshot: () => []
   })
 }
 
@@ -124,16 +126,38 @@ describe('orchestration hot-path statement compilation', () => {
     }
     expect([...compilationsPerSql].filter(([, count]) => count > 1)).toEqual([])
     expect(compiled).toEqual(compiledByFirstPublish)
-    // Why: a cache that changed what the fan-out returns would be worse than the recompiles.
     expect(publishes[0]).toBeDefined()
     for (const publish of publishes) {
       expect(publish).toEqual(publishes[0])
     }
   })
 
-  // Why: `SELECT *` is what made these statements uncacheable, and a retained wildcard is the only
-  // way node:sqlite could build a row from stale column names after another connection's ALTER.
-  // Seeds on one connection and publishes on a second so every compilation here is hot-path SQL.
+  // Task lookups and coordinator listings need cached projections too.
+  it('compiles the task lookup and listing SQL exactly once across repeated calls', () => {
+    const db = openDatabase(':memory:')
+    seedDispatchedWorker(db)
+    const seeded = db.listTasks()
+    expect(seeded.length).toBeGreaterThan(0)
+    const taskId = seeded[0].id
+
+    const compiled = trackCompiledSql(db)
+    for (let call = 0; call < 5; call += 1) {
+      db.getTask(taskId)
+      db.listTasks()
+      db.listTasks({ ready: true })
+      db.listTasks({ status: 'pending' })
+      db.listTasks({ runId: seeded[0].run_id })
+    }
+
+    const compilationsPerSql = new Map<string, number>()
+    for (const sql of compiled) {
+      compilationsPerSql.set(sql, (compilationsPerSql.get(sql) ?? 0) + 1)
+    }
+    expect([...compilationsPerSql].filter(([, count]) => count > 1)).toEqual([])
+    expect(compiled.filter((sql) => WILDCARD_PROJECTION.test(sql))).toEqual([])
+  })
+
+  // Seed through another connection so wildcard recompilation is measured only on the publish hot path.
   it('publishes without compiling a single wildcard projection', () => {
     const path = temporaryDatabasePath()
     seedDispatchedWorker(openDatabase(path))

@@ -1,5 +1,4 @@
 import { app, type BrowserWindow } from 'electron'
-import { cancelScheduledRelaunch } from '../app-relaunch'
 import { createMainWindow, loadMainWindow } from '../window/createMainWindow'
 import {
   recordCrashBreadcrumb,
@@ -18,13 +17,7 @@ import {
 import { logStartupMilestone } from './startup-diagnostics'
 import { notifyMainWindowBecameVisible } from '../window/main-window-visibility'
 import { setTrayAttention } from '../tray/system-tray'
-import {
-  createSystemTrayDeferred,
-  getSystemTrayOptions,
-  showMainWindowFromTray,
-  showRendererRecoveryPrompt,
-  syncMacMenuBarIcon
-} from './main-window-actions'
+import { createSystemTrayDeferred, showRendererRecoveryPrompt } from './main-window-actions'
 import { attachMainWindowCoreServices } from './main-window-core-services'
 import {
   clearMainWindowAgentStatusListeners,
@@ -39,12 +32,18 @@ import {
   recordProcessGoneCrash
 } from './main-window-lifecycle-flags'
 import { presentGpuFallbackRecoveredLaunchPrompt } from './gpu-lifecycle'
-import { maybeAutoRenameBranchOnFirstWorkFromHook } from './branch-rename-hook'
 import {
   resumeSyntheticTitleSpinnerTimer,
   stopSyntheticTitleSpinnerTimer
 } from './synthetic-title-runtime'
 import { requireMainWindowServices } from './main-window-service-readiness'
+import { recordRendererLaunchFailureProbe } from '../window/renderer-launch-failure-probe'
+
+import { isResourceWindowVisible } from '../window/resource-view-admission'
+import {
+  applyBackgroundActivationPolicy,
+  applyServeDesktopWindowActivationPolicy
+} from '../window/foreground-activation-policy'
 
 const TRAY_CREATE_FALLBACK_MS = 12_000
 const AGENT_STATE_CRASH_BREADCRUMB_MIN_INTERVAL_MS = 30_000
@@ -58,6 +57,7 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
     claudeUsage: state.claudeUsage,
     codexUsage: state.codexUsage,
     openCodeUsage: state.openCodeUsage,
+    museUsage: state.museUsage,
     rateLimits: state.rateLimits,
     automations: state.automations,
     codexAccounts: state.codexAccounts,
@@ -76,8 +76,7 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
         }
       }
     })
-    // Why here: read-only, and the install DACL is the one thing a 0x80000003
-    // child death cannot tell us about itself. See electron/electron#51761.
+    // Probe DACL read-only: 0x80000003 child deaths cannot identify install permissions themselves (electron/electron#51761).
     const probeDispatched = probeWindowsInstallDirAcl({
       isServeMode: state.isServeMode,
       onDone: (data) =>
@@ -87,43 +86,62 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
           appVersion: app.getVersion()
         })
     })
-    // Why gated on the dispatch: the probe is once-per-process while openMainWindow
-    // re-runs on every reopen, so arming this again would wait on a verdict that
-    // already landed — and drop every GPU crash for the grace window.
+    // Arm only when the once-per-process probe dispatches; reopened windows must not wait on an already-settled verdict.
     if (probeDispatched) {
       noteWindowsInstallDirAclProbePending()
     }
+  }
+  if (state.isServeMode) {
+    applyServeDesktopWindowActivationPolicy({ warn: console.warn })
   }
   const window = createMainWindow(store, {
     getIsQuitting: () => state.isQuitting,
     onQuitAborted: () => {
       state.isQuitting = false
       clearExpectedRendererReload()
-      // Why: a relaunch deferred to `quit` must be withdrawn when the quit is abandoned, or the
-      // next unrelated quit — possibly hours later — resurrects it as a surprise restart.
-      cancelScheduledRelaunch()
     },
-    onRendererProcessGone: (details, webContentsId) =>
+    onRendererProcessGone: (details, webContentsId, liveness) => {
       recordProcessGoneCrash(
         'renderer',
         'renderer',
         details.reason,
         details.exitCode ?? null,
-        { processType: 'renderer' },
+        { processType: 'renderer', ...liveness },
         webContentsId
-      ),
+      )
+      // launch-failed hides cause; errno can prove process exhaustion such as EAGAIN.
+      if (details.reason === 'launch-failed' && !state.isQuitting) {
+        void recordRendererLaunchFailureProbe(details)
+      }
+    },
     shouldRecoverRenderer: (details, webContentsId) =>
       shouldRecoverRendererAfterProcessGone({
         reason: details.reason,
         expectedTeardown: getExpectedTeardownScope(webContentsId, false)
       }),
-    onRendererRecoveryExhausted: ({ details, recentRecoveryCount }) => {
-      recordDurableCrashBreadcrumb('renderer_recovery_circuit_breaker_open', {
-        reason: details.reason,
-        exitCode: details.exitCode ?? null,
-        recentRecoveryCount
-      })
-      void showRendererRecoveryPrompt(recentRecoveryCount)
+    onRendererRecoveryExhausted: ({ details, recentRecoveryCount, cause, lowCommit, retry }) => {
+      // Name non-breaker failures separately so diagnostics do not misreport an opened breaker.
+      recordDurableCrashBreadcrumb(
+        cause === 'reload-stalled'
+          ? 'renderer_recovery_reload_exhausted'
+          : cause === 'launch-failed'
+            ? 'renderer_recovery_launch_backoff_exhausted'
+            : cause === 'low-commit'
+              ? 'renderer_recovery_low_commit_prompt'
+              : 'renderer_recovery_circuit_breaker_open',
+        {
+          reason: details.reason,
+          exitCode: details.exitCode ?? null,
+          recentRecoveryCount,
+          ...lowCommit
+        }
+      )
+      void showRendererRecoveryPrompt(
+        recentRecoveryCount,
+        cause,
+        retry,
+        lowCommit?.availableCommitMB
+      )
     },
     deferLoad: true,
     ...(options.revealOnDidFinishLoad === true ? { revealOnDidFinishLoad: true } : {}),
@@ -135,9 +153,16 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
       }
       recordCrashBreadcrumb('manual_reload_requested', { ignoreCache })
     },
-    onBeforeRecoveryReload: (webContentsId) => {
+    // Manual retries also preserve PTYs, but have their own intent breadcrumb.
+    onBeforeRecoveryReload: (webContentsId, trigger) => {
       markRecoveryReloadInFlight(webContentsId)
-      recordDurableCrashBreadcrumb('renderer_recovery_reload')
+      if (trigger === 'automatic') {
+        recordDurableCrashBreadcrumb('renderer_recovery_reload')
+      }
+    },
+    // Pair the intent breadcrumb with its path-free outcome.
+    onRecoveryReloadOutcome: ({ status, ...outcome }) => {
+      recordDurableCrashBreadcrumb(`renderer_recovery_reload_${status}`, outcome)
     }
   })
   recordCrashBreadcrumb('main_window_created')
@@ -158,9 +183,8 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
     clearExpectedRendererReload(rendererWebContentsId)
     recordCrashBreadcrumb('main_window_loaded')
     logStartupMilestone('did-finish-load')
-    // Why cleared here: a reload drops the old ui:openMarkdownFiles listener, and the fresh
-    // renderer re-attaches by pulling. Pushing into the gap between would be silently lost.
-    state.markdownFileOpenListenerReady = false
+    // Reload removes the listener; hold pushes until the fresh renderer pulls to prove readiness.
+    state.osDocumentOpenListenerReady = false
     const currentStore = state.store
     if (currentStore && resolveConsent(currentStore.getSettings()).effective === 'enabled') {
       trackAppOpenedOnce()
@@ -173,6 +197,15 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
       recordCrashBreadcrumb('renderer_reload_requested', { ignoreCache })
   })
   state.mainWindow = window
+  const publishResourceVisibility = (): void => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('memory:resourceWindowVisibility', isResourceWindowVisible(window))
+    }
+  }
+  window.on('show', publishResourceVisibility)
+  window.on('restore', publishResourceVisibility)
+  window.on('hide', publishResourceVisibility)
+  window.on('minimize', publishResourceVisibility)
   window.on('show', resumeSyntheticTitleSpinnerTimer)
   window.on('restore', resumeSyntheticTitleSpinnerTimer)
   window.on('hide', stopSyntheticTitleSpinnerTimer)
@@ -183,7 +216,6 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
   window.on('restore', () => setTrayAttention(false))
   installMainWindowAgentStatusListeners({
     window,
-    maybeAutoRenameBranchOnFirstWork: maybeAutoRenameBranchOnFirstWorkFromHook,
     onRecordAgentState: (agentType, status) =>
       recordCoalescedCrashBreadcrumb({
         name: 'agent_state_changed',
@@ -195,6 +227,9 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
   window.on('closed', () => {
     if (state.mainWindow === window) {
       state.mainWindow = null
+      if (state.isServeMode) {
+        applyBackgroundActivationPolicy({ serveWithoutDesktopWindow: true, warn: console.warn })
+      }
     }
     clearExpectedRendererReload(rendererWebContentsId)
     state.automations?.setWebContents(null)
@@ -203,11 +238,4 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
   logStartupMilestone('load-start')
   loadMainWindow(window)
   return window
-}
-
-export function configureWindowActions(): void {
-  // Kept as a named seam for startup composition; action callbacks are state-backed.
-  void getSystemTrayOptions
-  void showMainWindowFromTray
-  void syncMacMenuBarIcon
 }

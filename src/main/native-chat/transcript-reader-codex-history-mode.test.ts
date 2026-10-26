@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { extractPendingAsk } from '../../shared/native-chat-ask'
 import { decodeCodexTranscriptLine } from './transcript-line-decoders-codex'
 import { readNativeChatTranscript } from './transcript-reader'
 import { readNativeChatTranscriptTail } from './transcript-tail-reader'
@@ -239,12 +240,105 @@ describe('Codex transcript history modes', () => {
     expect(call).toMatchObject({
       id: 'call-1',
       role: 'assistant',
-      blocks: [{ type: 'tool-call', name: 'exec', input: 'pwd' }]
+      blocks: [{ type: 'tool-call', name: 'exec', input: 'pwd', callId: 'durable-call-1' }]
     })
     expect(output).toMatchObject({
       id: 'fallback-output',
       role: 'tool',
       blocks: [{ type: 'tool-result', output: 'ok' }]
     })
+  })
+
+  it('passes an argument payload through untouched, so no consumer changes shape', () => {
+    const call = decodeCodexTranscriptLine(
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'function_call',
+          id: 'call-2',
+          name: 'shell',
+          arguments: '{"command":["bash","-lc","echo hi"]}'
+        }
+      }),
+      'fallback-args'
+    )
+
+    expect(call?.blocks[0]).toMatchObject({
+      type: 'tool-call',
+      name: 'shell',
+      input: '{"command":["bash","-lc","echo hi"]}'
+    })
+  })
+
+  it('does not raise a question card from an unrelated tool that carries a questions payload', () => {
+    const call = decodeCodexTranscriptLine(
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'function_call',
+          id: 'call-3',
+          name: 'some_mcp_tool',
+          arguments: '{"questions":[{"question":"Which branch?","options":["main","dev"]}]}'
+        }
+      }),
+      'fallback-questions'
+    )
+
+    expect(call).not.toBeNull()
+    expect(extractPendingAsk(call ? [call] : [])).toBeNull()
+  })
+
+  it('keeps an async question pending past its display acknowledgement until the user replies', () => {
+    const lines = [
+      {
+        type: 'response_item',
+        payload: {
+          type: 'function_call',
+          name: 'request_user_input_async',
+          call_id: 'call-async',
+          arguments:
+            '{"questions":[{"title":"Which color?","options":["Red (Recommended)","Blue"]},{"title":"Any constraints?"}]}'
+        }
+      },
+      completedItem(
+        {
+          type: 'AgentMessage',
+          id: 'call-async',
+          content: [{ type: 'Text', text: 'Which color?\n- Red (Recommended)\n- Blue' }],
+          delivery: 'async'
+        },
+        '2026-10-21T00:00:01.000Z'
+      ),
+      {
+        type: 'response_item',
+        payload: {
+          type: 'function_call_output',
+          call_id: 'call-async',
+          output: '{"accepted":true}'
+        }
+      }
+    ]
+    const messages = lines.flatMap((line, index) => {
+      const message = decodeCodexTranscriptLine(JSON.stringify(line), `line-${index}`)
+      return message ? [message] : []
+    })
+
+    expect(extractPendingAsk(messages)).toEqual({
+      replyAsMessage: true,
+      questions: [
+        {
+          question: 'Which color?',
+          multiSelect: false,
+          options: [{ label: 'Red (Recommended)' }, { label: 'Blue' }]
+        },
+        { question: 'Any constraints?', multiSelect: false, options: [] }
+      ]
+    })
+
+    const reply = decodeCodexTranscriptLine(
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'Red' } }),
+      'reply'
+    )
+    expect(extractPendingAsk([...messages, ...(reply ? [reply] : [])])).toBeNull()
   })
 })

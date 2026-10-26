@@ -1,288 +1,271 @@
-import { useEffect, useState } from 'react'
-import { Check, ChevronRight, SquareTerminal, Wrench } from 'lucide-react'
+import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/CommentMarkdown'
+import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { NativeChatExpandable } from './NativeChatExpandable'
+import { useNativeChatDisclosure } from './native-chat-disclosure-store'
+import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import {
   isToolCallBlock,
-  isToolResultBlock,
-  type NativeChatBlock
+  type NativeChatBackgroundTaskBlock,
+  type NativeChatBlock,
+  type NativeChatSubagentGroupBlock,
+  type NativeChatToolCallBlock
 } from '../../../../shared/native-chat-types'
-import { diffFromText, diffFromToolCall, type DiffLine } from './native-chat-diff'
+import { isRenderableSubagentGroup } from '../../../../shared/native-chat-subagent-summary'
+import type { NativeChatDiffReveal } from './native-chat-turn-diffs'
+import { countToolCalls } from '../../../../shared/native-chat/tools/native-chat-tool-summary'
+import { nativeChatToolRunSentence } from './native-chat-tool-run-label'
 import {
-  countToolCalls,
-  createToolInputDisplay,
-  summarizeToolRun,
-  truncateToolDetail
-} from './native-chat-tool-summary'
-import { NativeChatDiffView } from './NativeChatDiffView'
+  describeLatestToolCall,
+  NATIVE_CHAT_TOOL_ACTIVITY_COPY,
+  selectActiveToolCall
+} from '../../../../shared/native-chat/tools/native-chat-tool-activity'
+import { nativeChatToolRunIconName } from '../../../../shared/native-chat/tools/native-chat-tool-icon'
+import { nativeChatToolRunOutcome } from '../../../../shared/native-chat/tools/native-chat-tool-run-outcome'
+import {
+  nativeChatAskRunBlocks,
+  nativeChatAskRunSubject
+} from '../../../../shared/native-chat-ask-row'
+import { NativeChatAwaitingInputRow } from './NativeChatAwaitingInputRow'
+import { NativeChatBackgroundTaskRun } from './NativeChatBackgroundTaskRun'
+import { NativeChatSubagentRun } from './NativeChatSubagentRun'
+import type {
+  NativeChatSubagentDisclosure,
+  NativeChatSubagentRosterState
+} from './native-chat-subagent-sections'
+import { NativeChatToolRunIcon } from './NativeChatToolIcon'
+import { NativeChatToolRunCallCounts } from './NativeChatToolRunCallCounts'
+import { NativeChatToolRunMembers, revealNativeChatToolRunMember } from './NativeChatToolRunMembers'
+import { NativeChatToolRunMemberList } from './NativeChatToolRunMemberList'
+import { NativeChatBrowserRunPageButton } from './NativeChatBrowserPageButton'
 
-const COMMAND_TOOL_NAMES = new Set([
-  'bash',
-  'shell',
-  'powershell',
-  'terminal',
-  'execute',
-  'run_command',
-  'run_shell_command',
-  'shell_command',
-  'exec_command',
-  'run_terminal_cmd',
-  'run_terminal_command'
-])
-
-function normalizedToolName(name: string): string {
-  return name.trim().toLowerCase()
+/** Insert keyed asides before their block or after the final block. */
+export type NativeChatToolRunAsides = {
+  before: ReadonlyMap<NativeChatBlock, readonly React.JSX.Element[]>
+  after: readonly React.JSX.Element[]
 }
 
-function activeToolLabel(call: Extract<NativeChatBlock, { type: 'tool-call' }>): string {
-  const preview = createToolInputDisplay(call.input).label
-  if (COMMAND_TOOL_NAMES.has(normalizedToolName(call.name))) {
-    return preview
-      ? translate('components.native-chat.tool.runningPreview', 'Running {{preview}}', {
-          preview
-        })
-      : translate('components.native-chat.tool.runningCommand', 'Running command')
-  }
-  return preview
-    ? translate(
-        'components.native-chat.tool.runningNamedPreview',
-        'Running {{toolName}} {{preview}}',
-        {
-          toolName: call.name,
-          preview
-        }
-      )
-    : translate('components.native-chat.tool.runningNamed', 'Running {{toolName}}', {
-        toolName: call.name
-      })
-}
+/** Stable empty default: a fresh array literal per render breaks memoization. */
+const NO_SUBAGENT_GROUPS: NativeChatSubagentGroupBlock[] = []
+const NO_BACKGROUND_TASKS: NativeChatBackgroundTaskBlock[] = []
 
-/** A single inline tool line — `▸ ToolName  preview` — that expands in place to
- *  show the call's diff/input or the result's body. Tool calls read as flat
- *  lines in the conversation rather than boxed blocks (mobile parity). Lines only
- *  mount while the parent run is open and are individually collapsible. */
-function ToolLine({
-  block,
-  initiallyExpanded = true
-}: {
-  block: NativeChatBlock
-  initiallyExpanded?: boolean
-}): React.JSX.Element | null {
-  const [expanded, setExpanded] = useState(initiallyExpanded)
-
-  let name: string
-  let preview: string
-  let diff: DiffLine[] | null = null
-  let body: { output: string; isError?: boolean } | null = null
-  let detail: string | null = null
-  let inputHasDetail = false
-
-  if (isToolCallBlock(block)) {
-    name = block.name
-    const inputDisplay = createToolInputDisplay(block.input)
-    preview = inputDisplay.label
-    inputHasDetail = inputDisplay.hasDetail
-    diff = expanded ? diffFromToolCall(block.name, block.input) : null
-    detail = expanded && !diff ? inputDisplay.formatDetail() : null
-  } else if (isToolResultBlock(block)) {
-    name = translate('components.native-chat.tool.result', 'Result')
-    preview = block.output.split('\n')[0]?.slice(0, 80) ?? ''
-    diff = expanded ? diffFromText(block.output) : null
-    body = { output: block.output, isError: block.isError }
-  } else {
-    return null
-  }
-
-  const hasDetail = diff !== null || body !== null || inputHasDetail
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => hasDetail && setExpanded((v) => !v)}
-        className={cn(
-          'group flex w-full items-center gap-1.5 py-0.5 text-left',
-          hasDetail ? 'cursor-pointer' : 'cursor-default'
-        )}
-        aria-expanded={hasDetail ? expanded : undefined}
-      >
-        <code className="shrink-0 font-mono text-xs font-semibold text-foreground/90 transition-colors group-hover:text-foreground">
-          {name}
-        </code>
-        {preview ? (
-          <span
-            className="min-w-0 truncate font-mono text-[11px] text-muted-foreground transition-colors group-hover:text-foreground/70"
-            title={preview}
-          >
-            {preview}
-          </span>
-        ) : null}
-        {hasDetail ? (
-          // Chevron stays hidden until this row is expanded.
-          <ChevronRight
-            className={cn(
-              'size-3.5 shrink-0 text-muted-foreground transition-all',
-              expanded ? 'rotate-90 opacity-100' : 'opacity-0 group-hover:opacity-100'
-            )}
-          />
-        ) : null}
-      </button>
-      {hasDetail && expanded ? (
-        <div className="space-y-1.5 py-1">
-          {diff ? <NativeChatDiffView lines={diff} /> : null}
-          {!diff && body ? (
-            <pre
-              className={cn(
-                'max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-accent p-2 font-mono text-[11px] scrollbar-sleek',
-                body.isError ? 'text-destructive' : 'text-foreground/80'
-              )}
-            >
-              {truncateToolDetail(body.output)}
-            </pre>
-          ) : null}
-          {!diff && !body && detail ? (
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-accent p-2 font-mono text-[11px] text-foreground/80 scrollbar-sleek">
-              {detail}
-            </pre>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-/** A run of a message's tool calls/results, collapsed to a one-line summary that
- *  expands to the individual inline tool lines. `expandSignal` lets the global
- *  toolbar toggle drive every run at once while still allowing per-run override. */
 export function NativeChatToolRun({
   blocks,
+  previousTodoWrite,
+  previousUpdatePlan,
+  revealedDiff,
+  onRevealDiff,
+  subagentGroups = NO_SUBAGENT_GROUPS,
+  subagentRoster,
+  subagentDisclosure,
+  backgroundTasks = NO_BACKGROUND_TASKS,
+  followsProse = true,
   expandSignal,
   activeTurnIsWorking,
-  expandOverride,
-  structuredActivityUi = true
+  trailing,
+  disclosureId,
+  onLinkClick,
+  asides
 }: {
   blocks: NativeChatBlock[]
-  /** Toolbar-driven desired open state. Each change re-syncs this run's state. */
+  previousTodoWrite?: NativeChatToolCallBlock
+  previousUpdatePlan?: NativeChatToolCallBlock
+  revealedDiff?: NativeChatDiffReveal
+  onRevealDiff?: (element: HTMLElement) => void
+  /** Spawn-group rosters that belong with this run's activity, one row each. */
+  subagentGroups?: NativeChatSubagentGroupBlock[]
+  /** The rosters' list state, and their children whose rows open below this run. */
+  subagentRoster?: NativeChatSubagentRosterState
+  subagentDisclosure?: NativeChatSubagentDisclosure
+  /** Background tasks that belong with this run's activity, one row each. */
+  backgroundTasks?: NativeChatBackgroundTaskBlock[]
+  /** The row draws prose above this run, which the run then sits just under. */
+  followsProse?: boolean
+  /** Legacy view-level default; production native-chat entry points pass false. */
   expandSignal: boolean
-  /** Per-turn disclosure state controlled by the completed turn status row. */
-  expandOverride?: boolean
   /** Structured lifecycle state, when available, keeps orphaned running calls from spinning. */
   activeTurnIsWorking?: boolean
-  structuredActivityUi?: boolean
+  /** Only a working turn’s trailing run stays live; omitted means trailing for compatibility. */
+  trailing?: boolean
+  /** Remember disclosure by message id outside the windowed row’s lifetime. */
+  disclosureId?: string
+  onLinkClick?: CommentMarkdownLinkClickHandler
+  asides?: NativeChatToolRunAsides
 }): React.JSX.Element | null {
-  const [open, setOpen] = useState(expandOverride ?? expandSignal)
-  // Re-sync when the global toolbar toggle flips.
-  useEffect(() => setOpen(expandOverride ?? expandSignal), [expandOverride, expandSignal])
+  // This row owns the language subscription for its tool, diff, and task labels.
+  useTranslation()
+  const spacing = followsProse ? 'mt-2' : undefined
+  // Rows drawn among the calls count as work too: a reader at the end follows them arriving.
+  const asideCount = useMemo(
+    () =>
+      asides
+        ? asides.after.length +
+          Array.from(asides.before.values()).reduce((count, rows) => count + rows.length, 0)
+        : 0,
+    [asides]
+  )
+  // Key reader overrides by controlling disclosure state so returning restores them without mid-render store writes.
+  const runKey =
+    disclosureId === undefined
+      ? undefined
+      : `run:${disclosureId}:${expandSignal}:${revealedDiff?.requestId ?? '-'}`
+  const { open, setOpen } = useNativeChatDisclosure(runKey, revealedDiff ? true : expandSignal)
 
-  const callCount = countToolCalls(blocks) || blocks.length
-  const summary = summarizeToolRun(blocks)
-  const calls = blocks.filter(isToolCallBlock)
-  const activeCalls = structuredActivityUi
-    ? calls.filter(
-        (call) =>
-          (call.state === 'running' || (call.state == null && activeTurnIsWorking === true)) &&
-          activeTurnIsWorking !== false
-      )
-    : []
-  const latestActiveCall = activeCalls.at(-1)
-  const isSettled = latestActiveCall == null
-  // The turn caret opens the activity group, while each child tool remains
-  // collapsed. The global expand toolbar still opens child details together.
-  const expandToolLines = expandOverride === undefined ? open : false
-  const ActiveToolIcon =
-    latestActiveCall && COMMAND_TOOL_NAMES.has(normalizedToolName(latestActiveCall.name))
-      ? SquareTerminal
-      : Wrench
+  // Share the renderability predicate with slot selection so childless groups cannot create empty margin wrappers.
+  const subagentRows = subagentGroups
+    .filter(isRenderableSubagentGroup)
+    .map((group) => (
+      <NativeChatSubagentRun
+        key={group.groupId}
+        block={group}
+        open={subagentRoster?.open}
+        onSetOpen={
+          subagentRoster && subagentDisclosure && disclosureId !== undefined
+            ? (open) => subagentDisclosure.setRosterOpen(disclosureId, open)
+            : undefined
+        }
+        sections={subagentRoster?.sections}
+        onSetSectionOpen={subagentDisclosure?.setSectionOpen}
+      />
+    ))
+  // Roster/task rows bypass tool-header hiding because they carry durable state beyond the originating turn.
+  const standaloneRows = [
+    ...subagentRows,
+    ...backgroundTasks.map((task) => <NativeChatBackgroundTaskRun key={task.taskId} block={task} />)
+  ]
+  const {
+    asks,
+    unansweredAsks,
+    work: headerBlocks
+  } = useMemo(() => nativeChatAskRunBlocks(blocks), [blocks])
+  const hasAskCall = asks.length > 0
+  const askSubject = hasAskCall ? nativeChatAskRunSubject(asks) : null
+  const callCount = countToolCalls(headerBlocks)
+  const showsHeader = !hasAskCall || callCount > 0
+  const askIsActive = selectActiveToolCall(unansweredAsks, { activeTurnIsWorking }) !== null
+  // Keep the trailing run live between calls; without a running unblocked turn, fall back to call state.
+  const live =
+    activeTurnIsWorking === true && !askIsActive
+      ? trailing !== false
+      : selectActiveToolCall(headerBlocks, { activeTurnIsWorking }) !== null
+  // A single command is more recognizable than its category summary.
+  const runSentence = nativeChatToolRunSentence(headerBlocks, { live })
+  // Keep the latest call named between calls, even if it finished within one frame.
+  const latestCall = live ? headerBlocks.findLast(isToolCallBlock) : undefined
+  const latestCallLabel = latestCall ? describeLatestToolCall(latestCall) : null
+  const {
+    succeeded: runSucceeded,
+    failedCallCount,
+    interruptedCallCount
+  } = nativeChatToolRunOutcome(headerBlocks, { activeTurnIsWorking })
+  // The card sits inside the run's own scroll box, so that box has to move too.
+  const revealDiff = useMemo(
+    () =>
+      onRevealDiff
+        ? (card: HTMLElement) => onRevealDiff(revealNativeChatToolRunMember(card))
+        : undefined,
+    [onRevealDiff]
+  )
+  // Choose a whole-run category; fixed leading identity leaves completion state to the trailing mark.
+  const settledHeaderIcon = nativeChatToolRunIconName(headerBlocks.filter(isToolCallBlock))
   const fallbackLabel =
-    callCount === 1
-      ? translate('components.native-chat.tool.countOne', '1 tool call')
-      : translate('components.native-chat.tool.countN', '{{value0}} tool calls', {
-          value0: callCount
-        })
+    callCount === 0
+      ? translate('components.native-chat.tool.result', 'Result')
+      : callCount === 1
+        ? translate('components.native-chat.tool.countOne', NATIVE_CHAT_TOOL_ACTIVITY_COPY.countOne)
+        : translate('components.native-chat.tool.countN', NATIVE_CHAT_TOOL_ACTIVITY_COPY.countN, {
+            value0: callCount
+          })
 
-  // Completed turn activity belongs behind the turn-status disclosure. Keeping
-  // the grouped row visible here made a failed child command look like the
-  // whole response was still running (or had failed) even while collapsed.
-  if (
-    structuredActivityUi &&
-    expandOverride === false &&
-    isSettled &&
-    activeTurnIsWorking === false
-  ) {
-    return null
+  // Standalone rosters/tasks have no tool calls for a header to summarize.
+  if (blocks.length === 0) {
+    return standaloneRows.length > 0 ? <div className={spacing}>{standaloneRows}</div> : null
   }
 
   return (
-    // Extra top margin sets the tool run apart from the assistant prose above it
-    // so the turn's activity doesn't crowd the message text.
-    <div className="mt-3">
-      {latestActiveCall ? (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="group flex min-h-6 w-full items-center gap-1.5 rounded-md py-0.5 text-left text-sm leading-relaxed text-muted-foreground hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
-          aria-expanded={open}
-          aria-live="polite"
-        >
-          <span className="flex size-6 shrink-0 items-center justify-center text-muted-foreground">
-            <ActiveToolIcon className="size-4" />
-          </span>
-          <span className="min-w-0 flex-1 truncate text-foreground/85">
-            {activeToolLabel(latestActiveCall)}
-          </span>
-          {open ? <ChevronRight className="size-3.5 rotate-90 text-muted-foreground" /> : null}
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="group flex min-h-6 w-full items-center gap-1.5 py-0.5 text-left"
-          aria-expanded={open}
-        >
-          {structuredActivityUi ? (
-            <span className="flex size-6 shrink-0 items-center justify-center text-muted-foreground">
-              <Check className="size-3.5" />
-            </span>
-          ) : null}
-          <span className="shrink-0 font-mono text-[11px] font-bold text-muted-foreground transition-colors group-hover:text-foreground/80">
-            {callCount}×
-          </span>
-          <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground transition-colors group-hover:text-foreground/80">
-            {summary || fallbackLabel}
-          </span>
-          {/* Chevron is revealed on hover when collapsed and points down when open. */}
-          <ChevronRight
-            className={cn(
-              'size-3.5 shrink-0 text-muted-foreground transition-all',
-              open ? 'rotate-90 opacity-100' : 'opacity-0 group-hover:opacity-100'
-            )}
-          />
-        </button>
-      )}
-      {open ? (
-        <div className="mt-1">
-          {(() => {
-            const seen = new Map<string, number>()
-            return blocks.map((block) => {
-              const signature =
-                block.type === 'tool-call'
-                  ? `${block.type}:${block.name}:${JSON.stringify(block.input)}`
-                  : block.type === 'tool-result'
-                    ? `${block.type}:${block.output}`
-                    : `${block.type}`
-              const occurrence = seen.get(signature) ?? 0
-              seen.set(signature, occurrence + 1)
-              return (
-                <ToolLine
-                  key={`${signature}:${occurrence}`}
-                  block={block}
-                  initiallyExpanded={expandToolLines}
-                />
-              )
-            })
-          })()}
-        </div>
+    <div className={spacing}>
+      {standaloneRows}
+      {hasAskCall ? (
+        <NativeChatAwaitingInputRow
+          subject={askSubject}
+          pending={askIsActive}
+          disclosureKey={disclosureId === undefined ? undefined : `ask:${disclosureId}`}
+          // A grouped ask here still names only its count.
+          listsQuestions={false}
+        />
       ) : null}
+      {!showsHeader ? null : (
+        <div className="flex items-start gap-1">
+          {/* Keep one header across live/settled states; summary line-height aligns marks and wrapped text. */}
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            className="group/tool-run flex min-h-6 min-w-0 flex-1 items-start gap-1.5 rounded-md py-0.5 text-left text-sm leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            aria-expanded={open}
+            aria-live="polite"
+            data-native-chat-tool-run-state={live ? 'live' : 'settled'}
+          >
+            {settledHeaderIcon ? (
+              <span className="flex h-[1lh] shrink-0 items-center">
+                <NativeChatToolRunIcon
+                  iconName={settledHeaderIcon}
+                  className="text-chat-foreground-faint"
+                />
+              </span>
+            ) : null}
+            {/* Keep the collapsed header bounded; the tool detail carries the full command. */}
+            <span
+              className={cn(
+                'min-w-0 line-clamp-2 whitespace-normal break-words text-sm leading-relaxed transition-colors',
+                live
+                  ? 'max-w-[72%] shrink-0 animate-pulse text-chat-foreground motion-reduce:animate-none'
+                  : 'min-w-0 text-chat-foreground-faint group-hover/tool-run:text-chat-foreground'
+              )}
+            >
+              {runSentence ?? fallbackLabel}
+            </span>
+            <NativeChatToolRunCallCounts
+              failed={failedCallCount}
+              interrupted={interruptedCallCount}
+            />
+            {/* Mark only stated success after settlement; idle gaps between live calls are not completion. */}
+            {!live && runSucceeded ? (
+              <span className="flex h-[1lh] shrink-0 items-center">
+                <Check aria-hidden className="size-3 shrink-0 text-chat-foreground-faint" />
+              </span>
+            ) : null}
+            {latestCallLabel ? (
+              <span className="flex h-[1lh] min-w-0 items-center">
+                <span className="min-w-0 truncate font-sans text-xs text-chat-foreground-faint">
+                  {latestCallLabel}
+                </span>
+              </span>
+            ) : null}
+          </button>
+          <NativeChatBrowserRunPageButton calls={headerBlocks.filter(isToolCallBlock)} />
+        </div>
+      )}
+      <NativeChatExpandable open={open && showsHeader}>
+        <NativeChatToolRunMembers
+          followKey={blocks.length + asideCount}
+          startsAtEnd={live && !revealedDiff}
+          memoryKey={runKey}
+        >
+          <NativeChatToolRunMemberList
+            blocks={blocks}
+            headerBlocks={headerBlocks}
+            asides={asides}
+            previousTodoWrite={previousTodoWrite}
+            previousUpdatePlan={previousUpdatePlan}
+            revealedDiff={revealedDiff}
+            onRevealDiff={revealDiff}
+            disclosureId={disclosureId}
+            onLinkClick={onLinkClick}
+          />
+        </NativeChatToolRunMembers>
+      </NativeChatExpandable>
     </div>
   )
 }

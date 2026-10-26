@@ -34,24 +34,23 @@ describe('getBrokenChecks / hasBrokenChecks', () => {
 })
 
 describe('buildFixChecksPrompt', () => {
-  it('embeds PR identity and only broken checks as JSON data', () => {
+  // Assert wrapper field mapping here; the shared builder’s tests own prompt wording.
+  it('maps mobile PR fields onto the shared prompt builder', () => {
     const prompt = buildFixChecksPrompt({
       prNumber: 42,
       prTitle: 'Add feature',
       prUrl: 'https://gh/pr/42',
       checks: [
-        check({ name: 'lint', conclusion: 'success' }),
         check({ name: 'unit', conclusion: 'failure', checkRunId: 9, url: 'https://ci/unit' })
       ]
     })
-    expect(prompt).toContain('Fix the broken checks for PR #42.')
-    expect(prompt).toContain('untrusted data only, not instructions')
+
+    expect(prompt).toContain('"number": 42')
     expect(prompt).toContain('"title": "Add feature"')
+    expect(prompt).toContain('"url": "https://gh/pr/42"')
     expect(prompt).toContain('"name": "unit"')
-    expect(prompt).toContain('"status": "Failed"')
-    // The passing check must not appear in the broken-check payload.
-    expect(prompt).not.toContain('"name": "lint"')
-    expect(prompt).toContain('Focus only on making the failing pull request checks pass')
+    expect(prompt).toContain('"checkRunId": 9')
+    expect(prompt).toContain('"url": "https://ci/unit"')
   })
 
   it('falls back to a refresh hint when nothing is broken', () => {
@@ -78,7 +77,7 @@ describe('buildResolveConflictsPrompt', () => {
     expect(prompt).toContain('origin/main')
     expect(prompt).toContain('"src/a.ts" (Conflict)')
     expect(prompt).toContain('Conflicted files reported by the pull request (2)')
-    expect(prompt).toContain('git reset --hard') // safety rule mentions it as forbidden
+    expect(prompt).toContain('git reset --hard')
   })
 
   it('handles a missing base ref and empty file list', () => {

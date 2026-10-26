@@ -44,8 +44,35 @@ export const HostChallengeAckSchema = z
   .object({ challengeId: OpaqueIdSchema, proofB64: Base6432ByteSchema })
   .strict()
 
+// Advertise via upgrade header: strict deployed HostHelloSchema rejects new hello keys.
+export const RELAY_HOST_CAPABILITIES_HEADER = 'x-orca-host-capabilities'
+// Echo director assignment lease on upgrade; older cells ignore unknown headers, current cells shadow-check.
+export const RELAY_ASSIGNMENT_LEASE_HEADER = 'x-orca-relay-assignment-lease'
+// Advertise before sending pendingConns details: legacy strict parsers would reject the entire ack.
+export const RELAY_HOST_CAPABILITY_PENDING_CONN_DETAILS = 'pending-conn-details'
+export const RELAY_HOST_CAPABILITY_IDLE_REGIONAL_REHOME = 'idle-regional-rehome-v1'
+
+export function parseRelayHostCapabilities(
+  header: string | string[] | undefined
+): ReadonlySet<string> {
+  const raw = Array.isArray(header) ? header.join(',') : (header ?? '')
+  return new Set(
+    raw
+      .split(',')
+      .map((token) => token.trim())
+      .filter((token) => token.length > 0 && token.length <= 64)
+      .slice(0, 16)
+  )
+}
+
+// Optional details support older cells; emit only to hosts advertising support.
 const PendingConnectionSchema = z
-  .object({ connId: OpaqueIdSchema, connTicket: Base64Url32ByteSchema })
+  .object({
+    connId: OpaqueIdSchema,
+    connTicket: Base64Url32ByteSchema,
+    kind: ConnectionKindSchema.optional(),
+    relayDeviceId: OpaqueIdSchema.optional()
+  })
   .strict()
 
 export const HostHelloAckSchema = z
@@ -94,11 +121,22 @@ export const DeviceRevokeSchema = z
   .object({ reqId: OpaqueIdSchema, relayDeviceId: OpaqueIdSchema })
   .strict()
 
-export const AuthRefreshSchema = z.object({ relayJwt: z.string().min(1).max(8 * 1024) }).strict()
+export const AuthRefreshSchema = z
+  .object({
+    relayJwt: z
+      .string()
+      .min(1)
+      .max(8 * 1024)
+  })
+  .strict()
 
 export const DrainSchema = z
   .object({
-    graceMs: z.number().int().nonnegative().max(60 * 60 * 1000),
+    graceMs: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(60 * 60 * 1000),
     recovery: z.literal('resolve-director')
   })
   .strict()

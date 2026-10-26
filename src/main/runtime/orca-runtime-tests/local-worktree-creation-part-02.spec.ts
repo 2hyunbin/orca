@@ -11,6 +11,7 @@ import {
   listWorktrees
 } from '../orca-runtime-test-mocks.spec'
 import { TEST_REPO_PATH, store } from '../orca-runtime-test-fixtures.spec'
+import { getLocalWorktreeScanGeneration } from '../../local-worktree-scan-generation'
 
 describe('OrcaRuntimeService', () => {
   it('creates a same-repo PR branch override from a resolved head SHA and matching push target', async () => {
@@ -50,14 +51,22 @@ describe('OrcaRuntimeService', () => {
         pushTarget: { remoteName: 'origin', branchName: 'feature/fix' }
       })
 
-      expect(getBranchConflictKind).toHaveBeenCalledWith(TEST_REPO_PATH, 'feature/fix', 'abc123')
+      expect(getBranchConflictKind).toHaveBeenCalledWith(
+        TEST_REPO_PATH,
+        'feature/fix',
+        'abc123',
+        {},
+        undefined
+      )
       expect(getPRForBranchMock).toHaveBeenCalledWith(TEST_REPO_PATH, 'feature/fix')
       expect(addWorktree).toHaveBeenCalledWith(
         TEST_REPO_PATH,
         createdWorktree.path,
         'feature/fix',
         'abc123',
-        false
+        false,
+        false,
+        {}
       )
       expect(gitSpy).toHaveBeenCalledWith(
         ['branch', '--set-upstream-to', 'origin/feature/fix', 'feature/fix'],
@@ -113,7 +122,9 @@ describe('OrcaRuntimeService', () => {
         createdWorktree.path,
         'feature/fix',
         sha,
-        false
+        false,
+        false,
+        {}
       )
       expect(result.worktree).toMatchObject({
         path: createdWorktree.path,
@@ -165,7 +176,9 @@ describe('OrcaRuntimeService', () => {
       expect(getBranchConflictKind).toHaveBeenCalledWith(
         TEST_REPO_PATH,
         'feature/bitbucket',
-        'abc123'
+        'abc123',
+        {},
+        undefined
       )
       expect(getHostedReviewForBranchMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -180,7 +193,9 @@ describe('OrcaRuntimeService', () => {
         createdWorktree.path,
         'feature/bitbucket',
         'abc123',
-        false
+        false,
+        false,
+        {}
       )
       expect(result.worktree).toMatchObject({
         path: createdWorktree.path,
@@ -241,7 +256,9 @@ describe('OrcaRuntimeService', () => {
         createdWorktree.path,
         'feature/fix-2',
         'abc123',
-        false
+        false,
+        false,
+        {}
       )
     } finally {
       gitSpy.mockRestore()
@@ -288,7 +305,9 @@ describe('OrcaRuntimeService', () => {
         createdWorktree.path,
         'feature/fix-2',
         'abc123',
-        false
+        false,
+        false,
+        {}
       )
     } finally {
       gitSpy.mockRestore()
@@ -345,7 +364,9 @@ describe('OrcaRuntimeService', () => {
         createdWorktree.path,
         'feature/fix-2',
         'abc123',
-        false
+        false,
+        false,
+        {}
       )
     } finally {
       gitSpy.mockRestore()
@@ -394,7 +415,9 @@ describe('OrcaRuntimeService', () => {
         createdWorktree.path,
         'feature/fix-2',
         'abc123',
-        false
+        false,
+        false,
+        {}
       )
     } finally {
       gitSpy.mockRestore()
@@ -522,5 +545,40 @@ describe('OrcaRuntimeService', () => {
     } finally {
       gitSpy.mockRestore()
     }
+  })
+
+  it('bumps the scan generation before the first step after git worktree add', async () => {
+    // Bump generation before post-add awaits so clients can reject earlier listings that omit the new worktree.
+    const witness: { duringAdd?: number; afterAdd?: number } = {}
+    // Generated-name retirement is the first await after add, exposing the generation race.
+    const addRetiredWorktreeName = vi.fn(() => {
+      if (witness.duringAdd !== undefined && witness.afterAdd === undefined) {
+        witness.afterAdd = getLocalWorktreeScanGeneration('repo-1')
+      }
+    })
+    const runtime = new OrcaRuntimeService({ ...store, addRetiredWorktreeName })
+    const createdWorktree = {
+      path: '/tmp/workspaces/nautilus',
+      head: 'abc123',
+      branch: 'refs/heads/nautilus',
+      isBare: false,
+      isMainWorktree: false
+    }
+    computeWorktreePathMock.mockReturnValue(createdWorktree.path)
+    ensurePathWithinWorkspaceMock.mockReturnValue(createdWorktree.path)
+    vi.mocked(addWorktree).mockImplementationOnce(async () => {
+      witness.duringAdd = getLocalWorktreeScanGeneration('repo-1')
+      return {}
+    })
+    vi.mocked(listWorktrees).mockResolvedValue([createdWorktree])
+
+    await runtime.createManagedWorktree({
+      repoSelector: 'id:repo-1',
+      name: 'nautilus',
+      nameWasGenerated: true
+    })
+
+    expect(addRetiredWorktreeName).toHaveBeenCalledWith('repo-1', 'nautilus')
+    expect(witness.afterAdd).toBeGreaterThan(witness.duringAdd ?? Infinity)
   })
 })

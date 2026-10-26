@@ -85,8 +85,7 @@ export function setTrackedSessionOption(
   optionId: string,
   value: SessionOptionValue,
   source: TrackedNativeChatSessionOption['source'],
-  /** The model the picker drew this option under when none is tracked — without it a
-   *  value set against a CLI default would be dispatched and then silently forgotten. */
+  /** Picker model when none is tracked; retain options dispatched under the CLI default. */
   fallbackModelId: string | null = null
 ): string | null {
   if (optionId === 'model') {
@@ -122,37 +121,47 @@ export function flattenNativeChatSessionOptionRecord(
 
 export function applyNativeChatReportedSessionOptions(
   record: NativeChatSessionOptionRecord,
-  values: Record<string, SessionOptionValue>
+  values: Record<string, SessionOptionValue>,
+  /** Provider-confirmed ids; omitted means all values are read-back reports. */
+  confirmed?: readonly string[]
 ): boolean {
+  const sourceFor = (id: string): TrackedNativeChatSessionOption['source'] =>
+    confirmed === undefined || confirmed.includes(id) ? 'reported' : 'dispatched'
   const modelId = typeof values.model === 'string' ? values.model : null
   if (!modelId) {
     return false
   }
   const modelChanged = record.model?.value !== modelId
-  let changed = modelChanged || record.model?.source !== 'reported'
-  record.model = { value: modelId, source: 'reported' }
+  let changed = modelChanged || record.model?.source !== sourceFor('model')
+  record.model = { value: modelId, source: sourceFor('model') }
   const modelValues = modelChanged ? {} : { ...record.valuesByModel[modelId] }
   for (const [id, value] of Object.entries(values)) {
     if (id === 'model') {
       continue
     }
     const current = modelValues[id]
-    if (current?.value !== value || current.source !== 'reported') {
+    if (current?.value !== value || current.source !== sourceFor(id)) {
       changed = true
     }
-    modelValues[id] = { value, source: 'reported' }
+    modelValues[id] = { value, source: sourceFor(id) }
   }
   record.valuesByModel[modelId] = modelValues
   return changed
 }
 
+/** Match reported model by exact id, label, then longest contained id; retain raw reports for unseeded catalogs. Callers may keep unlisted selectors without fuzzy matching. */
 export function matchNativeChatCatalogModelId(
   catalog: AgentSessionOptionCatalog,
-  reported: string
+  reported: string,
+  options?: { allowUnlisted?: boolean }
 ): string | null {
   const normalized = reported.trim().toLowerCase()
   if (!normalized) {
     return null
+  }
+  // OMP seeds no models; its reported provider/id is already the exact reusable CLI selector.
+  if (catalog.models.length === 0) {
+    return reported.trim()
   }
   const exact = catalog.models.find((model) => model.id.toLowerCase() === normalized)
   if (exact) {
@@ -162,8 +171,17 @@ export function matchNativeChatCatalogModelId(
   if (byLabel) {
     return byLabel.id
   }
-  const containing = [...catalog.models]
-    .sort((left, right) => right.id.length - left.id.length)
-    .find((model) => normalized.includes(model.id.toLowerCase()))
-  return containing?.id ?? null
+  if (options?.allowUnlisted && !/\s/.test(normalized)) {
+    return reported.trim()
+  }
+  let containingId: string | null = null
+  for (const model of catalog.models) {
+    if (
+      (containingId === null || model.id.length > containingId.length) &&
+      normalized.includes(model.id.toLowerCase())
+    ) {
+      containingId = model.id
+    }
+  }
+  return containingId
 }

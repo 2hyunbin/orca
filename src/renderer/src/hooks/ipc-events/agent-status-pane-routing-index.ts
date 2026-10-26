@@ -12,6 +12,7 @@ type AgentStatusPaneResolution = {
   repoConnectionResolved: boolean
   owningWorktreeId: string | undefined
   titleUsesTabTitle: boolean
+  tabTitle: string | undefined
 }
 
 type AgentStatusWorktreeConnectionResolution = {
@@ -52,13 +53,16 @@ export function resetAgentStatusPaneRoutingIndexCounters(): void {
   agentStatusPaneRoutingIndexCounters.leafSetBuilds = 0
 }
 
-// Why: layout roots are immutable snapshots, so leaf membership keyed on the root node stays
-// correct across commits and never has to be rewalked once seen.
+// Immutable layout roots keep cached leaf membership valid without rewalking each commit.
 const leafIdsByRoot = new WeakMap<TerminalPaneLayoutNode, Set<string>>()
 const tabsByIdCache = new WeakMap<AppState['tabsByWorktree'], Map<string, IndexedAgentStatusTab>>()
 const unifiedLabelIndexCache = new WeakMap<object, Map<string, Map<string, string | undefined>>>()
-const routingIndexCache = new WeakMap<AppState['tabsByWorktree'], AgentStatusPaneRoutingIndex>()
+const routingIndexCache = new WeakMap<
+  AppState['tabsByWorktree'],
+  WeakMap<object, AgentStatusPaneRoutingIndex>
+>()
 const NO_UNIFIED_TABS = {}
+const NO_LAYOUTS = {}
 
 function createUnifiedTerminalLabelIndex(
   entries: AppState['unifiedTabsByWorktree'][string] | undefined
@@ -125,15 +129,13 @@ function resolveUnifiedLabel(
   return labelsByTabId.get(tabId)
 }
 
-/**
- * Ownership index for agent-status routing, memoized on the identity of the slices it reads.
- * A status commit replaces none of them, so a dense burst reuses one index instead of rebuilding
- * a per-worktree tab and label map for every event.
- */
+/** Memoize ownership by relevant slice identity so status-only bursts reuse tab/label indexes. */
 export function createAgentStatusPaneRoutingIndex(store: AppState): AgentStatusPaneRoutingIndex {
   const worktreesById = getWorktreeMapFromState(store)
   const reposById = getRepoMapFromState(store)
-  const cached = routingIndexCache.get(store.tabsByWorktree)
+  const layoutsKey = store.terminalLayoutsByTabId ?? NO_LAYOUTS
+  let indexesByLayout = routingIndexCache.get(store.tabsByWorktree)
+  const cached = indexesByLayout?.get(layoutsKey)
   if (
     cached &&
     cached.unifiedTabsByWorktree === store.unifiedTabsByWorktree &&
@@ -153,7 +155,11 @@ export function createAgentStatusPaneRoutingIndex(store: AppState): AgentStatusP
     worktreesById,
     reposById
   }
-  routingIndexCache.set(store.tabsByWorktree, index)
+  if (!indexesByLayout) {
+    indexesByLayout = new WeakMap()
+    routingIndexCache.set(store.tabsByWorktree, indexesByLayout)
+  }
+  indexesByLayout.set(layoutsKey, index)
   return index
 }
 
@@ -186,7 +192,8 @@ export function resolvePaneKeyFromRoutingIndex(
       repoConnectionId: null,
       repoConnectionResolved: false,
       owningWorktreeId: undefined,
-      titleUsesTabTitle: false
+      titleUsesTabTitle: false,
+      tabTitle: undefined
     }
   }
   const { tabId, leafId } = parsed
@@ -199,7 +206,8 @@ export function resolvePaneKeyFromRoutingIndex(
       repoConnectionId: null,
       repoConnectionResolved: false,
       owningWorktreeId: undefined,
-      titleUsesTabTitle: false
+      titleUsesTabTitle: false,
+      tabTitle: undefined
     }
   }
   const connection = resolveWorktreeConnectionFromRoutingIndex(index, tab.owningWorktreeId)
@@ -219,7 +227,8 @@ export function resolvePaneKeyFromRoutingIndex(
         repoConnectionId: connection.repoConnectionId,
         repoConnectionResolved: connection.repoConnectionResolved,
         owningWorktreeId: tab.owningWorktreeId,
-        titleUsesTabTitle: false
+        titleUsesTabTitle: false,
+        tabTitle: undefined
       }
     }
   }
@@ -233,6 +242,7 @@ export function resolvePaneKeyFromRoutingIndex(
     repoConnectionId: connection.repoConnectionId,
     repoConnectionResolved: connection.repoConnectionResolved,
     owningWorktreeId: tab.owningWorktreeId,
-    titleUsesTabTitle: paneTitle === undefined
+    titleUsesTabTitle: paneTitle === undefined,
+    tabTitle: tab.title
   }
 }

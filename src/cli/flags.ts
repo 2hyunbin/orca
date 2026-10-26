@@ -4,6 +4,7 @@ import { describeQuoteStrippedJsonFlag } from './quote-stripped-json-flag'
 
 export function getRequiredStringFlag(flags: Map<string, string | boolean>, name: string): string {
   const value = flags.get(name)
+  rejectValuelessFlag(value, name)
   if (typeof value === 'string' && value.length > 0) {
     return value
   }
@@ -15,6 +16,7 @@ export function getRequiredStringFlagAllowingEmpty(
   name: string
 ): string {
   const value = flags.get(name)
+  rejectValuelessFlag(value, name)
   if (typeof value === 'string') {
     return value
   }
@@ -26,14 +28,35 @@ export function getOptionalStringFlag(
   name: string
 ): string | undefined {
   const value = flags.get(name)
+  rejectValuelessFlag(value, name)
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
-/**
- * A JSON-valued flag, rejected up front when a native argv boundary stripped its quotes so the
- * error names the shell instead of the user's value (#16706). The value itself is still parsed
- * downstream; this only catches the damaged shape.
- */
+export function getPresentStringFlag(
+  flags: Map<string, string | boolean>,
+  name: string
+): string | undefined {
+  if (!flags.has(name)) {
+    return undefined
+  }
+  const value = flags.get(name)
+  if (typeof value === 'string' && value.length > 0) {
+    return value
+  }
+  throw new RuntimeClientError('invalid_argument', `Missing value for --${name}`)
+}
+
+// A missing valued flag must fail: silently regenerating mutation IDs can submit prompts twice.
+export function rejectValuelessFlag(value: string | boolean | undefined, name: string): void {
+  if (value === true) {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      `--${name} requires a value; it was passed with none.`
+    )
+  }
+}
+
+/** Detect shell-stripped JSON quotes before downstream parsing so the error names the argv boundary. */
 export function getOptionalJsonFlag(
   flags: Map<string, string | boolean>,
   name: string
@@ -64,6 +87,7 @@ export function getOptionalNumberFlag(
   name: string
 ): number | undefined {
   const value = flags.get(name)
+  rejectValuelessFlag(value, name)
   if (typeof value !== 'string' || value.length === 0) {
     return undefined
   }
@@ -131,6 +155,7 @@ export function getOptionalNullableNumberFlag(
   name: string
 ): number | null | undefined {
   const value = flags.get(name)
+  rejectValuelessFlag(value, name)
   if (value === 'null') {
     return null
   }

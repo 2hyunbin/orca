@@ -7,8 +7,6 @@ import type {
   GitHubProjectUser
 } from '../../../shared/github/project-types'
 
-// ─── Normalizers ───────────────────────────────────────────────────────
-
 export type RawProjectV2Field = {
   __typename?: string
   id?: string
@@ -145,7 +143,8 @@ export function normalizeFieldValue(
         iterationId: raw.iterationId,
         title: raw.title ?? '',
         startDate: raw.startDate ?? '',
-        duration: typeof raw.duration === 'number' ? raw.duration : 0
+        duration: typeof raw.duration === 'number' ? raw.duration : 0,
+        ...(typeof raw.field.name === 'string' ? { fieldName: raw.field.name } : {})
       }
     case 'ProjectV2ItemFieldTextValue':
       return { kind: 'text', fieldId, text: raw.text ?? '' }
@@ -155,7 +154,12 @@ export function normalizeFieldValue(
       }
       return { kind: 'number', fieldId, number: raw.number }
     case 'ProjectV2ItemFieldDateValue':
-      return { kind: 'date', fieldId, date: raw.date ?? '' }
+      return {
+        kind: 'date',
+        fieldId,
+        date: raw.date ?? '',
+        ...(typeof raw.field.name === 'string' ? { fieldName: raw.field.name } : {})
+      }
     case 'ProjectV2ItemFieldLabelValue': {
       const labels = (raw.labels?.nodes ?? [])
         .map(normalizeLabel)
@@ -170,7 +174,7 @@ export function normalizeFieldValue(
     }
     case undefined:
     default:
-      // Unknown __typename → forward-compat: drop silently, don't classify as drift (see design §Error Handling).
+      // Ignore future field types rather than treating compatible schema additions as drift.
       return null
   }
 }

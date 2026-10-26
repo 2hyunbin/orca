@@ -13,7 +13,12 @@ import {
 import { readOrcaChromiumProcessPids } from './orca-chromium-process-pids'
 import { classifyWindowsTreeKillTarget } from './windows-pty-root-identity'
 import { terminateWindowsProcessTree } from './windows-process-tree-kill'
-import { admitSelfInitiatedTreeKill } from './own-chromium-tree-kill-guard'
+import {
+  admitSelfInitiatedTreeKill,
+  installMainProcessTreeKillGate
+} from './own-chromium-tree-kill-guard'
+import { killCodexAppServerProcessTree } from './codex/codex-app-server-process-tree-kill'
+import { setProcessTreeKillGate } from '@orca/process-host/process-tree-kill-gate'
 import { resetSelfInitiatedTreeKillLogForTest } from './crash-reporting/self-initiated-tree-kill-log'
 import {
   clearCrashBreadcrumbsForTest,
@@ -23,10 +28,8 @@ import { _resetTracerForTests, setActiveSink } from './observability/tracer'
 
 const ORCA_MAIN_PID = 1000
 const RENDERER_PID = 1001
-/** The standalone daemon is a sibling of the renderers, spawned by main. */
 const DAEMON_PID = 1500
 
-/** Orca's renderer is a direct child of the main process, so the ppid walk says `own`. */
 const PROCESS_ROWS = [
   { pid: RENDERER_PID, ppid: ORCA_MAIN_PID },
   { pid: ORCA_MAIN_PID, ppid: 900 }
@@ -57,6 +60,7 @@ beforeEach(() => {
   setActiveSink({ push: () => {}, flush: () => {}, close: () => {} })
   clearCrashBreadcrumbsForTest()
   resetSelfInitiatedTreeKillLogForTest()
+  installMainProcessTreeKillGate()
 })
 
 afterEach(() => {
@@ -66,6 +70,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   _resetTracerForTests()
   clearCrashBreadcrumbsForTest()
+  setProcessTreeKillGate(null)
 })
 
 describe('refusing to tree-kill our own Chromium processes', () => {
@@ -83,9 +88,7 @@ describe('refusing to tree-kill our own Chromium processes', () => {
   ])(
     'refuses an Orca renderer from a daemon host with %s, because no Chromium descends from it',
     (_case, ownChromiumPids) => {
-      // The standalone daemon and orcad install no Chromium-backed AppEnvironment,
-      // so this set is empty there. The ancestry walk is what refuses instead: it
-      // ends at the *killing* process's pid, and the renderer's chain reaches main.
+      // Daemon ancestry stops at the daemon PID; Chromium siblings fail that check without metrics.
       const rows = [...PROCESS_ROWS, { pid: DAEMON_PID, ppid: ORCA_MAIN_PID }]
 
       expect(classifyWindowsTreeKillTarget(RENDERER_PID, rows, DAEMON_PID, ownChromiumPids)).toBe(
@@ -95,8 +98,7 @@ describe('refusing to tree-kill our own Chromium processes', () => {
   )
 
   it('is the only thing standing between Electron main and its own renderer', () => {
-    // Falsifiable counterpart to the daemon case above: in main the ancestry walk
-    // says `own`, so the pid set is load-bearing here and nowhere else.
+    // In main, renderer ancestry passes; Chromium metrics provide the refusal.
     expect(
       classifyWindowsTreeKillTarget(RENDERER_PID, PROCESS_ROWS, ORCA_MAIN_PID, new Set())
     ).toBe('own')
@@ -143,19 +145,44 @@ describe('refusing to tree-kill our own Chromium processes', () => {
     )
   })
 
-  /**
-   * Fail-open is the deliberate choice — see `orca-chromium-process-pids.ts` for
-   * why refusing everything is worse — so the crumb is the only thing that keeps
-   * an unreadable metrics table distinguishable from a host that has no Chromium.
-   */
+  it('refuses the codex app-server deadline kill against one of our own pids', () => {
+    const spawnImpl = vi.fn(() => ({ on: vi.fn(), unref: vi.fn() }))
+    const child = { pid: RENDERER_PID, kill: vi.fn() }
+
+    killCodexAppServerProcessTree(child as never, {
+      platform: 'win32',
+      spawnImpl: spawnImpl as never
+    })
+
+    // Deadline kills have only a PID, which may have been reused after the child exited.
+    expect(spawnImpl).not.toHaveBeenCalled()
+    expect(getCrashBreadcrumbSnapshot()).toEqual([
+      expect.objectContaining({ name: 'self_tree_kill_refused_own_chromium' })
+    ])
+  })
+
+  it('still lets the codex app-server deadline kill reach a foreign pid', () => {
+    const killer = { on: vi.fn(), unref: vi.fn() }
+    const spawnImpl = vi.fn(() => killer)
+
+    killCodexAppServerProcessTree({ pid: 7777, kill: vi.fn() } as never, {
+      platform: 'win32',
+      spawnImpl: spawnImpl as never
+    })
+
+    expect(spawnImpl).toHaveBeenCalledWith('taskkill', ['/pid', '7777', '/t', '/f'], {
+      stdio: 'ignore',
+      windowsHide: true
+    })
+  })
+
   it('leaves proof, and still admits the kill, when the Chromium metrics cannot be read', () => {
     appMetricsMock.mockImplementation(() => {
       throw new Error('getAppMetrics unavailable')
     })
 
     expect([...readOrcaChromiumProcessPids()]).toEqual([])
-    // Coalesced: the gate reads this set on every kill, so a broken table must
-    // not evict the ring it shares with the refusal crumb.
+    // Coalesce repeated failures so they cannot evict refusal evidence from the shared ring.
     expect([...readOrcaChromiumProcessPids()]).toEqual([])
     expect(
       admitSelfInitiatedTreeKill({

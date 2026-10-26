@@ -4,20 +4,19 @@ import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
-import { ActivityScopeFilterChips } from '@/components/activity/activity-scope-filter-controls'
 import { hasActivityThreadWorkspace } from '@/components/activity/activity-thread-actions'
 import { useActivityThreadActionBindings } from '@/components/activity/use-activity-thread-action-bindings'
 import { ActivityThreadListPane } from '@/components/activity/activity-thread-list-pane'
 import { useAgentPaneThreads } from '@/components/activity/use-agent-pane-threads'
 import { ActivityThreadOptionsMenu } from '@/components/activity/activity-thread-controls'
 import type { ActivityGroupBy, ThreadReadFilter } from '@/components/activity/activity-thread-types'
+import {
+  selectDetectedWorktreesByRepo,
+  selectFolderWorkspaces,
+  selectWorktreesByRepo
+} from '@/store/workspace-record-selectors'
 
-/**
- * The Activity thread list, hosted in the sidebar as a navigator: selecting a
- * row reveals that agent's pane in the workbench instead of swapping the view.
- * Threads whose pane is gone stay listed but inert — activateThreadTerminal
- * already no-ops without a live tab.
- */
+/** Select threads by revealing their existing panes; threads whose panes are gone remain listed but inert. */
 export type SidebarAgentsListProps = {
   readFilter: ThreadReadFilter
   setReadFilter: (filter: ThreadReadFilter) => void
@@ -39,26 +38,29 @@ export default function SidebarAgentsList({
   optionsTarget,
   scrollTopRef
 }: SidebarAgentsListProps): React.JSX.Element {
-  // The search row is owned here and mounts conditionally, so subscribe this host to locale changes.
+  // Subscribe here because the translated search row mounts conditionally.
   useTranslation()
-  // Why store-backed: these are persisted preferences (agents* UI fields), unlike the momentary search.
   const compactMode = useAppStore((s) => s.agentsCompactMode)
   const setCompactMode = useAppStore((s) => s.setAgentsCompactMode)
+  const showSearch = useAppStore((s) => s.agentsShowSearch)
+  const setShowSearch = useAppStore((s) => s.setAgentsShowSearch)
   const showChildAgents = useAppStore((s) => s.agentsShowChildAgents)
   const setShowChildAgents = useAppStore((s) => s.setAgentsShowChildAgents)
   const [selectedPaneKey, setSelectedPaneKey] = useState<string | null>(null)
-  const [searchOpen, setSearchOpen] = useState(false)
   const activityFilterInputRef = useRef<HTMLInputElement | null>(null)
 
-  useEffect(() => {
-    if (!searchOpen) {
-      return
-    }
-    // Radix restores focus to the menu trigger after selection; focus on the
-    // next frame so the newly mounted search field wins that race.
-    const frame = requestAnimationFrame(() => activityFilterInputRef.current?.focus())
-    return () => cancelAnimationFrame(frame)
-  }, [searchOpen])
+  const handleShowSearchChange = useCallback(
+    (visible: boolean) => {
+      setShowSearch(visible)
+      if (!visible) {
+        setQuery('')
+        return
+      }
+      // Focus after the newly visible input mounts.
+      requestAnimationFrame(() => activityFilterInputRef.current?.focus())
+    },
+    [setQuery, setShowSearch]
+  )
 
   const {
     storeData,
@@ -78,6 +80,8 @@ export default function SidebarAgentsList({
   const {
     markThreadRead,
     markThreadUnread,
+    markThreadsRead,
+    markThreadsUnread,
     selectThread,
     jumpToWorkspace,
     markAllThreadsRead,
@@ -92,42 +96,46 @@ export default function SidebarAgentsList({
     setSelectedPaneKey
   })
 
+  const worktreesByRepo = selectWorktreesByRepo(storeData)
+  const detectedWorktreesByRepo = selectDetectedWorktreesByRepo(storeData)
+  const folderWorkspaces = selectFolderWorkspaces(storeData)
+
   const canJumpToWorkspace = useCallback(
     (thread: Parameters<typeof hasActivityThreadWorkspace>[0]) =>
       hasActivityThreadWorkspace(thread, {
-        worktreesByRepo: storeData.worktreesByRepo,
-        detectedWorktreesByRepo: storeData.detectedWorktreesByRepo,
-        folderWorkspaces: storeData.folderWorkspaces,
+        worktreesByRepo,
+        detectedWorktreesByRepo,
+        folderWorkspaces,
+        floatingWorkspacePath: storeData.floatingWorkspacePath,
         defaultHostId: storeData.defaultHostId
       }),
     [
-      storeData.worktreesByRepo,
-      storeData.detectedWorktreesByRepo,
-      storeData.folderWorkspaces,
+      worktreesByRepo,
+      detectedWorktreesByRepo,
+      folderWorkspaces,
+      storeData.floatingWorkspacePath,
       storeData.defaultHostId
     ]
   )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {searchOpen ? (
+      {showSearch ? (
         <div className="shrink-0 border-b border-border px-2 py-1.5">
           <Input
             ref={activityFilterInputRef}
-            autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
-                setSearchOpen(false)
-                setQuery('')
+                handleShowSearchChange(false)
               }
             }}
             placeholder={translate(
               'auto.components.activity.ActivityPrototypePage.795cbf26e2',
               'Filter...'
             )}
-            className="h-7 w-full text-[11px]"
+            className="h-7 w-full text-[11px] shadow-none focus-visible:ring-0"
             aria-label={translate(
               'auto.components.activity.ActivityPrototypePage.search',
               'Search'
@@ -158,13 +166,14 @@ export default function SidebarAgentsList({
         onJumpToWorkspace={jumpToWorkspace}
         onMarkThreadRead={markThreadRead}
         onMarkThreadUnread={markThreadUnread}
+        onMarkThreadsRead={markThreadsRead}
+        onMarkThreadsUnread={markThreadsUnread}
         canJumpToWorkspace={canJumpToWorkspace}
         allowMarkUnreadWhenSelected
         showJumpAction={false}
         showFilterControls={false}
         showOptionsMenu={false}
         showInlineActions={false}
-        scopeFilterRow={<ActivityScopeFilterChips />}
         scrollTopRef={scrollTopRef}
       />
       {optionsTarget
@@ -180,9 +189,10 @@ export default function SidebarAgentsList({
               onShowChildAgentsChange={setShowChildAgents}
               onMarkAllThreadsRead={markAllThreadsRead}
               onClearCompleted={handleClearCompleted}
-              onSearch={() => setSearchOpen(true)}
+              showSearch={showSearch}
+              onShowSearchChange={handleShowSearchChange}
               unreadOnly={readFilter === 'unread'}
-              onToggleUnread={() => setReadFilter(readFilter === 'unread' ? 'all' : 'unread')}
+              onUnreadOnlyChange={(unreadOnly) => setReadFilter(unreadOnly ? 'unread' : 'all')}
             />,
             optionsTarget
           )
