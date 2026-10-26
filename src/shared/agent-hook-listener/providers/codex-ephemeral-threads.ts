@@ -4,6 +4,8 @@ import { readString } from '../tool-input-preview'
 
 // Enough for any run of /side chats in one pane; the oldest ended long ago.
 const MAX_FORKS_PER_PANE = 16
+// Codex titles a new thread in a hidden ephemeral one (codex-rs/tui/src/app/thread_title.rs); its hooks run when managed config pins hooks on.
+const CODEX_THREAD_TITLE_PROMPT_PREFIX = 'Generate a concise, single-line task title'
 
 // A /side thread shares the pane/process but cannot change its status; identify it from SessionStart or the persisted pane thread.
 // Persisted identity survives restart and does not depend on parsed rollout availability.
@@ -22,7 +24,10 @@ export function isForeignEphemeralCodexThread(
     return true
   }
   const source = eventName === 'SessionStart' ? readString(hookPayload, 'source') : undefined
-  if (source === 'fork') {
+  const isTitleThreadPrompt =
+    eventName === 'UserPromptSubmit' &&
+    readString(hookPayload, 'prompt')?.startsWith(CODEX_THREAD_TITLE_PROMPT_PREFIX)
+  if (source === 'fork' || isTitleThreadPrompt) {
     state.codexEphemeralForkSessionsByPaneKey.set(
       paneKey,
       [...forks, sessionId].slice(-MAX_FORKS_PER_PANE)

@@ -58,7 +58,11 @@ export function buildCodexStatusPayload(
     state: options.stateName,
     workingMode: options.workingMode,
     prompt: resolvePrompt(state, paneKey, promptText, {
-      resetOnNewTurn: options.updateLead && isNewTurnEvent('codex', eventName)
+      // A rollout-less start may be Codex's hidden title thread; a real new conversation's prompt follows at once.
+      resetOnNewTurn:
+        options.updateLead &&
+        isNewTurnEvent('codex', eventName) &&
+        !(eventName === 'SessionStart' && hookPayload.transcript_path === null)
     }),
     agentType: 'codex',
     model: lead?.model,

@@ -105,3 +105,36 @@ it('lets a new ephemeral Codex conversation take over a pane whose last turn fin
     server.stop()
   }
 })
+
+it('keeps the main Codex prompt while Codex titles the thread in a hidden ephemeral thread', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'codex-side-thread-'))
+  dirs.push(dir)
+  const server = new AgentHookServer()
+  await server.start({ env: 'production' })
+  try {
+    const main = { session_id: MAIN, transcript_path: join(dir, 'rollout-main.jsonl') }
+    await postHookEvent(
+      server,
+      buildBody({ ...main, hook_event_name: 'UserPromptSubmit', prompt: 'main task' }),
+      '/hook/codex'
+    )
+    // codex-rs/tui/src/app/thread_title.rs starts this on the first user message (#30049).
+    const title = { session_id: SIDE, transcript_path: null }
+    for (const event of [
+      { hook_event_name: 'SessionStart', source: 'startup' },
+      { hook_event_name: 'UserPromptSubmit', prompt: 'Generate a concise, single-line task title' },
+      { hook_event_name: 'Stop' }
+    ]) {
+      await postHookEvent(server, buildBody({ ...title, ...event }), '/hook/codex')
+    }
+    expect(server.getStatusSnapshot()[0]).toMatchObject({ state: 'working', prompt: 'main task' })
+    await postHookEvent(server, buildBody({ ...main, hook_event_name: 'Stop' }), '/hook/codex')
+    expect(server.getStatusSnapshot()[0]).toMatchObject({
+      state: 'done',
+      prompt: 'main task',
+      providerSession: { id: MAIN }
+    })
+  } finally {
+    server.stop()
+  }
+})
