@@ -51,6 +51,16 @@ export function sshHostServerStatusLine(
   if (status?.kind === 'managed' && status.linked?.length) {
     return linkedProjectsLine(status.linked)
   }
+  if (status?.kind === 'managed' && status.automationsLeftDisabled) {
+    return {
+      tone: 'warning',
+      text: translate(
+        'auto.components.settings.sshHostServer.automationsLeftDisabled',
+        'This host’s Orca server took over {{count}} automations but couldn’t turn them back on. Turn them on in Automations.',
+        { count: status.automationsLeftDisabled }
+      )
+    }
+  }
   // A healthy managed server is the default; the card stays quiet unless something needs attention.
   if (status?.kind === 'managed' || (!status && target.orcadFence)) {
     return null
