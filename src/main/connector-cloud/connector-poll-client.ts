@@ -8,6 +8,7 @@ import {
   ConnectorDeliveryId,
   ConnectorPollControl,
   ConnectorPollResponse,
+  ConnectorReplyResponse,
   type ConnectorAck,
   type ConnectorConversation,
   type ConnectorDeliveryResult,
@@ -18,7 +19,11 @@ import type {
   ExternalConversationHost,
   ExternalConversationSeam
 } from '../external-conversations/external-conversation-seam'
-import { UNREADABLE_ANSWER, type ConnectorFailure } from './connector-cloud-request'
+import {
+  UNREADABLE_ANSWER,
+  type ConnectorFailure,
+  type ConnectorResult
+} from './connector-cloud-request'
 import { dispatchDelivery } from './connector-deliveries'
 import type { ConnectorMachine, ConnectorTransport } from './connector-machine'
 import {
@@ -30,8 +35,7 @@ import type { ConnectorTurnEvents } from './connector-turn-events'
 
 const RECONNECT_SPREAD_MS = 2_000
 const MAX_ACKS_PER_REQUEST = 100
-// `reply` is advertised once `orca slack reply` ships.
-const FEATURES = ['answer', 'cancel']
+const FEATURES = ['answer', 'cancel', 'reply']
 const PROMPT_KINDS = ['approval', 'question']
 
 export type ConnectorPollClientOptions = {
@@ -106,6 +110,18 @@ export class ConnectorPollClient {
     // Turn ends that finish before the first hello still reach the outbox; only sending waits for it.
     this.watch()
     void this.run()
+  }
+
+  /** Posts an agent's reply to its Slack thread; the same replyId never posts twice. */
+  reply(body: {
+    replyId: string
+    conversation: ConnectorConversation
+    turnId: number
+    text: string
+  }): Promise<ConnectorResult<ConnectorReplyResponse>> {
+    return this.transport.call(CONNECTOR_PATHS.replies, { v: 1, ...body }, ConnectorReplyResponse, {
+      signal: this.stopped.signal
+    })
   }
 
   stop(): void {

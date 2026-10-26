@@ -223,6 +223,11 @@ export const HANDLER_GROUPS: readonly HandlerGroup[] = [
     load: async () => (await import('./handlers/connector.js')).CONNECTOR_HANDLERS
   },
   {
+    name: 'slack',
+    keys: ['slack reply'],
+    load: async () => (await import('./handlers/slack.js')).SLACK_HANDLERS
+  },
+  {
     name: 'profile-state',
     keys: ['profile state exports', 'profile state rollback'],
     load: async () => (await import('./handlers/profile-state.js')).PROFILE_STATE_HANDLERS

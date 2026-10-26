@@ -12,6 +12,10 @@ import type {
 import type { Delivery } from '../external-conversations/external-conversation-types'
 import { placeLaunchTarget } from './connector-places'
 
+// Fixed text, so a resent start hashes to the same receipt.
+export const SLACK_REPLY_INSTRUCTIONS =
+  '(Sent from Slack. To answer in the thread, run: orca slack reply --text "<your message>")'
+
 export type DispatchedDelivery = {
   deliveryId: string
   /** False when this Orca refused it without calling the seam; only done is sent then. */
@@ -60,7 +64,8 @@ export function dispatchDelivery(
       if (!target) {
         return refuse(deliveryId, { outcome: 'unsupported' })
       }
-      const { agent, prompt } = delivery
+      const { agent } = delivery
+      const prompt = `${delivery.prompt}\n\n${SLACK_REPLY_INSTRUCTIONS}`
       done = settle(
         async () => (await seam.start(host, key, deliveryId, { agent, target, prompt })).initial
       )

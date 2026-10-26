@@ -69,6 +69,12 @@ export const ConnectorPollResponse = z.object({
   control: z.unknown().optional()
 })
 
+export const ConnectorReplyResponse = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('posted'), messageTs: z.string().min(1) }),
+  z.object({ status: z.literal('queued') })
+])
+export type ConnectorReplyResponse = z.infer<typeof ConnectorReplyResponse>
+
 export const ConnectorPollControl = z.union([
   z.object({ stop: z.string().min(1) }),
   z.object({ pausedForMs: z.number().int().positive() }),

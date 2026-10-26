@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { CONNECTOR_PATHS } from '../../shared/connector-cloud-contract'
 import type { Delivery } from '../external-conversations/external-conversation-types'
+import { SLACK_REPLY_INSTRUCTIONS } from './connector-deliveries'
 import { nextConnectorHelloRev } from './connector-hello-rev'
 import { connectorProjects } from './connector-places'
 import { ConnectorPollClient } from './connector-poll-client'
@@ -84,7 +85,7 @@ describe('ConnectorPollClient', () => {
       hostName: 'box',
       agents: ['claude', 'codex'],
       promptKinds: ['approval', 'question'],
-      features: ['answer', 'cancel'],
+      features: ['answer', 'cancel', 'reply'],
       projects: [{ placeId: project!.placeId, name: 'orca', kind: 'git' }]
     })
     expect(fake.events).toEqual([{ kind: 'snapshot', conversations: [] }])
@@ -112,7 +113,7 @@ describe('ConnectorPollClient', () => {
     await settle()
     expect(calls.start).toHaveBeenCalledWith(expect.anything(), conversation, 'd1', {
       agent: 'claude',
-      prompt: 'fix it',
+      prompt: `fix it\n\n${SLACK_REPLY_INSTRUCTIONS}`,
       target: expect.objectContaining({ kind: 'create-worktree' })
     })
     expect(fake.acks).toEqual([
@@ -586,6 +587,19 @@ describe('ConnectorPollClient', () => {
     })
     await settle(30_000)
     expect(fake.events).toContainEqual(expect.objectContaining({ kind: 'turn-ended', turnId: 4 }))
+    client.stop()
+  })
+
+  it('posts a reply to Orca Cloud with its turn, and a resend with the same id posts once', async () => {
+    const { client } = startClient()
+    await settle()
+    const body = { replyId: 'r1', conversation, turnId: 7, text: 'done' }
+    await expect(client.reply(body)).resolves.toEqual({
+      ok: true,
+      value: { status: 'posted', messageTs: '1793.0042' }
+    })
+    await client.reply(body)
+    expect([...fake.replies.values()]).toEqual([{ v: 1, ...body }])
     client.stop()
   })
 })
