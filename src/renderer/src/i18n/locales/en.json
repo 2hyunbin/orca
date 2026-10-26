@@ -362,6 +362,10 @@
       "chat": {
         "fontFamily": "Font family",
         "fontFamilyDescription": "Font used for messages, activity, and the message box.",
+        "fontKeyword": "font",
+        "familyKeyword": "family",
+        "typefaceKeyword": "typeface",
+        "typographyKeyword": "typography",
         "inheritFont": "Same as IDE font",
         "fontPreviewLabel": "Chat font preview",
         "fontPreview": "The quick brown fox jumps over the lazy dog.",

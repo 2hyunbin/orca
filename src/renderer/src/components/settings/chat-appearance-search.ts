@@ -53,7 +53,13 @@ const getChatAppearanceCatalog = createLocalizedCatalog(
           'settings.appearance.chat.fontFamilyDescription',
           'Font used for messages, activity, and the message box.'
         ),
-        keywords: ['chat', 'font', 'family', 'typeface', 'typography']
+        keywords: [
+          translate('settings.appearance.chat.title', 'Chat'),
+          translate('settings.appearance.chat.fontKeyword', 'font'),
+          translate('settings.appearance.chat.familyKeyword', 'family'),
+          translate('settings.appearance.chat.typefaceKeyword', 'typeface'),
+          translate('settings.appearance.chat.typographyKeyword', 'typography')
+        ]
       },
       textSize: {
         targetSectionId: 'chat-text-size',

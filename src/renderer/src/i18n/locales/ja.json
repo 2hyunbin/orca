@@ -135,6 +135,10 @@
       "chat": {
         "fontFamily": "フォント",
         "fontFamilyDescription": "メッセージ、アクティビティ、入力欄に使用するフォント。",
+        "fontKeyword": "フォント",
+        "familyKeyword": "ファミリー",
+        "typefaceKeyword": "書体",
+        "typographyKeyword": "タイポグラフィ",
         "inheritFont": "IDE と同じフォント",
         "fontPreviewLabel": "チャットフォントのプレビュー",
         "fontPreview": "この文章でチャットのフォントを確認できます。",

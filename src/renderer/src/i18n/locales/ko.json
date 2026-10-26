@@ -135,6 +135,10 @@
       "chat": {
         "fontFamily": "글꼴",
         "fontFamilyDescription": "메시지, 활동 및 메시지 입력란에 사용하는 글꼴입니다.",
+        "fontKeyword": "글꼴",
+        "familyKeyword": "패밀리",
+        "typefaceKeyword": "서체",
+        "typographyKeyword": "타이포그래피",
         "inheritFont": "IDE와 같은 글꼴",
         "fontPreviewLabel": "채팅 글꼴 미리보기",
         "fontPreview": "이 문장에서 채팅 글꼴을 미리 볼 수 있습니다.",

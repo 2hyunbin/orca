@@ -135,6 +135,10 @@
       "chat": {
         "fontFamily": "Fuente",
         "fontFamilyDescription": "Fuente de los mensajes, la actividad y el cuadro de mensaje.",
+        "fontKeyword": "fuente",
+        "familyKeyword": "familia",
+        "typefaceKeyword": "tipo de letra",
+        "typographyKeyword": "tipografía",
         "inheritFont": "Misma fuente que el IDE",
         "fontPreviewLabel": "Vista previa de la fuente del chat",
         "fontPreview": "El veloz zorro marrón salta sobre el perro perezoso.",

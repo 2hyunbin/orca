@@ -135,6 +135,10 @@
       "chat": {
         "fontFamily": "字体",
         "fontFamilyDescription": "用于消息、活动和消息输入框的字体。",
+        "fontKeyword": "字体",
+        "familyKeyword": "字族",
+        "typefaceKeyword": "字型",
+        "typographyKeyword": "排版",
         "inheritFont": "与 IDE 字体相同",
         "fontPreviewLabel": "聊天字体预览",
         "fontPreview": "这段文字用于预览聊天字体。",
