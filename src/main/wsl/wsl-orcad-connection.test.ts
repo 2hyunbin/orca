@@ -15,6 +15,7 @@ import {
 import { checkOrcadStdioBridge, openOrcadStdioBridgeChannel } from '../ssh/orcad-stdio-bridge'
 import { startEchoServer } from '../managed-server/lifecycle/orcad-stdio-bridge-test-channel'
 import { fakeWslBridgeChildren, posixOrcadStdioBridge } from './wsl-orcad-bridge-test-child'
+import { WslDistroNotRunningError } from './wsl-orcad-connection-errors'
 import {
   WslOrcadConnectionManager,
   type WslOrcadConnection,
@@ -178,6 +179,20 @@ describe('WslOrcadConnectionManager', () => {
     expect(manager.list()).toEqual([a])
     expect(manager.get('UBUNTU')).toBe(a)
     expect(children.commands).toHaveLength(1)
+  })
+
+  it('a no-boot connect spawns nothing in a distro not confirmed running (E9)', async () => {
+    const { manager, deployAndLaunch, children } = setup()
+    const requireRunning = vi.fn(async () => false)
+    await expect(manager.ensure('Ubuntu', { requireRunning })).rejects.toBeInstanceOf(
+      WslDistroNotRunningError
+    )
+    expect(requireRunning).toHaveBeenCalledWith('Ubuntu')
+    expect(deployAndLaunch).not.toHaveBeenCalled()
+    expect(children.commands).toHaveLength(0)
+    requireRunning.mockResolvedValue(true)
+    await expect(manager.ensure('Ubuntu', { requireRunning })).resolves.toBeTruthy()
+    expect(deployAndLaunch).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the bridge when orcad still listens on the same port', async () => {

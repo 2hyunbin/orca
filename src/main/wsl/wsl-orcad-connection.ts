@@ -4,6 +4,7 @@ import type {
   WslOrcadConnectionDependencies
 } from './wsl-orcad-connection-types'
 import {
+  assertWslDistroMayStart,
   WslOrcadConnectionSupersededError,
   WslOrcadLaunchDeferredError
 } from './wsl-orcad-connection-errors'
@@ -42,6 +43,8 @@ export type WslOrcadConnectOptions = {
   signal?: AbortSignal
   /** What `onChange` reports while this connect runs and once it is ready (liveness recovery). */
   status?: WslOrcadConnectStatus
+  /** E9 no-boot reconnect: refuse unless this confirms the distro runs, right before any spawn. */
+  requireRunning?: (distro: string) => Promise<boolean>
 }
 
 type WslOrcadConnectStatus = { pending: WslOrcadConnectionStatus; ready: WslOrcadConnectionStatus }
@@ -164,15 +167,13 @@ export class WslOrcadConnectionManager {
     options: WslOrcadConnectOptions,
     status: WslOrcadConnectStatus
   ): Promise<WslOrcadConnection> {
+    // Taken before any await, so a close during the running-list read still supersedes this.
     const generation = this.generation(key)
+    await assertWslDistroMayStart(distro, options.requireRunning)
     const environmentId = options.environmentId ?? defaultWslOrcadEnvironmentId(distro)
     const label = options.label ?? distro
-    const transport = (this.dependencies.createTransport ?? defaultTransport)({
-      kind: 'wsl',
-      id: environmentId,
-      distro,
-      label
-    })
+    const target = { kind: 'wsl', id: environmentId, distro, label } as const
+    const transport = (this.dependencies.createTransport ?? defaultTransport)(target)
     // Relaunch stopped orcad on each connect so distro restarts recover.
     const launch = await (this.dependencies.deployAndLaunch ?? deployAndLaunchWslOrcad)(distro, {
       environmentId,
