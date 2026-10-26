@@ -1,4 +1,5 @@
 import { parseWslUncPath } from '../../../../shared/wsl-paths'
+import { normalizeWindowsWslPath } from '../../../../shared/windows-path-access'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared/execution-host'
 import { lastVerifiedRuntimeStatus } from '../../../../shared/runtime-host-status'
 import type { AppState } from '../types'
@@ -45,7 +46,7 @@ export async function refreshWslRegistrationAfterFailure(
   getState: () => AppState,
   path: string
 ): Promise<void> {
-  const parsed = parseWslUncPath(path)
+  const parsed = parseWslUncPath(normalizeWindowsWslPath(path))
   if (
     !parsed ||
     !getState().settings?.experimentalWslHosts ||

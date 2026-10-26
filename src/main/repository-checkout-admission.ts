@@ -21,6 +21,7 @@ import {
 export type RepositoryCheckoutAdmission = {
   selectedPath: string
   registrationPath: string
+  mainRepoPath?: string | null
   /** The saved row that claimed the selection when it was admitted. */
   saved: Repo | undefined
   /** Re-read after asynchronous work; never retains a deleted or transferred claim. */
@@ -75,11 +76,29 @@ export async function admitRepositoryCheckout(
     rule.scope === 'desktop'
       ? await admitDesktopClaim(store, paths)
       : await admitWslClaim(store, paths, rule)
-  return { selectedPath, registrationPath, ...claim }
+  return { selectedPath, registrationPath, mainRepoPath, ...claim }
 }
 
 type CheckoutPaths = { selectedPath: string; registrationPath: string; mainRepoPath: string | null }
 type Claim = Pick<RepositoryCheckoutAdmission, 'saved' | 'findSaved'>
+
+export function findSavedCheckout(
+  rows: readonly Repo[],
+  paths: CheckoutPaths,
+  key = normalizeRuntimePathForComparison
+): Repo | undefined {
+  const at = (path: string) => rows.find((repo) => key(repo.path) === key(path))
+  return (
+    at(paths.selectedPath) ??
+    at(paths.registrationPath) ??
+    rows.find(
+      (repo) =>
+        paths.mainRepoPath !== null &&
+        !isFolderRepo(repo) &&
+        key(repo.path) === key(paths.mainRepoPath)
+    )
+  )
+}
 
 function isSshRow(repo: Repo): boolean {
   return parseExecutionHostId(getRepoExecutionHostId(repo))?.kind === 'ssh'
@@ -142,12 +161,9 @@ async function admitWslClaim(
             : runtimeRepoMatchesExecutionHost(repo, rule.domain))
       )
   const { mainRepoPath } = paths
-  const matches = (repo: Repo) =>
-    key(repo.path) === key(paths.selectedPath) ||
-    key(repo.path) === key(paths.registrationPath) ||
-    (mainRepoPath !== null && !isFolderRepo(repo) && key(repo.path) === key(mainRepoPath))
+  const match = () => findSavedCheckout(sameHostRepos(), paths, key)
   const realPathMatch =
-    sameHostRepos().find(matches) ??
+    match() ??
     // Create/nested keep their ordinary catalog lookup free of filesystem reads.
     (rule.aliases === 'lexical'
       ? null
@@ -164,7 +180,7 @@ async function admitWslClaim(
     if (captured) {
       return requireSavedProject(store, captured, key)
     }
-    captured = sameHostRepos().find(matches)
+    captured = match()
     return captured ?? undefined
   }
   return { saved: findSaved(), findSaved }

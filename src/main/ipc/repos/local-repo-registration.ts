@@ -47,12 +47,16 @@ export async function registerPlacedDesktopProject(
     return { repo, alreadyExisted: true }
   }
   if (placement.kind === 'wsl') {
-    const result = await registerOnWslOwner(placement.authority, {
-      kind: 'add',
-      path: placement.linuxPath,
-      repoKind,
-      displayName
-    })
+    const result = await registerOnWslOwner(
+      placement.authority,
+      {
+        kind: 'add',
+        path: placement.linuxPath,
+        repoKind,
+        displayName
+      },
+      placement.admission
+    )
     return { repo: result.repo, alreadyExisted: result.kind === 'saved' }
   }
   const { admission } = placement

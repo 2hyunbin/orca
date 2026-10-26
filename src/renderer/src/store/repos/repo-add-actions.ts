@@ -25,6 +25,7 @@ import {
   refreshWslRegistrationAfterFailure
 } from './repo-owner-host-readiness'
 import { selectWorktreesByRepo } from '../workspace-record-selectors'
+import { extractIpcErrorMessage } from '@/lib/ipc-error'
 
 export function createRepoAddActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -141,7 +142,10 @@ export function createRepoAddActions(
       } catch (err) {
         await refreshWslRegistrationAfterFailure(get, path)
         console.error('Failed to add project:', err)
-        const message = err instanceof Error ? err.message : String(err)
+        const message = extractIpcErrorMessage(
+          err,
+          err instanceof Error ? err.message : String(err)
+        )
         const duration = ERROR_TOAST_DURATION
         toast.error(translate('auto.store.slices.repos.c6e022ddfc', 'Failed to add project'), {
           description: message,

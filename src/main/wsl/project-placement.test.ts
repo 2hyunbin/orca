@@ -11,6 +11,7 @@ import type { RuntimeStore } from '../runtime/runtime-store-contract'
 type PlacementTestState = {
   ownerRepos: Repo[]
   target: (path: string) => string
+  mainRepoPath?: string
   handlers: Map<string, (event: unknown, args: unknown) => Promise<unknown>>
   scan?: NestedRepoScanResult
 }
@@ -28,6 +29,9 @@ vi.mock('node:path', async (importOriginal) => {
 })
 vi.mock('node:fs/promises', async (importOriginal) => ({
   ...(await importOriginal<typeof NodeFsPromises>()),
+  access: vi.fn(async () => {}),
+  mkdir: vi.fn(async () => {}),
+  readdir: vi.fn(async () => []),
   realpath: vi.fn(async (path: string) => path)
 }))
 vi.mock('electron', () => ({
@@ -47,7 +51,8 @@ vi.mock('../git/runner', () => ({
 vi.mock('../git/repo', () => ({
   inspectGitRepoForRegistrationAsync: vi.fn(async (path: string) => ({
     isRepo: true,
-    rootPath: mocks.target(path)
+    rootPath: mocks.target(path),
+    mainRepoPath: mocks.mainRepoPath
   })),
   getGitRepoRootAsync: vi.fn(async (path: string) => path),
   getRepoName: (path: string) => path.split(/[\\/]/).pop() ?? path,
@@ -144,6 +149,7 @@ describe('one placement per project operation', () => {
     vi.mocked(realpath).mockClear()
     mocks.ownerRepos = []
     mocks.target = (path) => path
+    mocks.mainRepoPath = undefined
     mocks.handlers.clear()
     let groups = 0
     mocks.call
@@ -191,6 +197,179 @@ describe('one placement per project operation', () => {
     Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
     vi.unstubAllEnvs()
   })
+
+  it.each(['wsl.localhost', 'wsl$'])(
+    'places extended %s Add and Create without losing Linux case',
+    async (share) => {
+      const parentPath = `\\\\?\\UNC\\${share}\\Ubuntu\\home\\me`
+      const selectedPath = `${parentPath}\\App`
+      const saved = row('windows-App', selectedPath, { kind: 'folder' })
+      registerRepoCreationHandlers(mainWindow, makeStore([]))
+      for (const operation of ['add', 'create']) {
+        await expect(
+          mocks.handlers.get(`repos:${operation}`)!(null, {
+            path: selectedPath,
+            parentPath,
+            name: 'App',
+            kind: 'folder'
+          })
+        ).resolves.toMatchObject({ repo: { path: '/home/me/App', executionHostId: OWNER } })
+      }
+      await expect(
+        addLocalRepoFromPath(makeStore([saved]), selectedPath, 'folder')
+      ).resolves.toEqual({ repo: saved, alreadyExisted: true })
+    }
+  )
+
+  it('normalizes Git registration output while retaining the selected cwd', async () => {
+    const selectedPath = '\\\\?\\UNC\\wsl$\\Ubuntu\\home\\me\\App\\src'
+    mocks.target = () => '\\\\?\\UNC\\wsl.localhost\\Ubuntu\\home\\me\\App'
+    const placement = await placeProject(makeStore([]), {
+      operation: 'add',
+      selectedPath,
+      kind: 'git',
+      domain: 'local',
+      fromPairedClient: false,
+      claimsOutsideWsl: { scope: 'desktop' }
+    })
+    expect(placement).toMatchObject({
+      kind: 'wsl',
+      linuxPath: '/home/me/App',
+      selectedPath: '\\\\wsl$\\Ubuntu\\home\\me\\App\\src'
+    })
+  })
+
+  it.each(['add', 'create'])(
+    '%s keeps only recognized drvfs folders Windows-owned',
+    async (operation) => {
+      for (const mount of ['mnt\\c', 'MNT\\c', 'mnt\\C', 'mnt\\cdrom', 'home\\me']) {
+        const parentPath = `\\\\wsl.localhost\\Ubuntu\\${mount}`
+        const path = `${parentPath}\\App`
+        const store = makeStore([])
+        mocks.ensure.mockClear()
+        registerRepoCreationHandlers(mainWindow, store)
+        const result = await mocks.handlers.get(`repos:${operation}`)!(null, {
+          path,
+          parentPath,
+          name: 'App',
+          kind: 'folder'
+        })
+        expect(result).toMatchObject({
+          repo: { path: mount === 'mnt\\c' ? path : `/${mount.replace(/\\/g, '/')}/App` }
+        })
+        if (mount === 'mnt\\c') {
+          expect(store.addRepo).toHaveBeenCalledWith(expect.objectContaining({ path }))
+          expect(mocks.ensure).not.toHaveBeenCalled()
+        } else {
+          expect(result).toMatchObject({ repo: { executionHostId: OWNER } })
+          expect(store.addRepo).not.toHaveBeenCalled()
+        }
+      }
+    }
+  )
+
+  it('matches selected/root/non-folder-main on an old owner without adopting foreign or case-neighbor rows', async () => {
+    const root = '\\\\wsl$\\Ubuntu\\home\\me\\topic'
+    const mainPath = '\\\\wsl.localhost\\ubuntu\\home\\me\\App'
+    mocks.target = () => root
+    const main = row('main', '/home/me/App', { projectHostSetupMethod: 'provisioned' })
+    const checkout = row('root', '/home/me/topic', { executionHostId: 'local' })
+    const child = row('selected', '/home/me/topic/src', { executionHostId: OWNER })
+    const ineligible = [
+      row('folder', main.path, { kind: 'folder' }),
+      row('foreign', main.path, { executionHostId: 'runtime:other' }),
+      row('ssh', main.path, { connectionId: 'ssh-1' }),
+      row('nested-ssh', main.path, { executionHostId: OWNER, connectionId: 'ssh-1' }),
+      row('case-neighbor', '/home/me/app')
+    ]
+    for (const [catalog, proof, expected] of [
+      [ineligible, mainPath, row('guest:/home/me/topic', '/home/me/topic')],
+      [[main], mainPath.replace('ubuntu', 'Debian'), row('guest:/home/me/topic', '/home/me/topic')],
+      [[main], mainPath, main],
+      [[main, checkout], mainPath, checkout],
+      [[main, checkout, child], mainPath, child]
+    ] as const) {
+      mocks.ownerRepos = [...catalog]
+      mocks.mainRepoPath = proof
+      mocks.call.mockClear()
+      await expect(addLocalRepoFromPath(makeStore([]), `${root}\\src`)).resolves.toMatchObject({
+        repo: { ...expected, executionHostId: OWNER }
+      })
+      if (!expected.id.startsWith('guest:')) {
+        expect(mocks.call.mock.calls.map(([, method]) => method)).toEqual(['repo.list'])
+      } else {
+        expect(mocks.call).toHaveBeenCalledWith(
+          'wsl:ubuntu',
+          'repo.add',
+          expect.objectContaining({ path: '/home/me/topic' }),
+          expect.any(Function)
+        )
+      }
+    }
+  })
+
+  it('groups an existing guest checkout without treating its receipt as Windows or rewriting setup', async () => {
+    const parentPath = '\\\\wsl$\\Ubuntu\\home\\me'
+    const path = `${parentPath}\\App`
+    mocks.scan = scanOf(parentPath, [path])
+    mocks.ownerRepos = [row('guest-existing', '/home/me/App', { projectHostSetupMethod: 'cloned' })]
+    registerNestedRepoImportHandler(mainWindow, makeStore([]))
+    await expect(
+      mocks.handlers.get('projectGroups:importNested')!(null, {
+        parentPath,
+        projectPaths: [path],
+        mode: 'group',
+        scanId: 'scan-1'
+      })
+    ).resolves.toMatchObject({
+      alreadyKnownCount: 1,
+      projects: [{ projectId: 'guest-existing', status: 'already-known', executionHostId: OWNER }],
+      group: { executionHostId: OWNER }
+    })
+    expect(
+      mocks.call.mock.calls.filter(
+        ([, method]) => method === 'repo.add' || method.startsWith('projectHostSetup.')
+      )
+    ).toEqual([])
+  })
+
+  it.each([true, false])(
+    'finishes zero viable nested selections before provisioning (inspection=%s)',
+    async (inspect) => {
+      const parentPath = '\\\\wsl$\\Ubuntu\\home\\me'
+      const [a, b, missing] = ['a', 'b', 'missing'].map((name) => `${parentPath}\\${name}`)
+      mocks.scan = scanOf(parentPath, inspect ? [a, b] : [])
+      mocks.target = () => {
+        throw new Error('Repository disappeared')
+      }
+      const store = makeStore([])
+      registerNestedRepoImportHandler(mainWindow, store)
+      const projectPaths = inspect ? [b, missing, a, b] : [missing, missing]
+      await expect(
+        mocks.handlers.get('projectGroups:importNested')!(null, {
+          parentPath,
+          projectPaths,
+          mode: 'group',
+          scanId: 'scan-1'
+        })
+      ).resolves.toEqual({
+        importedCount: 0,
+        alreadyKnownCount: 0,
+        failedCount: inspect ? 3 : 1,
+        projects: (inspect ? [b, missing, a] : [missing]).map((path) => ({
+          path,
+          status: 'failed',
+          error:
+            path === missing
+              ? 'Repository was not found in the nested repo scan result'
+              : 'Repository disappeared'
+        }))
+      })
+      expect(mocks.ensure).not.toHaveBeenCalled()
+      expect(mocks.call).not.toHaveBeenCalled()
+      expect(store.createProjectGroup).not.toHaveBeenCalled()
+    }
+  )
 
   it.each(['create', 'nested'] as const)(
     '%s never traverses unrelated saved UNC or native-link catalog paths',
@@ -349,6 +528,9 @@ describe('one placement per project operation', () => {
         }
         if (phase === 'send-stop' && method === 'repo.add') {
           vi.stubEnv('ORCA_INTERNAL_WSL_HOSTS', '0')
+        }
+        if (phase === 'list-claim' && method === 'repo.list') {
+          return { repos: [row('guest-late', '/home/me/late')] }
         }
         return normal(env, method, params, beforeSend)
       })

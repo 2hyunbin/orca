@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   getRepoExecutionHostId,
+  isRepoOnCatalogHost,
   LOCAL_EXECUTION_HOST_ID,
   toRuntimeExecutionHostId
 } from '../../shared/execution-host'
@@ -8,6 +9,13 @@ import type { Repo } from '../../shared/repo-types'
 import { getWslHostService } from './wsl-host-service-instance'
 import type { WslMutationAuthority } from './project-placement'
 import type { RpcCallerIdentity } from '../runtime/rpc/rpc-caller-identity'
+import {
+  findSavedCheckout,
+  type RepositoryCheckoutAdmission
+} from '../repository-checkout-admission'
+import { runtimeRepoIsRegistrationCandidate } from '../runtime/runtime-worktree-selection'
+import { normalizeWindowsWslPath, sameWslDistroName } from '../../shared/windows-path-access'
+import { parseWslUncPath } from '../../shared/wsl-paths'
 
 type WslProjectOperation =
   | { kind: 'add'; path: string; repoKind?: 'git' | 'folder'; displayName?: string }
@@ -56,10 +64,42 @@ export async function listWslOwnerRepos(environmentId: string): Promise<Repo[]> 
 /** Existing owner operations also prepare metadata/root on guests whose update was deferred. */
 export async function registerOnWslOwner(
   authority: WslMutationAuthority,
-  operation: WslProjectOperation
+  operation: WslProjectOperation,
+  admission?: RepositoryCheckoutAdmission
 ): Promise<{ kind: 'saved' | 'registered'; repo: Repo }> {
   const { environmentId } = authority
   const known = await listWslOwnerRepos(environmentId)
+  const hostId = toRuntimeExecutionHostId(environmentId)
+  if (operation.kind === 'add') {
+    const owner = admission && parseWslUncPath(normalizeWindowsWslPath(admission.registrationPath))
+    const ownerPath = (path: string) => {
+      const parsed = parseWslUncPath(normalizeWindowsWslPath(path))
+      return parsed && owner && sameWslDistroName(parsed.distro, owner.distro)
+        ? parsed.linuxPath
+        : null
+    }
+    const existing = findSavedCheckout(
+      known.filter(
+        (row) =>
+          isRepoOnCatalogHost(row) ||
+          (getRepoExecutionHostId(row) === hostId &&
+            runtimeRepoIsRegistrationCandidate(row, hostId))
+      ),
+      {
+        selectedPath: admission
+          ? (ownerPath(admission.selectedPath) ?? operation.path)
+          : operation.path,
+        registrationPath: operation.path,
+        mainRepoPath: admission?.mainRepoPath ? ownerPath(admission.mainRepoPath) : null
+      }
+    )
+    if (existing) {
+      const saved = authority.validate()
+      return saved
+        ? { kind: 'saved', repo: saved }
+        : { kind: 'registered', repo: { ...existing, executionHostId: hostId } }
+    }
+  }
   let response: unknown
   try {
     response = await mutateWslProject(

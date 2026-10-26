@@ -68,6 +68,42 @@ export async function placeNestedImport(
     linuxPath: string
     admission: RepositoryCheckoutAdmission
   })[] = []
+  const finish = (
+    executionHostId?: ProjectGroupImportResult['executionHostId'],
+    group?: ProjectGroupImportResult['group']
+  ): NestedImportPlacement => {
+    const seen = new Set<string>()
+    const projects = args.projectPaths.flatMap((path) => {
+      if (seen.has(selectionKey(path))) {
+        return []
+      }
+      seen.add(selectionKey(path))
+      const result = results.get(selectionKey(path))
+      if (result) {
+        return [{ ...result, path }]
+      }
+      return selection.rejectedPaths.includes(path)
+        ? [
+            {
+              path,
+              status: 'failed' as const,
+              error: 'Repository was not found in the nested repo scan result'
+            }
+          ]
+        : []
+    })
+    return {
+      kind: 'done',
+      result: {
+        ...(executionHostId ? { executionHostId } : {}),
+        ...(group ? { group } : {}),
+        projects,
+        importedCount: projects.filter((row) => row.status === 'imported').length,
+        alreadyKnownCount: projects.filter((row) => row.status === 'already-known').length,
+        failedCount: projects.filter((row) => row.status === 'failed').length
+      }
+    }
+  }
   for (const [order, path] of selection.selectedPaths.entries()) {
     try {
       const target = await targetResolver.resolveLocal(path)
@@ -95,6 +131,9 @@ export async function placeNestedImport(
         error: errorText(error, 'Repository could not be inspected')
       })
     }
+  }
+  if (items.length === 0) {
+    return finish()
   }
   // An uninspectable selection has no proven Windows claim; never send it to Windows grouping.
   const allSaved = () => results.size === 0 && items.every((item) => item.admission.findSaved())
@@ -139,7 +178,8 @@ export async function placeNestedImport(
           ? null
           : await registerOnWslOwner(
               wslMutationAuthority(store, caller, environmentId, admission.findSaved),
-              { kind: 'add', path: linuxPath, repoKind: 'git' }
+              { kind: 'add', path: linuxPath, repoKind: 'git' },
+              admission
             )
       if (receipt?.kind === 'saved') {
         result = {
@@ -225,35 +265,5 @@ export async function placeNestedImport(
           results
         })
       : undefined
-  const seen = new Set<string>()
-  const projects = args.projectPaths.flatMap((path) => {
-    if (seen.has(selectionKey(path))) {
-      return []
-    }
-    seen.add(selectionKey(path))
-    const result = results.get(selectionKey(path))
-    if (result) {
-      return [{ ...result, path }]
-    }
-    return selection.rejectedPaths.includes(path)
-      ? [
-          {
-            path,
-            status: 'failed' as const,
-            error: 'Repository was not found in the nested repo scan result'
-          }
-        ]
-      : []
-  })
-  return {
-    kind: 'done',
-    result: {
-      executionHostId,
-      ...(group ? { group: { ...group, executionHostId } } : {}),
-      projects,
-      importedCount: projects.filter((row) => row.status === 'imported').length,
-      alreadyKnownCount: projects.filter((row) => row.status === 'already-known').length,
-      failedCount: projects.filter((row) => row.status === 'failed').length
-    }
-  }
+  return finish(executionHostId, group ? { ...group, executionHostId } : undefined)
 }

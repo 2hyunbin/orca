@@ -2,7 +2,8 @@ import { join } from 'node:path'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { Repo } from '../../shared/repo-types'
-import { parseWslUncPath } from '../../shared/wsl-paths'
+import { isDrvfsLinuxPath, parseWslUncPath } from '../../shared/wsl-paths'
+import { normalizeWindowsWslPath } from '../../shared/windows-path-access'
 import {
   admitRepositoryCheckout,
   type RepositoryCheckoutAdmission,
@@ -134,9 +135,13 @@ export async function placeProject(
   store: PlacementStore,
   context: PlacementContext
 ): Promise<ProjectPlacement> {
-  const target =
+  let target =
     context.operation === 'create' ? join(context.parentPath, context.name) : context.selectedPath
-  const wsl = parseWslUncPath(target) !== null && wslProjectRoutingEnabled(store, context.domain)
+  const routingEnabled = wslProjectRoutingEnabled(store, context.domain)
+  if (routingEnabled) {
+    target = normalizeWindowsWslPath(target)
+  }
+  const wsl = parseWslUncPath(target) !== null && routingEnabled
   if (context.operation === 'create' && !wsl) {
     const { sameTarget } = context
     const findSaved = () => store.getRepos().find(sameTarget)
@@ -161,8 +166,8 @@ export async function placeProject(
   if (saved) {
     return { kind: 'saved', repo: saved, admission }
   }
-  const owner = wsl ? parseWslUncPath(admission.registrationPath) : null
-  if (!owner) {
+  const owner = wsl ? parseWslUncPath(normalizeWindowsWslPath(admission.registrationPath)) : null
+  if (!owner || isDrvfsLinuxPath(owner.linuxPath)) {
     return { kind: 'local', admission }
   }
   const environmentId = await ensureNewWslOwner(store, owner.distro, context)

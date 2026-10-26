@@ -83,12 +83,16 @@ export class RuntimeRepositoryRegistrationController {
     }
     if (placement.kind === 'wsl') {
       return (
-        await registerOnWslOwner(placement.authority, {
-          kind: 'add',
-          path: placement.linuxPath,
-          repoKind: kind,
-          displayName
-        })
+        await registerOnWslOwner(
+          placement.authority,
+          {
+            kind: 'add',
+            path: placement.linuxPath,
+            repoKind: kind,
+            displayName
+          },
+          placement.admission
+        )
       ).repo
     }
     const { admission } = placement
