@@ -10,7 +10,7 @@ import {
   ConnectorPendingPromptSchema,
   ConnectorReplyResponseSchema
 } from './event-messages.js'
-import { ConnectorHelloRequestSchema } from './hello-messages.js'
+import { CONNECTOR_FEATURES, ConnectorHelloRequestSchema } from './hello-messages.js'
 import { CONNECTOR_LIMITS } from './connector-limits.js'
 
 const conversation = { source: 'slack', externalId: 'T1:C9:1792.9:U5' } as const
@@ -208,6 +208,10 @@ describe('hello and replies', () => {
     })
     expect(ConnectorDeliverySchema.parse(cancel)).not.toHaveProperty('turnId')
     expect(ConnectorDeliverySchema.safeParse({ ...cancel, turnId: -1 }).success).toBe(false)
+  })
+
+  it('names turn-bound cancel as a feature a machine can list', () => {
+    expect(CONNECTOR_FEATURES).toContain('turnCancel')
   })
 
   it('carries a conversation from any connected platform', () => {

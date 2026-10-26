@@ -11,7 +11,8 @@ export const CONNECTOR_PATHS = {
   replies: '/v1/connector/replies'
 } as const
 
-export const CONNECTOR_FEATURES = ['answer', 'cancel', 'reply'] as const
+// turnCancel: the machine honours cancel.turnId and refuses a cancel for any other turn.
+export const CONNECTOR_FEATURES = ['answer', 'cancel', 'reply', 'turnCancel'] as const
 
 export const CONNECTOR_CLIENT_LIMITS = {
   pollTimeoutMs: 70_000,
