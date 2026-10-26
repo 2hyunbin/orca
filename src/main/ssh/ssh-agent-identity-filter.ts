@@ -24,50 +24,6 @@ function comparablePublicKey(key: AgentPublicKey): ParsedKey | Buffer | string {
   return key
 }
 
-class IdentityFilteredAgent extends BaseAgent<ParsedKey | Buffer | string> {
-  readonly kind = 'identity-filtered-agent'
-  declare getStream?: BaseAgent['getStream']
-
-  constructor(
-    readonly socketPath: string,
-    private readonly agent: BaseAgent,
-    private readonly allowedKeys: ParsedKey[]
-  ) {
-    super()
-    if (agent.getStream) {
-      this.getStream = agent.getStream.bind(agent)
-    }
-  }
-
-  getIdentities(callback: IdentityCallback): void {
-    this.agent.getIdentities((error, keys) => {
-      if (error) {
-        callback(error)
-        return
-      }
-      callback(
-        undefined,
-        keys?.filter((key) =>
-          this.allowedKeys.some((allowedKey) => allowedKey.equals(comparablePublicKey(key)))
-        ) ?? []
-      )
-    })
-  }
-
-  sign(
-    pubKey: ParsedKey | Buffer | string,
-    data: Buffer,
-    optionsOrCallback?: SigningRequestOptions | SignCallback,
-    callback?: SignCallback
-  ): void {
-    if (typeof optionsOrCallback === 'function') {
-      this.agent.sign(pubKey, data, optionsOrCallback)
-      return
-    }
-    this.agent.sign(pubKey, data, optionsOrCallback ?? {}, callback)
-  }
-}
-
 function parseIdentityKeyFile(filePath: string): ParsedKey | undefined {
   const { contents } = readSshIdentityFileSync(filePath)
   if (!contents) {
@@ -100,6 +56,50 @@ export function createIdentityFilteredAgent(
   agentSocket: string,
   identityFilePaths: string[]
 ): BaseAgent | undefined {
+  class IdentityFilteredAgent extends BaseAgent<ParsedKey | Buffer | string> {
+    readonly kind = 'identity-filtered-agent'
+    declare getStream?: BaseAgent['getStream']
+
+    constructor(
+      readonly socketPath: string,
+      private readonly agent: BaseAgent,
+      private readonly allowedKeys: ParsedKey[]
+    ) {
+      super()
+      if (agent.getStream) {
+        this.getStream = agent.getStream.bind(agent)
+      }
+    }
+
+    getIdentities(callback: IdentityCallback): void {
+      this.agent.getIdentities((error, keys) => {
+        if (error) {
+          callback(error)
+          return
+        }
+        callback(
+          undefined,
+          keys?.filter((key) =>
+            this.allowedKeys.some((allowedKey) => allowedKey.equals(comparablePublicKey(key)))
+          ) ?? []
+        )
+      })
+    }
+
+    sign(
+      pubKey: ParsedKey | Buffer | string,
+      data: Buffer,
+      optionsOrCallback?: SigningRequestOptions | SignCallback,
+      callback?: SignCallback
+    ): void {
+      if (typeof optionsOrCallback === 'function') {
+        this.agent.sign(pubKey, data, optionsOrCallback)
+        return
+      }
+      this.agent.sign(pubKey, data, optionsOrCallback ?? {}, callback)
+    }
+  }
+
   const identityKeys = readIdentityKeys(identityFilePaths)
   if (identityKeys.length === 0) {
     return undefined

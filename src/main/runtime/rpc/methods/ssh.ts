@@ -1,5 +1,6 @@
 import {
   connectRegisteredSshTarget,
+  ensureSshConnectionManager,
   getRegisteredSshState,
   getRegisteredSshTargetMutations,
   getSshConnectionManager,
@@ -177,7 +178,8 @@ export const SSH_METHODS = [
     name: 'ssh.browseDir',
     permission: 'workspace',
     params: SshBrowseDir,
-    handler: (params) => {
+    handler: async (params) => {
+      await ensureSshConnectionManager()
       const manager = getSshConnectionManager()
       if (!manager) {
         throw new SshTargetManagementUnservedError()

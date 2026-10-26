@@ -1,5 +1,6 @@
 /** IPC for plain SSH terminals; the renderer names a saved target id and never any argv. */
 import { homedir } from 'node:os'
+import type { SshIpcRegistrar } from './ssh-ipc-registration'
 import { ipcMain, type WebContents } from 'electron'
 import {
   PLAIN_SSH_TERMINAL_CHANNELS,
@@ -57,15 +58,15 @@ function endSessionsWithOwner(sender: WebContents): void {
   })
 }
 
-export function registerPlainSshTerminalHandlers(): void {
+export function registerPlainSshTerminalHandlers(ipc: SshIpcRegistrar = ipcMain): void {
   const { open, write, resize, close, ack, event } = PLAIN_SSH_TERMINAL_CHANNELS
-  ipcMain.removeHandler(open)
-  ipcMain.removeAllListeners(write)
-  ipcMain.removeAllListeners(resize)
-  ipcMain.removeAllListeners(close)
-  ipcMain.removeAllListeners(ack)
+  ipc.removeHandler(open)
+  ipc.removeAllListeners(write)
+  ipc.removeAllListeners(resize)
+  ipc.removeAllListeners(close)
+  ipc.removeAllListeners(ack)
 
-  ipcMain.handle(
+  ipc.handle(
     open,
     async (ipcEvent, args: { targetId?: unknown; cols?: unknown; rows?: unknown }) => {
       const sender = ipcEvent.sender
@@ -83,16 +84,16 @@ export function registerPlainSshTerminalHandlers(): void {
       )
     }
   )
-  ipcMain.on(write, (ipcEvent, args: { sessionId?: unknown; data?: unknown }) => {
+  ipc.on(write, (ipcEvent, args: { sessionId?: unknown; data?: unknown }) => {
     writePlainSshTerminal(args?.sessionId, ipcEvent.sender.id, args?.data)
   })
-  ipcMain.on(resize, (ipcEvent, args: { sessionId?: unknown; cols?: unknown; rows?: unknown }) => {
+  ipc.on(resize, (ipcEvent, args: { sessionId?: unknown; cols?: unknown; rows?: unknown }) => {
     resizePlainSshTerminal(args?.sessionId, ipcEvent.sender.id, args?.cols, args?.rows)
   })
-  ipcMain.on(close, (ipcEvent, args: { sessionId?: unknown }) => {
+  ipc.on(close, (ipcEvent, args: { sessionId?: unknown }) => {
     closePlainSshTerminal(args?.sessionId, ipcEvent.sender.id)
   })
-  ipcMain.on(ack, (ipcEvent, args: { sessionId?: unknown; chars?: unknown }) => {
+  ipc.on(ack, (ipcEvent, args: { sessionId?: unknown; chars?: unknown }) => {
     ackPlainSshTerminal(args?.sessionId, ipcEvent.sender.id, args?.chars)
   })
 }

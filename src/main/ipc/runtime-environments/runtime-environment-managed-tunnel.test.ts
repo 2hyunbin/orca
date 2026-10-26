@@ -57,8 +57,8 @@ vi.mock('../ssh/ssh-ipc-context', () => ({
   getCurrentMainWindow: () => null
 }))
 vi.mock('../ssh/ssh-renderer-broadcast', () => ({ broadcastSshState: vi.fn() }))
-vi.mock('../ssh/ssh-managed-port-forward-restore', () => ({
-  restoreManagedHostPortForwards: mocks.restoreForwards
+vi.mock('../ssh/ssh-port-forward-startup', () => ({
+  restoreSavedSshPortForwards: mocks.restoreForwards
 }))
 vi.mock('../ssh/ssh-host-launch-session-note', () => ({
   forgetLaunchSessionVerdict: mocks.forgetVerdict

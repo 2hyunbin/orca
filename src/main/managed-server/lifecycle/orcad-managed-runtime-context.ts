@@ -21,6 +21,7 @@ import { resolveOrcadRemoteContext, type OrcadRemoteContext } from '../install/o
 import { ORCAD_INSTALL_MODEL } from '../install/remote-install-model'
 import { computeRemoteInstallDir } from '../install/remote-versioned-install'
 import {
+  ensureSshConnectionManager,
   getSshConnectionManager,
   getSshTargetRegistryStore
 } from '../../ssh/targets/ssh-target-registry'
@@ -64,6 +65,7 @@ export async function resolveLinkedOrcadContext(
   deployment: OrcadSshDeploymentLink,
   signal?: AbortSignal
 ): Promise<OrcadRemoteContext> {
+  await ensureSshConnectionManager()
   const { connectionManager, targetStore } = requireManagedOrcadInfrastructure()
   const target = targetStore.getTarget(deployment.sshTargetId)
   if (

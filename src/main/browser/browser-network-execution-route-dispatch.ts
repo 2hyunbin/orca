@@ -14,11 +14,13 @@ export const resolveBrowserNetworkExecutionRoute: BrowserNetworkExecutionRouteRe
     const wslRoute = await import('./wsl-browser-network-execution-route')
     return wslRoute.resolveWslBrowserNetworkExecutionRoute(context)
   }
-  const [{ getSshConnectionManager }, authority, sshRoute] = await Promise.all([
-    import('../ssh/targets/ssh-target-registry'),
-    import('../ssh/ssh-provider-authority'),
-    import('./ssh-browser-network-execution-route')
-  ])
+  const [{ ensureSshConnectionManager, getSshConnectionManager }, authority, sshRoute] =
+    await Promise.all([
+      import('../ssh/targets/ssh-target-registry'),
+      import('../ssh/ssh-provider-authority'),
+      import('./ssh-browser-network-execution-route')
+    ])
+  await ensureSshConnectionManager()
   const connectionManager = getSshConnectionManager()
   if (!connectionManager) {
     throw new Error('browser_tunnel_execution_host_unavailable')

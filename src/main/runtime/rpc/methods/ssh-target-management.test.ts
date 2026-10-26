@@ -12,11 +12,13 @@ const mocks = vi.hoisted(() => ({
   listRegisteredSshTargets: vi.fn(),
   mutations: { add: vi.fn(), update: vi.fn(), remove: vi.fn() },
   getSshConnectionManager: vi.fn(),
+  ensureSshConnectionManager: vi.fn(async () => {}),
   browseSshDirectory: vi.fn()
 }))
 
 vi.mock('../../../ssh/targets/ssh-target-registry', () => ({
   connectRegisteredSshTarget: vi.fn(),
+  ensureSshConnectionManager: mocks.ensureSshConnectionManager,
   getRegisteredSshState: mocks.getRegisteredSshState,
   getRegisteredSshTargetMutations: () => mocks.mutations,
   getSshConnectionManager: mocks.getSshConnectionManager,
@@ -249,9 +251,12 @@ describe('server SSH target management RPC', () => {
     })
   })
 
-  it('browses a server SSH target over the server connection manager', async () => {
+  it('initializes SSH before browsing a server target over its connection manager', async () => {
     const manager = { getConnection: vi.fn() }
-    mocks.getSshConnectionManager.mockReturnValue(manager)
+    mocks.getSshConnectionManager.mockReturnValue(null)
+    mocks.ensureSshConnectionManager.mockImplementationOnce(async () => {
+      mocks.getSshConnectionManager.mockReturnValue(manager)
+    })
     mocks.browseSshDirectory.mockResolvedValue({
       entries: [{ name: 'src', isDirectory: true }],
       resolvedPath: '/home/me',

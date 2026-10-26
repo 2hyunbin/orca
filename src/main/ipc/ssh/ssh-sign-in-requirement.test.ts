@@ -16,7 +16,7 @@ vi.mock('../ssh/ssh-port-scanner', () => mocks.sshPortScanner)
 
 import type { SshTarget } from '../../../shared/ssh-types'
 import { isSshCredentialDeclined } from '../../ssh/ssh-credential-decline'
-import { registerSshHandlers, resetSshHandlerStateForTests } from './ssh'
+import { ensureSshHandlersLoaded, registerSshHandlers, resetSshHandlerStateForTests } from './ssh'
 import { createSshIpcHarness } from './ssh-ipc-test-harness'
 import { createSshConnectionCallbacks } from './ssh-connection-state-callbacks'
 
@@ -47,6 +47,7 @@ describe('SSH hosts that need a typed credential', () => {
     mockSshStore.listTargets.mockReturnValue(targets)
     mockSshStore.getTarget.mockImplementation((id: string) => targets.find((t) => t.id === id))
     registerAgain()
+    await ensureSshHandlersLoaded()
   }
 
   function registerAgain(): void {

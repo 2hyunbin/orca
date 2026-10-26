@@ -2,7 +2,10 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import type { ClientChannel } from 'ssh2'
 import type { AutomationPrecheck, AutomationPrecheckResult } from '../../shared/automations-types'
 import { MAX_AUTOMATION_PRECHECK_OUTPUT_CHARS } from '../../shared/automation-precheck'
-import { getSshConnectionManager } from '../ssh/targets/ssh-target-registry'
+import {
+  ensureSshConnectionManager,
+  getSshConnectionManager
+} from '../ssh/targets/ssh-target-registry'
 import { quotePosixShell } from '../../shared/shell-argument-quoting'
 import { admitSelfInitiatedTreeKill } from '../own-chromium-tree-kill-guard'
 import { errorMessage } from '../../shared/error-message'
@@ -254,12 +257,13 @@ async function runSshPrecheck(
   target: Extract<AutomationPrecheckExecutionTarget, { type: 'ssh' }>
 ): Promise<AutomationPrecheckResult> {
   const startedAt = Date.now()
-  const manager = getSshConnectionManager()
-  const connection = manager?.getConnection(target.connectionId)
-  if (!connection || connection.getState().status !== 'connected') {
-    return failedPrecheckResult(precheck, startedAt, 'SSH target is not connected.')
-  }
   try {
+    await ensureSshConnectionManager()
+    const manager = getSshConnectionManager()
+    const connection = manager?.getConnection(target.connectionId)
+    if (!connection || connection.getState().status !== 'connected') {
+      return failedPrecheckResult(precheck, startedAt, 'SSH target is not connected.')
+    }
     const remoteCommand = `cd ${quotePosixShell(target.cwd)} && ${precheck.command}`
     const channel = await connection.exec(remoteCommand)
     return await runSshChannelPrecheck({ precheck, channel, startedAt })

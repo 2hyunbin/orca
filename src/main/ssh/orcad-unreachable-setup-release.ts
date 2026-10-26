@@ -16,7 +16,11 @@ import { resolveOrcadRemoteContext } from '../managed-server/install/orcad-remot
 import { orcadStopFreedTheHost } from '../managed-server/install/orcad-remote-process-control'
 import { orcadSlotDir, stopOrcadSlot } from './orcad-recovery-slot'
 import { sshOrcadHostTransport } from './orcad-ssh-host-transport'
-import { getSshConnectionManager, getSshTargetRegistryStore } from './targets/ssh-target-registry'
+import {
+  ensureSshConnectionManager,
+  getSshConnectionManager,
+  getSshTargetRegistryStore
+} from './targets/ssh-target-registry'
 import { errorMessage } from '../../shared/error-message'
 
 export async function releaseUnreachableOrcadSetup(args: {
@@ -52,6 +56,7 @@ export async function releaseUnreachableOrcadSetup(args: {
 
 /** Clear active only after proven slot exit; daemon terminals may outlive it. */
 async function stopStrandedOrcad(targetId: string, signal?: AbortSignal): Promise<void> {
+  await ensureSshConnectionManager()
   const target = getSshTargetRegistryStore()?.getTarget(targetId)
   const connectionManager = getSshConnectionManager()
   if (!target || !connectionManager) {

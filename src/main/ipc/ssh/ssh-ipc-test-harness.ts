@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import type { Mock } from 'vitest'
-import { registerSshHandlers, resetSshHandlerStateForTests } from './ssh'
+import { ensureSshHandlersLoaded, registerSshHandlers, resetSshHandlerStateForTests } from './ssh'
 import type {
   SshConnectionManagerMock,
   SshIpcMocks,
@@ -24,7 +24,7 @@ export type SshIpcHarness = {
   createConnectionManagerMock: () => SshConnectionManagerMock
   /** Replacement forwarders never exercise the await-able removal path. */
   createPortForwardManagerMock: () => Omit<SshPortForwardManagerMock, 'removeForwardAndWait'>
-  reset: () => Promise<void>
+  reset: (options?: { load?: boolean }) => Promise<void>
 }
 
 export function createSshIpcHarness(mocks: SshIpcMocks): SshIpcHarness {
@@ -79,7 +79,7 @@ export function createSshIpcHarness(mocks: SshIpcMocks): SshIpcHarness {
     setCallbacks: vi.fn(),
     callbacksRef: { current: null as unknown }
   })
-  const reset = async (): Promise<void> => {
+  const reset = async (options?: { load?: boolean }): Promise<void> => {
     await resetSshHandlerStateForTests()
     handlers.clear()
     mockNextConnectionManagers.length = 0
@@ -135,6 +135,9 @@ export function createSshIpcHarness(mocks: SshIpcMocks): SshIpcHarness {
     powerMonitorOffMock.mockReset()
 
     registerSshHandlers(mockStore as never, () => mockWindow as never)
+    if (options?.load !== false) {
+      await ensureSshHandlersLoaded()
+    }
   }
 
   return {
