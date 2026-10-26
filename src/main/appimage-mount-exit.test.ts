@@ -1,6 +1,5 @@
 import { spawn as nodeSpawn, spawnSync } from 'node:child_process'
 import type * as fs from 'node:fs'
-import { realpathSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { spawnProcess } from '@orca/process-host'
 import { resolveAppImageRuntimeIdentity } from './appimage-runtime-identity'
@@ -122,31 +121,48 @@ describe('installAppImageMountExit', () => {
   })
 })
 
-describe.runIf(process.platform === 'linux')('MOUNT_KEEPALIVE_SCRIPT', () => {
+describe.runIf(process.platform === 'linux')('MOUNT_KEEPALIVE_SCRIPT', async () => {
+  // These run the real script against real processes, so they need the unmocked fs.
+  const { readlinkSync, realpathSync } = await vi.importActual<typeof fs>('node:fs')
   const sleepPath = realpathSync('/bin/sleep')
 
-  function runWatcher(ticks: number, helpers: string[]): number {
-    const startedAt = Date.now()
-    spawnSync('/bin/sh', ['-c', MOUNT_KEEPALIVE_SCRIPT, 'watcher', String(ticks), ...helpers], {
-      env: { PATH: '/usr/bin:/bin' }
-    })
-    return Date.now() - startedAt
+  // A watcher still waiting when spawnSync's timeout fires reports an error.
+  function runWatcher(ticks: number, helpers: string[], timeoutMs = 10_000): boolean {
+    const result = spawnSync(
+      '/bin/sh',
+      ['-c', MOUNT_KEEPALIVE_SCRIPT, 'watcher', String(ticks), ...helpers],
+      { env: { PATH: '/usr/bin:/bin' }, timeout: timeoutMs }
+    )
+    return result.error === undefined && result.status === 0
   }
 
-  it('waits for a helper, then returns once it exits', () => {
+  function isLive(pid: number | undefined): boolean {
+    try {
+      // A zombie has no exe link, so only a running helper resolves.
+      return readlinkSync(`/proc/${pid}/exe`) === sleepPath
+    } catch {
+      return false
+    }
+  }
+
+  it('returns only after the helper it waits on has exited', () => {
     const helper = nodeSpawn(sleepPath, ['0.5'])
-    expect(runWatcher(50, [`${helper.pid}=${sleepPath}`])).toBeGreaterThanOrEqual(400)
+    expect(runWatcher(50, [`${helper.pid}=${sleepPath}`])).toBe(true)
+    expect(isLive(helper.pid)).toBe(false)
   })
 
-  it('releases at the deadline without signalling the helper, and ignores a pid with another exe', () => {
+  it('releases at the deadline without signalling the helper', () => {
     const helper = nodeSpawn(sleepPath, ['30'])
     try {
-      const elapsed = runWatcher(3, [`${helper.pid}=${sleepPath}`, `${process.pid}=${sleepPath}`])
-      expect(elapsed).toBeLessThan(5_000)
-      expect(process.kill(helper.pid ?? 0, 0)).toBe(true)
-      expect(runWatcher(50, [`${process.pid}=${sleepPath}`])).toBeLessThan(1_000)
+      expect(runWatcher(3, [`${helper.pid}=${sleepPath}`])).toBe(true)
+      expect(isLive(helper.pid)).toBe(true)
     } finally {
       helper.kill('SIGKILL')
     }
+  })
+
+  it('ignores a pid whose exe differs', () => {
+    // Waiting on it would outlast the 50-tick deadline's 2s timeout.
+    expect(runWatcher(50, [`${process.pid}=${sleepPath}`], 2_000)).toBe(true)
   })
 })
