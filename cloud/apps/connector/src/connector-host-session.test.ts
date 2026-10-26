@@ -82,6 +82,16 @@ describe('connector machine sessions', () => {
     await expect(refused.json()).resolves.toEqual({ error: 'host_revoked' })
   })
 
+  it('ends every earlier session when a key is linked again', async () => {
+    const { harness, host, browser, signOut } = await linkedHarness()
+    // The state a session request leaves when it races a revoke: revoked, but its session kept.
+    await harness.database.query('UPDATE connector_hosts SET revoked_at = 1 WHERE host_id = ?', [
+      deriveHostFingerprint(host.publicKey)
+    ])
+    await harness.approve(browser, (await harness.startSignIn(host)).started!.userCode)
+    expect((await signOut()).status).toBe(401)
+  })
+
   it('ignores a revoke from an account that does not own the machine', async () => {
     const { harness, host } = await linkedHarness()
     const stranger = await harness.signedInBrowser({ userId: 'user-2', email: 'eve@example.com' })

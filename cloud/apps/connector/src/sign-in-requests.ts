@@ -222,6 +222,8 @@ export class ConnectorSignInRequests {
           now
         ]
       )
+      // A session minted while a revoke or logout raced it must not come back to life with the new link.
+      await transaction.query('DELETE FROM connector_sessions WHERE host_fingerprint = ?', [hostId])
       return 'approved'
     })
   }
