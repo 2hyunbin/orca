@@ -41,10 +41,19 @@ const installAttemptSchema = z.object({
   attemptId: z.string()
 })
 type InstallAttempt = z.infer<typeof installAttemptSchema>
+const nativeBundleUrlSchema = z.string().refine((value) => {
+  try {
+    fileURLToPath(value)
+    return true
+  } catch {
+    return false
+  }
+})
 const relaunchRequestSchema = z.object({
   launchAfterInstallation: z.literal(true),
   bundleIdentifier: z.string().min(1),
-  targetBundleURL: z.string()
+  targetBundleURL: nativeBundleUrlSchema,
+  updateBundleURL: nativeBundleUrlSchema
 })
 
 function identity(): { execPath: string; bundlePath: string; directory: string } | null {

@@ -20,6 +20,7 @@ import {
   MAC_UPDATE_INSTALL_LAUNCH_EXIT_CODE,
   markMacUpdateInstallInFlight,
   clearMacUpdateInstallMarker,
+  exitForInFlightMacUpdateInstall,
   shouldExitForInFlightMacUpdateInstall
 } from './mac-update-install-marker'
 
@@ -28,6 +29,10 @@ const mock = vi.hoisted(() => ({
   version: '1.2.3',
   packaged: true,
   run: vi.fn(),
+  exit: vi.fn(),
+  read: vi.fn<(path: NodeFs.PathLike | undefined, bytes: number) => void>(),
+  opened: vi.fn(),
+  closed: vi.fn(),
   beforeRename: vi.fn()
 }))
 vi.mock('electron', () => ({
@@ -35,6 +40,7 @@ vi.mock('electron', () => ({
     get isPackaged() {
       return mock.packaged
     },
+    exit: mock.exit,
     getVersion: () => mock.version,
     getPath: () => mock.root
   }
@@ -42,8 +48,24 @@ vi.mock('electron', () => ({
 vi.mock('@orca/process-host', () => ({ runProcessSync: mock.run }))
 vi.mock('node:fs', async (original) => {
   const fs = await original<typeof NodeFs>()
+  const paths = new Map<number, NodeFs.PathLike>()
   return {
     ...fs,
+    openSync: (...args: Parameters<typeof fs.openSync>) => {
+      const fd = fs.openSync(...args)
+      paths.set(fd, args[0])
+      mock.opened(fd)
+      return fd
+    },
+    readSync: (fd: number, buffer: Buffer, offset: number, length: number, position: number) => {
+      mock.read(paths.get(fd), buffer.byteLength)
+      return fs.readSync(fd, buffer, offset, length, position)
+    },
+    closeSync: (fd: number) => {
+      fs.closeSync(fd)
+      paths.delete(fd)
+      mock.closed(fd)
+    },
     renameSync: (...args: Parameters<typeof fs.renameSync>) => {
       mock.beforeRename()
       fs.renameSync(...args)
@@ -57,8 +79,11 @@ let statePath: string
 let command: string
 let diagnostic: ReturnType<typeof vi.spyOn>
 const now = 1_800_000_000_000
+const resourcesPathDescriptor = Object.getOwnPropertyDescriptor(process, 'resourcesPath')
 
 beforeEach(() => {
+  Object.defineProperty(process, 'resourcesPath', { value: '/resources', configurable: true })
+  mock.exit.mockClear()
   mock.root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-install-fence-')))
   bundle = join(mock.root, 'Orca QA.app')
   executable = join(bundle, 'Contents', 'MacOS', 'Orca')
@@ -94,6 +119,11 @@ afterEach(() => {
   rmSync(mock.root, { recursive: true, force: true })
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
+  if (resourcesPathDescriptor) {
+    Object.defineProperty(process, 'resourcesPath', resourcesPathDescriptor)
+  } else {
+    Reflect.deleteProperty(process, 'resourcesPath')
+  }
 })
 function setCommand(value: string): void {
   command = value
@@ -101,11 +131,25 @@ function setCommand(value: string): void {
 function setVersion(value: string): void {
   mock.version = value
 }
-function writeRequest(overrides: object = {}) {
+type NativeRequestOverrides = {
+  launchAfterInstallation?: boolean | null
+  bundleIdentifier?: string
+  targetBundleURL?: string | null
+  updateBundleURL?: string | null
+}
+type InstallAttemptOverrides = {
+  targetVersion?: string
+  schema?: number
+  execPath?: string
+  bundlePath?: string
+}
+function writeRequest(overrides: NativeRequestOverrides = {}) {
   writeFileSync(
     statePath,
     JSON.stringify({
       launchAfterInstallation: true,
+      useUpdateBundleName: false,
+      updateBundleURL: pathToFileURL(join(mock.root, 'Downloaded update.app')).href,
       bundleIdentifier: 'com.stablyai.orca',
       targetBundleURL: pathToFileURL(`${bundle}/`).href,
       ...overrides
@@ -118,7 +162,7 @@ function markerPath() {
     readdirSync(directory).find((name) => name.endsWith('.json'))!
   )
 }
-function changeMarker(overrides: object) {
+function changeMarker(overrides: InstallAttemptOverrides) {
   const path = markerPath()
   writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')), ...overrides }))
 }
@@ -188,6 +232,16 @@ it.each([
     () => writeRequest({ targetBundleURL: 'file:///other/Orca.app' }),
     false
   ],
+  ...(['targetBundleURL', 'updateBundleURL'] as const).flatMap((field) =>
+    [undefined, null, '', 'not a URL', 'https://example.com/Orca.app', 'file:///bad%XX'].map(
+      (value) =>
+        [
+          `invalid required ${field}: ${value}`,
+          () => writeRequest({ [field]: value }),
+          false
+        ] as const
+    )
+  ),
   ['mismatched native job label', () => writeRequest({ bundleIdentifier: 'other' }), false],
   ['unreadable request', () => rmSync(statePath), false],
   ['probe nonzero', () => mock.run.mockReturnValue({ code: 1, stdout: command }), false],
@@ -273,4 +327,74 @@ it('does not observe a temporary publication before its atomic rename', () => {
   })
   markMacUpdateInstallInFlight('1.3.0')
   expect(shouldExitForInFlightMacUpdateInstall()).toBe(true)
+})
+
+it.each([10, 100])(
+  'shares native evidence across %i real attempts through the desktop exit adapter',
+  (count) => {
+    for (let index = 1; index < count; index++) {
+      markMacUpdateInstallInFlight('1.0.0')
+    }
+    expect(readdirSync(directory)).toHaveLength(count)
+    setCommand(
+      command + Array.from({ length: count }, (_, index) => `/bin/other-${index}`).join('\n')
+    )
+    vi.spyOn(process, 'argv', 'get').mockReturnValue([executable])
+    mock.read.mockClear()
+    mock.opened.mockClear()
+    mock.closed.mockClear()
+
+    expect(exitForInFlightMacUpdateInstall()).toBe(true)
+    expect(mock.exit).toHaveBeenCalledExactlyOnceWith(75)
+    expect(mock.run).toHaveBeenCalledTimes(2)
+    expect(mock.run).toHaveBeenNthCalledWith(1, {
+      program: '/bin/ps',
+      args: ['-axww', '-o', 'command='],
+      timeoutMs: 1000,
+      maxOutputBytes: 8 * 1024 * 1024
+    })
+    expect(mock.run).toHaveBeenNthCalledWith(2, mock.run.mock.calls[0]![0])
+    expect(mock.read.mock.calls.filter(([path]) => path === statePath)).toEqual([
+      [statePath, 65537],
+      [statePath, 65537]
+    ])
+    const records = mock.read.mock.calls.filter(([path]) => path !== statePath)
+    expect(records).toHaveLength(count)
+    expect(new Set(records.map(([path]) => path)).size).toBe(count)
+    for (const [path, bytes] of records) {
+      expect(path).toEqual(expect.stringContaining(`${directory}/attempt-`))
+      expect(bytes).toBe(4097)
+    }
+    expect(mock.opened).toHaveBeenCalledTimes(count + 2)
+    expect(mock.closed.mock.calls).toEqual(mock.opened.mock.calls)
+
+    mock.exit.mockClear()
+    mock.run.mockClear()
+    setCommand('')
+    expect(exitForInFlightMacUpdateInstall()).toBe(false)
+    expect(mock.run).toHaveBeenCalledTimes(1)
+    expect(readdirSync(directory)).toHaveLength(0)
+    mock.run.mockClear()
+    expect(exitForInFlightMacUpdateInstall()).toBe(false)
+    expect(mock.run).not.toHaveBeenCalled()
+    expect(mock.exit).not.toHaveBeenCalled()
+  }
+)
+
+it.each([
+  ['--serve', '--profile-state-recovery', '{"raw":"payload"}'],
+  ['serve', '--profile-state-recovery', '{"raw":"payload"}'],
+  ['/resources/app.asar.unpacked/out/cli/index.js', 'status']
+])('bypasses the real desktop adapter without consuming raw launch arguments: %j', (...args) => {
+  const argv = [executable, ...args]
+  const original = [...argv]
+  vi.spyOn(process, 'argv', 'get').mockReturnValue(argv)
+  mock.opened.mockClear()
+  mock.read.mockClear()
+  expect(exitForInFlightMacUpdateInstall()).toBe(false)
+  expect(argv).toEqual(original)
+  expect(mock.opened).not.toHaveBeenCalled()
+  expect(mock.read).not.toHaveBeenCalled()
+  expect(mock.run).not.toHaveBeenCalled()
+  expect(mock.exit).not.toHaveBeenCalled()
 })
