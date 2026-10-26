@@ -1,16 +1,16 @@
-import type { TaskPageGitHubQuietRefreshModel } from './task-page/github/use-task-page-github-quiet-refresh'
+import type { TaskPageGitHubQuietRefreshModel } from './github/use-task-page-github-quiet-refresh'
 import React, { useCallback, useEffect } from 'react'
-import type { PRFilterChange } from '@/components/github/PRFilterDropdowns'
+import type { PRFilterChange } from '@/components/github/PRFilterSections'
 import {
   scopeGitHubTaskSearch,
   getDefaultPresetForGitHubTaskKind
-} from '../../../shared/task-github-search'
-import { withQualifier } from '../../../shared/task-query'
-import type { TaskViewPresetId } from '../../../shared/ui-chrome-types'
+} from '../../../../shared/task-github-search'
+import { withQualifier } from '../../../../shared/task-query'
+import type { TaskViewPresetId } from '../../../../shared/ui-chrome-types'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import type { GitHubTaskKind } from '@/components/task-page-localized-options'
-import { getTaskPresetQuery } from '../../../shared/task-preset-query'
+import { getTaskPresetQuery } from '../../../../shared/task-preset-query'
 import { shouldSuppressEnterSubmit } from '@/lib/new-workspace-enter-guard'
 import { addAppKeyListener, removeAppKeyListener } from '@/lib/app-keyboard-router'
 export function useTaskPageSearchActions(model: TaskPageGitHubQuietRefreshModel) {

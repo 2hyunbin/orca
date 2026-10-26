@@ -106,8 +106,15 @@ describe('ConnectorTurnEvents', () => {
     events.observe({
       kind: 'snapshot',
       conversations: [
-        { ...entry, working: true, prompt: null, turnId: 200 },
-        { ...entry, paneKey: 'tab:2', working: false, prompt: null, turnId: null }
+        { ...entry, working: true, prompt: null, turnId: 200, activeAt: 0 },
+        {
+          ...entry,
+          paneKey: 'tab:2',
+          working: false,
+          prompt: null,
+          turnId: null,
+          activeAt: Date.now()
+        }
       ]
     })
     expect(events.next(1)?.batch[0]).toEqual({

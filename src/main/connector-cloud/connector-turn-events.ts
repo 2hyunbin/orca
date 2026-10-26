@@ -2,20 +2,15 @@
 import { readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
-import type { PendingPrompt } from '../../shared/agent-pending-prompt'
-import {
-  CONNECTOR_CLIENT_LIMITS,
-  type ConnectorConversation,
-  type ConnectorEvent
-} from '../../shared/connector-cloud-contract'
+import { CONNECTOR_CLIENT_LIMITS, type ConnectorEvent } from '../../shared/connector-cloud-contract'
 import { writeSecureJsonFile } from '../../shared/secure-file'
 import type {
   ConversationEvent,
   ConversationSnapshot
 } from '../external-conversations/external-conversation-events'
-import type { ConversationKey } from '../external-conversations/external-conversation-types'
 import { isMissingFileError } from '../runtime/device-registry-corruption'
 import { ConnectorOutbox, type ConnectorOutboxHead, type ConnectorStamp } from './connector-outbox'
+import { connectorSnapshot, jsonBytes, slackConversation, unsupported } from './connector-snapshot'
 
 const TURN_OUTBOX_FILE = 'connector-turn-outbox.json'
 const MAX_TURN_ENDS = 200
@@ -46,10 +41,6 @@ const isTurnEnded = (event: ConnectorEvent): event is TurnEnded => event.kind ==
 const isLive = (event: ConnectorEvent): boolean =>
   event.kind !== 'turn-ended' && event.kind !== 'snapshot'
 
-function slackConversation(key: ConversationKey): ConnectorConversation | null {
-  return key.source === 'slack' ? { source: 'slack', externalId: key.externalId } : null
-}
-
 /** Cut on a character boundary so the cloud's byte limit always holds. */
 function capUtf8(text: string, maxBytes: number): string {
   const bytes = Buffer.from(text)
@@ -64,8 +55,6 @@ function capUtf8(text: string, maxBytes: number): string {
   return bytes.subarray(0, end).toString('utf8')
 }
 
-const jsonBytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value))
-
 /** As many leading events as fit in one request, and at least one. */
 function eventsHeadSize(events: readonly ConnectorEvent[]): number {
   let bytes = 0
@@ -78,55 +67,14 @@ function eventsHeadSize(events: readonly ConnectorEvent[]): number {
   return events.length
 }
 
-const unsupported = (prompt: PendingPrompt): PendingPrompt => ({
-  kind: 'unsupported',
-  promptId: prompt.promptId
-})
-
-/** Within the per-event cap: a prompt too large to carry is offered as one only Orca can answer. */
-function withinEventCap(event: ConnectorEvent): ConnectorEvent {
-  if (jsonBytes(event) <= CONNECTOR_CLIENT_LIMITS.maxEventBytes) {
-    return event
-  }
-  if (event.kind === 'prompt') {
-    return { ...event, prompt: unsupported(event.prompt) }
-  }
-  if (event.kind === 'snapshot') {
-    return {
-      ...event,
-      conversations: event.conversations.map((entry) =>
-        entry.prompt ? { ...entry, prompt: unsupported(entry.prompt) } : entry
-      )
-    }
-  }
-  return event
+/** Within the per-event cap. */
+function promptEvent(event: Extract<ConnectorEvent, { kind: 'prompt' }>): ConnectorEvent {
+  return jsonBytes(event) <= CONNECTOR_CLIENT_LIMITS.maxEventBytes
+    ? event
+    : { ...event, prompt: unsupported(event.prompt) }
 }
 
-export function toConnectorEvent(
-  event: ConversationSnapshot | ConversationEvent
-): ConnectorEvent | null {
-  if (event.kind === 'snapshot') {
-    return withinEventCap({
-      kind: 'snapshot',
-      conversations: event.conversations.flatMap(
-        ({ conversation, paneKey, agent, working, prompt, turnId }) => {
-          const slack = slackConversation(conversation)
-          return slack
-            ? [
-                {
-                  conversation: slack,
-                  paneKey,
-                  agent,
-                  working,
-                  prompt,
-                  ...(turnId === null ? {} : { turnId })
-                }
-              ]
-            : []
-        }
-      )
-    })
-  }
+export function toConnectorEvent(event: ConversationEvent): ConnectorEvent | null {
   const conversation = slackConversation(event.conversation)
   if (!conversation) {
     return null
@@ -136,7 +84,7 @@ export function toConnectorEvent(
     case 'linked':
       return { kind: 'linked', conversation, paneKey, agent: event.agent }
     case 'prompt':
-      return withinEventCap({ kind: 'prompt', conversation, paneKey, prompt: event.prompt })
+      return promptEvent({ kind: 'prompt', conversation, paneKey, prompt: event.prompt })
     case 'turn-started':
       return { kind: 'turn-started', conversation, paneKey, at: event.at }
     case 'turn-ended':
@@ -187,6 +135,7 @@ export class ConnectorTurnEvents {
   private readonly filePath: string
   // Something owed was dropped to stay within the caps; only a fresh snapshot restates it.
   private dropped = false
+  private warnedTrimmed = false
 
   constructor(
     userDataPath: string,
@@ -215,11 +164,18 @@ export class ConnectorTurnEvents {
    * owed; only turn ends carry over. Everything else follows in order.
    */
   observe(event: ConversationSnapshot | ConversationEvent): void {
-    const wire = toConnectorEvent(event)
-    if (wire?.kind === 'snapshot') {
+    if (event.kind === 'snapshot') {
+      const { snapshot, trimmed } = connectorSnapshot(event, Date.now())
+      if (trimmed && !this.warnedTrimmed) {
+        this.warnedTrimmed = true
+        console.warn('[connector] a snapshot left out some active conversations to fit its caps')
+      }
       this.dropped = false
-      this.outbox.restart([wire], isTurnEnded)
-    } else if (wire) {
+      this.outbox.restart([snapshot], isTurnEnded)
+      return
+    }
+    const wire = toConnectorEvent(event)
+    if (wire) {
       this.outbox.push(wire)
     }
   }

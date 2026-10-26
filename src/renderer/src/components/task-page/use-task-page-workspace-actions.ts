@@ -1,7 +1,7 @@
 import type { TaskPageSearchActionsModel } from './use-task-page-search-actions'
 import { useCallback } from 'react'
-import type { GitHubWorkItem } from '../../../shared/github/work-item-types'
-import type { GitLabWorkItem } from '../../../shared/gitlab-types'
+import type { GitHubWorkItem } from '../../../../shared/github/work-item-types'
+import type { GitLabWorkItem } from '../../../../shared/gitlab-types'
 import type { LinkedWorkItemSummary } from '@/lib/new-workspace'
 import { useAppStore } from '@/store'
 import { getWorkItemRepo } from '@/lib/work-item-repo-row'
@@ -13,7 +13,7 @@ import {
   getGitHubWorkItemWorkspaceSeed,
   getGitLabWorkItemWorkspaceSeed,
   getTaskPageRepoSourceContext
-} from './task-page-source-context'
+} from '../task-page-source-context'
 export function useTaskPageWorkspaceActions(model: TaskPageSearchActionsModel) {
   const { repos, openModal } = model
   const openComposerForItem = useCallback(

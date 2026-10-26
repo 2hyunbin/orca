@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import type { GitHubWorkItem } from '../../../shared/github/work-item-types'
-import type { GitLabWorkItem } from '../../../shared/gitlab-types'
-import type { Repo } from '../../../shared/repo-types'
+import type { GitHubWorkItem } from '../../../../shared/github/work-item-types'
+import type { GitLabWorkItem } from '../../../../shared/gitlab-types'
+import type { Repo } from '../../../../shared/repo-types'
 import type { TaskPageSearchActionsModel } from './use-task-page-search-actions'
 import { useTaskPageWorkspaceActions } from './use-task-page-workspace-actions'
 

@@ -21,7 +21,8 @@ const [project] = connectorProjects({
   getProjectGroups: () => [],
   getFolderWorkspaces: () => [],
   getSshTargets: () => [],
-  getProjectHostSetups: () => []
+  getProjectHostSetups: () => [],
+  getAllWorktreeMeta: () => ({})
 })
 
 let userDataPath: string
@@ -672,6 +673,28 @@ describe('ConnectorPollClient', () => {
       fake.events.filter((event) => isRecord(event) && event.kind === 'turn-ended')
     ).toHaveLength(60)
     expect(fake.requestsTo(CONNECTOR_PATHS.events).length).toBeGreaterThan(2)
+    client.stop()
+  })
+
+  it('keeps a turn end refused under a hello a retired client replaced, and resends it after hello', async () => {
+    const { client, emit } = startClient()
+    await settle()
+    fake.helloFromElsewhere()
+    emit({
+      kind: 'turn-ended',
+      conversation,
+      worktreeId: 'wt',
+      paneKey: 'tab:1',
+      turnId: 4,
+      stopReason: 'success',
+      at: 9
+    })
+    await settle()
+    // The cloud wakes the held poll for the newer hello, as the real one does.
+    fake.answerPoll({ status: 409, body: { error: 'hello_required' } })
+    await settle(5_000)
+    expect(fake.hellos).toHaveLength(2)
+    expect(fake.events).toContainEqual(expect.objectContaining({ kind: 'turn-ended', turnId: 4 }))
     client.stop()
   })
 })
