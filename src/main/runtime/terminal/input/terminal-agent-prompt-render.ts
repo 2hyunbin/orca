@@ -138,13 +138,6 @@ export abstract class OrcaRuntimeWithCreateAgentPromptRenderGate extends OrcaRun
       launchReadiness?: boolean
     }
   ): Promise<RuntimeTerminalWait> {
-    if ((options?.condition ?? 'exit') !== 'exit') {
-      try {
-        this.assertTerminalOutputReachesMain(handle)
-      } catch (error) {
-        return Promise.reject(error)
-      }
-    }
     // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
     const starting = ORCA_LAYOUT_OWNER_IS_MAIN
       ? this.startRestoredHandlePane(handle, options ?? {})

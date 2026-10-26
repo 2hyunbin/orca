@@ -11,7 +11,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-it('a silent reattached Codex reads quiet on its PTY and its pane leaf alike', () => {
+it('a silent reattached Codex reads quiet on its PTY and its pane leaf alike, and stays quiet when its pane mounts', () => {
   vi.useFakeTimers({ now: 100_000 })
   const { runtime, leaf } = runtimeWithLeaf(PTY_ID)
   runtime.seedTerminalRestoreTail(PTY_ID, { text: CODEX_COMPOSER })
@@ -33,5 +33,8 @@ it('a silent reattached Codex reads quiet on its PTY and its pane leaf alike', (
   vi.advanceTimersByTime(source.quiescenceMs)
   // Neither record ever saw output; the clock is main's observation since the reattach.
   expect([pty.lastOutputAt, leaf.lastOutputAt]).toEqual([null, null])
+  expect(verdicts()).toEqual(['ready-strong', 'ready-strong'])
+  // A pane mounting later reattaches the same process; its observed quiet must not restart.
+  runtime.startReattachedOutputClock(PTY_ID)
   expect(verdicts()).toEqual(['ready-strong', 'ready-strong'])
 })

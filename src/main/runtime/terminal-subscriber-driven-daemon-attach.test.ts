@@ -25,7 +25,6 @@ type RuntimeInternals = {
   ) => unknown
   issuePtyHandle: (pty: unknown) => string
   headlessTerminals: Map<string, unknown>
-  mainDaemonAttachments: { isUnreachable: (ptyId: string) => boolean }
   refreshPtyWorktreeRecordsWithControllerInventory: (
     worktrees: [],
     targetWorktreeId: string | null
@@ -430,21 +429,6 @@ describe('subscriber-driven daemon attach (never-activated tab)', () => {
     expect(model.emitData(PTY_ID, 'worker still printing\r\n')).toBe(true)
     const read = await runtime.readTerminal(handle)
     expect(read.tail.join('\n')).toContain('worker still printing')
-  })
-
-  it('fails a wait at once when main could not attach the surviving session', async () => {
-    const { runtime, model, handle } = setupNeverAttachedDaemonSession({ snapshotCapable: false })
-    const refuse = model.deferNextAttach(false)
-    await internals(runtime).refreshPtyWorktreeRecordsWithControllerInventory([], null)
-    refuse()
-    await vi.waitFor(() =>
-      expect(internals(runtime).mainDaemonAttachments.isUnreachable(PTY_ID)).toBe(true)
-    )
-
-    await expect(
-      runtime.waitForTerminal(handle, { condition: 'tui-idle', timeoutMs: 60_000 })
-    ).rejects.toThrow('terminal_not_connected_since_restart')
-    expect(model.attachCalls).toEqual([PTY_ID])
   })
 
   it('does not subscriber-attach or provider-read a session this app already spawned', async () => {

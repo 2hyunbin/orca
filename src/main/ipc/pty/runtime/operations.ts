@@ -129,11 +129,10 @@ export async function attachPtyFromRuntimeController(
   if (provider !== localProvider || provider instanceof LocalPtyProvider) {
     return false
   }
-  // Only a mark this attach set may be undone; a pane's own hidden claim stays.
-  const hidden =
-    !isRendererViewShowingPty(ptyId) &&
-    !isHiddenRendererPty(ptyId) &&
+  // A pane's own hidden claim stays its own; a reveal or exit clears main's.
+  if (!isRendererViewShowingPty(ptyId) && !isHiddenRendererPty(ptyId)) {
     hideRuntimeOwnedRendererDelivery(deps, ptyId)
+  }
   try {
     const sequenceBeforeProviderAttach = deps.runtime?.getPtyOutputSequence?.(ptyId) ?? 0
     const attachResult = await provider.attach(ptyId)
@@ -152,9 +151,6 @@ export async function attachPtyFromRuntimeController(
     deps.syncPtyBackgroundedDelivery?.(ptyId, 'main-attach')
     return true
   } catch {
-    if (hidden) {
-      deps.transitionSpawnHiddenRendererPtyDeliveryState?.(ptyId, false)
-    }
     return false
   }
 }

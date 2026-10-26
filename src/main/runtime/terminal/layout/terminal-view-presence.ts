@@ -68,18 +68,6 @@ export abstract class OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged ext
     return this.mainDaemonAttachments.isKnownUnattachedLocal(ptyId)
   }
 
-  /** A survivor main holds no stream for can never satisfy a wait; say so instead of timing out. */
-  protected assertTerminalOutputReachesMain(handle: string): void {
-    const ptyId = this.getLivePtyForHandle(handle)?.pty.ptyId
-    if (ptyId && this.mainDaemonAttachments.isUnreachable(ptyId)) {
-      throw new Error('terminal_not_connected_since_restart')
-    }
-  }
-
-  protected reconcileMainDaemonAttach(ptyId: string): void {
-    this.mainDaemonAttachments.reconcile(ptyId)
-  }
-
   /** Mark a raw-output viewer without transferring terminal query authority. */
   registerRawTerminalViewSubscriber(ptyId: string): () => void {
     return this.terminalViewSubscribers.registerRaw(ptyId)

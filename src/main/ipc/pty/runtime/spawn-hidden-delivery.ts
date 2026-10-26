@@ -73,16 +73,15 @@ function markRuntimeSpawnHidden(ctx: RuntimePtySpawnState, id: string): void {
 export function hideRuntimeOwnedRendererDelivery(
   deps: Pick<PtyRuntimeControllerDeps, 'transitionSpawnHiddenRendererPtyDeliveryState'>,
   id: string
-): boolean {
+): void {
   const transition = deps.transitionSpawnHiddenRendererPtyDeliveryState
   if (!transition) {
-    return false
+    return
   }
   // Transition first so a fresh mark still invalidates the drain policy.
   transition(id, true)
   // No renderer exists to re-mark this PTY after reload.
   markRuntimeOwnedHiddenRendererPty(id)
-  return true
 }
 
 function isAdoptedAgentSession(ensure: unknown): boolean {

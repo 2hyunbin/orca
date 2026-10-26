@@ -225,11 +225,11 @@ export abstract class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRun
       })
   }
 
-  /** A reattached live process may print nothing; from now on its silence is observed quiet. */
+  /** A reattached live process may print nothing; its silence is observed quiet from the first attach of this generation. */
   startReattachedOutputClock(ptyId: string): void {
     const pty = this.ptysById.get(ptyId)
     if (pty && pty.lastOutputAt === null) {
-      pty.outputObservedSince = Date.now()
+      pty.outputObservedSince ??= Date.now()
     }
   }
 

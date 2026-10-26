@@ -30,11 +30,6 @@ export class MainDaemonAttachments {
     return !this.attached.has(ptyId) && this.deps.isUnattachedLocalCandidate(ptyId)
   }
 
-  /** No stream and no attach in flight: nothing this session prints can reach main. */
-  isUnreachable(ptyId: string): boolean {
-    return !this.attaching.has(ptyId) && this.isKnownUnattachedLocal(ptyId)
-  }
-
   /** Inventory proved the session live; attach it, or retry once an in-flight refusal settles. */
   reconcile(ptyId: string): void {
     const attempt = this.attaching.get(ptyId)
@@ -53,7 +48,7 @@ export class MainDaemonAttachments {
     if (this.attaching.has(ptyId) || !this.isKnownUnattachedLocal(ptyId)) {
       return
     }
-    const attempt = this.attach(ptyId)
+    const attempt: Promise<boolean> = this.acquireSlot().then(() => this.attach(ptyId, attempt))
     this.attaching.set(ptyId, attempt)
     void attempt.then((attached) => {
       if (this.attaching.get(ptyId) !== attempt) {
@@ -66,16 +61,19 @@ export class MainDaemonAttachments {
     })
   }
 
-  private async attach(ptyId: string): Promise<boolean> {
-    if (this.running >= MAX_CONCURRENT_ATTACHES) {
-      // The finishing attach hands its slot over without releasing it.
-      await new Promise<void>((resolve) => this.queued.push(resolve))
-    } else {
+  private acquireSlot(): Promise<void> {
+    if (this.running < MAX_CONCURRENT_ATTACHES) {
       this.running += 1
+      return Promise.resolve()
     }
+    // The finishing attach hands its slot over without releasing it.
+    return new Promise<void>((resolve) => this.queued.push(resolve))
+  }
+
+  private async attach(ptyId: string, attempt: Promise<boolean>): Promise<boolean> {
     try {
-      // A pane may have attached, or the session exited, while this waited.
-      if (this.attached.has(ptyId) || !this.deps.isUnattachedLocalCandidate(ptyId)) {
+      // While this queued, an exit or respawn may have superseded it, or a pane may have attached.
+      if (this.attaching.get(ptyId) !== attempt || !this.isKnownUnattachedLocal(ptyId)) {
         return false
       }
       return (await this.deps.attachProvider(ptyId)) ?? false
