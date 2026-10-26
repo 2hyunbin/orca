@@ -77,21 +77,18 @@ export class EmulatorSessionRegistry {
 
   /** Drop managed records whose device stopped outside Orca; true while any managed device still runs. */
   async pruneGoneManagedSessions(
-    backendForKind: (kind: EmulatorBackendKind) => Pick<EmulatorBackend, 'listDevices'> | null
+    backendForKind: (
+      kind: EmulatorBackendKind
+    ) => Pick<EmulatorBackend, 'listRunningDeviceIds'> | null
   ): Promise<boolean> {
     const managed = this.listSessions().filter((session) => session.managed)
     let live = false
     for (const kind of new Set(managed.map((session) => session.backend))) {
-      const backend = backendForKind(kind)
-      const devices = backend
-        ? await withTimeout(backend.listDevices(), DEVICE_LISTING_BUDGET_MS, null)
-        : []
+      const census = backendForKind(kind)?.listRunningDeviceIds?.()
+      // A backend without a census, or one that failed or timed out, proves nothing; keep its records.
+      const running = census ? await withTimeout(census, DEVICE_LISTING_BUDGET_MS, null) : null
       for (const session of managed.filter((candidate) => candidate.backend === kind)) {
-        // An unanswered listing proves nothing; keep the record rather than strand a running device.
-        const running =
-          devices === null ||
-          devices.some((device) => device.id === session.deviceUdid && device.state !== 'shutdown')
-        if (running) {
+        if (running === null || running.includes(session.deviceUdid)) {
           live = true
         } else {
           this.clearSessionAndWorktrees(session.deviceUdid)

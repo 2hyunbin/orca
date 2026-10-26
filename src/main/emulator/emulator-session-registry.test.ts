@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { EmulatorSessionRegistry } from './emulator-session-registry'
-import type { EmulatorDevice } from './backends/emulator-backend'
 
 describe('EmulatorSessionRegistry backend tagging', () => {
   it('round-trips backend kind and stream codec', () => {
@@ -47,21 +46,13 @@ describe('EmulatorSessionRegistry managed-session liveness', () => {
     )
     return registry
   }
-  const listing = (listDevices: () => Promise<EmulatorDevice[]>) => () => ({ listDevices })
-  const device = (id: string, state: EmulatorDevice['state']): EmulatorDevice => ({
-    backend: 'android',
-    id,
-    name: id,
-    state,
-    isAvailable: true
+  const census = (running: string[] | null) => () => ({
+    listRunningDeviceIds: async () => running
   })
 
   it('drops a managed device that stopped outside Orca and keeps the running one', async () => {
     const registry = registryWith('emulator-5554', 'emulator-5556')
-    const live = await registry.pruneGoneManagedSessions(
-      listing(async () => [device('emulator-5554', 'booted'), device('emulator-5556', 'shutdown')])
-    )
-    expect(live).toBe(true)
+    expect(await registry.pruneGoneManagedSessions(census(['emulator-5554']))).toBe(true)
     expect(registry.getActiveForWorktree('wt0')?.deviceUdid).toBe('emulator-5554')
     expect(registry.getSession('emulator-5556')).toBeUndefined()
     expect(registry.getActiveForWorktree('wt1')).toBeNull()
@@ -69,18 +60,19 @@ describe('EmulatorSessionRegistry managed-session liveness', () => {
 
   it('reads no managed devices once every one is gone', async () => {
     const registry = registryWith('emulator-5554')
-    expect(await registry.pruneGoneManagedSessions(listing(async () => []))).toBe(false)
+    expect(await registry.pruneGoneManagedSessions(census([]))).toBe(false)
     expect(registry.listSessions()).toEqual([])
   })
 
-  it('keeps the record when the device listing fails', async () => {
+  it('keeps the records when adb could not answer', async () => {
     const registry = registryWith('emulator-5554')
-    const live = await registry.pruneGoneManagedSessions(
-      listing(async () => {
-        throw new Error('adb hung up')
-      })
-    )
-    expect(live).toBe(true)
+    expect(await registry.pruneGoneManagedSessions(census(null))).toBe(true)
+    expect(registry.getSession('emulator-5554')).toBeDefined()
+  })
+
+  it('keeps the records of a backend with no census', async () => {
+    const registry = registryWith('emulator-5554')
+    expect(await registry.pruneGoneManagedSessions(() => ({}))).toBe(true)
     expect(registry.getSession('emulator-5554')).toBeDefined()
   })
 })
