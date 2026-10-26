@@ -29,7 +29,6 @@ function liveBuffer(terminal: Terminal): LiveBuffer | null {
     !('ydisp' in buffer) ||
     !('y' in buffer) ||
     !('x' in buffer) ||
-    !('savedY' in buffer) ||
     !('scrollTop' in buffer) ||
     !('scrollBottom' in buffer)
   ) {
@@ -46,8 +45,7 @@ function liveBuffer(terminal: Terminal): LiveBuffer | null {
     typeof lines.pop !== 'function' ||
     typeof buffer.ybase !== 'number' ||
     typeof buffer.y !== 'number' ||
-    typeof buffer.x !== 'number' ||
-    typeof buffer.savedY !== 'number'
+    typeof buffer.x !== 'number'
   ) {
     return null
   }
@@ -70,14 +68,9 @@ function liveBuffer(terminal: Terminal): LiveBuffer | null {
         buffer.ydisp = buffer.ybase
       }
       buffer.y = num(buffer.y) + 1
-      // The saved cursor (DECSC) moves with the text it was saved on.
-      buffer.savedY = Math.min(rows(terminal) - 1, num(buffer.savedY) + 1)
+      // DECSC's savedY is absolute (ybase + y), so it already stays on the text it was saved on.
     }
   }
-}
-
-function rows(terminal: Terminal): number {
-  return terminal.rows
 }
 
 function isWrapped(line: unknown): boolean {

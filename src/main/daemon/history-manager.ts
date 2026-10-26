@@ -18,6 +18,7 @@ import {
 } from './terminal-history-session-tombstone'
 import { TerminalHistorySessionWriter } from './terminal-history-session-writer'
 import {
+  newTerminalHistoryMeta,
   readTerminalHistoryMetaFromDir,
   updateTerminalHistoryMeta,
   writeTerminalHistoryMeta,
@@ -75,15 +76,7 @@ export class HistoryManager {
       this.recoveryFreezes.release(sessionId)
       ensurePrivateDir(dir)
 
-      const meta: SessionMeta = {
-        cwd: opts.cwd,
-        cols: opts.cols,
-        rows: opts.rows,
-        startedAt: new Date().toISOString(),
-        endedAt: null,
-        exitCode: null
-      }
-      writeTerminalHistoryMeta(dir, meta)
+      writeTerminalHistoryMeta(dir, newTerminalHistoryMeta(opts))
 
       if (!opts.quarantineUnreadableRecovery) {
         clearReplayableTerminalHistorySessionFiles(dir)

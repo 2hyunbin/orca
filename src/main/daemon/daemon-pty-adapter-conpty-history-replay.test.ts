@@ -1,9 +1,10 @@
 import './mock-descendant-sweep'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { join } from 'node:path'
-import { rmSync } from 'node:fs'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { Terminal } from '@xterm/headless'
 import { HistoryReader } from './history-reader'
+import { getHistorySessionDirName } from './history-paths'
 import { DaemonPtyAdapter } from './daemon-pty-adapter'
 import type { DaemonServer } from './daemon-server'
 import { createMockSubprocess, startDaemonAdapterHarness } from './daemon-pty-adapter-test-harness'
@@ -95,32 +96,43 @@ describe('daemon history of a ConPTY session through a resize', () => {
     await server?.shutdown()
     rmSync(dir, { recursive: true, force: true })
   })
-  // awin verify-15a: Sleep, Wake, quit and relaunch, then Sleep put the new prompt on the old one.
-  it('restores a widened ConPTY session from its checkpoint and log with no lost or doubled rows', async () => {
+  /** Records a ConPTY session through one resize, then restores it from checkpoint and log. */
+  async function restoredLabels(opts: {
+    from: [number, number]
+    to: [number, number]
+    /** A session an older daemon recorded carries no resize model in its meta. */
+    olderDaemon?: boolean
+  }): Promise<string[]> {
     const original = Object.getOwnPropertyDescriptor(process, 'platform')
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
     try {
       const historyDir = join(dir, 'history')
-      const sessionId = 'wt-1::/project@@widen1'
+      const sessionId = `wt-1::/project@@resize${opts.from[0]}to${opts.to[0]}`
       const history = new SavingDaemonPtyAdapter({ socketPath, tokenPath, historyPath: historyDir })
-      await history.spawn({ cols: 40, rows: 10, cwd: '/project', sessionId })
+      await history.spawn({ cols: opts.from[0], rows: opts.from[1], cwd: '/project', sessionId })
       await history.savePeriodically([sessionId])
-      // Rows that wrap at 40 columns and rejoin at 120: widening pulls rows out of scrollback.
+      // Rows of 70 columns wrap at 40 and fit at 120, so the resize moves rows through scrollback.
       const output = `${Array.from({ length: 30 }, (_, i) => `${'x'.repeat(70)} L${i}`).join('\r\n')}\r\n$ `
       lastSubprocess._simulateData(output)
       await history.savePeriodically([sessionId])
-      history.resize(sessionId, 120, 10)
+      history.resize(sessionId, opts.to[0], opts.to[1])
       // ConPTY keeps no scrollback: it repaints from the top only the screen it still holds.
-      lastSubprocess._simulateData(await conptyRepaintAfterResize(output, [40, 10], [120, 10]))
+      lastSubprocess._simulateData(await conptyRepaintAfterResize(output, opts.from, opts.to))
       await history.savePeriodically([sessionId])
+      history.dispose()
+      if (opts.olderDaemon) {
+        const metaPath = join(historyDir, getHistorySessionDirName(sessionId), 'meta.json')
+        const { resizeModel: _dropped, ...meta } = JSON.parse(readFileSync(metaPath, 'utf8'))
+        writeFileSync(metaPath, JSON.stringify(meta))
+      }
 
       const restored = await new HistoryReader(historyDir).detectColdRestore(sessionId, {
         ignoreCleanEnd: true
       })
       expect(restored).not.toBeNull()
       const terminal = new Terminal({
-        cols: 120,
-        rows: 10,
+        cols: opts.to[0],
+        rows: opts.to[1],
         scrollback: 5000,
         allowProposedApi: true
       })
@@ -135,12 +147,30 @@ describe('daemon history of a ConPTY session through a resize', () => {
         }
       }
       terminal.dispose()
-      expect(labels).toEqual(Array.from({ length: 30 }, (_, i) => `L${i}`))
-      history.dispose()
+      return labels
     } finally {
       if (original) {
         Object.defineProperty(process, 'platform', original)
       }
     }
+  }
+
+  const EVERY_ROW_ONCE = Array.from({ length: 30 }, (_, i) => `L${i}`)
+
+  // Sleep, Wake, quit and relaunch, then Sleep put the new prompt on the old one.
+  it('restores a widened ConPTY session from its checkpoint and log with no lost or doubled rows', async () => {
+    expect(await restoredLabels({ from: [40, 10], to: [120, 10] })).toEqual(EVERY_ROW_ONCE)
+  })
+
+  it('restores a narrowed ConPTY session from its checkpoint and log with no lost or doubled rows', async () => {
+    expect(await restoredLabels({ from: [120, 10], to: [40, 10] })).toEqual(EVERY_ROW_ONCE)
+  })
+
+  it("replays an older daemon's session with xterm's model, as that daemon's live screen did", async () => {
+    // xterm's model pulls four rows back out of scrollback, and ConPTY's repaint overwrites them.
+    const overwritten = ['L21', 'L22', 'L23', 'L24']
+    expect(await restoredLabels({ from: [40, 10], to: [120, 10], olderDaemon: true })).toEqual(
+      EVERY_ROW_ONCE.filter((label) => !overwritten.includes(label))
+    )
   })
 })

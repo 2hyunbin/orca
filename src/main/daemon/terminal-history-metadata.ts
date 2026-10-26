@@ -5,6 +5,7 @@ import { isValidTerminalHistorySize } from './terminal-history-dimensions'
 import { readTerminalHistoryJson } from './terminal-history-file-reader'
 import { TERMINAL_HISTORY_META_MAX_BYTES } from './terminal-history-file-limits'
 import { PRIVATE_FILE_MODE, tightenPathMode } from './daemon-private-file-modes'
+import { DAEMON_HISTORY_RESIZE_MODEL } from './daemon-history-replay-pty'
 
 export type SessionMeta = {
   cwd: string
@@ -13,6 +14,8 @@ export type SessionMeta = {
   startedAt: string
   endedAt: string | null
   exitCode: number | null
+  /** Absent from an older daemon's sessions (daemon-history-replay-pty.ts). */
+  resizeModel?: string
 }
 
 export type SessionMetaRead =
@@ -45,6 +48,21 @@ export function readTerminalHistoryMetaFromDir(dir: string): SessionMeta | null 
   }
 }
 
+/** A session this daemon opens, stamped with its live resize model. */
+export function newTerminalHistoryMeta(
+  opts: Pick<SessionMeta, 'cwd' | 'cols' | 'rows'>
+): SessionMeta {
+  return {
+    cwd: opts.cwd,
+    cols: opts.cols,
+    rows: opts.rows,
+    startedAt: new Date().toISOString(),
+    endedAt: null,
+    exitCode: null,
+    resizeModel: DAEMON_HISTORY_RESIZE_MODEL
+  }
+}
+
 export function writeTerminalHistoryMeta(dir: string, meta: SessionMeta): void {
   const metaPath = join(dir, 'meta.json')
   writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: PRIVATE_FILE_MODE })
@@ -71,6 +89,7 @@ function isSessionMeta(value: unknown): value is SessionMeta {
     typeof meta.startedAt === 'string' &&
     isValidTerminalHistorySize(meta.cols, meta.rows) &&
     (meta.endedAt === null || typeof meta.endedAt === 'string') &&
-    (meta.exitCode === null || typeof meta.exitCode === 'number')
+    (meta.exitCode === null || typeof meta.exitCode === 'number') &&
+    (meta.resizeModel === undefined || typeof meta.resizeModel === 'string')
   )
 }
