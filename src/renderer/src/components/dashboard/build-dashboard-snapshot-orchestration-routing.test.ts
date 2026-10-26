@@ -58,6 +58,7 @@ function state(
 ): Parameters<typeof buildDashboardSnapshot>[0] {
   const worktrees = Array.from({ length: worktreeCount }, (_, index) => worktree(index))
   return {
+    chatNames: new Map(),
     repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000', addedAt: 1 }],
     worktreesByRepo: { r1: worktrees },
     tabsByWorktree: Object.fromEntries(

@@ -64,6 +64,7 @@ export function createWorktreesApi(): NonNullable<Partial<PreloadApi>['worktrees
         baseBranch: args.baseBranch,
         compareBaseRef: args.compareBaseRef,
         branchNameOverride: args.branchNameOverride,
+        ...(args.branchIntent ? { branchIntent: args.branchIntent } : {}),
         linkedIssue: args.linkedIssue,
         linkedPR: args.linkedPR,
         ...(args.linkedItems !== undefined ? { linkedItems: args.linkedItems } : {}),
@@ -176,6 +177,7 @@ export function createWorktreesApi(): NonNullable<Partial<PreloadApi>['worktrees
     // A web client runs no VM, so a reopen during a sleep changes nothing.
     sleepReopened: async () => {},
     resumeSleptPane: async () => false,
+    retireStrandedSleepRecord: async () => {},
     remove: async ({ worktreeId, hostId, force, allowUnverifiedPtyStop, skipArchive }) => {
       invalidateRuntimeWorktreeCaches()
       return callRuntimeResult<RemoveWorktreeResult>(

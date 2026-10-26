@@ -3,7 +3,7 @@ import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import type { RetainedAgentEntry } from '@/store/slices/agent-status'
+import type { RetainedAgentEntry } from '@/store/slices/agent-status/agent-status-contract'
 import { buildDashboardSnapshot } from './build-dashboard-snapshot'
 import { createWorktreeAgentRowsCache } from './worktree-agent-rows-cache'
 
@@ -64,6 +64,7 @@ function entry(paneKey: string, tabId: string, worktreeId: string): AgentStatusE
 
 function baseState(): Parameters<typeof buildDashboardSnapshot>[0] {
   return {
+    chatNames: new Map(),
     repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000', addedAt: 1 }],
     worktreesByRepo: { r1: [worktree('w1'), worktree('w2')] },
     tabsByWorktree: { w1: [tab('tab1', 'w1')], w2: [tab('tab2', 'w2')] },

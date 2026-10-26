@@ -1,5 +1,6 @@
 // Resolve the host launch identity, then commit an at-rest create or the compatible acquired path.
 
+import { assertAgentPromptRequestActive } from '../../orca-runtime-core'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../../shared/agent-chat-permission-mode'
 import { refuse, AgentSessionRefusalError } from '../../../../shared/agent-session-wire-refusals'
 import { computeAgentSessionPayloadFingerprint } from '../../../../shared/agent-session-mutation-envelope'
@@ -27,14 +28,12 @@ import {
   type StructuredAgentCliSourceEvidence
 } from '../../../native-chat/structured-agent-cli-source'
 import type { StructuredAgentId } from '../../../../shared/agent-session-provider-handle'
-import {
-  resolveUncommittedStructuredCreate,
-  type StructuredCreateRefused
-} from './structured-agent-session-precommit-refusal'
+import { resolveUncommittedStructuredCreate } from './structured-agent-session-precommit-refusal'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { structuredAgentSessionClosedBeforeCreate } from './structured-agent-session-close-before-create'
 import { structuredLaunchSeedOnSavedListing } from '../../session-tabs/structured-launch-seed-listing'
 import type { ChatTabPlacement } from '../../agent-session/agent-session-tab-layout'
+import { seedOptionsAdmittedOnSavedListing } from '../../agent-session-record-options'
 
 export type PreparedStructuredAgentSessionCreate = {
   host: StructuredAgentSessionHost
@@ -165,13 +164,23 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
           await catalogFolder()
         )
       : undefined
+  // Fit remembered values to the saved row instead of refusing the create (#31493).
+  const admittedSeed =
+    options && catalogModels && !args.options?.model
+      ? seedOptionsAdmittedOnSavedListing(
+          resolved.provider,
+          options,
+          catalogModels,
+          new Set(Object.keys(args.options ?? {}))
+        )
+      : options
   return {
     host,
     ...(catalogModels ? { catalogModels } : {}),
     ...(hostLaunchDirectory ? { hostLaunchDirectory } : {}),
     attachParams: {
       ...resolvedAttach,
-      ...(options ? { options } : {}),
+      ...(admittedSeed ? { options: admittedSeed } : {}),
       ...(args.tabId ? { surfaceTabId: args.tabId } : {}),
       provider: resolved.provider,
       agent: resolved.agent,
@@ -286,6 +295,8 @@ export async function createStructuredAgentSessionForWorktree(args: {
   tabId?: string
   /** Create without starting the agent; its first message starts it. */
   atRest?: true
+  firstMessage?: StructuredAgentSessionFirstMessage
+  signal?: AbortSignal
 }): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
   // An at-rest create's ledger row is keyed by its intent, as a client's create is.
   const envelope = args.atRest
@@ -294,13 +305,13 @@ export async function createStructuredAgentSessionForWorktree(args: {
         payloadFingerprint: structuredAgentSessionCreateIntentFingerprint(args)
       }
     : args.envelope
-  const prepared: PreparedStructuredAgentSessionCreate | StructuredCreateRefused =
-    await resolveUncommittedStructuredCreate(() =>
-      prepareStructuredAgentSessionCreateForWorktree({ ...args, envelope })
-    )
+  const prepared = await resolveUncommittedStructuredCreate(() =>
+    prepareStructuredAgentSessionCreateForWorktree({ ...args, envelope })
+  )
   if ('refusal' in prepared) {
     return { ok: false, refusal: prepared.refusal }
   }
+  assertAgentPromptRequestActive(args.signal)
   return commitStructuredAgentSessionCreate({
     runtime: args.runtime,
     caller: args.caller,

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildDashboardSnapshot, type DashboardSnapshotState } from './build-dashboard-snapshot'
+import {
+  buildDashboardSnapshot,
+  type DashboardSnapshotInput as DashboardSnapshotState
+} from './build-dashboard-snapshot'
 import {
   AGENT_STATUS_STALE_AFTER_MS,
   type AgentStatusEntry,
@@ -108,7 +111,8 @@ function baseState(
   overrides: Partial<Parameters<typeof buildDashboardSnapshot>[0]>
 ): Parameters<typeof buildDashboardSnapshot>[0] {
   return {
-    repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000', addedAt: 1 }],
+    chatNames: new Map(),
+    repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000', addedAt: NOW }],
     worktreesByRepo: { r1: [worktree()] },
     tabsByWorktree: { w1: [tab()] },
     agentStatusByPaneKey: {},

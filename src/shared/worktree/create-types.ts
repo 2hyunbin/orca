@@ -97,6 +97,8 @@ export type CreateWorktreeArgs = {
   compareBaseRef?: string
   /** Existing local branches may contain slashes that the filesystem-safe worktree name cannot. */
   branchNameOverride?: string
+  /** Only an explicit existing-branch pick opts out of new-branch allocation. */
+  branchIntent?: 'open-existing'
   setupDecision?: SetupDecision
   /** Per-create choice; omitted callers use the execution host's saved default. */
   setupOnly?: boolean
@@ -144,6 +146,8 @@ export type CreateWorktreeProgressEvent = {
   creationId?: string
   phase: 'fetching' | 'creating'
   checkout?: WorktreeCheckoutProgress | null
+  /** Local creates name the checkout before Git publishes it. */
+  worktreeId?: string
 }
 
 export type AdoptProvisionedRootArgs = CreateWorktreeArgs & {

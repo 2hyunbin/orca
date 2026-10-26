@@ -55,6 +55,7 @@ export class Session {
       scrollback: opts.scrollback,
       wslDistro: opts.wslDistro,
       historySeedChunks: opts.historySeedChunks,
+      ownerBackend: opts.ownerBackend,
       subprocess: this.subprocess,
       isAlive: () => !this._disposed && this._state !== 'exited'
     })
@@ -245,8 +246,10 @@ export class Session {
     return this.subprocess.getForegroundProcess(options)
   }
 
-  async confirmForegroundProcess(): Promise<string | null> {
-    return this.subprocess.confirmForegroundProcess?.() ?? this.subprocess.getForegroundProcess()
+  async confirmForegroundProcess(context?: { decision?: boolean }): Promise<string | null> {
+    return (
+      this.subprocess.confirmForegroundProcess?.(context) ?? this.subprocess.getForegroundProcess()
+    )
   }
 
   confirmShellForeground(): Promise<boolean> {

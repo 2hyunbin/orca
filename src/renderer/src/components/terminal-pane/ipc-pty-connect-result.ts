@@ -1,3 +1,4 @@
+import { terminalLaunchFacts } from '../../../../shared/agent-session-resume'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import type { PtyConnectResult } from './pty-transport-types'
 
@@ -7,8 +8,11 @@ export function projectIpcPtyConnectResult(
   spawnResult: IpcPtySpawnResult
 ): string | PtyConnectResult {
   const launchAgent = isTuiAgent(spawnResult.launchAgent) ? spawnResult.launchAgent : undefined
+  const facts = terminalLaunchFacts({ ...spawnResult, launchAgent })
   if (spawnResult.isReattach || spawnResult.coldRestore || spawnResult.sessionExpired) {
     return {
+      ...facts,
+      ...(spawnResult.incarnationId ? { incarnationId: spawnResult.incarnationId } : {}),
       id: spawnResult.id,
       ...(spawnResult.incarnationId ? { incarnationId: spawnResult.incarnationId } : {}),
       ...(spawnResult.shellPath ? { shellPath: spawnResult.shellPath } : {}),
@@ -43,7 +47,10 @@ export function projectIpcPtyConnectResult(
       ...(spawnResult.startupCwdFallback
         ? { startupCwdFallback: spawnResult.startupCwdFallback }
         : {}),
-      ...(spawnResult.agentResumeUnavailable ? { agentResumeUnavailable: true as const } : {})
+      ...(spawnResult.agentResumeUnavailable ? { agentResumeUnavailable: true as const } : {}),
+      ...(spawnResult.agentResumeRefused
+        ? { agentResumeRefused: spawnResult.agentResumeRefused }
+        : {})
     }
   }
   if (
@@ -53,9 +60,14 @@ export function projectIpcPtyConnectResult(
     launchAgent ||
     spawnResult.launchConfig ||
     spawnResult.startupCwdFallback ||
-    spawnResult.agentResumeUnavailable
+    spawnResult.agentResumeUnavailable ||
+    spawnResult.savedResumeDecision ||
+    spawnResult.refusedResume ||
+    spawnResult.launchToken
   ) {
     return {
+      ...facts,
+      ...(spawnResult.incarnationId ? { incarnationId: spawnResult.incarnationId } : {}),
       id: spawnResult.id,
       ...(spawnResult.incarnationId ? { incarnationId: spawnResult.incarnationId } : {}),
       ...(spawnResult.shellPath ? { shellPath: spawnResult.shellPath } : {}),
@@ -65,7 +77,10 @@ export function projectIpcPtyConnectResult(
       ...(spawnResult.startupCwdFallback
         ? { startupCwdFallback: spawnResult.startupCwdFallback }
         : {}),
-      ...(spawnResult.agentResumeUnavailable ? { agentResumeUnavailable: true as const } : {})
+      ...(spawnResult.agentResumeUnavailable ? { agentResumeUnavailable: true as const } : {}),
+      ...(spawnResult.agentResumeRefused
+        ? { agentResumeRefused: spawnResult.agentResumeRefused }
+        : {})
     }
   }
   return spawnResult.id

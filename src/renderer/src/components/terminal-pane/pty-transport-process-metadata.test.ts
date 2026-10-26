@@ -434,13 +434,14 @@ describe('IPC process description lifetime', () => {
       await flushPtySideEffects()
       expect(transport.getLocalSessionMetadata?.()).toMatchObject(expected)
       const { resolveTerminalPasteRuntime } = await import('./terminal-paste-runtime')
-      const { isLocalWindowsConptyPaneForCtrlArrow } = await import('./terminal-ctrl-arrow-conpty')
+      const { isTerminalPaneLocalWindowsConpty } =
+        await import('./terminal-pane-local-windows-conpty')
       const { useAppStore } = await import('@/store')
       expect(
         resolveTerminalPasteRuntime({ platform: 'win32', ptyId: 'contract', transport }).runtimeKey
       ).toBe(runtimeKey)
       expect(
-        isLocalWindowsConptyPaneForCtrlArrow({
+        isTerminalPaneLocalWindowsConpty({
           isWindows: true,
           userAgent: 'Windows',
           state: useAppStore.getState(),

@@ -1,3 +1,4 @@
+import { getStructuredChatTabNames } from '@/runtime/structured-chat-name-observation'
 import { getDefaultSettings } from '../../../../shared/constants'
 import {
   STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY as CHAT,
@@ -141,7 +142,11 @@ describe('useLiveDashboardSnapshot', () => {
       const before = useAppStore.getState()
       const rowsCache = createWorktreeAgentRowsCache()
       const options = { rowsCache, rowsGeneration: before.agentStatusEpoch }
-      const popoutBefore = buildDashboardSnapshot(before, NOW, options)
+      const popoutBefore = buildDashboardSnapshot(
+        { ...before, chatNames: getStructuredChatTabNames() },
+        NOW,
+        options
+      )
       const { result } = renderHook(() => useLiveDashboardSnapshot())
       expect(result.current.cards).toHaveLength(1)
       expect(result.current.cards[0].ptyId).toBe('pty-1')
@@ -169,7 +174,11 @@ describe('useLiveDashboardSnapshot', () => {
       expect(after.tabsByWorktree).toBe(before.tabsByWorktree)
       expect(after.agentStatusByPaneKey).toBe(before.agentStatusByPaneKey)
       expect(after.terminalLayoutsByTabId).toBe(before.terminalLayoutsByTabId)
-      const popoutAfter = buildDashboardSnapshot(after, NOW, options)
+      const popoutAfter = buildDashboardSnapshot(
+        { ...after, chatNames: getStructuredChatTabNames() },
+        NOW,
+        options
+      )
       expect(result.current.cards).toHaveLength(1)
       expect(result.current.cards[0].ptyId).toBe('pty-1')
       expect(result.current.cards[0].terminalInput).toMatchObject({

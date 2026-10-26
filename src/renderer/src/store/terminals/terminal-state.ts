@@ -7,6 +7,7 @@ import type {
 } from '../../../../shared/workspace-layout/workspace-layout-published'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type {
+  SavedResumeStartupSource,
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
 } from '../../../../shared/agent-session-resume'
@@ -67,6 +68,8 @@ export type TerminalState = {
       envToDelete?: string[]
       launchConfig?: SleepingAgentLaunchConfig
       resumeProviderSession?: AgentProviderSessionMetadata
+      resumeOrigin?: 'saved'
+      resumeSource?: SavedResumeStartupSource
       launchToken?: string
       launchAgent?: TuiAgent
       /** The agent launch the pane's own spawn starts, instead of `command`. */
@@ -100,6 +103,8 @@ export type TerminalState = {
   contestedHostWorkspaceSessions: HostSessionSlices
   /** Partition each restored session key was read from, so a write returns its rows there. */
   contestedPrimaryHostBySessionKey: Record<string, ExecutionHostId>
+  /** Runtime partitions the startup read loaded; only these may receive emptied host-keyed fields. */
+  hydratedRuntimeSessionHostIds: ExecutionHostId[]
   defaultTerminalTabsAppliedByWorktreeId: Record<string, true>
   closedTerminalTabTombstonesByTabId: ClosedTerminalTabTombstonesByTabId
   hydrationSucceeded: boolean
