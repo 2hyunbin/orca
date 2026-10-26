@@ -90,6 +90,7 @@ test("a paired phone lists, opens, runs and launches on the desktop's WSL host, 
   orcaPage,
   electronApp
 }, testInfo) => {
+  // Two Orca instances, a pairing, a terminal and an agent launch on a cold runner.
   test.setTimeout(300_000)
   await waitForSessionReady(orcaPage)
   // The HUB is the "distro's orcad": its projects are the WSL host's projects.
@@ -203,7 +204,9 @@ test("a paired phone lists, opens, runs and launches on the desktop's WSL host, 
           { timeout: 30_000 }
         )
         .toMatchObject({ relay: 'unavailable', startsOnDesktop: true })
-      await page.waitForTimeout(2_000)
+      // A second refused call: anything a phone's call could start would have started by its answer.
+      const refusedAgain = await send(stopped, 'worktree.ps', { limit: 100 }, hostId)
+      expect(JSON.stringify(refusedAgain.error)).toContain('isn’t running')
       expect(fakeWslConnects(connectLogFile)).toEqual(connectsBeforeStop)
     } finally {
       stopped.close()

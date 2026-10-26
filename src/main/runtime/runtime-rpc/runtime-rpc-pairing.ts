@@ -13,10 +13,6 @@ import { resolveAdvertisedPairingEndpoint } from '../pairing-endpoint'
 import { RuntimeRpcNetworkExposure } from './runtime-rpc-network-exposure'
 import { MobileDesktopRelay } from '../mobile-desktop-relay/mobile-desktop-relay'
 import type { MobileDesktopRelayHosts } from '../mobile-desktop-relay/mobile-desktop-relay-hosts'
-import {
-  serverRowsWithDesktopWslHostsOnDemand,
-  withoutDesktopWslHosts
-} from '../mobile-desktop-relay/desktop-wsl-host-relay-rows'
 import { MobileRelayHostCatalog } from '../mobile-desktop-relay/mobile-relay-host-catalog'
 import { OnDemandServerWorktreeRows } from '../mobile-desktop-relay/on-demand-server-worktree-rows'
 import { getHostDisplayLabelOverrides } from '../../../shared/host-setting-overrides'
@@ -108,19 +104,11 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
       : null
     const { pairedServerRows } = this.runtime
     this.detachPairedServerRows?.()
-    // Why: the desktop sidebar lists its own WSL hosts itself; only phones reach them as servers.
-    this.detachPairedServerRows =
-      hosts && pairedServerRows ? pairedServerRows.attach(withoutDesktopWslHosts(hosts)) : null
+    this.detachPairedServerRows = hosts && pairedServerRows ? pairedServerRows.attach(hosts) : null
     this.mobileRelayHostCatalog = hosts
       ? new MobileRelayHostCatalog({
           hosts,
-          serverRows: pairedServerRows
-            ? serverRowsWithDesktopWslHostsOnDemand(
-                hosts,
-                pairedServerRows,
-                new OnDemandServerWorktreeRows(hosts)
-              )
-            : new OnDemandServerWorktreeRows(hosts),
+          serverRows: pairedServerRows ?? new OnDemandServerWorktreeRows(hosts),
           hostLabelOverrides: () =>
             getHostDisplayLabelOverrides(this.runtime.requireStore().getSettings()),
           getWorkspaceSession: (hostId) => this.runtime.getWorkspaceSessionForHost(hostId)

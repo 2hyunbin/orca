@@ -48,6 +48,10 @@ export async function callRuntimeEnvironment(
   }
 ): Promise<RuntimeRpcResponse<unknown>> {
   if (method === 'status.get') {
+    // Why: the status probe dials on its own, so a no-start caller's WSL host is checked first.
+    if (options?.preparation) {
+      await resolveManagedRuntimeEnvironment(userDataPath, selector, options.preparation)
+    }
     const environment = resolveEnvironment(userDataPath, selector)
     const failure = runtimeEnvironmentRevisionFailure(
       environment,
