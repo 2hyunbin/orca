@@ -76,7 +76,10 @@ export function DragReorderList<ItemT>({
 }: DragReorderListProps<ItemT>): React.JSX.Element {
   const keys = items.map(itemKey)
   const keySignature = keys.join(KEY_SEPARATOR)
-  const [measured, setMeasured] = useState<Record<string, number>>({})
+  const [measured, setMeasured] = useState<{
+    sizes: Record<string, number>
+    revision: number
+  }>({ sizes: {}, revision: 0 })
   const measurements = useRef(new Map<string, number>())
   const measurementFrame = useRef<number | null>(null)
   const publishMeasurements = useCallback(() => {
@@ -85,7 +88,8 @@ export function DragReorderList<ItemT>({
     }
     measurementFrame.current = requestAnimationFrame(() => {
       measurementFrame.current = null
-      setMeasured(Object.fromEntries(measurements.current))
+      const sizes = Object.fromEntries(measurements.current)
+      setMeasured((previous) => ({ sizes, revision: previous.revision + 1 }))
     })
   }, [])
   useLayoutEffect(
@@ -104,14 +108,14 @@ export function DragReorderList<ItemT>({
       Object.fromEntries(
         (keySignature ? keySignature.split(KEY_SEPARATOR) : []).map((key) => [
           key,
-          rowHeight ?? measured[key] ?? 0
+          rowHeight ?? measured.sizes[key] ?? 0
         ])
       ),
     [keySignature, rowHeight, measured]
   )
   const ready = keys.every((key) => rowSizes[key] > 0)
   // Order changes animate within the same measurement snapshot; measuring places rows directly.
-  const measurementKey = useMemo(() => JSON.stringify([rowHeight, measured]), [rowHeight, measured])
+  const measurementKey = `${rowHeight ?? 'measured'}:${measured.revision}`
   const measurement = useSharedValue({ sizes: rowSizes, key: measurementKey })
   const height = Object.values(rowSizes).reduce((sum, size) => sum + size, 0)
   const positions = useSharedValue<DragReorderPositions>(dragReorderPositionsFromKeys(keys))
