@@ -3,6 +3,7 @@ import type { LaunchedAgentReadinessRuntime } from '../runtime/launched-agent-co
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { waitForStartedAgentReady } from '../runtime/rpc/methods/agent-launch-terminal-prompt'
 import type { AgentSessionResumeRefusal } from '../runtime/session-lifecycle/projection/resume-agent-session-in-workspace'
+import { admitConnectorAgent, connectorAgentArgs, type ConnectorSettings } from './connector-agents'
 import { refusalOf } from './external-conversation-chain'
 import { bindPane, type FollowUpTerminal } from './external-conversation-send'
 import type { ConnectorRefusal } from './external-conversation-types'
@@ -27,8 +28,7 @@ export async function reopenLinkedAgent(
   terminal: ReopenTerminal,
   worktreeId: string,
   link: ExternalConversationLink,
-  /** The connector launch policy's Arguments, used instead of whatever the session last ran with. */
-  agentArgs: string,
+  settings: ConnectorSettings,
   mutationId: string,
   signal: AbortSignal,
   /** Called as soon as the resumed pane exists, before the readiness wait. */
@@ -41,11 +41,15 @@ export async function reopenLinkedAgent(
   if (!providerSession || !captureHostId) {
     return { ok: false, refusal: 'no_session_to_reopen' }
   }
+  if (!admitConnectorAgent(settings, link.agent)) {
+    return { ok: false, refusal: 'unsupported_agent' }
+  }
   const resumed = await terminal.resumeAgentSessionInWorkspace(worktreeId, {
     agent: link.agent,
     providerSession,
     captureHostId,
-    agentArgs,
+    // The connector launch policy, never whatever the session last ran with.
+    agentArgs: connectorAgentArgs(link.agent, settings),
     mutationId,
     signal
   })

@@ -42,6 +42,27 @@ async function started(
 }
 
 describe('ExternalConversationSeam reopen', () => {
+  it('refuses to reopen an agent whose Command now skips approvals', async () => {
+    const settings: Parameters<typeof harness>[0] = {}
+    const terminal = fakeTerminal()
+    const h = harness(settings, fakeLinkStore(), undefined, terminal.terminal)
+    const { launcher } = fakeLauncher(async () => launchResult('handed-to-terminal'), {
+      worktreeId: WORKTREE,
+      sshHostId: null
+    })
+    const host = { launcher, terminal: terminal.terminal }
+    await h.seam.start(host, KEY, 'start', START)
+    h.reportSessions([{ paneKey: PANE, sessionId: SESSION.id }])
+    terminal.exit()
+    terminal.reopenable()
+    settings.agentCmdOverrides = { claude: 'claude --dangerously-skip-permissions' }
+    expect(await h.seam.send(host, KEY, 'd1', 'next')).toEqual({
+      outcome: 'refused',
+      reason: 'unsupported_agent'
+    })
+    expect(terminal.terminal.resumeAgentSessionInWorkspace).not.toHaveBeenCalled()
+  })
+
   it('captures a session already reported when the link is published', async () => {
     const { seam, host, terminal } = await started()
     terminal.exit()

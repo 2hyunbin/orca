@@ -16,6 +16,7 @@ export type ExternalConversationStore = ExternalConversationLinkStore & {
       | 'agentStatusHooksEnabled'
       | 'disabledTuiAgents'
       | 'agentDefaultArgs'
+      | 'agentCmdOverrides'
     >
   >
   onSettingsChanged?: (listener: (updates: Partial<GlobalSettings>) => void) => unknown

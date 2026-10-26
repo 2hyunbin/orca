@@ -14,6 +14,7 @@ import type { OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal as OwnedMob
 import { deterministicAgentSessionUuid } from '../../runtime-agent-launch-resolution'
 import { isUnclaimedRunningSleepRecord } from './sleep-record-pane-claim'
 import type { ResumedAgentSession } from './agent-session-resume-claims'
+import { withResumeArguments } from '../../../../shared/tui-agent-launch-defaults'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
 
 export type AgentSessionResumeRefusal =
@@ -144,7 +145,7 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
       launchConfig:
         request.agentArgs === undefined
           ? record?.launchConfig
-          : { agentEnv: {}, ...record?.launchConfig, agentArgs: request.agentArgs }
+          : withResumeArguments(record?.launchConfig, request.agentArgs)
     })
     if (!resume) {
       return refuse('no_resume_command')

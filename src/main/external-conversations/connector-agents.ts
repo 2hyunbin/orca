@@ -9,17 +9,21 @@ import { agentPermissionArgs } from '../../shared/tui-agent-permission-choice'
 
 /** The host settings that decide which agents a connector may run, and how. */
 export type ConnectorSettings = NonNullable<AgentStatusHooksSettings> &
-  Partial<Pick<GlobalSettings, 'agentDefaultArgs'>>
+  Partial<Pick<GlobalSettings, 'agentDefaultArgs' | 'agentCmdOverrides'>>
 
 // Membership records mid-turn terminal input support until capability data covers it.
 export const CONNECTOR_AGENTS = ['claude', 'codex'] as const satisfies readonly ConnectorAgent[]
 
+/** Agents Slack may drive: hooks on, and no custom Command that skips approvals (Arguments cannot undo it). */
 export function admitConnectorAgent(
-  settings: AgentStatusHooksSettings,
+  settings: ConnectorSettings | null | undefined,
   agent: string
 ): agent is ConnectorAgent {
   return CONNECTOR_AGENTS.some(
-    (candidate) => candidate === agent && isAgentStatusHooksEnabledForAgent(settings, candidate)
+    (candidate) =>
+      candidate === agent &&
+      isAgentStatusHooksEnabledForAgent(settings, candidate) &&
+      !agentArgsSetPermission(candidate, settings?.agentCmdOverrides?.[candidate])
   )
 }
 

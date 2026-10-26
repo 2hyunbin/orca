@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { connectorAgentArgs } from './connector-agents'
+import { admitConnectorAgent, connectorAgentArgs } from './connector-agents'
 
 describe('connectorAgentArgs', () => {
   it('asks for approval even with no Arguments, where the legacy default would skip it', () => {
@@ -27,5 +27,18 @@ describe('connectorAgentArgs', () => {
     expect(connectorAgentArgs(agent, { agentDefaultArgs: { [agent]: own } })).toBe(
       connectorAgentArgs(agent, {})
     )
+  })
+})
+
+describe('admitConnectorAgent', () => {
+  it('refuses an agent whose own Command skips approvals, since Arguments cannot undo that', () => {
+    expect(admitConnectorAgent({}, 'claude')).toBe(true)
+    expect(
+      admitConnectorAgent(
+        { agentCmdOverrides: { claude: 'claude --dangerously-skip-permissions' } },
+        'claude'
+      )
+    ).toBe(false)
+    expect(admitConnectorAgent({ agentCmdOverrides: { codex: '/opt/codex' } }, 'codex')).toBe(true)
   })
 })

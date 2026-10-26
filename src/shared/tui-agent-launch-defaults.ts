@@ -262,3 +262,11 @@ export function resolveResumeLaunchRecipe(
     ...(launchConfig.ompResumeFilePath ? { ompResumeFilePath: launchConfig.ompResumeFilePath } : {})
   }
 }
+
+/** The recipe with its Arguments replaced; its captured command embeds the old ones, so it is rebuilt. */
+export function withResumeArguments(
+  launchConfig: SleepingAgentLaunchConfig | undefined,
+  agentArgs: string
+): SleepingAgentLaunchConfig {
+  return { agentArgs, agentEnv: launchConfig?.agentEnv ?? {} }
+}

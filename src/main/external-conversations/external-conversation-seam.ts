@@ -283,7 +283,7 @@ export class ExternalConversationSeam {
       terminal,
       workspace.worktreeId,
       link,
-      connectorAgentArgs(link.agent, this.deps.readSettings()),
+      this.deps.readSettings(),
       JSON.stringify(['connector-reopen', key.source, key.externalId, deliveryId]),
       signal,
       (paneKey) => {
