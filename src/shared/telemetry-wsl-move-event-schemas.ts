@@ -67,3 +67,51 @@ export const wslMoveSchema = z
     bytes_bucket: z.enum(WSL_MOVE_BYTES_BUCKETS)
   })
   .strict()
+
+/** What woke the move orchestrator (D3a) for a distro; `timer` is a retry or deferred re-check. */
+export const WSL_MOVE_ORCHESTRATOR_TRIGGER_VALUES = [
+  'connect',
+  'project_opened',
+  'startup',
+  'user',
+  'timer'
+] as const
+
+/** The state the orchestrator left the distro in; reported only when it changes. */
+export const WSL_MOVE_ORCHESTRATOR_TRANSITION_VALUES = [
+  'idle',
+  'pending',
+  'deferred',
+  'started',
+  'waiting_for_host',
+  'backoff',
+  'parked',
+  'done',
+  'distro_gone',
+  'restore_offered'
+] as const
+
+export const WSL_MOVE_ORCHESTRATOR_PARK_REASON_VALUES = [
+  'none',
+  'export_incomplete',
+  'manifest_too_large',
+  'host_update_required',
+  'attempts_exhausted',
+  'not_now',
+  'declined',
+  'removal_pending'
+] as const
+
+export const WSL_MOVE_ORCHESTRATOR_ATTEMPT_BUCKETS = ['0', '1', '2_3', 'gte_4'] as const
+
+// Same enum-only rule as `wsl_move`: no distro, project or migration id leaves.
+export const wslMoveOrchestratorSchema = z
+  .object({
+    trigger: z.enum(WSL_MOVE_ORCHESTRATOR_TRIGGER_VALUES),
+    transition: z.enum(WSL_MOVE_ORCHESTRATOR_TRANSITION_VALUES),
+    refusal: z.enum(WSL_MOVE_REFUSAL_VALUES),
+    reset_reason: z.enum(WSL_MOVE_RESET_REASON_VALUES),
+    park_reason: z.enum(WSL_MOVE_ORCHESTRATOR_PARK_REASON_VALUES),
+    attempt_bucket: z.enum(WSL_MOVE_ORCHESTRATOR_ATTEMPT_BUCKETS)
+  })
+  .strict()
