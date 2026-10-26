@@ -14,6 +14,7 @@ import { isWslMoveWindowWriteHeld } from '../persistence/moving-wsl-projects/wsl
 import { windowViewSaveForMain, type ReconnectFactsFor } from '../persistence/window-save-view'
 import { reportWindowSaveDrift } from '../persistence/window-save-divergence'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { formatShutdownCheckpointFailureReason } from '../../shared/renderer-shutdown-events'
 
 type StageBeforeUnloadSyncArgs = {
   sessions: { state: WorkspaceSessionState; hostId?: ExecutionHostId }[]
@@ -100,7 +101,7 @@ export function registerRendererShutdownCheckpointHandler(
   let pendingCheckpoint: Promise<ShutdownCheckpointResult> = Promise.resolve({ ok: true })
 
   ipcMain.on('app:stage-before-unload-sync', (event, args: StageBeforeUnloadSyncArgs) => {
-    let ok = true
+    let error: string | undefined
     try {
       // A window a WSL move rewrote under is stale; main reloads it and keeps what is on disk.
       const sessions = isWslMoveWindowWriteHeld() ? [] : args.sessions
@@ -117,12 +118,14 @@ export function registerRendererShutdownCheckpointHandler(
       if (!isWslMoveWindowWriteHeld()) {
         store.updateUI(args.ui)
       }
-    } catch (error) {
-      console.error('[app] Failed to stage renderer state before unload:', error)
-      ok = false
+    } catch (stagingError) {
+      console.error('[app] Failed to stage renderer state before unload:', stagingError)
+      // Main's console is not persisted in packaged builds; the renderer toast is the only place users see the cause.
+      error = formatShutdownCheckpointFailureReason(stagingError)
     }
-    pendingCheckpoint = ok ? flushStagedStateWithDeadline(store) : Promise.resolve({ ok: false })
-    event.returnValue = { ok }
+    pendingCheckpoint =
+      error === undefined ? flushStagedStateWithDeadline(store) : Promise.resolve({ ok: false })
+    event.returnValue = error === undefined ? { ok: true } : { ok: false, error }
   })
 
   ipcMain.handle(

@@ -5,6 +5,7 @@
  * copies under the same tab ids, so they must leave before the host partitions merge in.
  */
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { normalizeWorkspaceSessionKeyToWorkspaceId } from '../../../../shared/workspace-scope'
 import {
   filterWorkspaceRows,
@@ -54,4 +55,17 @@ export function withoutWslMovedLocalRows(
     mergeWorkspaceSessionRecordField(rest, field, chatRows)
   }
   return rest
+}
+
+type SessionRead = { get: (hostId?: ExecutionHostId) => Promise<WorkspaceSessionState> }
+
+/** The session read startup hydrates from, with moved workspaces' retained local rows left out. */
+export function wslMovedSessionReadApi(
+  projects: readonly WslMovedProject[],
+  api: SessionRead = window.api.session
+): SessionRead {
+  return {
+    get: async (hostId) =>
+      hostId === undefined ? withoutWslMovedLocalRows(await api.get(), projects) : api.get(hostId)
+  }
 }

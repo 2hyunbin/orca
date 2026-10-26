@@ -37,6 +37,7 @@ import {
 import { listRuntimeSessionHostIdsForStartup } from './startup-runtime-session-hosts'
 import { mapWithConcurrency } from '../../../shared/map-with-concurrency'
 import { collectWslMovedWorkspaceKeysFromSession } from '../store/repos/wsl-moved-projects'
+import { wslMovedSessionReadApi } from '../store/repos/wsl-moved-local-session-rows'
 import type { OnboardingState } from '../../../shared/onboarding-state-types'
 import { ensureLocalRuntimeCapabilities } from '../runtime/local-runtime-capabilities'
 
@@ -123,10 +124,10 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
             // Restore cached runtime-host partitions without network waits; skip unreadable ones.
             timeRendererStartupStep('session-get', () =>
               fetchWorkspaceSessionWithRuntimeHostOwners(
-                window.api.session,
+                // A moved workspace's retained rows share tab ids with its host's live ones.
+                wslMovedSessionReadApi(useAppStore.getState().wslMovedProjects),
                 useAppStore.getState().repos,
-                startupRuntimeHostIds,
-                useAppStore.getState().wslMovedProjects
+                startupRuntimeHostIds
               )
             )
         )
@@ -182,11 +183,10 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
             )
           }
           timeRendererStartupSyncStep('hydrate-session-stores', () => {
+            // The read's host-ownership fields are named as the hydration options it feeds.
             actions.hydrateWorkspaceSession(sessionRead.session, {
-              ...sessionHydrationOptions,
-              runtimeHostIdByWorkspaceSessionKey: sessionRead.runtimeHostIdByWorkspaceSessionKey,
-              contestedHostWorkspaceSessions: sessionRead.contestedHostWorkspaceSessions,
-              contestedPrimaryHostBySessionKey: sessionRead.contestedPrimaryHostBySessionKey
+              ...sessionRead,
+              ...sessionHydrationOptions
             })
             actions.hydrateTabsSession(sessionRead.session, sessionHydrationOptions)
             actions.hydrateEditorSession(sessionRead.session, sessionHydrationOptions)

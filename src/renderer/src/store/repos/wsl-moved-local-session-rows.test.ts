@@ -6,7 +6,7 @@ import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import type { WslMovedProject } from '../../../../shared/wsl-move/wsl-moved-project'
 import { fetchWorkspaceSessionWithRuntimeHostOwners } from '@/lib/workspace-session-host-hydration'
-import { withoutWslMovedLocalRows } from './wsl-moved-local-session-rows'
+import { withoutWslMovedLocalRows, wslMovedSessionReadApi } from './wsl-moved-local-session-rows'
 
 const HOST: ExecutionHostId = 'runtime:wsl%3AUbuntu'
 const LOCAL_ID = 'repo-a::\\\\wsl.localhost\\Ubuntu\\home\\dev\\app'
@@ -127,14 +127,13 @@ describe('WSL moved local session rows', () => {
 
   it("hydrates one tab-1, the host's, when both partitions hold it; the local chat stays", async () => {
     const read = await fetchWorkspaceSessionWithRuntimeHostOwners(
-      {
+      wslMovedSessionReadApi(MOVED, {
         get: vi.fn(async (hostId?: ExecutionHostId) =>
           hostId === HOST ? workspaceSession(HOST_ID, 'host') : localPartition()
         )
-      },
+      }),
       [],
-      [HOST],
-      MOVED
+      [HOST]
     )
     const { session } = read
 

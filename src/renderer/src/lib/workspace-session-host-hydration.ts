@@ -22,8 +22,6 @@ import {
   normalizeWorkspaceSessionKeyToWorktreeId
 } from './workspace-session-host-contention'
 import { nonLocalHostSessionEntries, type HostSessionSlices } from './workspace-session-host-split'
-import type { WslMovedProject } from '../../../shared/wsl-move/wsl-moved-project'
-import { withoutWslMovedLocalRows } from '../store/repos/wsl-moved-local-session-rows'
 
 type SessionReadApi = {
   get: (hostId?: ExecutionHostId) => Promise<WorkspaceSessionState>
@@ -36,6 +34,8 @@ export type WorkspaceSessionHostRead = {
   runtimeHostIdByWorkspaceSessionKey: Record<string, ExecutionHostId>
   contestedHostWorkspaceSessions: HostSessionSlices
   contestedPrimaryHostBySessionKey: Record<string, ExecutionHostId>
+  /** Runtime partitions this read actually loaded, so a later write may speak for all of their rows. */
+  hydratedRuntimeSessionHostIds: ExecutionHostId[]
 }
 
 const WORKSPACE_SESSION_KEYED_FIELDS = [
@@ -150,8 +150,7 @@ export async function fetchWorkspaceSessionFromHosts(
 export async function fetchWorkspaceSessionWithRuntimeHostOwners(
   api: SessionReadApi,
   repos: readonly Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>[],
-  additionalRuntimeHostIds: readonly ExecutionHostId[] = [],
-  wslMovedProjects: readonly WslMovedProject[] = []
+  additionalRuntimeHostIds: readonly ExecutionHostId[] = []
 ): Promise<WorkspaceSessionHostRead> {
   const readPartition = async (hostId: ExecutionHostId): Promise<WorkspaceSessionState | null> => {
     try {
@@ -162,8 +161,7 @@ export async function fetchWorkspaceSessionWithRuntimeHostOwners(
     }
   }
   const slices: HostSessionSlices = {
-    // Before the merge: a moved workspace's retained rows share tab ids with its host's live ones.
-    [LOCAL_EXECUTION_HOST_ID]: withoutWslMovedLocalRows(await api.get(), wslMovedProjects)
+    [LOCAL_EXECUTION_HOST_ID]: await api.get()
   }
   // Read saved runtime session hosts before their repo catalogs hydrate.
   const runtimeHostIds = new Set<ExecutionHostId>([
@@ -227,7 +225,8 @@ export async function fetchWorkspaceSessionWithRuntimeHostOwners(
     // Derive owners from surviving merged rows, never parked raw rows, or startup creates runtime placeholders for local winners.
     runtimeHostIdByWorkspaceSessionKey: buildRuntimeHostIdByWorkspaceSessionKey(merged.slices),
     contestedHostWorkspaceSessions: shadow,
-    contestedPrimaryHostBySessionKey: primaryHostBySessionKey
+    contestedPrimaryHostBySessionKey: primaryHostBySessionKey,
+    hydratedRuntimeSessionHostIds: [...runtimeHostIds].filter((hostId) => slices[hostId])
   }
 }
 

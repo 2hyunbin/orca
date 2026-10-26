@@ -163,7 +163,7 @@ describe('registerRendererShutdownCheckpointHandler', () => {
     const event: { returnValue?: unknown } = {}
     handler?.(event, { sessions: [], ui: { activeView: 'settings' } })
 
-    expect(event.returnValue).toEqual({ ok: false })
+    expect(event.returnValue).toEqual({ ok: false, error: 'disk full' })
   })
 
   it('does not queue persistence when staging is incomplete', async () => {
@@ -182,7 +182,7 @@ describe('registerRendererShutdownCheckpointHandler', () => {
     handler?.(event, { sessions: [], ui: { activeView: 'settings' } })
 
     expect(store.flushPendingOrThrowAsync).not.toHaveBeenCalled()
-    expect(event.returnValue).toEqual({ ok: false })
+    expect(event.returnValue).toEqual({ ok: false, error: 'invalid state' })
     await expect(invokeHandlers.get(AWAIT_CHANNEL)?.()).resolves.toEqual({ ok: false })
   })
 
