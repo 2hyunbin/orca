@@ -21,11 +21,7 @@ import type {
 import { UNREADABLE_ANSWER, type ConnectorFailure } from './connector-cloud-request'
 import { dispatchDelivery } from './connector-deliveries'
 import type { ConnectorMachine, ConnectorTransport } from './connector-machine'
-import {
-  connectorRetryDelayMs,
-  ConnectorSendQueue,
-  type ConnectorBatchSender
-} from './connector-send-queue'
+import { connectorRetryDelayMs, ConnectorOutbox, ConnectorOutboxSender } from './connector-outbox'
 import type { ConnectorTurnEvents } from './connector-turn-events'
 
 const RECONNECT_SPREAD_MS = 2_000
@@ -58,18 +54,19 @@ export class ConnectorPollClient {
   private readonly host: ExternalConversationHost
   private readonly transport: ConnectorTransport
   private readonly stopped = new AbortController()
-  private readonly acks: ConnectorSendQueue<ConnectorAck>
-  private readonly sendAcks: ConnectorBatchSender<ConnectorAck>
-  private readonly sendEvents: ConnectorBatchSender<ConnectorEvent>
+  private readonly acks: ConnectorOutbox<ConnectorAck>
+  private readonly ackSender: ConnectorOutboxSender<ConnectorAck>
+  private readonly eventSender: ConnectorOutboxSender<ConnectorEvent>
   // Received in this process and not yet confirmed done.
   private readonly active = new Set<string>()
   private readonly random: () => number
   private releaseWatch: (() => void) | null = null
-  // The last hello the cloud took; it scopes the poll and the numbered events.
-  private helloRev = 0
-  // What the last accepted hello said; null until one is accepted, and whenever senders are paused, so
-  // the next cycle says hello. Senders are attached exactly while it is set.
-  private helloSaid: string | null = null
+  // The hello the cloud took, which scopes the poll and everything sent; null until then, from the moment
+  // a newer one goes out, and once stopped. The cloud answers an older hello's requests 204 as well, so
+  // only an answer that lands while its hello is still this one counts.
+  private helloRev: number | null = null
+  // What that hello said.
+  private helloSaid = ''
   private failures = 0
   private stopReason: Stop | null = null
 
@@ -78,9 +75,8 @@ export class ConnectorPollClient {
     this.transport = options.transport
     this.random = options.random ?? Math.random
     this.host = options.machine.conversationHost()
-    this.acks = new ConnectorSendQueue<ConnectorAck>({
+    this.acks = new ConnectorOutbox<ConnectorAck>({
       maxBatch: MAX_ACKS_PER_REQUEST,
-      random: this.random,
       onAccepted: (sent) => {
         for (const ack of sent) {
           if (ack.step === 'done') {
@@ -89,12 +85,20 @@ export class ConnectorPollClient {
         }
       }
     })
-    // Acks name the current hello; the cloud ignores older ones and lists those deliveries as unsettled.
-    this.sendAcks = (acks) =>
-      this.post(CONNECTOR_PATHS.acks, { v: 1, helloRev: this.helloRev, acks })
-    // Every hello restarts the numbering with a snapshot, so the current one always owns the queue.
-    this.sendEvents = (events, seq) =>
-      this.post(CONNECTOR_PATHS.events, { v: 1, helloRev: this.helloRev, seq, events })
+    const helloRev = (): number | null => this.helloRev
+    this.ackSender = new ConnectorOutboxSender(
+      this.acks,
+      (acks, rev) => this.post(CONNECTOR_PATHS.acks, { v: 1, helloRev: rev, acks }),
+      helloRev,
+      this.random
+    )
+    // Every hello restarts the numbering with a snapshot.
+    this.eventSender = new ConnectorOutboxSender(
+      options.events,
+      (events, rev, seq) => this.post(CONNECTOR_PATHS.events, { v: 1, helloRev: rev, seq, events }),
+      helloRev,
+      this.random
+    )
   }
 
   start(): void {
@@ -111,8 +115,9 @@ export class ConnectorPollClient {
   stop(): void {
     this.stopped.abort()
     // Confirmations still owed are listed as unsettled after the next hello and settled from receipts.
-    this.acks.detach(this.sendAcks)
-    this.options.events.detach(this.sendEvents)
+    this.helloRev = null
+    this.ackSender.stop()
+    this.eventSender.stop()
     this.releaseWatch?.()
     this.releaseWatch = null
   }
@@ -140,16 +145,25 @@ export class ConnectorPollClient {
     const { machine } = this.options
     const said = { agents: machine.agents(), projects: machine.projects() }
     // A hello restarts the numbered events with a snapshot, which also restates anything the caps dropped.
-    if (JSON.stringify(said) !== this.helloSaid || this.options.events.needsSnapshot) {
+    if (
+      this.helloRev === null ||
+      JSON.stringify(said) !== this.helloSaid ||
+      this.options.events.needsSnapshot
+    ) {
       const refused = await this.hello(said)
       if (refused) {
         return stopFor(refused) ?? this.backoff(refused)
       }
     }
+    const { helloRev } = this
+    // Stopped during the hello.
+    if (helloRev === null) {
+      return null
+    }
     const sentAt = performance.now()
     const polled = await this.transport.call(
       CONNECTOR_PATHS.poll,
-      { v: 1, helloRev: this.helloRev },
+      { v: 1, helloRev },
       ConnectorPollResponse,
       { timeoutMs: CONNECTOR_CLIENT_LIMITS.pollTimeoutMs, signal: this.stopped.signal }
     )
@@ -158,9 +172,9 @@ export class ConnectorPollClient {
       return null
     }
     if (!polled.ok) {
-      // The cloud wants hello again; forgetting what was said makes the next cycle say it.
+      // The cloud wants hello again.
       if (polled.status === 409) {
-        this.helloSaid = null
+        this.helloRev = null
         return null
       }
       return stopFor(polled) ?? this.backoff(polled)
@@ -185,7 +199,8 @@ export class ConnectorPollClient {
     projects: ConnectorProject[]
   }): Promise<ConnectorFailure | null> {
     const { machine } = this.options
-    this.pauseSending()
+    // From here the cloud may take this hello and answer the last one's requests 204 without applying them.
+    this.helloRev = null
     const helloRev = this.options.nextHelloRev()
     const answer = await this.transport.call(
       CONNECTOR_PATHS.hello,
@@ -211,32 +226,22 @@ export class ConnectorPollClient {
     if (this.stopped.signal.aborted) {
       return null
     }
-    this.helloRev = helloRev
     this.helloSaid = JSON.stringify(said)
     // A fresh watch's first event is the snapshot, which opens this hello's numbered events.
     this.watch()
-    this.options.events.attach(this.sendEvents)
-    this.acks.attach(this.sendAcks)
+    this.helloRev = helloRev
+    this.eventSender.resume()
+    this.ackSender.resume()
     return null
-  }
-
-  /**
-   * Senders work only under an accepted hello. While the cloud switches hellos, an old request's ignored
-   * success would read as taken and drop it here, so in-flight batches are taken back, kept, and sent
-   * again under the new hello.
-   */
-  private pauseSending(): void {
-    this.helloSaid = null
-    this.acks.detach(this.sendAcks)
-    this.acks.restart([], () => true)
-    this.options.events.detach(this.sendEvents)
-    this.options.events.takeBack()
   }
 
   private watch(): void {
     const { events } = this.options
     const previous = this.releaseWatch
-    this.releaseWatch = this.seam.watch(this.host, (event) => events.observe(event))
+    this.releaseWatch = this.seam.watch(this.host, (event) => {
+      events.observe(event)
+      this.eventSender.flush()
+    })
     previous?.()
   }
 
@@ -244,7 +249,7 @@ export class ConnectorPollClient {
     const id = ConnectorDeliveryId.safeParse(raw)
     // A lost `received` resends the delivery; this process already holds it.
     if (id.success && this.active.has(id.data.deliveryId)) {
-      this.acks.push({ deliveryId: id.data.deliveryId, step: 'received' })
+      this.pushAck({ deliveryId: id.data.deliveryId, step: 'received' })
       return
     }
     const dispatched = dispatchDelivery(this.seam, this.host, raw, msLeft)
@@ -254,9 +259,9 @@ export class ConnectorPollClient {
     const { deliveryId, received, done } = dispatched
     this.active.add(deliveryId)
     if (received) {
-      this.acks.push({ deliveryId, step: 'received' })
+      this.pushAck({ deliveryId, step: 'received' })
     }
-    void done.then((result) => this.acks.push({ deliveryId, step: 'done', result }))
+    void done.then((result) => this.pushAck({ deliveryId, step: 'done', result }))
   }
 
   /** A delivery an earlier process received: replay its receipt, never run it again. */
@@ -276,7 +281,12 @@ export class ConnectorPollClient {
     if (this.stopped.signal.aborted) {
       return
     }
-    this.acks.push({ deliveryId, step: 'done', result })
+    this.pushAck({ deliveryId, step: 'done', result })
+  }
+
+  private pushAck(ack: ConnectorAck): void {
+    this.acks.push(ack)
+    this.ackSender.flush()
   }
 
   private async obey(raw: unknown): Promise<Stop | null> {

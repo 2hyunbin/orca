@@ -14,7 +14,7 @@ import type {
 } from '../external-conversations/external-conversation-events'
 import type { ConversationKey } from '../external-conversations/external-conversation-types'
 import { isMissingFileError } from '../runtime/device-registry-corruption'
-import { ConnectorSendQueue, type ConnectorBatchSender } from './connector-send-queue'
+import { ConnectorOutbox, type ConnectorOutboxHead, type ConnectorStamp } from './connector-outbox'
 
 const TURN_OUTBOX_FILE = 'connector-turn-outbox.json'
 const MAX_TURN_ENDS = 200
@@ -112,21 +112,18 @@ export function toConnectorEvent(
 }
 
 /**
- * Keeps the newest turn ends and live events within their caps, counting the frozen batch, so memory and
- * disk hold the same set. A snapshot is never dropped: it opens its hello.
+ * Keeps the newest turn ends and live events within their caps, never trimming the first `sent`, so memory
+ * and disk hold the same set. A snapshot is never dropped: it opens its hello.
  */
-function boundEvents(
-  events: ConnectorEvent[],
-  frozen: readonly ConnectorEvent[]
-): ConnectorEvent[] {
-  const owed = [...frozen, ...events]
-  let turnEndsOver = owed.filter(isTurnEnded).length - MAX_TURN_ENDS
-  let liveOver = owed.filter(isLive).length - MAX_LIVE_EVENTS
+function boundEvents(events: ConnectorEvent[], sent: number): ConnectorEvent[] {
+  let turnEndsOver = events.filter(isTurnEnded).length - MAX_TURN_ENDS
+  let liveOver = events.filter(isLive).length - MAX_LIVE_EVENTS
   if (turnEndsOver <= 0 && liveOver <= 0) {
     return events
   }
-  return events.filter((event) =>
-    isTurnEnded(event) ? turnEndsOver-- <= 0 : !isLive(event) || liveOver-- <= 0
+  return events.filter(
+    (event, index) =>
+      index < sent || (isTurnEnded(event) ? turnEndsOver-- <= 0 : !isLive(event) || liveOver-- <= 0)
   )
 }
 
@@ -135,7 +132,7 @@ function boundEvents(
  * races a retired one over the file. Turn ends also wait on disk until the cloud accepts them.
  */
 export class ConnectorTurnEvents {
-  private readonly queue: ConnectorSendQueue<ConnectorEvent>
+  private readonly outbox: ConnectorOutbox<ConnectorEvent>
   private readonly filePath: string
   // Something owed was dropped to stay within the caps; only a fresh snapshot restates it.
   private dropped = false
@@ -145,11 +142,11 @@ export class ConnectorTurnEvents {
     readonly account: string
   ) {
     this.filePath = join(userDataPath, TURN_OUTBOX_FILE)
-    this.queue = new ConnectorSendQueue<ConnectorEvent>({
+    this.outbox = new ConnectorOutbox<ConnectorEvent>({
       maxBatch: MAX_EVENTS_PER_REQUEST,
       initial: this.readStored(),
-      bound: (events, frozen) => {
-        const kept = boundEvents(events, frozen)
+      bound: (events, sent) => {
+        const kept = boundEvents(events, sent)
         this.dropped ||= kept.length < events.length
         return kept
       },
@@ -170,28 +167,23 @@ export class ConnectorTurnEvents {
     const wire = toConnectorEvent(event)
     if (wire?.kind === 'snapshot') {
       this.dropped = false
-      this.queue.restart([wire], isTurnEnded)
+      this.outbox.restart([wire], isTurnEnded)
     } else if (wire) {
-      this.queue.push(wire)
+      this.outbox.push(wire)
     }
   }
 
-  attach(sender: ConnectorBatchSender<ConnectorEvent>): void {
-    this.queue.attach(sender)
+  next(helloRev: number): ConnectorOutboxHead<ConnectorEvent> | null {
+    return this.outbox.next(helloRev)
   }
 
-  detach(sender: ConnectorBatchSender<ConnectorEvent>): void {
-    this.queue.detach(sender)
-  }
-
-  /** Takes back the batch in flight, keeping everything owed, so its late answer changes nothing. */
-  takeBack(): void {
-    this.queue.restart([], () => true)
+  accepted(stamp: ConnectorStamp): void {
+    this.outbox.accepted(stamp)
   }
 
   /** Drops everything, file included: no other account can report these turns. */
   clear(): void {
-    this.queue.restart([], () => false)
+    this.outbox.restart([], () => false)
   }
 
   /** The same, before any owner exists in this process. */
