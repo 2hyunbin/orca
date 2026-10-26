@@ -60,6 +60,7 @@ export function useNativeChatComposerEditSession({
     if (root.current && handle.current) {
       return registerNativeChatComposerDestination(root.current, handle, !isEditing)
     }
+    return undefined
   }, [isEditing, root, handle])
 
   useLayoutEffect(() => {

@@ -130,7 +130,7 @@ export function NativeChatQueuedMessageList({
               // Bound queue height to preserve transcript/composer space; allow extra room for edit thumbnails.
               className={cn(
                 'scrollbar-sleek divide-y divide-border overflow-y-auto',
-                controller.editor?.images?.chips.length ? 'max-h-72' : 'max-h-40'
+                controller.editor ? 'max-h-72' : 'max-h-40'
               )}
             >
               {cards.map((card) => (

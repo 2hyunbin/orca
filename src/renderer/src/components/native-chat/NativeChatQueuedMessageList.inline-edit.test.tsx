@@ -2,6 +2,8 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { NativeChatComposerProps } from './native-chat-composer-types'
+import type { QueuedEditAttachTarget } from './NativeChatQueuedMessageComposer'
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 // A card's sender line opens and names agents through modules this test does not exercise.
@@ -18,6 +20,46 @@ vi.mock('../../store', () => {
   return { useAppStore }
 })
 
+vi.mock('./NativeChatComposer', async () => {
+  const React = await import('react')
+  return {
+    NativeChatComposer: React.forwardRef<HTMLTextAreaElement, NativeChatComposerProps>(
+      (props, ref) => (
+        <>
+          <textarea ref={ref} aria-label="Edit message" />
+          <button onClick={props.editSession?.cancel}>Cancel editing</button>
+        </>
+      )
+    )
+  }
+})
+
+const editAttachTo: QueuedEditAttachTarget = {
+  terminalTabId: 'tab',
+  transport: {
+    capturePresentation: () => () => true,
+    send: () => false,
+    dispatchCommand: async () => {
+      throw new Error('not used by the queue renderer')
+    },
+    optionsSurface: {
+      getSnapshot: () => [],
+      setOption: async () => {
+        throw new Error('not used')
+      },
+      invokeAction: async () => {
+        throw new Error('not used')
+      },
+      subscribe: () => () => {}
+    },
+    optionSnapshot: [],
+    onError: vi.fn(),
+    runtime: 'local',
+    sessionId: 'session',
+    runtimeEnvironmentId: null
+  }
+}
+
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { QueuedMessageCard } from './structured-agent-session-queued-cards'
 import { NativeChatQueuedMessageList } from './NativeChatQueuedMessageList'
@@ -26,7 +68,11 @@ import type { StructuredAgentSessionQueuedMessagesController } from './use-struc
 function renderList(owner: StructuredAgentSessionQueuedMessagesController) {
   return render(
     <TooltipProvider delayDuration={0}>
-      <NativeChatQueuedMessageList chatWorktreeId={null} controller={owner} />
+      <NativeChatQueuedMessageList
+        chatWorktreeId={null}
+        controller={owner}
+        editAttachTo={editAttachTo}
+      />
     </TooltipProvider>
   )
 }
@@ -80,6 +126,8 @@ describe('NativeChatQueuedMessageList inline edit', () => {
   it('the card being edited shows its editor in place of its text and actions; others cannot open one', async () => {
     const editor = {
       messageId: 'draft-1',
+      draftScopeKey: 'edit-scope',
+      imagesCapable: true,
       text: 'editing',
       acquiring: false,
       saving: false,
@@ -107,6 +155,8 @@ describe('NativeChatQueuedMessageList inline edit', () => {
   it('an edited card shows the editing header with its sender and hides its caption until editing ends', () => {
     const editor = {
       messageId: 'mail',
+      draftScopeKey: 'edit-scope',
+      imagesCapable: true,
       text: 'editing',
       acquiring: false,
       saving: false,
@@ -133,6 +183,7 @@ describe('NativeChatQueuedMessageList inline edit', () => {
       <TooltipProvider delayDuration={0}>
         <NativeChatQueuedMessageList
           chatWorktreeId={null}
+          editAttachTo={editAttachTo}
           controller={controller(cards, null, true, {
             editCapable: true,
             editor: undefined
@@ -151,6 +202,8 @@ describe('NativeChatQueuedMessageList inline edit', () => {
     const focusComposer = vi.fn()
     const editor = {
       messageId: 'draft-1',
+      draftScopeKey: 'edit-scope',
+      imagesCapable: true,
       text: 'editing',
       acquiring: false,
       saving: false,
@@ -165,6 +218,7 @@ describe('NativeChatQueuedMessageList inline edit', () => {
         <TooltipProvider delayDuration={0}>
           <NativeChatQueuedMessageList
             chatWorktreeId={null}
+            editAttachTo={editAttachTo}
             controller={owner}
             focusComposer={focusComposer}
           />
