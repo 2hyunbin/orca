@@ -194,6 +194,19 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
     expect(mocks.call.mock.calls[1]?.[0]).toMatchObject({ params: { tabId: 'host-tab-2' } })
   })
 
+  it('sends a browser pick again when a report times out after it was made', async () => {
+    reassert.mockReset()
+    let fail: (reason: unknown) => void = () => {}
+    mocks.call.mockImplementationOnce(() => new Promise((_resolve, reject) => (fail = reject)))
+    deliver(frame('host-tab-2'))
+    groups[WT]![0]!.activeTabId = 'u3'
+    fail(new Error('timeout'))
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.waitFor(() =>
+      expect(reassert).toHaveBeenCalledWith(WT, { type: 'browser', id: 'browser-ws', tabId: 'u3' })
+    )
+  })
+
   it('does nothing with a report answered after mirror teardown', async () => {
     reassert.mockReset()
     let finish: (value: unknown) => void = () => {}

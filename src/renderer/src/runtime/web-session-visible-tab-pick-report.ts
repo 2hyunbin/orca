@@ -155,6 +155,7 @@ function reportIfStale(environmentId: string, snapshot: RuntimeMobileSessionTabs
     return
   }
   reportedPaneByWorkspace.set(key, pane)
+  const reportedLeafId = target.leafId
   const sentEpoch = teardownEpochByEnvironment.get(environmentId) ?? 0
   const sentGeneration = connectionGeneration(environmentId)
   const stillCurrent = (): boolean =>
@@ -180,35 +181,40 @@ function reportIfStale(environmentId: string, snapshot: RuntimeMobileSessionTabs
     },
     timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS
   }).then(
-    // Best effort; a failed report is tried again on a later frame.
-    (response) => {
-      if (!stillCurrent()) {
-        return
-      }
-      if (!response.ok) {
-        retryLater()
-        return
-      }
-      // The host does not order activations; one the user made meanwhile may have landed first.
-      const now = visibleTerminalPane(worktreeId)
-      if (now && (now.hostTabId !== hostTabId || (now.leafId && now.leafId !== target.leafId))) {
-        // Check afresh against the host's answer, which is its state after this report; a cached
-        // frame or record may predate the late landing.
-        reportedPaneByWorkspace.delete(key)
-        if (isSessionTabsFrame(response.result, worktreeId)) {
-          latestFrameByWorkspace.set(key, {
-            environmentId,
-            snapshot: response.result,
-            generation: sentGeneration
-          })
-        }
-        scheduleCheck(key)
-      } else if (!now) {
-        reassertVisibleNonTerminalTab(worktreeId, stillCurrent)
-      }
-    },
-    retryLater
+    (response) => settle(response.ok ? { result: response.result } : null),
+    () => settle(null)
   )
+
+  // Any outcome, even a timeout, may have landed after a newer pick by the user: the host does
+  // not order activations. Reconcile with what the desktop shows now.
+  function settle(answer: { result: unknown } | null): void {
+    if (!stillCurrent()) {
+      return
+    }
+    if (!answer) {
+      // Tried again on a later frame.
+      retryLater()
+    }
+    const now = visibleTerminalPane(worktreeId)
+    if (!now) {
+      reassertVisibleNonTerminalTab(worktreeId, stillCurrent)
+      return
+    }
+    if (now.hostTabId === hostTabId && (!now.leafId || now.leafId === reportedLeafId)) {
+      return
+    }
+    // A record or cached frame may predate the late landing; the host's answer, when there is
+    // one, is its state after this report.
+    reportedPaneByWorkspace.delete(key)
+    if (answer && isSessionTabsFrame(answer.result, worktreeId)) {
+      latestFrameByWorkspace.set(key, {
+        environmentId,
+        snapshot: answer.result,
+        generation: sentGeneration
+      })
+    }
+    scheduleCheck(key)
+  }
 }
 
 /** A browser or chat tab the user picked while a report was in flight: send their pick again, the
