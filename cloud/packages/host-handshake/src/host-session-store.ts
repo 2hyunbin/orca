@@ -79,16 +79,24 @@ export class HostSessionStore {
         : `SELECT host_fingerprint, expires_at FROM ${table} WHERE token_hash = ?`,
       [sessionId]
     )
-    if (!row) return { ok: false, reason: 'unknown_session' }
+    if (!row) {
+      return { ok: false, reason: 'unknown_session' }
+    }
     // Revocation outranks expiry, so the host stops instead of re-proving.
     if (linkTable) {
-      if (row.linked_host === null) return { ok: false, reason: 'host_not_linked' }
-      if (row.revoked_at !== null) return { ok: false, reason: 'host_revoked' }
+      if (row.linked_host === null) {
+        return { ok: false, reason: 'host_not_linked' }
+      }
+      if (row.revoked_at !== null) {
+        return { ok: false, reason: 'host_revoked' }
+      }
     }
     const expiresAt = Number(row.expires_at)
     // No skew grace here: a session that just expired should be re-minted
     // through the challenge, which is cheap and already handled by the host.
-    if (this.now() > expiresAt) return { ok: false, reason: 'session_expired' }
+    if (this.now() > expiresAt) {
+      return { ok: false, reason: 'session_expired' }
+    }
     return { ok: true, hostFingerprint: String(row.host_fingerprint), expiresAt, sessionId }
   }
 
