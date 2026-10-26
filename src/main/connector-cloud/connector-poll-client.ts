@@ -56,9 +56,9 @@ export class ConnectorPollClient {
   private readonly active = new Set<string>()
   private readonly random: () => number
   private releaseWatch: (() => void) | null = null
-  // The hello the cloud took, which scopes the poll and everything sent; null until then, from the moment
-  // a newer one goes out, and once stopped. The cloud answers an older hello's requests 204 as well, so
-  // only an answer that lands while its hello is still this one counts.
+  // The hello the cloud took, which scopes the poll and everything sent; null until then, once the cloud
+  // says it is no longer current, and once stopped. A new hello only replaces it. The cloud refuses
+  // anything under another hello with 409, so a 204 always means applied.
   private helloRev: number | null = null
   // What that hello said.
   private helloSaid = ''
@@ -84,14 +84,15 @@ export class ConnectorPollClient {
     const helloRev = (): number | null => this.helloRev
     this.ackSender = new ConnectorOutboxSender(
       this.acks,
-      (acks, rev) => this.post(CONNECTOR_PATHS.acks, { v: 1, helloRev: rev, acks }),
+      (acks, rev) => this.post(CONNECTOR_PATHS.acks, rev, { v: 1, helloRev: rev, acks }),
       helloRev,
       this.random
     )
     // Every hello restarts the numbering with a snapshot.
     this.eventSender = new ConnectorOutboxSender(
       options.events,
-      (events, rev, seq) => this.post(CONNECTOR_PATHS.events, { v: 1, helloRev: rev, seq, events }),
+      (events, rev, seq) =>
+        this.post(CONNECTOR_PATHS.events, rev, { v: 1, helloRev: rev, seq, events }),
       helloRev,
       this.random
     )
@@ -194,8 +195,6 @@ export class ConnectorPollClient {
       this.warnedTrimmed = true
       console.warn('[connector] the hello left out the least recently used projects to fit its cap')
     }
-    // From here the cloud may take this hello and answer the last one's requests 204 without applying them.
-    this.helloRev = null
     const answer = await this.transport.call(CONNECTOR_PATHS.hello, body, ConnectorHelloResponse, {
       method: 'PUT',
       signal: this.stopped.signal
@@ -291,12 +290,20 @@ export class ConnectorPollClient {
     return null
   }
 
-  private async post(path: string, body: unknown): Promise<ConnectorFailure | null> {
+  private async post(
+    path: string,
+    helloRev: number,
+    body: unknown
+  ): Promise<ConnectorFailure | null> {
     const sent = await this.transport.call(path, body, z.undefined(), {
       signal: this.stopped.signal
     })
     if (sent.ok) {
       return null
+    }
+    // That hello is no longer current, e.g. a retired client's late one landed after it: say hello again.
+    if (sent.status === 409 && this.helloRev === helloRev) {
+      this.helloRev = null
     }
     const stop = stopFor(sent)
     if (stop) {

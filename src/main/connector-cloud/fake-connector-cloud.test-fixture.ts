@@ -115,6 +115,11 @@ export class FakeConnectorCloud {
     this.tokens.clear()
   }
 
+  /** Another hello for this machine lands, as a retired client's late one would. */
+  helloFromElsewhere(): void {
+    this.hello = { rev: ++this.lastRev, seq: -1 }
+  }
+
   /** Loses the hello, as a cloud restart would; the machine must say it again. */
   forgetHello(): void {
     this.hello = null
@@ -156,10 +161,7 @@ export class FakeConnectorCloud {
       return { status: 200, body: { helloRev: this.hello.rev } }
     }
     const { hello } = this
-    // Acks and events from an older hello are ignored; the next first poll lists what is unsettled.
-    if (hello && rev < hello.rev && path !== CONNECTOR_PATHS.poll) {
-      return { status: 204 }
-    }
+    // Anything under another hello is refused and applies nothing.
     if (!hello || rev !== hello.rev) {
       return { status: 409, body: { error: 'hello_required' } }
     }
