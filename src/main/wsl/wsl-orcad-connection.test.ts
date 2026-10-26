@@ -15,13 +15,13 @@ import {
 import { checkOrcadStdioBridge, openOrcadStdioBridgeChannel } from '../ssh/orcad-stdio-bridge'
 import { startEchoServer } from '../managed-server/lifecycle/orcad-stdio-bridge-test-channel'
 import { fakeWslBridgeChildren, posixOrcadStdioBridge } from './wsl-orcad-bridge-test-child'
-import { WslDistroNotRunningError } from './wsl-orcad-connection-errors'
 import {
   WslOrcadConnectionManager,
   type WslOrcadConnection,
   type WslOrcadConnectionDependencies
 } from './wsl-orcad-connection'
 import {
+  WslDistroNotRunningError,
   WslOrcadConnectionSupersededError,
   WslOrcadLaunchDeferredError
 } from './wsl-orcad-connection-errors'
