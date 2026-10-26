@@ -189,7 +189,7 @@ describe('dispatchTerminalNotification', () => {
         prompt: 'p',
         agentType: 'antigravity' as const,
         toolName,
-        stateStartedAt: Date.now()
+        stateStartedAt: 1_000
       }
       mockState.agentStatusByPaneKey[paneKey] = makeAgentStatus(paneKey, waiting)
       dispatchTerminalNotification('wt-primary', {
