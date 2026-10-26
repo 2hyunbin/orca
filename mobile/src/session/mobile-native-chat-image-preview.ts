@@ -32,7 +32,8 @@ export async function readStoredChatImage(
   signal: AbortSignal
 ): Promise<string | null> {
   const release = await storedImageReads.acquire(0, signal).catch(() => null)
-  if (!release) {
+  if (!release || signal.aborted) {
+    release?.()
     return null
   }
   try {

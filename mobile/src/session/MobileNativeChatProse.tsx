@@ -15,6 +15,7 @@ import { withoutPendingNativeChatVisualDirectiveTail } from '../../../src/shared
 import { isAgentSessionAttachmentStorePath } from '../../../src/shared/agent-session-attachments'
 import { MobileNativeChatRowOverlaysContext } from './mobile-native-chat-row-overlays'
 import { isRenderableImageUri, readStoredChatImage } from './mobile-native-chat-image-preview'
+import type { RpcClient } from '../transport/rpc-client'
 import {
   CHAT_PROSE_SCALE,
   scaledType,
@@ -109,7 +110,11 @@ function ImageAttachment({
     !renderable && imageClient && block.path && isAgentSessionAttachmentStorePath(block.path)
       ? block.path
       : null
-  const [stored, setStored] = useState<{ path: string; uri: string | null } | null>(null)
+  const [stored, setStored] = useState<{
+    client: RpcClient
+    path: string
+    uri: string | null
+  } | null>(null)
   useEffect(() => {
     if (!imageClient || !storedPath) {
       return
@@ -117,12 +122,13 @@ function ImageAttachment({
     const unmounted = new AbortController()
     void readStoredChatImage(imageClient, storedPath, unmounted.signal).then((uri) => {
       if (!unmounted.signal.aborted) {
-        setStored({ path: storedPath, uri })
+        setStored({ client: imageClient, path: storedPath, uri })
       }
     })
     return () => unmounted.abort()
   }, [imageClient, storedPath])
-  const read = storedPath && stored?.path === storedPath ? stored : null
+  const read =
+    storedPath && stored?.path === storedPath && stored.client === imageClient ? stored : null
   const uri = renderable ?? read?.uri
   const label = block.alt ?? 'Attached image'
   if (storedPath && !read) {
