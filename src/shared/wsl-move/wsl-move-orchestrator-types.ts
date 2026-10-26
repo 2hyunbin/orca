@@ -1,0 +1,67 @@
+/**
+ * The general migration's orchestrator (D3a): per distro, when to start the move the driver runs,
+ * and what the user is told while it cannot finish. It never boots a distro (A1): only a user
+ * action that already woke it, or an explicit request, starts anything.
+ */
+import type { WslMoveBlocker } from './wsl-move-driver-types'
+
+/** What woke the orchestrator for a distro. */
+export type WslMoveOrchestratorTrigger =
+  /** The distro's host connection reached ready (the user's Connect, or visible demand, C7). */
+  | 'connect'
+  /** The user opened a project of a distro that is already running. */
+  | 'project-opened'
+  /** App start, for a distro whose host is already ready. */
+  | 'startup'
+  /** Move now, Retry or Restore from the UI. */
+  | 'user'
+  /** A backoff retry or deferred re-check; runs only while the host stays ready. */
+  | 'timer'
+
+/** Why the orchestrator stopped trying on its own; each needs the user. */
+export type WslMoveOrchestratorParkReason =
+  | 'export-incomplete'
+  | 'manifest-too-large'
+  | 'host-update-required'
+  | 'attempts-exhausted'
+  /** The user cancelled a move or chose "Not now". */
+  | 'not-now'
+
+export type WslMoveOrchestratorState =
+  /** Nothing of the distro left to move. */
+  | { kind: 'idle' }
+  /** Waiting for a trigger. */
+  | { kind: 'pending' }
+  /** "Finishing your move": the move waits on busy terminals, automations or dispatches. */
+  | { kind: 'deferred'; blockers: WslMoveBlocker[] }
+  | { kind: 'moving' }
+  /** The move may have reached the host; it resumes when the host answers. */
+  | { kind: 'waiting-for-host'; migrationId: string }
+  | { kind: 'backoff'; nextAttemptAt: number; reason: string }
+  | { kind: 'parked'; reason: WslMoveOrchestratorParkReason; until?: number }
+  | { kind: 'done'; migrationId: string }
+  /** R38: a finished move's distro is registered under neither its name nor its recorded GUID. */
+  | { kind: 'distro-gone' }
+  /** R38: the distro was replaced (new GUID) or its host lost the moved projects. */
+  | { kind: 'restore-offered' }
+
+export type WslMoveOrchestratorStateKind = WslMoveOrchestratorState['kind']
+
+/** One distro's persisted record. */
+export type WslMoveOrchestratorRecord = {
+  distro: string
+  state: WslMoveOrchestratorState
+  /** Failed automatic attempts since the last success or user Retry. */
+  attempts: number
+  /** The build that counted `attempts`; a new build may try again. */
+  appVersion: string
+  updatedAt: number
+}
+
+/** What the user asked of a distro's move from its status line. */
+export type WslMoveOrchestratorUserAction = 'move-now' | 'retry' | 'not-now' | 'restore'
+
+export const WSL_MOVE_ORCHESTRATOR_STATUS_CHANNEL = 'wslMoveOrchestrator:status'
+/** Main asks the window for its slept-pane bindings before an automatic start. */
+export const WSL_MOVE_ORCHESTRATOR_SLEPT_PANES_REQUEST_CHANNEL =
+  'wslMoveOrchestrator:requestSleptPanes'

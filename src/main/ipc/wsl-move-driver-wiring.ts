@@ -59,6 +59,7 @@ import { inspectPtyProviderProcessForRenderer } from '../providers/pty-process-i
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { getTrustedUIRendererWebContents, getTrustedUIRendererWindow } from './ui'
 import { registerWslMoveHandlers } from './wsl-move-handlers'
+import { registerWslMoveOrchestrator } from './wsl-move-orchestrator-wiring'
 import { createWslMoveUndoPorts } from './wsl-move-undo-wiring'
 import { wslMoveReloadableWindow } from './wsl-move-reloadable-window'
 import { setWslMoveReloadableWindow } from '../persistence/moving-wsl-projects/wsl-move-window-write-hold'
@@ -89,6 +90,7 @@ export function registerWslMoveWiring(store: Store, runtime: OrcaRuntimeService)
     () => createWslMoveDriverDeps(store, runtime),
     () => createWslMoveUndoPorts(store, app.getPath('userData'))
   )
+  registerWslMoveOrchestrator(store, () => createWslMoveDriverDeps(store, runtime))
 }
 
 /** Each live bridge pane's shell folder, one process read per distro. */

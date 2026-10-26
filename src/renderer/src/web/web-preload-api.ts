@@ -146,7 +146,12 @@ function createWebPreloadApi(): Partial<PreloadApi> {
       cancel: () => Promise.resolve(false),
       listUnfinished: () => Promise.resolve([]),
       useProjectHereAgain: () => Promise.resolve({ released: false, reason: 'gated-off' }),
-      onProgress: () => () => {}
+      onProgress: () => () => {},
+      listOrchestrator: () => Promise.resolve([]),
+      orchestratorUserAction: () => Promise.resolve(null),
+      onOrchestratorStatus: () => () => {},
+      onOrchestratorSleptPanesRequest: () => () => {},
+      answerOrchestratorSleptPanes: () => Promise.resolve()
     },
     pwsh: {
       isAvailable: () => callRuntimeResult<boolean>('host.pwsh.isAvailable').catch(() => false)

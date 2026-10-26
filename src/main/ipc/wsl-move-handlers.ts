@@ -30,6 +30,7 @@ import type { WslMoveDriverDeps } from '../persistence/moving-wsl-projects/wsl-m
 import { listUnfinishedWslMoves } from '../persistence/moving-wsl-projects/wsl-move-host-automations-rewrite'
 import { runTrackedWslMove } from '../telemetry/wsl-move-telemetry'
 import { wslHostsGateOpen } from '../wsl/wsl-host-gate'
+import type { WslMoveProjectRef } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 import {
   findWslMovedProjectMove,
   releaseWslMove,
@@ -177,46 +178,57 @@ function registerWslMoveUseHereHandler(
       }
       const ref =
         request.kind === 'repo' ? { repoId: request.id } : { folderWorkspaceId: request.id }
-      const userDataPath = getUserDataPath()
-      const found = findWslMovedProjectMove(userDataPath, ref)
-      if (!('move' in found)) {
-        return found
-      }
-      // Only the move's own workspaces reload from their pre-move state; other unsaved files stay.
-      const unsavedWorkspaceIds = wslMoveWorkspacesInScope(
-        found.move,
+      return releaseWslMovedProjectHere(
+        getUserDataPath(),
+        ref,
         'unsavedWorkspaceIds' in request && Array.isArray(request.unsavedWorkspaceIds)
           ? request.unsavedWorkspaceIds.filter((id): id is string => typeof id === 'string')
-          : []
+          : [],
+        createUndoPorts
       )
-      if (unsavedWorkspaceIds.length > 0) {
-        return { released: false, reason: 'unsaved-files', unsavedWorkspaceIds }
-      }
-      // Why before the stop: a refused undo must leave the host's copies running (awin verify-9, X1).
-      const refusal = wslMoveReleaseRefusal(userDataPath, found.move)
-      if (refusal) {
-        return refusal
-      }
-      // The host's copies stop first, or an agent the move resumed there runs beside this one.
-      // Fenced until the reload: an open host pane would otherwise start its stopped agent again.
-      const releaseSpawnFence = fenceHostSpawnsForWslMoveUndo(found.move.destinationEnvironmentId)
-      const stop = await createUndoPorts().stopHostCopies(found.move)
-      if (stop !== 'stopped') {
-        releaseSpawnFence()
-        return {
-          released: false,
-          reason: stop === 'unreachable' ? 'host-unreachable' : 'host-still-running'
-        }
-      }
-      const result = releaseWslMove(userDataPath, found.move)
-      if (result.released) {
-        // The page holds only the project's chats; the reloaded one hydrates its pre-move session.
-        holdWslMoveWindowWrites()
-        reloadWslMoveWindowWithWritesHeld(releaseSpawnFence)
-      } else {
-        releaseSpawnFence()
-      }
-      return result
     }
   )
+}
+
+/** "Use on this computer again" for one project: its whole move comes back and the window reloads. */
+export async function releaseWslMovedProjectHere(
+  userDataPath: string,
+  ref: WslMoveProjectRef,
+  unsavedWorkspaceIdsAsked: readonly string[],
+  createUndoPorts: () => WslMoveUndoPorts
+): Promise<WslMoveUseLocallyResult> {
+  const found = findWslMovedProjectMove(userDataPath, ref)
+  if (!('move' in found)) {
+    return found
+  }
+  // Only the move's own workspaces reload from their pre-move state; other unsaved files stay.
+  const unsavedWorkspaceIds = wslMoveWorkspacesInScope(found.move, unsavedWorkspaceIdsAsked)
+  if (unsavedWorkspaceIds.length > 0) {
+    return { released: false, reason: 'unsaved-files', unsavedWorkspaceIds }
+  }
+  // Why before the stop: a refused undo must leave the host's copies running (awin verify-9, X1).
+  const refusal = wslMoveReleaseRefusal(userDataPath, found.move)
+  if (refusal) {
+    return refusal
+  }
+  // The host's copies stop first, or an agent the move resumed there runs beside this one.
+  // Fenced until the reload: an open host pane would otherwise start its stopped agent again.
+  const releaseSpawnFence = fenceHostSpawnsForWslMoveUndo(found.move.destinationEnvironmentId)
+  const stop = await createUndoPorts().stopHostCopies(found.move)
+  if (stop !== 'stopped') {
+    releaseSpawnFence()
+    return {
+      released: false,
+      reason: stop === 'unreachable' ? 'host-unreachable' : 'host-still-running'
+    }
+  }
+  const result = releaseWslMove(userDataPath, found.move)
+  if (result.released) {
+    // The page holds only the project's chats; the reloaded one hydrates its pre-move session.
+    holdWslMoveWindowWrites()
+    reloadWslMoveWindowWithWritesHeld(releaseSpawnFence)
+  } else {
+    releaseSpawnFence()
+  }
+  return result
 }
