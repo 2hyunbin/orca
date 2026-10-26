@@ -44,14 +44,14 @@ export type WslMoveOrchestratorState =
   | { kind: 'moving' }
   /** The move may have reached the host; it resumes when the host answers. */
   | { kind: 'waiting-for-host'; migrationId: string }
-  /** `waitingSince`: when uncounted waits (an earlier move still settling) began, for their cap. */
-  | { kind: 'backoff'; nextAttemptAt: number; reason: string; waitingSince?: number }
+  /** `waits`: uncounted checks so far (an earlier move still settling), for their cap. */
+  | { kind: 'backoff'; nextAttemptAt: number; reason: string; waits?: number }
   | { kind: 'parked'; reason: WslMoveOrchestratorParkReason; until?: number }
   /**
-   * `nextCheckAt` / `waitingSince` while a newer preview waits on this move to finish settling:
+   * `nextCheckAt` / `waits` while a newer preview waits on this move to finish settling:
    * new projects may be queued behind it, so the wait is re-checked and capped like a backoff.
    */
-  | { kind: 'done'; migrationId: string; nextCheckAt?: number; waitingSince?: number }
+  | { kind: 'done'; migrationId: string; nextCheckAt?: number; waits?: number }
   /** R38: a finished move's distro is registered under neither its name nor its recorded GUID. */
   | { kind: 'distro-gone' }
   /** R38: the distro was replaced (new GUID) or its host lost the moved projects. */

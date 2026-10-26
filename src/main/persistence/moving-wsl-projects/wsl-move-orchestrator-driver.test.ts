@@ -179,7 +179,7 @@ describe('the move orchestrator over the real driver', () => {
       code: 'wsl_move_already_in_flight'
     })
     await orchestrator.trigger('Ubuntu', 'project-opened')
-    expect(stateOf(orchestrator)).toMatchObject({ kind: 'done', migrationId, waitingSince: 1_000 })
+    expect(stateOf(orchestrator)).toMatchObject({ kind: 'done', migrationId, waits: 1 })
     expect(orchestrator.list()[0]?.attempts).toBe(0)
     await runWslMoveRetentionPass({
       userDataPath,

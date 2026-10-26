@@ -15,7 +15,7 @@ import {
   WSL_MOVE_ORCHESTRATOR_MAX_ATTEMPTS,
   WSL_MOVE_ORCHESTRATOR_NOT_NOW_MS,
   WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS,
-  WSL_MOVE_ORCHESTRATOR_UNCOUNTED_WAIT_LIMIT_MS,
+  WSL_MOVE_ORCHESTRATOR_UNCOUNTED_WAIT_LIMIT,
   wslMoveOrchestratorTimerDelay
 } from './wsl-move-orchestrator-transitions'
 import {
@@ -373,7 +373,7 @@ describe('review fixes (#33802)', () => {
       kind: 'done',
       migrationId: 'm1',
       nextCheckAt: NOW + WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS,
-      waitingSince: NOW
+      waits: 1
     })
     expect(wslMoveOrchestratorTimerDelay(waiting, NOW)).toBe(
       WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS
@@ -415,37 +415,37 @@ describe('review fixes (#33802)', () => {
     expect(applyWslMoveOutcome(record({ kind: 'pending' }), outcome, context).attempts).toBe(1)
   })
 
-  it('parks as stuck once uncounted waits have lasted a day, for a backoff and for a done distro', () => {
+  it('parks as stuck after a day of uncounted checks, for a backoff and for a done distro', () => {
     const reason = 'wsl_move_already_in_flight'
-    const later = { ...context, now: NOW + WSL_MOVE_ORCHESTRATOR_UNCOUNTED_WAIT_LIMIT_MS }
-    const waitingBackoff = record({
-      kind: 'backoff',
-      nextAttemptAt: NOW,
-      reason,
-      waitingSince: NOW
-    })
+    const last = WSL_MOVE_ORCHESTRATOR_UNCOUNTED_WAIT_LIMIT - 1
+    const waitingBackoff = record({ kind: 'backoff', nextAttemptAt: NOW, reason, waits: last - 1 })
     expect(
-      applyWslMoveOutcome(
-        waitingBackoff,
-        { next: 'transient', reason },
-        { ...context, now: NOW + 60_000 }
-      ).state
-    ).toMatchObject({ kind: 'backoff', waitingSince: NOW })
-    expect(applyWslMoveOutcome(waitingBackoff, { next: 'transient', reason }, later).state).toEqual(
-      {
-        kind: 'parked',
-        reason: 'stuck'
-      }
-    )
-    const waitingDone = record({
-      kind: 'done',
-      migrationId: 'm1',
-      nextCheckAt: NOW,
-      waitingSince: NOW
+      applyWslMoveOutcome(waitingBackoff, { next: 'transient', reason }, context).state
+    ).toMatchObject({ kind: 'backoff', waits: last })
+    const atCap = record({ kind: 'backoff', nextAttemptAt: NOW, reason, waits: last })
+    expect(applyWslMoveOutcome(atCap, { next: 'transient', reason }, context).state).toEqual({
+      kind: 'parked',
+      reason: 'stuck'
     })
-    const stuck = applyWslMoveOutcome(waitingDone, { next: 'transient', reason }, later)
+    const waitingDone = record({ kind: 'done', migrationId: 'm1', nextCheckAt: NOW, waits: last })
+    const stuck = applyWslMoveOutcome(waitingDone, { next: 'transient', reason }, context)
     expect(stuck.state).toEqual({ kind: 'parked', reason: 'stuck' })
-    expect(mayStartWslMove(stuck, 'connect', later.now, '1.0.0')).toBe(false)
-    expect(mayStartWslMove(stuck, 'user', later.now, '1.0.0')).toBe(true)
+    expect(mayStartWslMove(stuck, 'connect', NOW, '1.0.0')).toBe(false)
+    expect(mayStartWslMove(stuck, 'user', NOW, '1.0.0')).toBe(true)
+  })
+
+  // Review: a weekend with the app closed must not park a distro on its first check after launch.
+  it('does not park on the first check after days with the app closed', () => {
+    const reason = 'wsl_move_already_in_flight'
+    const waiting = record({ kind: 'done', migrationId: 'm1', nextCheckAt: NOW, waits: 3 })
+    const afterWeekend = { ...context, now: NOW + 3 * 24 * 60 * 60_000 }
+    const next = applyWslMoveOutcome(waiting, { next: 'transient', reason }, afterWeekend)
+    expect(next.state).toMatchObject({ kind: 'done', waits: 4 })
+  })
+
+  it('counts an in-flight refusal whose detail is an empty string', () => {
+    expect(
+      classifyWslMoveOutcome({ outcome: 'refused', code: 'wsl_move_already_in_flight', detail: '' })
+    ).toEqual({ next: 'transient', reason: 'wsl_move_already_in_flight_unverifiable' })
   })
 })

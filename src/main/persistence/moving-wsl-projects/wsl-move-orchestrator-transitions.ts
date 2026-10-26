@@ -28,8 +28,12 @@ export const WSL_MOVE_ORCHESTRATOR_NOT_NOW_MS = 7 * 24 * 60 * 60_000
 export const WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS = [60_000, 5 * 60_000, 30 * 60_000] as const
 /** Waiting that is not a failed attempt, retried without costing one. */
 export const WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS = 5 * 60_000
-/** Uncounted waits that last this long park the distro as stuck, for the user to look at. */
-export const WSL_MOVE_ORCHESTRATOR_UNCOUNTED_WAIT_LIMIT_MS = 24 * 60 * 60_000
+/**
+ * Uncounted checks before the distro parks as stuck: a day of the app running at 5-minute
+ * spacing. Counted, not timed, so days with the app closed never park a distro on launch.
+ */
+export const WSL_MOVE_ORCHESTRATOR_UNCOUNTED_WAIT_LIMIT =
+  (24 * 60 * 60_000) / WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS
 /** An in-flight refusal whose earlier move could not be checked is a failed attempt after all. */
 const IN_FLIGHT_UNVERIFIABLE = 'wsl_move_already_in_flight_unverifiable'
 
@@ -75,7 +79,7 @@ function refusalOutcome(
       // With a `detail`, the earlier move was interrupted and its host could not be asked.
       return {
         next: 'transient',
-        reason: 'detail' in preview && preview.detail ? IN_FLIGHT_UNVERIFIABLE : code
+        reason: 'detail' in preview && preview.detail !== undefined ? IN_FLIGHT_UNVERIFIABLE : code
       }
     case 'wsl_move_host_update_required':
     case 'wsl_move_host_unavailable':
@@ -193,10 +197,7 @@ export function withWslMoveOrchestratorState(
 /** A done distro whose wait (if any) is over; unchanged when it was not waiting. */
 function settledDone(record: WslMoveOrchestratorRecord, now: number): WslMoveOrchestratorRecord {
   const { state } = record
-  if (
-    state.kind !== 'done' ||
-    (state.nextCheckAt === undefined && state.waitingSince === undefined)
-  ) {
+  if (state.kind !== 'done' || (state.nextCheckAt === undefined && state.waits === undefined)) {
     return record
   }
   return withWslMoveOrchestratorState(record, { kind: 'done', migrationId: state.migrationId }, now)
@@ -209,11 +210,11 @@ function uncountedWait(
   now: number
 ): WslMoveOrchestratorRecord {
   const { state } = record
-  const since =
-    (state.kind === 'backoff' || state.kind === 'done') && state.waitingSince !== undefined
-      ? state.waitingSince
-      : now
-  if (now - since >= WSL_MOVE_ORCHESTRATOR_UNCOUNTED_WAIT_LIMIT_MS) {
+  const waits =
+    ((state.kind === 'backoff' || state.kind === 'done') && state.waits !== undefined
+      ? state.waits
+      : 0) + 1
+  if (waits >= WSL_MOVE_ORCHESTRATOR_UNCOUNTED_WAIT_LIMIT) {
     return withWslMoveOrchestratorState(record, { kind: 'parked', reason: 'stuck' }, now)
   }
   const nextAt = now + WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS
@@ -221,8 +222,8 @@ function uncountedWait(
   return withWslMoveOrchestratorState(
     record,
     state.kind === 'done'
-      ? { kind: 'done', migrationId: state.migrationId, nextCheckAt: nextAt, waitingSince: since }
-      : { kind: 'backoff', nextAttemptAt: nextAt, reason, waitingSince: since },
+      ? { kind: 'done', migrationId: state.migrationId, nextCheckAt: nextAt, waits }
+      : { kind: 'backoff', nextAttemptAt: nextAt, reason, waits },
     now
   )
 }

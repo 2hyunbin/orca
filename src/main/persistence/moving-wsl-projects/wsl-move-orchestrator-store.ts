@@ -40,7 +40,7 @@ const stateSchema = z.discriminatedUnion('kind', [
     kind: z.literal('backoff'),
     nextAttemptAt: z.number(),
     reason: z.string(),
-    waitingSince: z.number().optional()
+    waits: z.number().int().nonnegative().optional()
   }),
   z.object({
     kind: z.literal('parked'),
@@ -60,7 +60,7 @@ const stateSchema = z.discriminatedUnion('kind', [
     kind: z.literal('done'),
     migrationId: z.string(),
     nextCheckAt: z.number().optional(),
-    waitingSince: z.number().optional()
+    waits: z.number().int().nonnegative().optional()
   }),
   z.object({ kind: z.literal('distro-gone') }),
   z.object({ kind: z.literal('restore-offered') })
