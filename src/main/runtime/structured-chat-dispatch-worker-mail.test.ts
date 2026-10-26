@@ -13,6 +13,7 @@ import { dispatchTaskSource } from './orchestration/dispatch-task-source'
 import { StructuredAgentSessionLeaseRenewer } from '../native-chat/agent-session-wire/structured-agent-session-lease-renewer'
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { readMailHandoff } from './orchestration/mail-handoff'
+import type { MessageType } from './orchestration/types'
 import './rpc/unused-default-rpc-methods.test-fixture'
 // Worker mail belongs to its Dispatch mailbox; held pointers redrive on the next idle edge, including after restart or clear.
 
@@ -209,7 +210,7 @@ it.each([
           ...(held ? { nonAdmission: 'held' } : {})
         })
       )
-    const insert = (to: string, subject: string, type = 'status') =>
+    const insert = (to: string, subject: string, type: MessageType = 'status') =>
       db.insertMessage({ from: 'sender', to, subject, type })
     const update = db.db.prepare('UPDATE messages SET handoff = ? WHERE id = ?')
     for (let index = 0; index < history; index++) {
