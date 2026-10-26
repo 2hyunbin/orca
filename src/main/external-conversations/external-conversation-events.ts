@@ -20,6 +20,7 @@ import {
 } from './external-conversation-links'
 import type { AgentPromptExpectedBinding } from '../runtime/runtime-terminal-contracts'
 import { sameBinding } from './external-conversation-send'
+import { unannouncedStampedStart } from './external-conversation-turn-id'
 import type { ConversationKey } from './external-conversation-types'
 
 type ConversationPane = { conversation: ConversationKey; worktreeId: string; paneKey: string }
@@ -76,7 +77,8 @@ export const HOST_CLOCK: Pick<ConversationEventsDeps, 'setTimer' | 'now'> = {
 /** Watch-scoped turn news shares mobile push detection and automation completion verdicts. */
 export class ConversationEvents {
   private readonly listeners = new Set<ConversationWatchListener>()
-  private readonly turnStartedAt = new Map<string, number>()
+  // A started turn's id only where the host stamps none; the host's stamp is the id everywhere else.
+  private readonly unstampedTurn = new Map<string, number>()
   // Prompts our cancel rejected, by pane: Claude's hooks report no end for that turn.
   private readonly rejected = new Map<
     string,
@@ -99,6 +101,7 @@ export class ConversationEvents {
       const unsubscribe = this.deps.onAgentPaneChange((change) => {
         this.settleRejected(change.paneKey)
         news.observe(change)
+        this.announceStampedStart(change)
       })
       this.release = () => {
         unsubscribe()
@@ -150,7 +153,7 @@ export class ConversationEvents {
     this.release?.()
     this.release = null
     this.listeners.clear()
-    this.turnStartedAt.clear()
+    this.unstampedTurn.clear()
     this.rejected.clear()
   }
 
@@ -210,11 +213,7 @@ export class ConversationEvents {
           agent: link.agent,
           working,
           prompt: this.deps.pendingPrompt(link),
-          // The same id started() and takeTurnId() give this turn.
-          turnId:
-            this.turnStartedAt.get(link.paneKey) ??
-            row?.turnStartedAt ??
-            (row && working ? row.stateStartedAt : null),
+          turnId: this.turnIdOf(link.paneKey, row),
           activeAt: Math.max(link.createdAt, row?.receivedAt ?? 0)
         }
       })
@@ -226,9 +225,26 @@ export class ConversationEvents {
     if (!link) {
       return
     }
-    const at = item.row.turnStartedAt ?? item.row.stateStartedAt
-    this.turnStartedAt.set(item.paneKey, at)
-    this.emit({ kind: 'turn-started', ...pane(link, item.worktreeId), at })
+    const stamp = item.row.turnStartedAt
+    if (stamp === undefined) {
+      this.unstampedTurn.set(item.paneKey, item.row.stateStartedAt)
+    } else {
+      this.unstampedTurn.delete(item.paneKey)
+    }
+    this.emit({
+      kind: 'turn-started',
+      ...pane(link, item.worktreeId),
+      at: stamp ?? item.row.stateStartedAt
+    })
+  }
+
+  /** A start no news announced; the cloud applies a start only if it is newer than its own. */
+  private announceStampedStart(change: AgentPaneChange): void {
+    const at = unannouncedStampedStart(change, this.deps.readHookRow(change.paneKey))
+    const link = this.linkedFor(change.paneKey)?.link
+    if (at !== null && link && change.kind === 'moved') {
+      this.emit({ kind: 'turn-started', ...pane(link, change.workspace.worktreeId), at })
+    }
   }
 
   private told(item: TerminalAgentTurnNewsItem): void {
@@ -247,7 +263,7 @@ export class ConversationEvents {
     const verdict = judgeIdleAgentTurn(
       {
         rows: [item.row],
-        sentAt: this.turnStartedAt.get(item.paneKey) ?? 0,
+        sentAt: this.turnIdOf(item.paneKey, item.row) ?? 0,
         tail: [],
         readAgentCommands: () => []
       },
@@ -280,13 +296,18 @@ export class ConversationEvents {
     if (!link) {
       return null
     }
-    const turnId = this.turnStartedAt.get(paneKey) ?? this.deps.readHookRow(paneKey)?.turnStartedAt
-    return { key: { source: link.source, externalId: link.externalId }, turnId: turnId ?? null }
+    const turnId = this.turnIdOf(paneKey, this.deps.readHookRow(paneKey))
+    return { key: { source: link.source, externalId: link.externalId }, turnId }
+  }
+
+  /** The turn a pane is in or last ended: the host's stamp, or the unstamped start news reported. */
+  private turnIdOf(paneKey: string, row: AgentStatusIpcPayload | null): number | null {
+    return row?.turnStartedAt ?? this.unstampedTurn.get(paneKey) ?? null
   }
 
   private takeTurnId(paneKey: string, row: AgentStatusIpcPayload): number | null {
-    const turnId = this.turnStartedAt.get(paneKey) ?? row.turnStartedAt ?? null
-    this.turnStartedAt.delete(paneKey)
+    const turnId = this.turnIdOf(paneKey, row)
+    this.unstampedTurn.delete(paneKey)
     return turnId
   }
 

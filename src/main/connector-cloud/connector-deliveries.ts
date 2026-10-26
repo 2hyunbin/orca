@@ -83,7 +83,7 @@ export function dispatchDelivery(
       done = settle(() => seam.answer(host, key, delivery.promptId, delivery.optionId))
       break
     case 'cancel':
-      done = settle(() => seam.cancel(host, key, deliveryId))
+      done = settle(() => seam.cancel(host, key, deliveryId, delivery.turnId))
       break
   }
   return { deliveryId, received: true, done }

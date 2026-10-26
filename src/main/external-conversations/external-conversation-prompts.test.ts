@@ -205,6 +205,8 @@ describe('ExternalConversationSeam watch', () => {
       hookRow({
         state: 'done',
         stateStartedAt: 300,
+        // The host keeps the turn's stamp on its done row.
+        turnStartedAt: 100,
         lastAssistantMessage: 'Done.',
         mainAgent: { state: 'done', stateStartedAt: 300, outcome: 'success' }
       })
@@ -258,10 +260,48 @@ describe('ExternalConversationSeam watch', () => {
     })
     hookRows.set(PANE, hookRow({ state: 'working', turnStartedAt: 500 }))
     paneChange(moved('rest', 'working', 'prompt-submitted'))
-    hookRows.set(PANE, hookRow({ state: 'done', stateStartedAt: 400, sessionBoundary: false }))
+    hookRows.set(
+      PANE,
+      hookRow({ state: 'done', stateStartedAt: 400, turnStartedAt: 500, sessionBoundary: false })
+    )
     paneChange(moved('working', 'done', 'turn-finished'))
     paneChange({ ...moved('rest', 'working', 'prompt-submitted'), paneKey: 'tab-9:other' })
     expect(seen.map((event) => event.kind)).toEqual(['turn-started'])
+  })
+
+  it('names a turn a new prompt opened after an approval by the host’s stamp everywhere', async () => {
+    const { seam, host, hookRows, paneChange, fake } = await linked()
+    const seen: (ConversationSnapshot | ConversationEvent)[] = []
+    seam.watch(host, (event) => seen.push(event))
+    hookRows.set(PANE, hookRow({ state: 'working', turnStartedAt: 100 }))
+    paneChange(moved('rest', 'working', 'prompt-submitted'))
+    hookRows.set(PANE, { ...APPROVAL, turnStartedAt: 100 })
+    paneChange(moved('working', 'needs-you', 'needs-input'))
+    // The approval was dismissed and a new prompt sent: no prompt-submitted news, a new stamp.
+    hookRows.set(PANE, hookRow({ state: 'working', stateStartedAt: 300, turnStartedAt: 300 }))
+    paneChange(moved('needs-you', 'working', null))
+    expect(seen.at(-1)).toMatchObject({ kind: 'turn-started', at: 300 })
+    expect(seam.replyTarget(PANE)).toEqual({ key: KEY, turnId: 300 })
+    seam.watch(host, (event) => seen.push(event))
+    expect(seen.at(-1)).toMatchObject({ kind: 'snapshot', conversations: [{ turnId: 300 }] })
+    // A Stop pressed for the earlier turn leaves the new turn's own approval alone.
+    hookRows.set(PANE, { ...APPROVAL, stateStartedAt: 400, turnStartedAt: 300 })
+    paneChange(moved('working', 'needs-you', 'needs-input'))
+    await expect(seam.cancel(host, KEY, 'c-old', 100)).resolves.toMatchObject({
+      reason: 'turn_not_running'
+    })
+    expect(fake.keys).toEqual([])
+    hookRows.set(
+      PANE,
+      hookRow({
+        state: 'done',
+        stateStartedAt: 500,
+        turnStartedAt: 300,
+        mainAgent: { state: 'done', stateStartedAt: 500, outcome: 'success' }
+      })
+    )
+    paneChange(moved('needs-you', 'done', 'turn-finished'))
+    expect(seen.at(-1)).toMatchObject({ kind: 'turn-ended', turnId: 300 })
   })
 
   it('tells a watcher of a conversation linked while it watches', async () => {
