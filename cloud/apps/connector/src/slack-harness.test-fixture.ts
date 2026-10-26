@@ -173,11 +173,12 @@ export async function createSlackHarness(slack: Partial<SlackConfig> = {}) {
 
   const posts = async () =>
     await harness.database.query(
-      'SELECT post_id, kind, body, state, next_at, slack_ts FROM connector_slack_posts ORDER BY post_id'
+      'SELECT post_id, kind, body, state, next_at, message_ref FROM connector_posts ORDER BY post_id'
     )
 
   return {
     ...harness,
+    core: harness.runtime.core,
     edge,
     fake,
     tokenKey,
@@ -224,14 +225,14 @@ export async function startedThread() {
   }
   const status = async () => {
     const [row] = await harness.database.query(
-      'SELECT body FROM connector_slack_posts WHERE post_id = ?',
+      'SELECT body FROM connector_posts WHERE post_id = ?',
       [`status:${EXTERNAL_ID}`]
     )
     return JSON.parse(String(row?.body)).text
   }
   const reply = (replyId: string, text: string, by = machine) =>
     by.call(CONNECTOR_PATHS.replies, { v: 1, replyId, conversation, turnId: TURN, text })
-  const pass = () => harness.edge.worker.sendDue()
+  const pass = () => harness.core.sendDue()
   return { ...harness, machine, start, events, status, reply, pass }
 }
 

@@ -1,4 +1,5 @@
-import type { PlaceOption } from './slack-machine-choice.js'
+import type { ConversationView } from './connector-adapter.js'
+import type { PlaceOption } from './machine-choice.js'
 import type { AnswerablePrompt } from './owner-controls.js'
 
 // Every line Orca posts in Slack, in one place for review. Replies meant only for the person who
@@ -118,4 +119,29 @@ export const slackText = {
       '',
       ownerText
     ].join('\n')
+}
+
+// The status message's line for a conversation's state.
+export function slackStatusText({ hostName, ownerUserId, status }: ConversationView): string {
+  const line = slackText.status
+  switch (status.kind) {
+    case 'offline':
+      return line.offline(ownerUserId, hostName)
+    case 'needs_answer':
+      return status.answerHere ? line.needsAnswerHere : line.needsAnswer(hostName)
+    case 'working':
+      return line.working(hostName)
+    case 'waiting':
+      return line.waiting(hostName)
+    case 'refused':
+      return line.refused(hostName, status.reason)
+    case 'unsupported':
+      return line.unsupported(hostName)
+    case 'unknown':
+      return line.unknown
+    case 'no_update':
+      return line.noUpdate
+    case 'done':
+      return line.done(hostName)
+  }
 }

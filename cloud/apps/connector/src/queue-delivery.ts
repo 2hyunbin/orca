@@ -27,7 +27,7 @@ export async function queueDelivery(
     held?: boolean
   }
 ): Promise<QueueResult> {
-  const { hostId, externalId } = input.thread
+  const { hostId, conversation } = input.thread
   return await deps.database.transaction(async (transaction) => {
     await lockConnectorHost(transaction, hostId)
     const accountId = await deps.hosts.accountOf(transaction, hostId)
@@ -39,7 +39,7 @@ export async function queueDelivery(
     }
     return await deps.inbox.enqueue(transaction, {
       hostId,
-      externalId,
+      conversation,
       deliveryId: input.deliveryId,
       body: input.body,
       held: input.held ?? false

@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util'
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
-import { saveSlackIdentity } from './slack-identities.js'
+import { saveIdentity } from './connector-identities.js'
 import { SlackInstalls } from './slack-installs.js'
 
 // Slack ids are upper-case letters and digits; anything else is a typo, and a bot user id ends up
@@ -79,7 +79,7 @@ export async function runSlackOperator(
       return command === 'pause' ? `Paused ${teamId}.` : `Resumed ${teamId}.`
     }
     case 'link': {
-      const channelProjects = Object.fromEntries(
+      const containerProjects = Object.fromEntries(
         (values['channel-project'] ?? []).map((entry) => {
           const [channel, project] = entry.split('=', 2)
           return [slackId(channel, 'channel-project'), required(project, 'channel-project')]
@@ -87,15 +87,16 @@ export async function runSlackOperator(
       )
       const teamId = slackId(values.team, 'team')
       const slackUserId = slackId(values.user, 'user')
-      await saveSlackIdentity(
+      await saveIdentity(
         deps.database,
         {
-          teamId,
-          slackUserId,
+          source: 'slack',
+          workspaceId: teamId,
+          userId: slackUserId,
           accountId: required(values.account, 'account'),
           defaultHostId: values['default-host'] ?? null,
           defaultProject: values['default-project'] ?? null,
-          channelProjects
+          containerProjects
         },
         deps.now()
       )

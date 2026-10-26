@@ -1,7 +1,7 @@
 import type { ConnectorProject } from '@orca-cloud/connector-contract'
 import { describe, expect, it } from 'vitest'
-import type { SlackIdentity } from './slack-identities.js'
-import { chooseMachine, type KnownHost } from './slack-machine-choice.js'
+import type { ConnectorIdentity } from './connector-identities.js'
+import { chooseMachine, type KnownHost } from './machine-choice.js'
 
 function host(
   hostId: string,
@@ -37,11 +37,11 @@ const project = (name: string, placeId: string, remote?: string): ConnectorProje
   where: { kind: 'local' }
 })
 
-const identity = (overrides: Partial<SlackIdentity> = {}): SlackIdentity => ({
+const identity = (overrides: Partial<ConnectorIdentity> = {}): ConnectorIdentity => ({
   accountId: 'user-1',
   defaultHostId: null,
   defaultProject: null,
-  channelProjects: {},
+  containerProjects: {},
   ...overrides
 })
 
@@ -52,7 +52,7 @@ const laptop = host('h1', 'laptop', [
 const server = host('h2', 'build box', [project('orca', 'pl_3', 'stablyai/orca')])
 
 const choose = (text: string, ident = identity(), hosts = [laptop, server], channelId = 'C1') =>
-  chooseMachine({ hosts, identity: ident, channelId, text })
+  chooseMachine({ source: 'slack', hosts, identity: ident, containerId: channelId, text })
 
 describe('chooseMachine', () => {
   it('takes a project named in the message, by name or remote', () => {
@@ -68,7 +68,7 @@ describe('chooseMachine', () => {
   it('falls back to the channel default, then the personal default', () => {
     const ident = identity({
       defaultProject: 'orca',
-      channelProjects: { C1: 'web' },
+      containerProjects: { C1: 'web' },
       defaultHostId: 'h2'
     })
     expect(choose('fix it', ident)).toMatchObject({ kind: 'chosen', placeId: 'pl_2' })

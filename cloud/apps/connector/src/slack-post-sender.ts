@@ -1,7 +1,8 @@
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import { z } from 'zod'
+import type { ClaimedPost, PostKind } from './connector-posts.js'
+import type { SendOutcome } from './post-worker.js'
 import type { SlackInstalls } from './slack-installs.js'
-import type { ClaimedPost, SlackPostKind, SlackPosts } from './slack-posts.js'
 import type { SlackResult, SlackWebApi } from './slack-web-api.js'
 
 const TextBodySchema = z.object({
@@ -15,7 +16,7 @@ const EphemeralBodySchema = z.object({
   // Present only when the message it answers was inside a thread.
   threadTs: z.string().min(1).optional()
 })
-const BODY_SCHEMAS: Record<SlackPostKind, z.ZodType> = {
+const BODY_SCHEMAS: Record<PostKind, z.ZodType> = {
   message: TextBodySchema,
   status: TextBodySchema,
   reaction: ReactionBodySchema,
@@ -37,62 +38,47 @@ const POST_METADATA_TYPE = 'orca_post'
 const RECONCILE_LOOKBACK_MS = 60_000
 const RECONCILE_MAX_PAGES = 3
 
-// Sends queued posts. A new message carries its post id in Slack metadata, so one that was left
-// mid-send is looked for in the thread before it is sent again; if that check can't run, the post
-// is marked uncertain rather than risking a duplicate.
-export class SlackPostWorker {
+// Sends one claimed post to Slack. A new message carries its post id in Slack metadata, so one that
+// was left mid-send is looked for in the thread before it is sent again; if that check can't run,
+// the post is uncertain rather than risking a duplicate.
+export class SlackPostSender {
   constructor(
     private readonly deps: {
       database: CloudDatabase
-      posts: SlackPosts
       installs: SlackInstalls
       api: SlackWebApi
     }
   ) {}
 
-  // Claimed heads are in different channels and go out in parallel, well inside their lease. A
-  // database error leaves its post sending, so the lease brings it back to the history check.
-  async sendDue(): Promise<void> {
-    const claimed = await this.deps.posts.claim()
-    const sent = await Promise.allSettled(claimed.map((post) => this.sendClaimed(post)))
-    const failure = sent.find((result) => result.status === 'rejected')
-    if (failure) {
-      throw failure.reason
-    }
-  }
-
   // A post that can never go (no readable install token, an unreadable body) fails rather than
   // holding its channel.
-  private async sendClaimed(post: ClaimedPost): Promise<void> {
-    const token = await this.deps.installs.botToken(this.deps.database, post.teamId)
+  async send(post: ClaimedPost): Promise<SendOutcome> {
+    const token = await this.deps.installs.botToken(this.deps.database, post.workspaceId)
     const body = BODY_SCHEMAS[post.kind].safeParse(post.body)
     if (token === null || !body.success) {
-      await this.deps.posts.settle(post, 'failed')
-      return
+      return { kind: 'failed' }
     }
-    await this.send(token, post)
+    return await this.sendWith(token, post)
   }
 
-  private async send(token: string, post: ClaimedPost): Promise<void> {
-    const { api, posts } = this.deps
+  private async sendWith(token: string, post: ClaimedPost): Promise<SendOutcome> {
+    const { api } = this.deps
     if (post.kind === 'reaction') {
       const body = ReactionBodySchema.parse(post.body)
-      const result = await api(token, 'reactions.add', { channel: post.channelId, ...body })
-      await this.finish(
-        post,
+      const result = await api(token, 'reactions.add', { channel: post.containerId, ...body })
+      return outcome(
         result.kind === 'failed' && result.error === 'already_reacted'
           ? { kind: 'ok', body: {} }
           : result,
         'retry'
       )
-      return
     }
     if (post.kind === 'ephemeral') {
       // Nothing to look for afterwards, so an unclear outcome is retried; a duplicate is seen by
       // one person at most.
       const { text, user, threadTs } = EphemeralBodySchema.parse(post.body)
       const result = await api(token, 'chat.postEphemeral', {
-        channel: post.channelId,
+        channel: post.containerId,
         user,
         text,
         ...(threadTs === undefined ? {} : { thread_ts: threadTs })
@@ -102,36 +88,30 @@ export class SlackPostWorker {
           JSON.stringify({ event: 'orca_connector_slack_ephemeral_failed', error: result.error })
         )
       }
-      await this.finish(post, result, 'retry')
-      return
+      return outcome(result, 'retry')
     }
     const { text, blocks } = TextBodySchema.parse(post.body)
-    if (post.kind === 'status' && post.slackTs !== null) {
+    if (post.kind === 'status' && post.messageRef !== null) {
       const result = await api(token, 'chat.update', {
-        channel: post.channelId,
-        ts: post.slackTs,
+        channel: post.containerId,
+        ts: post.messageRef,
         text,
         ...(blocks ? { blocks } : {})
       })
-      await this.finish(post, result, 'retry')
-      return
+      return outcome(result, 'retry')
     }
     if (post.stale) {
       const found = await this.findSent(token, post)
       if (found === undefined) {
-        if (await posts.settle(post, 'uncertain')) {
-          console.warn(JSON.stringify({ event: 'orca_connector_slack_post_uncertain' }))
-        }
-        return
+        return { kind: 'uncertain' }
       }
       if (found !== null) {
-        await posts.found(post, found)
-        return
+        return { kind: 'found', messageRef: found }
       }
     }
     const result = await api(token, 'chat.postMessage', {
-      channel: post.channelId,
-      thread_ts: post.threadTs,
+      channel: post.containerId,
+      thread_ts: post.threadId,
       text,
       ...(blocks ? { blocks } : {}),
       unfurl_links: false,
@@ -139,32 +119,7 @@ export class SlackPostWorker {
       metadata: { event_type: POST_METADATA_TYPE, event_payload: { post_id: post.postId } }
     })
     // An unknown outcome stays sending; the lease brings it back to findSent.
-    await this.finish(post, result, 'leave')
-  }
-
-  private async finish(
-    post: ClaimedPost,
-    result: SlackResult,
-    onUnknown: 'retry' | 'leave'
-  ): Promise<void> {
-    const { posts } = this.deps
-    switch (result.kind) {
-      case 'ok': {
-        const ts = typeof result.body.ts === 'string' ? result.body.ts : undefined
-        await posts.posted(post, ts)
-        return
-      }
-      case 'failed':
-        await posts.settle(post, 'failed')
-        return
-      case 'retry':
-        await posts.retry(post, result.afterMs)
-        return
-      case 'unknown':
-        if (onUnknown === 'retry') {
-          await posts.retry(post)
-        }
-    }
+    return outcome(result, 'leave')
   }
 
   // The sent message's ts, null when it isn't in the thread, undefined when we couldn't tell.
@@ -172,8 +127,8 @@ export class SlackPostWorker {
     let cursor: string | undefined
     for (let page = 0; page < RECONCILE_MAX_PAGES; page++) {
       const result = await this.deps.api(token, 'conversations.replies', {
-        channel: post.channelId,
-        ts: post.threadTs,
+        channel: post.containerId,
+        ts: post.threadId,
         oldest: String((post.sentAt - RECONCILE_LOOKBACK_MS) / 1000),
         include_all_metadata: true,
         limit: 200,
@@ -196,5 +151,21 @@ export class SlackPostWorker {
       }
     }
     return undefined
+  }
+}
+
+function outcome(result: SlackResult, onUnknown: 'retry' | 'leave'): SendOutcome {
+  switch (result.kind) {
+    case 'ok':
+      return {
+        kind: 'posted',
+        messageRef: typeof result.body.ts === 'string' ? result.body.ts : undefined
+      }
+    case 'failed':
+      return { kind: 'failed' }
+    case 'retry':
+      return { kind: 'retry', afterMs: result.afterMs }
+    case 'unknown':
+      return onUnknown === 'retry' ? { kind: 'retry' } : { kind: 'unknown' }
   }
 }
