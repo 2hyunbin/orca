@@ -57,6 +57,8 @@ export function useMobileStructuredSendWithOutcome(args: {
   commandsWait: boolean
   stateRef: { readonly current: StructuredAgentSessionState }
   stopping: boolean
+  /** The host's queue sends next: commands that cannot wait in line read the chat as working. */
+  queueSendsNext: boolean
   accept: MobileStructuredSends['accept']
   hold: MobileStructuredSends['hold']
   commandPending: { current: boolean }
@@ -86,6 +88,7 @@ export function useMobileStructuredSendWithOutcome(args: {
     onSendError,
     queueCapable,
     queueFollowUps,
+    queueSendsNext,
     sendOptions,
     sessionCommands,
     sessionId,
@@ -130,7 +133,7 @@ export function useMobileStructuredSendWithOutcome(args: {
           const turnId = runningStructuredAgentSessionTurnId(state)
           const tasks = structuredSessionBackgroundTasksView(state.backgroundTasks, turnId)
           return {
-            working: turnId !== null,
+            working: turnId !== null || queueSendsNext,
             prompt: Boolean(
               actionableStructuredApproval(state) || actionableStructuredQuestion(state)
             ),
@@ -208,6 +211,7 @@ export function useMobileStructuredSendWithOutcome(args: {
       onSendError,
       queueCapable,
       queueFollowUps,
+      queueSendsNext,
       sendOptions,
       sessionCommands,
       sessionId,

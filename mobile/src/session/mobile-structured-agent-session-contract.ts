@@ -22,6 +22,8 @@ export type StructuredMobileSession = ReturnType<typeof useMobileStructuredAgent
   ReturnType<typeof useMobileStructuredAgentTurnTiming> & {
     session: MobileNativeChatSession
     isWorking: boolean
+    /** Desktop's Stop rule: a running turn, or conversation Stop while working or sending. */
+    canStop: boolean
     turnId: string | null
     turnIndicator: NativeChatLiveTurnIndicator
     sendWithOutcome: (
