@@ -32,6 +32,7 @@ import { NativeChatCopyOrcaSessionIdMenuItem } from './NativeChatCopyOrcaSession
 import { NativeChatSelectionQuote } from './NativeChatSelectionQuote'
 import { StructuredChatPaneMenuItems } from './StructuredChatPaneMenuItems'
 import { NativeChatPaneMenuItems } from './NativeChatPaneMenuItems'
+import { NativeChatStructuredPaneMenuItems } from './NativeChatStructuredPaneMenuItems'
 import type { NativeChatComposerHandle } from './native-chat-composer-types'
 import { AgentSessionContinuationMenuItem } from '@/components/terminal-pane/AgentSessionContinuationMenuItem'
 import { AgentSessionContextCopyMenuItem } from '@/components/terminal-pane/AgentSessionContextCopyMenuItem'
@@ -313,7 +314,7 @@ export function useNativeChatContextMenu({
             </>
           ) : null}
           {chatPane ? (
-            <StructuredChatPaneMenuItems
+            <NativeChatStructuredPaneMenuItems
               pane={chatPane}
               leadingSeparator={hasEditItems || hasSessionItems}
               splitShortcutLabels={splitShortcutLabels}
