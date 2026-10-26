@@ -9,8 +9,9 @@ export function escapeSlackText(text: string): string {
 }
 
 const MAX_LISTED_OPTIONS = 10
-// Slack's limit on a section's text.
+// Slack's limits on a section's text and a button's label.
 const MAX_SECTION_CHARS = 3_000
+export const MAX_BUTTON_LABEL_CHARS = 75
 
 export const slackText = {
   paused: 'Orca for Slack is paused.',
@@ -53,8 +54,9 @@ export const slackText = {
         : [prompt.header && `*${escapeSlackText(prompt.header)}*`, escapeSlackText(prompt.question)]
     return lines.filter(Boolean).join('\n').slice(0, MAX_SECTION_CHARS)
   },
+  // The label as its button showed it (Slack caps those at 75), so the note stays within limits.
   promptAnswered: (ownerUserId: string, label: string) =>
-    `<@${ownerUserId}> answered: ${escapeSlackText(label)}.`,
+    `<@${ownerUserId}> answered: ${escapeSlackText(label.slice(0, MAX_BUTTON_LABEL_CHARS))}.`,
   promptClosed: 'No longer waiting for this answer.',
   onlyOwner: (ownerUserId: string) => `Only <@${ownerUserId}> can do this.`,
   stopButton: 'Stop',

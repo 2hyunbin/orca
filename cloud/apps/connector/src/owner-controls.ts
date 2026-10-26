@@ -1,11 +1,13 @@
+import { createHash } from 'node:crypto'
 import type { CloudDatabase, SqlRow } from '@orca-cloud/cloud-database'
 import {
+  ConnectorDeliveryResultSchema,
   ConnectorPendingPromptSchema,
   type ConnectorHelloRequest,
   type ConnectorPendingPrompt
 } from '@orca-cloud/connector-contract'
 import { lockConnectorHost } from './connector-hosts.js'
-import type { queueDelivery } from './queue-delivery.js'
+import type { QueueInTransaction } from './queue-delivery.js'
 
 // What an owner can do to their conversation from any connected app: answer the agent's prompt,
 // or stop its turn (decisions §1: only the owner). Each goes to the machine through the inbox.
@@ -20,17 +22,23 @@ export type OwnerActionOutcome =
   | { kind: 'answered'; ownerUserId: string; label: string }
   | { kind: 'stopping' }
 
+// Where an owner action for the current prompt or turn stands, read from its inbox row.
+export type OwnerActionState =
+  | { kind: 'on_its_way' }
+  | { kind: 'refused'; reason: string }
+  | { kind: 'unknown' }
+  | { kind: 'unreached' }
+
 export type AnswerablePrompt = Extract<ConnectorPendingPrompt, { kind: 'approval' | 'question' }>
 
-type QueueInTransaction = (
-  transaction: CloudDatabase,
-  input: Parameters<typeof queueDelivery>[1]
-) => ReturnType<typeof queueDelivery>
-
-// One answer per prompt, one stop per turn: repeated presses are duplicates in the inbox.
+// One answer per prompt, one stop per turn, so repeated presses are inbox duplicates. Hashed, so
+// any contract-valid conversation and prompt ids still make a delivery id within its 128 limit.
+const actionDeliveryId = (action: 'answer' | 'stop', externalId: string, target: string) =>
+  `${action}:${createHash('sha256').update(`${externalId}\0${target}`).digest('hex')}`
 export const answerDeliveryId = (externalId: string, promptId: string) =>
-  `answer:${externalId}:${promptId}`
-const stopDeliveryId = (externalId: string, turnId: number) => `stop:${externalId}:${turnId}`
+  actionDeliveryId('answer', externalId, promptId)
+export const stopDeliveryId = (externalId: string, turnId: number) =>
+  actionDeliveryId('stop', externalId, String(turnId))
 
 export function pendingPrompt(thread: SqlRow): ConnectorPendingPrompt | undefined {
   return typeof thread.pending_prompt === 'string'
@@ -52,20 +60,6 @@ export function answerablePrompt(
     : null
 }
 
-// An answer to that prompt is already on its way or done.
-export async function promptAnswered(
-  transaction: CloudDatabase,
-  hostId: string,
-  externalId: string,
-  promptId: string
-): Promise<boolean> {
-  const [row] = await transaction.query(
-    'SELECT 1 AS found FROM connector_inbox WHERE host_id = ? AND delivery_id = ?',
-    [hostId, answerDeliveryId(externalId, promptId)]
-  )
-  return row !== undefined
-}
-
 // The open turn, when its machine takes a stop.
 export function stoppableTurn(
   thread: SqlRow,
@@ -76,6 +70,65 @@ export function stoppableTurn(
     hello?.features.includes('cancel')
     ? Number(thread.open_turn_id)
     : null
+}
+
+// The answer to this prompt or the stop for this turn, if the owner sent one: matched by its own
+// delivery id, so a newer prompt or turn starts clean.
+export async function ownerActionState(
+  transaction: CloudDatabase,
+  hostId: string,
+  deliveryId: string
+): Promise<OwnerActionState | null> {
+  const [row] = await transaction.query(
+    'SELECT state, result FROM connector_inbox WHERE host_id = ? AND delivery_id = ?',
+    [hostId, deliveryId]
+  )
+  if (!row) {
+    return null
+  }
+  if (row.state === 'expired') {
+    return { kind: 'unreached' }
+  }
+  if (row.state !== 'done') {
+    return { kind: 'on_its_way' }
+  }
+  const result = ConnectorDeliveryResultSchema.safeParse(JSON.parse(String(row.result))).data
+  switch (result?.outcome) {
+    case 'accepted':
+      return { kind: 'on_its_way' }
+    case 'refused':
+      return { kind: 'refused', reason: result.reason }
+    case 'expired':
+      return { kind: 'unreached' }
+    default:
+      return { kind: 'unknown' }
+  }
+}
+
+// Under the host lock that applied a machine's events: a Stop not yet received for a turn that is
+// no longer the open one never goes out. Received ones are the machine's to refuse.
+export async function retireStaleStops(
+  transaction: CloudDatabase,
+  hostId: string,
+  now: number
+): Promise<void> {
+  const stops = await transaction.query(
+    `SELECT i.delivery_id, i.payload, t.turn_state, t.open_turn_id FROM connector_inbox i
+     JOIN connector_threads t ON t.external_id = i.external_id AND t.host_id = i.host_id
+     WHERE i.host_id = ? AND i.kind = 'cancel' AND i.state IN ('pending', 'leased')`,
+    [hostId]
+  )
+  for (const stop of stops) {
+    const turnId: unknown = JSON.parse(String(stop.payload)).turnId
+    const current = stop.turn_state === 'working' && Number(stop.open_turn_id) === turnId
+    if (typeof turnId === 'number' && !current) {
+      await transaction.query(
+        `UPDATE connector_inbox SET state = 'dropped', payload = NULL, settled_at = ?
+         WHERE host_id = ? AND delivery_id = ? AND state IN ('pending', 'leased')`,
+        [now, hostId, stop.delivery_id]
+      )
+    }
+  }
 }
 
 // Decided under the host lock the machine's events are applied under, so the prompt and turn read
@@ -123,7 +176,7 @@ export async function applyOwnerAction(
     const queued = await queue(transaction, {
       thread: target,
       deliveryId: stopDeliveryId(externalId, action.turnId),
-      body: { kind: 'cancel' }
+      body: { kind: 'cancel', turnId: action.turnId }
     })
     return queued === 'queued' ? { kind: 'stopping' } : { kind: 'moved_on' }
   }

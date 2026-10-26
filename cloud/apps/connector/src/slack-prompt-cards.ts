@@ -1,13 +1,12 @@
 import type { CloudDatabase, SqlRow } from '@orca-cloud/cloud-database'
 import type { ConnectorHelloRequest } from '@orca-cloud/connector-contract'
 import { z } from 'zod'
-import { answerablePrompt, promptAnswered, type AnswerablePrompt } from './owner-controls.js'
+import { answerablePrompt, type AnswerablePrompt } from './owner-controls.js'
 import type { SlackBlock, SlackPlace, SlackPosts } from './slack-posts.js'
-import { slackText } from './slack-text.js'
+import { MAX_BUTTON_LABEL_CHARS, slackText } from './slack-text.js'
 
-// Slack's limits: buttons per actions block, characters per button label.
+// Slack's limit on buttons per actions block.
 const MAX_BUTTONS = 25
-const MAX_BUTTON_LABEL_CHARS = 75
 
 const CardBodySchema = z.object({
   blocks: z.array(z.looseObject({ type: z.string() })).optional()
@@ -85,35 +84,32 @@ export function settledCard(body: unknown, note: string): { text: string; blocks
   }
 }
 
-function isOpen(body: unknown): boolean {
+// A card still showing its buttons; an answered or closed one is final.
+export function isOpenCard(body: unknown): boolean {
   return (
     CardBodySchema.safeParse(body).data?.blocks?.some((block) => block.type === 'actions') ?? false
   )
 }
 
 // The conversation's prompt cards as a projection, beside its status and under the same lock: the
-// unanswered pending prompt's card is open; any other open card closes. Answered cards are final.
+// shown prompt gets a card once; any other open card closes. A final card is never reopened.
 export async function refreshPromptCards(
   transaction: CloudDatabase,
   posts: SlackPosts,
-  thread: SlackPlace & { hostId: string; externalId: string },
+  thread: SlackPlace & { externalId: string },
   prompt: AnswerablePrompt | null
 ): Promise<void> {
-  const { hostId, externalId } = thread
-  const openId =
-    prompt && !(await promptAnswered(transaction, hostId, externalId, prompt.promptId))
-      ? promptCardId(externalId, prompt.promptId)
-      : null
-  if (prompt && openId) {
-    await posts.setStatus(transaction, { ...thread, postId: openId, ...openCard(prompt) })
-  }
   const cards = await transaction.query(
     `SELECT post_id, body FROM connector_slack_posts WHERE kind = 'status' AND post_id LIKE ?`,
-    [`${promptCardId(externalId, '')}%`]
+    [`${promptCardId(thread.externalId, '')}%`]
   )
+  const shownId = prompt ? promptCardId(thread.externalId, prompt.promptId) : null
+  if (prompt && shownId && !cards.some((card) => card.post_id === shownId)) {
+    await posts.setStatus(transaction, { ...thread, postId: shownId, ...openCard(prompt) })
+  }
   for (const card of cards) {
     const body: unknown = JSON.parse(String(card.body))
-    if (String(card.post_id) !== openId && isOpen(body)) {
+    if (card.post_id !== shownId && isOpenCard(body)) {
       await posts.setStatus(transaction, {
         ...thread,
         postId: String(card.post_id),

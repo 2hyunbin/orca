@@ -1,6 +1,7 @@
 import { ConnectorPollResponseSchema } from '@orca-cloud/connector-contract'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanupConnectorHarnesses } from './connector-server-harness.test-fixture.js'
+import { answerDeliveryId, stopDeliveryId } from './owner-controls.js'
 import {
   CHANNEL,
   conversation,
@@ -96,7 +97,7 @@ describe('Slack prompt cards', () => {
     expect(await harness.deliveries()).toEqual([
       expect.objectContaining({
         kind: 'answer',
-        deliveryId: `answer:${EXTERNAL_ID}:p1`,
+        deliveryId: answerDeliveryId(EXTERNAL_ID, 'p1'),
         promptId: 'p1',
         optionId: 'reject_once'
       })
@@ -211,7 +212,11 @@ describe('Slack prompt cards', () => {
     await harness.click({ messageTs: ts, actionId: 'stop', value: String(TURN) })
     await harness.click({ messageTs: ts, actionId: 'stop', value: String(TURN) })
     expect(await harness.deliveries()).toEqual([
-      expect.objectContaining({ kind: 'cancel', deliveryId: `stop:${EXTERNAL_ID}:${TURN}` })
+      expect.objectContaining({
+        kind: 'cancel',
+        deliveryId: stopDeliveryId(EXTERNAL_ID, TURN),
+        turnId: TURN
+      })
     ])
     const [status] = await harness.database.query(
       'SELECT body FROM connector_slack_posts WHERE post_id = ?',
@@ -238,5 +243,125 @@ describe('Slack prompt cards', () => {
     await harness.events(turnEnded)
     await harness.click({ messageTs: ts, actionId: 'stop', value: String(TURN) })
     expect(await harness.deliveries()).toEqual([])
+  })
+
+  it('never sends a Stop whose turn ended before the machine polled, even when a new turn began', async () => {
+    const harness = await asked()
+    await harness.click({
+      messageTs: await harness.statusTs(),
+      actionId: 'stop',
+      value: String(TURN)
+    })
+    await harness.events(turnEnded, { ...turnStarted, at: TURN + 10_000 })
+    expect(await harness.deliveries()).toEqual([])
+    const [stop] = await harness.database.query(
+      'SELECT state FROM connector_inbox WHERE delivery_id = ?',
+      [stopDeliveryId(EXTERNAL_ID, TURN)]
+    )
+    expect(stop?.state).toBe('dropped')
+  })
+
+  it('keeps showing a stop until its turn ends, whether the ack, a message or the end comes first', async () => {
+    const harness = await asked()
+    await harness.click({
+      messageTs: await harness.statusTs(),
+      actionId: 'stop',
+      value: String(TURN)
+    })
+    const [stop] = await harness.deliveries()
+    await harness.machine.ack([
+      { deliveryId: stop?.deliveryId, step: 'done', result: { outcome: 'accepted' } }
+    ])
+    const status = async () => {
+      const [row] = await harness.database.query(
+        'SELECT body FROM connector_slack_posts WHERE post_id = ?',
+        [`status:${EXTERNAL_ID}`]
+      )
+      return JSON.parse(String(row?.body))
+    }
+    expect((await status()).text).toBe('Stopping on build-box…')
+    expect((await status()).blocks).toHaveLength(1)
+    await harness.message({
+      text: 'and then?',
+      ts: '1800000000.000300',
+      thread_ts: '1800000000.000100'
+    })
+    expect((await status()).text).toBe('Stopping on build-box…')
+    // The turn's end settles the stop; what shows next is the follow-up waiting for the machine.
+    await harness.events(turnEnded)
+    expect((await status()).text).toBe('Waiting for your Orca on build-box…')
+  })
+
+  it('shows an answer’s refusal or unknown outcome as soon as it is settled', async () => {
+    for (const [result, text] of [
+      [{ outcome: 'refused', reason: 'prompt_not_pending' }, 'Already answered or moved on.'],
+      [
+        { outcome: 'unknown', reason: 'writer_failed' },
+        'This may not have reached the agent; check Orca.'
+      ]
+    ] as const) {
+      const harness = await asked()
+      await harness.click({ messageTs: (await harness.card()).ts, value: 'allow_once' })
+      const [answer] = await harness.deliveries()
+      await harness.machine.ack([{ deliveryId: answer?.deliveryId, step: 'done', result }])
+      expect(await harness.status()).toBe(text)
+    }
+  })
+
+  it('closes a card when a snapshot no longer lists its conversation', async () => {
+    const harness = await asked()
+    await harness.events({
+      kind: 'snapshot',
+      conversations: [
+        {
+          conversation,
+          paneKey: 'pane-1',
+          agent: 'claude',
+          working: true,
+          prompt: approval().prompt
+        }
+      ]
+    })
+    expect((await harness.card()).blocks).toHaveLength(2)
+    await harness.events({ kind: 'snapshot', conversations: [] })
+    expect((await harness.card()).text).toBe('No longer waiting for this answer.')
+  })
+
+  it('keeps an answered card’s note within Slack’s limits for any label', async () => {
+    const label = '&'.repeat(3_100)
+    const harness = await asked(approval([{ id: 'allow_once', label }]))
+    await harness.click({ messageTs: (await harness.card()).ts, value: 'allow_once' })
+    const note = (await harness.card()).blocks[1].elements[0].text
+    expect(note).toBe(`<@${OWNER}> answered: ${'&amp;'.repeat(75)}.`)
+  })
+
+  it('leaves an answered card final after the inbox forgets its answer', async () => {
+    const harness = await asked()
+    const { ts } = await harness.card()
+    await harness.click({ messageTs: ts, value: 'allow_once' })
+    const [answer] = await harness.deliveries()
+    await harness.machine.ack([
+      { deliveryId: answer?.deliveryId, step: 'done', result: { outcome: 'unknown', reason: 'x' } }
+    ])
+    harness.advance(8 * 24 * 60 * 60_000)
+    await harness.runtime.inbox.pruneSettled(7 * 24 * 60 * 60_000)
+    await harness.events(approval())
+    expect((await harness.card()).blocks).toHaveLength(2)
+    expect((await harness.card()).text).toBe(`<@${OWNER}> answered: Allow once.`)
+    await harness.click({ messageTs: ts, value: 'allow_once' })
+    expect(await harness.deliveries()).toEqual([])
+  })
+
+  it('delivers an answer to a prompt id at the contract’s 128-character limit', async () => {
+    const promptId = 'p'.repeat(128)
+    const harness = await asked({ ...approval(), prompt: { ...approval().prompt, promptId } })
+    const [card] = await harness.database.query(
+      'SELECT slack_ts FROM connector_slack_posts WHERE post_id = ?',
+      [`prompt:${EXTERNAL_ID}:${promptId}`]
+    )
+    await harness.click({ messageTs: String(card?.slack_ts), value: 'allow_once' })
+    expect(await harness.deliveries()).toEqual([
+      expect.objectContaining({ kind: 'answer', promptId, optionId: 'allow_once' })
+    ])
   })
 })

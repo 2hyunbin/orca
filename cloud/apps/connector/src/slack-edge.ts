@@ -17,7 +17,8 @@ import { SlackMembers } from './slack-members.js'
 import { SlackPostWorker } from './slack-post-worker.js'
 import { handleSlackClick, readSlackClick } from './slack-clicks.js'
 import { SlackPosts } from './slack-posts.js'
-import { routeSlackMessage, type QueueInTransaction } from './slack-routing.js'
+import type { QueueInTransaction } from './queue-delivery.js'
+import { routeSlackMessage } from './slack-routing.js'
 import { verifySlackSignature } from './slack-signature.js'
 import { SlackThreadStarts } from './slack-thread-start.js'
 import { queueAgentReply, queueTurnFallback, refreshSlackStatus } from './slack-thread-posts.js'
@@ -166,17 +167,15 @@ export function createSlackEdge(deps: {
           ? event.conversations.map((entry) => entry.conversation.externalId)
           : [event.conversation.externalId]
       )
-      // A snapshot can mark threads it doesn't list unverifiable.
-      const unverifiable = events.some((event) => event.kind === 'snapshot')
-        ? await transaction.query(
-            `SELECT external_id FROM connector_threads
-             WHERE host_id = ? AND turn_state = 'unverifiable'`,
-            [hostId]
-          )
+      // A snapshot also changes the threads it doesn't list (unverifiable turn, no prompt).
+      const unlisted = events.some((event) => event.kind === 'snapshot')
+        ? await transaction.query('SELECT external_id FROM connector_threads WHERE host_id = ?', [
+            hostId
+          ])
         : []
       await refresh(transaction, hostId, [
         ...externalIds,
-        ...unverifiable.map((row) => String(row.external_id))
+        ...unlisted.map((row) => String(row.external_id))
       ])
       for (const event of events) {
         if (event.kind === 'turn-ended' && event.lastAssistantMessage !== undefined) {

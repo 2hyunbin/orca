@@ -4,7 +4,14 @@ import {
   type ConnectorHelloRequest
 } from '@orca-cloud/connector-contract'
 import { knownHost } from './slack-machine-choice.js'
-import { stoppableTurn } from './owner-controls.js'
+import {
+  answerDeliveryId,
+  ownerActionState,
+  pendingPrompt,
+  stopDeliveryId,
+  stoppableTurn,
+  type OwnerActionState
+} from './owner-controls.js'
 import { refreshPromptCards, slackAnswerablePrompt, statusBlocks } from './slack-prompt-cards.js'
 import type { SlackPlace, SlackPosts } from './slack-posts.js'
 import { escapeSlackText, slackText } from './slack-text.js'
@@ -55,29 +62,34 @@ export async function refreshSlackStatus(
   }
   const [latest] = await transaction.query(
     `SELECT kind, state, result FROM connector_inbox
-     WHERE host_id = ? AND external_id = ? AND kind IN ('start', 'send', 'answer', 'cancel')
+     WHERE host_id = ? AND external_id = ? AND kind IN ('start', 'send', 'answer')
      ORDER BY seq DESC LIMIT 1`,
     [hostId, externalId]
   )
   const prompt = slackAnswerablePrompt(thread.row, thread.hello)
   const place = { teamId: thread.teamId, channelId: thread.channelId, threadTs: thread.threadTs }
-  // A stop on its way to the machine; it settles when the turn ends.
-  const stopping =
-    latest?.kind === 'cancel' && ['pending', 'leased', 'received'].includes(String(latest.state))
-  const text = stopping
-    ? slackText.status.stopping(thread.hostName)
-    : statusText(thread.row, latest, thread.hostName, prompt !== null)
+  // The owner's own stop for the open turn and answer to the shown prompt, matched by their ids.
+  const openTurn = thread.row.turn_state === 'working' ? thread.row.open_turn_id : null
+  const shown = pendingPrompt(thread.row)
+  const owner = {
+    stop:
+      openTurn === null
+        ? null
+        : await ownerActionState(transaction, hostId, stopDeliveryId(externalId, Number(openTurn))),
+    answer: shown
+      ? await ownerActionState(transaction, hostId, answerDeliveryId(externalId, shown.promptId))
+      : null
+  }
+  const text = statusText(thread.row, latest, thread.hostName, prompt !== null, owner)
+  const stoppable = stoppableTurn(thread.row, thread.hello)
   await posts.setStatus(transaction, {
     ...place,
     postId: statusPostId(externalId),
     text,
-    // No Stop while stopping, or while the machine can't be reached.
-    blocks: statusBlocks(
-      text,
-      stopping || unreached(latest) ? null : stoppableTurn(thread.row, thread.hello)
-    )
+    // One Stop per turn, and none while the machine can't be reached.
+    blocks: statusBlocks(text, owner.stop || unreached(latest) ? null : stoppable)
   })
-  await refreshPromptCards(transaction, posts, { ...place, hostId, externalId }, prompt)
+  await refreshPromptCards(transaction, posts, { ...place, externalId }, prompt)
 }
 
 // A turn's reply and its fallback decide under one lock, so exactly one of them wins.
@@ -148,18 +160,47 @@ function unreached(latest: SqlRow | undefined): boolean {
   return latest?.state === 'expired' || resultOf(latest)?.outcome === 'expired'
 }
 
+// An owner action's outcome; `pending` is what the status shows while it is on its way.
+function ownerActionText(
+  state: OwnerActionState,
+  thread: SqlRow,
+  hostName: string,
+  pending: string
+): string {
+  switch (state.kind) {
+    case 'on_its_way':
+      return pending
+    case 'refused':
+      // An answer or stop the agent no longer had a use for (decision 10).
+      return state.reason === 'prompt_not_pending'
+        ? slackText.alreadyAnswered
+        : slackText.status.refused(hostName, state.reason)
+    case 'unknown':
+      return slackText.status.unknown
+    case 'unreached':
+      return slackText.status.offline(String(thread.owner_user_id), hostName)
+  }
+}
+
 function statusText(
   thread: SqlRow,
   latest: SqlRow | undefined,
   hostName: string,
-  answerableHere: boolean
+  answerableHere: boolean,
+  owner: { stop: OwnerActionState | null; answer: OwnerActionState | null }
 ): string {
   const result = resultOf(latest)
   // The newest message never arriving outranks whatever the last turn left showing.
   if (unreached(latest)) {
     return slackText.status.offline(String(thread.owner_user_id), hostName)
   }
+  if (owner.stop) {
+    return ownerActionText(owner.stop, thread, hostName, slackText.status.stopping(hostName))
+  }
   if (thread.pending_prompt !== null) {
+    if (owner.answer) {
+      return ownerActionText(owner.answer, thread, hostName, slackText.status.working(hostName))
+    }
     return answerableHere
       ? slackText.status.needsAnswerHere
       : slackText.status.needsAnswer(hostName)

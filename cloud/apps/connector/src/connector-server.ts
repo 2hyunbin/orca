@@ -17,7 +17,7 @@ import { queueDelivery } from './queue-delivery.js'
 import { limitByClientIp, RateLimiter } from './rate-limiter.js'
 import { RequestDrain } from './request-drain.js'
 import { createSlackEdge } from './slack-edge.js'
-import type { QueueInTransaction } from './slack-routing.js'
+import type { QueueInTransaction } from './queue-delivery.js'
 
 const MAX_BODY_BYTES = 64 * 1024
 const UNAUTHENTICATED_PER_MINUTE_PER_IP = 30

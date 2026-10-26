@@ -1,11 +1,12 @@
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import { z } from 'zod'
+import { lockConnectorHost } from './connector-hosts.js'
 import { applyOwnerAction, type OwnerAction } from './owner-controls.js'
 import type { SlackConfig } from './slack-config.js'
 import type { SlackInstalls } from './slack-installs.js'
 import type { SlackPosts } from './slack-posts.js'
-import { promptCardId, settledCard } from './slack-prompt-cards.js'
-import type { QueueInTransaction } from './slack-routing.js'
+import { isOpenCard, promptCardId, settledCard } from './slack-prompt-cards.js'
+import type { QueueInTransaction } from './queue-delivery.js'
 import { slackText } from './slack-text.js'
 import { refreshSlackStatus, statusPostId } from './slack-thread-posts.js'
 
@@ -129,6 +130,18 @@ export async function handleSlackClick(
             promptId: postId.slice(promptCardId(externalId, '').length),
             optionId: click.button.optionId
           }
+    if (action.kind === 'answer') {
+      // Cards close only under the host lock (events, clicks), so this read holds until commit.
+      await lockConnectorHost(transaction, String(thread.host_id))
+      const [card] = await transaction.query(
+        'SELECT body FROM connector_slack_posts WHERE post_id = ?',
+        [postId]
+      )
+      if (!isOpenCard(JSON.parse(String(card?.body ?? '{}')))) {
+        await tell(`moved-on:${postId}:${click.userId}`, slackText.alreadyAnswered)
+        return
+      }
+    }
     const outcome = await applyOwnerAction(transaction, queue, externalId, click.userId, action)
     switch (outcome?.kind) {
       case 'not_owner':
