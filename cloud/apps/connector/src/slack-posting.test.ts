@@ -117,7 +117,7 @@ describe('Slack thread status and posts', () => {
     await harness.pass()
     expect(await (await harness.reply('r1', 'Here you go')).json()).toEqual({
       status: 'posted',
-      messageTs: expect.any(String)
+      messageId: expect.any(String)
     })
   })
 

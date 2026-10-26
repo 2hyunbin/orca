@@ -126,7 +126,7 @@ export function createSlackEdge(deps: {
       }
       const response: ConnectorReplyResponse =
         sent.state === 'posted' && sent.slackTs !== null
-          ? { status: 'posted', messageTs: sent.slackTs }
+          ? { status: 'posted', messageId: sent.slackTs }
           : { status: 'queued' }
       return context.json(response)
     })
