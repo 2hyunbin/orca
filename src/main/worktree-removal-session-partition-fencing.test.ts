@@ -265,6 +265,41 @@ describe('worktree removal across host session partitions', () => {
     ).toBe(1)
   })
 
+  // #21236: a mirrored tab the server closed stayed on disk for days, because every window save that
+  // dropped it was rebased onto the prior rows once any revision existed in the repo.
+  it('lets a window save drop a tab the server closed, after a restart past an old revision', async () => {
+    const MIRRORED = 'web-terminal-host-tab'
+    const store = await createStore()
+    store.setWorkspaceSession(
+      {
+        ...getDefaultWorkspaceSession(),
+        tabsByWorktree: {
+          [LIVE]: [
+            makeTerminalTab({ id: MIRRORED, worktreeId: LIVE, ptyId: null }),
+            makeTerminalTab({ id: 'kept', worktreeId: LIVE, ptyId: 'pty-kept' })
+          ]
+        },
+        terminalTopologyRevisionByRepoId: { 'repo-gone': 3 }
+      },
+      ENV_A
+    )
+    await store.flushPendingOrThrowAsync()
+
+    const restarted = await createStore()
+    restarted.setWorkspaceSession(
+      {
+        ...getDefaultWorkspaceSession(),
+        tabsByWorktree: {
+          [LIVE]: [makeTerminalTab({ id: 'kept', worktreeId: LIVE, ptyId: 'pty-kept' })]
+        }
+      },
+      ENV_A
+    )
+    expect(restarted.getWorkspaceSession(ENV_A).tabsByWorktree[LIVE]?.map((tab) => tab.id)).toEqual(
+      ['kept']
+    )
+  })
+
   it("lets the window's saves win again once main's fence has expired", async () => {
     const now = vi.spyOn(performance, 'now')
     try {
