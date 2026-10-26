@@ -36,7 +36,12 @@ const stateSchema = z.discriminatedUnion('kind', [
   }),
   z.object({ kind: z.literal('moving') }),
   z.object({ kind: z.literal('waiting-for-host'), migrationId: z.string() }),
-  z.object({ kind: z.literal('backoff'), nextAttemptAt: z.number(), reason: z.string() }),
+  z.object({
+    kind: z.literal('backoff'),
+    nextAttemptAt: z.number(),
+    reason: z.string(),
+    waits: z.number().int().nonnegative().optional()
+  }),
   z.object({
     kind: z.literal('parked'),
     reason: z.enum([
@@ -46,11 +51,17 @@ const stateSchema = z.discriminatedUnion('kind', [
       'attempts-exhausted',
       'not-now',
       'declined',
-      'removal-pending'
+      'removal-pending',
+      'stuck'
     ]),
     until: z.number().optional()
   }),
-  z.object({ kind: z.literal('done'), migrationId: z.string() }),
+  z.object({
+    kind: z.literal('done'),
+    migrationId: z.string(),
+    nextCheckAt: z.number().optional(),
+    waits: z.number().int().nonnegative().optional()
+  }),
   z.object({ kind: z.literal('distro-gone') }),
   z.object({ kind: z.literal('restore-offered') })
 ])

@@ -474,4 +474,35 @@ describe('WslMoveOrchestrator', () => {
   })
 
   // E11 (#33843): a Remove that could not prove the server stopped leaves the host to the user.
+
+  // Review of #34087: the wait cap counts checks, so a restart after days closed does not park.
+  it('does not park on the first in-flight refusal after a restart more than a day later', async () => {
+    const loaded = new Map<string, WslMoveOrchestratorRecord>([
+      [
+        wslMoveJournalKey('Ubuntu'),
+        {
+          distro: 'Ubuntu',
+          state: { kind: 'done', migrationId: 'm1', nextCheckAt: 1_000, waits: 2 },
+          attempts: 0,
+          appVersion: '1.0.0',
+          updatedAt: 0
+        }
+      ]
+    ])
+    const ports = fakePorts({
+      load: () => loaded,
+      preview: vi.fn(async () => ({
+        outcome: 'refused' as const,
+        code: 'wsl_move_already_in_flight' as const
+      }))
+    })
+    ports.clock.now += 3 * 24 * 60 * 60_000
+    const orchestrator = new WslMoveOrchestrator(ports)
+    await orchestrator.trigger('Ubuntu', 'startup')
+    expect(stateOf(orchestrator, 'Ubuntu')).toMatchObject({
+      kind: 'done',
+      migrationId: 'm1',
+      waits: 3
+    })
+  })
 })
