@@ -400,4 +400,24 @@ describe('Slack thread status and posts', () => {
       (await harness.posts()).find((post) => String(post.post_id).startsWith('eyes:'))?.state
     ).toBe('sending')
   })
+
+  it('a status whose first post is uncertain stays uncertain when its text changes', async () => {
+    const harness = await startedThread()
+    await harness.pass()
+    harness.fake.respond('chat.postMessage', new Response(null, { status: 502 }))
+    await harness.pass()
+    harness.advance(120_000)
+    harness.fake.respond(
+      'conversations.replies',
+      Response.json({ ok: false, error: 'ratelimited' })
+    )
+    await harness.pass()
+    await harness.events(turnStarted)
+    harness.fake.take()
+    await harness.pass()
+    expect(harness.fake.take()).toEqual([])
+    expect(
+      (await harness.posts()).find((post) => post.post_id === `status:${EXTERNAL_ID}`)?.state
+    ).toBe('uncertain')
+  })
 })

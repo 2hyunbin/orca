@@ -72,6 +72,7 @@ export class SlackPosts {
 
   // A changed text bumps rev. A finished row rejoins the back of its channel's queue; a queued or
   // sending one keeps its place, and a sender holding an older rev leaves it queued for one more edit.
+  // A text change never erases a delivery outcome: an uncertain status stays so, and stops editing.
   async setStatus(
     transaction: CloudDatabase,
     status: SlackPlace & { postId: string; text: string }
@@ -91,7 +92,8 @@ export class SlackPosts {
          next_at = CASE WHEN connector_slack_posts.state IN ('queued', 'sending')
            THEN connector_slack_posts.next_at ELSE excluded.next_at END,
          state = CASE WHEN connector_slack_posts.state = 'sending' THEN 'sending' ELSE 'queued' END
-       WHERE connector_slack_posts.body <> excluded.body`,
+       WHERE connector_slack_posts.body <> excluded.body
+         AND connector_slack_posts.state <> 'uncertain'`,
       [
         status.postId,
         status.teamId,
