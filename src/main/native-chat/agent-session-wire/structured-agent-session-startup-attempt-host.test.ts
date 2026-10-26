@@ -38,6 +38,7 @@ import {
 } from './structured-agent-session-host-test-data'
 import { createStructuredAgentSessionLogger } from './structured-agent-session-logger'
 import type { StructuredAgentSessionStartupLimits } from './structured-agent-session-startup-attempt-contract'
+import { registerStartupReports } from './structured-agent-session-startup-reports.test-support'
 
 const CALLER = { callerKey: 'client-1' }
 
@@ -486,62 +487,23 @@ describe('a start that ends before it proves itself', () => {
   })
 })
 
-describe('what a started child reports', () => {
-  it('keeps provider reports out of the saved next-message choice', async () => {
-    await restartWith(publishFirst)
-    const id = await heldBehindStart('hello')
-    await proveOpen('reported')
-    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('accepted'))
-    await host.handleAdapterEvent({
-      type: 'options-reported',
-      sessionId: SESSION,
-      fence: store.getRecord(SESSION)!.lease.runtimeFence,
-      acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
-      reportedOptions: { model: 'from-settings' }
-    })
-    await host.flushStreamedEvents(SESSION)
-    expect(store.getRecord(SESSION)?.options).toBeUndefined()
-  })
-
-  it('preserves a later accepted pick when an older child reports options', async () => {
-    await restartWith(publishFirst)
-    const id = await heldBehindStart('hello')
-    await store.replaceSessionOptions({
-      sessionId: SESSION,
-      fence: store.getRecord(SESSION)!.lease.runtimeFence,
-      options: { model: 'picked' },
-      now: NOW
-    })
-    await proveOpen('reported')
-    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('accepted'))
-    await host.handleAdapterEvent({
-      type: 'options-reported',
-      sessionId: SESSION,
-      fence: store.getRecord(SESSION)!.lease.runtimeFence,
-      acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
-      reportedOptions: { model: 'from-settings' }
-    })
-    await host.flushStreamedEvents(SESSION)
-    expect(store.getRecord(SESSION)?.options).toEqual({ model: 'picked' })
-  })
-
-  it('saves a settings readback that arrives before open proves the start', async () => {
-    await restartWith(publishFirst)
-    await heldBehindStart('hello')
-    const listing = { models: [], configuredDefault: { modelId: 'opus' } }
-    const reported = host.handleAdapterEvent({
-      type: 'options-reported',
-      sessionId: SESSION,
-      fence: store.getRecord(SESSION)!.lease.runtimeFence,
-      acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
-      reportedOptions: { model: 'opus' },
-      catalogListing: listing
-    })
-    await proveOpen()
-    await reported
-
-    await eventually(() => expect(recordLiveListing).toHaveBeenCalledWith(SESSION, listing))
-  })
+registerStartupReports({
+  get host() {
+    return host
+  },
+  get store() {
+    return store
+  },
+  get acquire() {
+    return acquire
+  },
+  restartWith,
+  publishFirst,
+  heldBehindStart,
+  proveOpen,
+  eventually,
+  submission,
+  recordLiveListing
 })
 
 function startupAttemptOpen(): boolean {
