@@ -6,7 +6,7 @@ import {
   PersistedRuntimeEnvironmentSchema,
   type PersistedRuntimeEnvironment
 } from './runtime-environments'
-import { hardenExistingSecureFile } from './secure-file'
+import { hardenExistingSecureFile, writeSecureFile } from './secure-file'
 
 const ENVIRONMENTS_FILE = 'orca-environments.json'
 export const MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES = 1024 * 1024
@@ -39,8 +39,6 @@ export type UnreadableEnvironmentRecord = { id: string | undefined; raw: unknown
 export type EnvironmentStoreRecords = {
   environments: PersistedRuntimeEnvironment[]
   unreadable: UnreadableEnvironmentRecord[]
-  /** The file exists but holds only NUL/whitespace; the next write backs it up and replaces it. */
-  blankFile?: true
 }
 
 function recordId(raw: unknown): string | undefined {
@@ -68,33 +66,21 @@ export function readEnvironmentStoreRecords(
   if (!options.requireStoreFile && !existsSync(path)) {
     return { environments: [], unreadable: [] }
   }
-  let text: string
-  try {
-    hardenExistingSecureFile(path)
-    text = readNodeFileSyncWithinLimit(
-      path,
-      MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES
-    ).buffer.toString('utf8')
-  } catch {
-    throw invalidStoreError(path)
-  }
-  let json: unknown
-  try {
-    json = JSON.parse(text)
-  } catch {
-    // A crash can publish the name over zeroed data (#18766); those bytes hold no server, and failing
-    // every save would strand the user. Other bad JSON may hold servers, so it still fails closed.
-    if (options.requireStoreFile || !/^[\s\0]*$/.test(text)) {
-      throw invalidStoreError(path)
-    }
-    return { environments: [], unreadable: [], blankFile: true }
-  }
   let records: unknown[]
   try {
-    // Valid JSON in another shape may be a newer build's store, so it fails closed.
-    records = StoreEnvelopeSchema.parse(json).environments
+    hardenExistingSecureFile(path)
+    records = StoreEnvelopeSchema.parse(
+      JSON.parse(
+        readNodeFileSyncWithinLimit(path, MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES).buffer.toString(
+          'utf8'
+        )
+      )
+    ).environments
   } catch {
-    throw invalidStoreError(path)
+    throw new RuntimeEnvironmentStoreError(
+      'runtime_error',
+      `Could not read Orca environments at ${path}; the file is invalid.`
+    )
   }
   const result: EnvironmentStoreRecords = { environments: [], unreadable: [] }
   for (const raw of records) {
@@ -108,19 +94,34 @@ export function readEnvironmentStoreRecords(
   return result
 }
 
-function invalidStoreError(path: string): RuntimeEnvironmentStoreError {
-  return new RuntimeEnvironmentStoreError(
-    'runtime_error',
-    `Could not read Orca environments at ${path}; the file is invalid.`
-  )
+function readBlankStoreText(path: string): boolean {
+  try {
+    const bytes = readNodeFileSyncWithinLimit(path, MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES).buffer
+    return /^[\s\0]*$/.test(bytes.toString('utf8'))
+  } catch {
+    return false
+  }
 }
 
-/** Copies (never moves) the blank store aside, so concurrent readers never see the name missing. */
-export function backUpBlankEnvironmentStore(userDataPath: string): void {
+/**
+ * A crash can publish the store's name over zeroed data (#18766). Those bytes hold no server, yet
+ * every read fails closed on them, so adding a server could never succeed. Saving a server copies
+ * them aside and replaces them with an empty store; other reads keep failing closed, because
+ * cleanup that treats an empty list as "every server was removed" must not run on them.
+ */
+export function recoverBlankEnvironmentStore(userDataPath: string): void {
   const path = getEnvironmentStorePath(userDataPath)
+  if (!existsSync(path) || !readBlankStoreText(path)) {
+    return
+  }
   const backupPath = `${path}.corrupt-${Date.now()}-${process.pid}`
   copyFileSync(path, backupPath, constants.COPYFILE_EXCL)
   hardenExistingSecureFile(backupPath)
+  // Another process may have saved a real store since the check above; never publish over it.
+  writeSecureFile(path, JSON.stringify({ version: 1, environments: [] }, null, 2), {
+    durable: true,
+    shouldPublish: () => readBlankStoreText(path)
+  })
   console.warn(`[runtime-environments] ${path} held no data; kept a copy at ${backupPath}.`)
 }
 

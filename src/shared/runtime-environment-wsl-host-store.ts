@@ -63,7 +63,7 @@ export function addWslHostEnvironment(
   }
 ): KnownRuntimeEnvironment {
   const offer = parseBridgedPairing(args.pairingCode)
-  const known = readEnvironmentStore(userDataPath).environments
+  const known = readEnvironmentStore(userDataPath, { recoverBlankStore: true }).environments
   if (known.some((entry) => entry.id === args.id)) {
     throw new RuntimeEnvironmentStoreError(
       'invalid_argument',

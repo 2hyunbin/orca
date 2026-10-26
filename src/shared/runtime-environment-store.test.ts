@@ -267,13 +267,15 @@ describe('runtime environment store', () => {
     expect(() => listEnvironments(userDataPath)).toThrow(RuntimeEnvironmentStoreError)
   })
 
-  it('backs up a NUL-filled store and saves new servers over it', () => {
+  it('backs up a NUL-filled store when a server is saved over it', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     onTestFinished(() => warn.mockRestore())
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-nul-'))
     tempDirs.push(userDataPath)
     writeFileSync(getEnvironmentStorePath(userDataPath), Buffer.alloc(640))
 
+    // Plain reads stay fail-closed: an empty answer would read as "every server was removed".
+    expect(() => listEnvironments(userDataPath)).toThrow(RuntimeEnvironmentStoreError)
     const added = addEnvironmentFromPairingCode(userDataPath, {
       name: 'dev box',
       pairingCode: pairingCode()
@@ -290,13 +292,16 @@ describe('runtime environment store', () => {
   it.each([
     ['a newer format', '{"version":2,"environments":[]}'],
     ['truncated JSON that may still hold servers', '{"version":1,"environments":[{"id":"a"']
-  ])('keeps failing closed on %s', (_label, contents) => {
+  ])('does not overwrite %s when a server is saved', (_label, contents) => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-invalid-'))
     tempDirs.push(userDataPath)
     writeFileSync(getEnvironmentStorePath(userDataPath), contents)
 
-    expect(() => listEnvironments(userDataPath)).toThrow(RuntimeEnvironmentStoreError)
+    expect(() =>
+      addEnvironmentFromPairingCode(userDataPath, { name: 'dev box', pairingCode: pairingCode() })
+    ).toThrow(RuntimeEnvironmentStoreError)
     expect(readdirSync(userDataPath)).toEqual(['orca-environments.json'])
+    expect(readFileSync(getEnvironmentStorePath(userDataPath), 'utf8')).toBe(contents)
   })
 
   it('rejects an oversized write without replacing the durable environment list', () => {

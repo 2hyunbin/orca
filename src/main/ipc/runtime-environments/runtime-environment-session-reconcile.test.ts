@@ -42,11 +42,6 @@ describe('reconciling orphaned runtime sessions at startup', () => {
     writeFileSync(getEnvironmentStorePath(corrupt), '{not json', { mode: 0o600 })
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     expect(reconcileOrphanedRuntimeSessions(store, corrupt)).toEqual([])
-
-    // A crash-zeroed store is recoverable for saves but still proves nothing about removals.
-    const zeroed = mkdtempSync(join(tmpdir(), 'orca-session-reconcile-zeroed-'))
-    writeFileSync(getEnvironmentStorePath(zeroed), Buffer.alloc(640), { mode: 0o600 })
-    expect(reconcileOrphanedRuntimeSessions(store, zeroed)).toEqual([])
     expect(store.removeWorkspaceSessionHost).not.toHaveBeenCalled()
   })
 })

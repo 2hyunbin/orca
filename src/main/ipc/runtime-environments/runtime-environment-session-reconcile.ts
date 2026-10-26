@@ -20,11 +20,7 @@ export function reconcileOrphanedRuntimeSessions(
   }
   let known: Set<string>
   try {
-    known = new Set(
-      listEnvironments(userDataPath, { requireStoreFile: true }).map(
-        (environment) => environment.id
-      )
-    )
+    known = new Set(listEnvironments(userDataPath).map((environment) => environment.id))
   } catch (error) {
     console.warn('[runtime-environments] skipped orphaned session reconcile:', error)
     return []

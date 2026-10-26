@@ -11,10 +11,10 @@ import {
   RuntimeEnvironmentSidecarInvalidError
 } from './runtime-environment-sidecar'
 import {
-  backUpBlankEnvironmentStore,
   getEnvironmentStorePath,
   MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES,
   readEnvironmentStoreRecords,
+  recoverBlankEnvironmentStore,
   RuntimeEnvironmentStoreError,
   warnUnreadableEnvironmentState
 } from './runtime-environment-store-records'
@@ -32,11 +32,20 @@ export {
   type RuntimeEnvironmentStoreErrorCode
 } from './runtime-environment-store-records'
 
+type EnvironmentStoreReadOptions = {
+  requireStoreFile?: boolean
+  /** Only for reads that go on to save a server: replaces a crash-zeroed store with an empty one. */
+  recoverBlankStore?: boolean
+}
+
 /** Readable records only; writeEnvironmentStore preserves unreadable corrupt/newer records verbatim. */
 export function readPersistedEnvironmentStore(
   userDataPath: string,
-  options: { requireStoreFile?: boolean } = {}
+  options: EnvironmentStoreReadOptions = {}
 ): RuntimeEnvironmentStore {
+  if (options.recoverBlankStore) {
+    recoverBlankEnvironmentStore(userDataPath)
+  }
   const { environments, unreadable } = readEnvironmentStoreRecords(userDataPath, options)
   if (unreadable.length > 0) {
     warnUnreadableEnvironmentState(
@@ -68,7 +77,7 @@ function readWslHostDeploymentsForRegistry(
 
 export function readEnvironmentStore(
   userDataPath: string,
-  options: { requireStoreFile?: boolean } = {}
+  options: EnvironmentStoreReadOptions = {}
 ): {
   version: 1
   environments: KnownRuntimeEnvironment[]
@@ -115,9 +124,6 @@ export function writeEnvironmentStore(userDataPath: string, store: RuntimeEnviro
   const path = getEnvironmentStorePath(userDataPath)
   const environments = RuntimeEnvironmentStoreSchema.parse(store).environments
   const onDisk = readEnvironmentStoreRecords(userDataPath)
-  if (onDisk.blankFile) {
-    backUpBlankEnvironmentStore(userDataPath)
-  }
   const readableIds = new Set(onDisk.environments.map((environment) => environment.id))
   const unreadableIds = new Set(onDisk.unreadable.map((record) => record.id))
   // A new readable record must not shadow one a newer build owns under the same id.
