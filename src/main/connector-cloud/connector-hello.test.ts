@@ -24,7 +24,7 @@ function largestProject(index: number): ConnectorProject {
 describe('connectorHello', () => {
   it('advertises exactly the features this build implements', () => {
     // A new contract feature is listed here only once the desktop implements it.
-    expect(CONNECTOR_DESKTOP_FEATURES).toEqual(['answer', 'cancel', 'reply', 'turnCancel'])
+    expect(CONNECTOR_DESKTOP_FEATURES).toEqual(['answer', 'cancel', 'reply'])
     const { body } = connectorHello(
       fakeMachine(() => null),
       { agents: [], projects: [] }

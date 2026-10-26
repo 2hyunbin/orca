@@ -9,12 +9,12 @@ import type { ConnectorMachine } from './connector-machine'
 import { jsonBytes } from './connector-snapshot'
 
 // What this build implements, listed by hand so a new contract feature is never advertised early.
-// turnCancel: a cancel naming another turn is refused (turn_not_running).
+// Not turnCancel: an approval rejection can still outlive the turn a bound cancel names, so the cloud
+// offers no Stop; bound cancels stay supported for whoever sends one.
 export const CONNECTOR_DESKTOP_FEATURES: readonly (typeof CONNECTOR_FEATURES)[number][] = [
   'answer',
   'cancel',
-  'reply',
-  'turnCancel'
+  'reply'
 ]
 const PROMPT_KINDS = ['approval', 'question']
 

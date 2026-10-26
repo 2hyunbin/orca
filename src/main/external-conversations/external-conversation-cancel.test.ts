@@ -97,6 +97,24 @@ describe('ExternalConversationSeam cancel', () => {
       expect(fake.keys).toEqual([])
     })
 
+    it('refuses once the main agent is done though background work keeps the row working', async () => {
+      const { seam, host, hookRows, fake } = await linked()
+      hookRows.set(PANE, {
+        ...working(100),
+        mainAgent: { state: 'done', stateStartedAt: 150, outcome: 'success' }
+      })
+      fake.state.blocked = true
+      const held = seam.send(host, KEY, 's1', 'next')
+      await vi.waitFor(() => expect(fake.held()).toBe(1))
+      await expect(seam.cancel(host, KEY, 'c1', 100)).resolves.toEqual({
+        outcome: 'refused',
+        reason: 'turn_not_running'
+      })
+      fake.answer()
+      await expect(held).resolves.toEqual({ outcome: 'accepted' })
+      expect(fake.keys).toEqual([])
+    })
+
     it('refuses a turn it cannot prove: relayed from another host, replayed or restored', async () => {
       const { seam, host, hookRows, fake } = await linked()
       const stale = { outcome: 'refused', reason: 'turn_not_running' }
