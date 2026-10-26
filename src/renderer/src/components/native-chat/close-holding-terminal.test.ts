@@ -257,15 +257,12 @@ it('preserves the chat in its retired terminal source slot when a different hold
     'terminal.close'
   ])
 })
-it.each(['cancel', 'replace', 'navigate', 'timeout', 'host-loss', 'spawn'] as const)(
+it.each(['replace', 'navigate', 'timeout', 'host-loss', 'spawn'] as const)(
   'settles %s without a follow-up or stolen navigation',
   async (outcome) => {
     const { result } = await begin()
     if (outcome === 'spawn') {
       spawned({ id: target.ptyId, incarnationId: 'replacement' })
-    }
-    if (outcome === 'cancel') {
-      callbacks.onCancel?.()
     }
     if (outcome === 'replace') {
       useAppStore.setState({

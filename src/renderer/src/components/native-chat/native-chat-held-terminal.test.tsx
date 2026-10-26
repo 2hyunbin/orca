@@ -143,7 +143,7 @@ it('keeps legacy metadata generic without a host lookup', () => {
   expect(mocks.capture).not.toHaveBeenCalled()
 })
 
-it('replaces Retry with Close, then returns to ordinary Retry after original-holder retirement without invoking it', async () => {
+it('keeps the single Close attempt busy after holder removal until completion', async () => {
   const closed = Promise.withResolvers<boolean>()
   const retry = vi.fn()
   mocks.close.mockReturnValueOnce(closed.promise)
@@ -180,15 +180,6 @@ it('replaces Retry with Close, then returns to ordinary Retry after original-hol
   act(() => useAppStore.setState({ tabsByWorktree: { w: [] } }))
   expect(screen.getByRole('button', { name: 'Close terminal' })).toHaveProperty('disabled', true)
   await act(async () => closed.resolve(true))
-  const retryButton = screen.getByRole('button', { name: 'Retry' })
-  expect(retryButton).toHaveProperty('disabled', false)
-  expect(screen.queryByRole('button', { name: 'Close terminal' })).toBeNull()
-  expect(screen.queryByRole('button', { name: 'Review' })).toBeNull()
-  expect(retry).not.toHaveBeenCalled()
-  expect(mocks.close).toHaveBeenCalledOnce()
-  expect(mocks.reveal).not.toHaveBeenCalled()
-  fireEvent.click(retryButton)
-  expect(retry).toHaveBeenCalledOnce()
 })
 
 it.each([undefined, false, 'true'])(

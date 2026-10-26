@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { confirmedPinnedClose } from '../../src/main/runtime/orca-runtime-original-terminal-close-store.test'
+import { makeSession } from '../../src/main/runtime/__fixtures__/orca-runtime-terminal-close-continuity-state-fixture'
 import { capturedPinnedTerminalCloseRequest } from '../../src/shared/__fixtures__/captured-pinned-terminal-close.test-fixture'
 import { TerminalClose } from '../../src/shared/rpc-contract/terminal-unary-params'
 import { createGlobalSettingsFixture } from '../../src/shared/global-settings-test-fixture'
@@ -122,34 +123,14 @@ it.each([
     ensurePtyDispatcher()
     reattachPtyDispatcherPushListeners()
     useAppStore.setState(useAppStore.getInitialState(), true)
+    const session = makeSession()
     useAppStore.setState({
       settings: createGlobalSettingsFixture({ confirmClosePinnedTab: true }),
       requestPinnedTabCloseConfirm: pin,
-      tabsByWorktree: {
-        [worktreeId]: [
-          {
-            id: tabId,
-            worktreeId,
-            ptyId,
-            title: 'Holder',
-            customTitle: null,
-            color: null,
-            createdAt: 1,
-            sortOrder: 0,
-            isPinned: true
-          }
-        ]
-      },
+      tabsByWorktree: session.tabsByWorktree,
       ptyIdsByTabId: { [tabId]: [ptyId] },
-      terminalPtyIncarnationsByPaneKey: { [`${tabId}:${leafId}`]: incarnationId },
-      terminalLayoutsByTabId: {
-        [tabId]: {
-          root: { type: 'leaf', leafId },
-          activeLeafId: leafId,
-          expandedLeafId: null,
-          ptyIdsByLeafId: { [leafId]: ptyId }
-        }
-      }
+      terminalPtyIncarnationsByPaneKey: session.terminalPtyIncarnationsByPaneKey,
+      terminalLayoutsByTabId: session.terminalLayoutsByTabId
     })
     const holder = useAppStore.getState().createUnifiedTab(worktreeId, 'terminal', {
       id: tabId,
@@ -251,7 +232,7 @@ it.each([
     expect(api.session.flush).toHaveBeenCalled()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Retry' }).disabled).toBe(false))
     expect(screen.queryByRole('button', { name: 'Close terminal' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Holder' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Fixture shell' })).toBeNull()
     expect(retry).not.toHaveBeenCalled()
     expect(
       useAppStore.getState().unifiedTabsByWorktree[worktreeId].some((tab) => tab.id === chat.id)
