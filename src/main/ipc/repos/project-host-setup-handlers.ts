@@ -65,7 +65,7 @@ function alignRepoWithRequestedProject(
     const updated = store.updateRepo(
       repo,
       resolveImportedFolderProjectLink(
-        folderRemote,
+        { ...repo, ...folderRemote },
         projectId,
         project?.providerIdentity ?? requestedProviderIdentity
       )
