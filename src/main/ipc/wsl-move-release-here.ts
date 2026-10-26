@@ -68,7 +68,7 @@ export async function releaseWslMoveChainHere(
 ): Promise<WslMoveUseLocallyResult> {
   const moves = listWslMoveCutoverChain(userDataPath, wslMoveJournalKey(distro))
     .filter((move) => WSL_MOVE_CUTOVER_PHASES.indexOf(move.phase) >= COMMITTED_FROM)
-    .reverse()
+    .toReversed()
   return moves.length > 0
     ? releaseWslMovesHere(userDataPath, moves, unsavedWorkspaceIdsAsked, createUndoPorts)
     : { released: false, reason: 'not-moved' }
