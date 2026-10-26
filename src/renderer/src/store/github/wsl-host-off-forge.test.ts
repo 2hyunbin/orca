@@ -26,16 +26,31 @@ function status(state: WslHostStatus['state']): WslHostStatus {
 describe('isWslHostOffForForge', () => {
   const runtimeEnvironments = [environment('wsl:ubuntu', true), environment('box', false)]
 
-  it('skips a WSL host that is not ready, including one with no status yet', () => {
-    expect(isWslHostOffForForge({ runtimeEnvironments, wslHostStatuses: {} }, 'wsl:ubuntu')).toBe(
-      true
-    )
+  it.each(['distro-stopped', 'closed'] as const)('skips a WSL host that is %s', (state) => {
     expect(
       isWslHostOffForForge(
-        { runtimeEnvironments, wslHostStatuses: { 'wsl:ubuntu': status('distro-stopped') } },
+        { runtimeEnvironments, wslHostStatuses: { 'wsl:ubuntu': status(state) } },
         'wsl:ubuntu'
       )
     ).toBe(true)
+  })
+
+  it.each(['connecting', 'reconnecting', 'unverifiable', 'failed'] as const)(
+    'lets a %s WSL host try, as any other call would',
+    (state) => {
+      expect(
+        isWslHostOffForForge(
+          { runtimeEnvironments, wslHostStatuses: { 'wsl:ubuntu': status(state) } },
+          'wsl:ubuntu'
+        )
+      ).toBe(false)
+    }
+  )
+
+  it('lets a WSL host with no status yet try', () => {
+    expect(isWslHostOffForForge({ runtimeEnvironments, wslHostStatuses: {} }, 'wsl:ubuntu')).toBe(
+      false
+    )
   })
 
   it('lets a ready WSL host and any other paired host refresh as before', () => {

@@ -1,9 +1,11 @@
 /**
  * E9: forge (PR/review) refreshes for a workspace on a WSL host go through the host, which never
- * boots a stopped distro for a poll. Skip them while the host isn't ready and say so, rather than
- * failing a request per badge.
+ * boots a stopped distro for a poll. Skip them while the host is off and say so, rather than
+ * failing a request per badge. Connecting, reconnecting or unverifiable hosts are not off: their
+ * calls proceed (or fail) as usual.
  */
 import { isWslHostRuntimeEnvironment } from '../../../../shared/runtime-environments'
+import type { WslHostStatus } from '../../../../shared/wsl-host-types'
 import type { AppState } from '../types'
 import type { PRRefreshState } from './pr-refresh-state'
 
@@ -16,8 +18,13 @@ export function isWslHostOffForForge(
   return Boolean(
     environment &&
     isWslHostRuntimeEnvironment(environment) &&
-    state.wslHostStatuses?.[environmentId]?.state !== 'ready'
+    isOffState(state.wslHostStatuses?.[environmentId]?.state)
   )
+}
+
+/** Confirmed stopped (a parked host included), or WSL hosts closed: nothing will answer. */
+function isOffState(state: WslHostStatus['state'] | undefined): boolean {
+  return state === 'distro-stopped' || state === 'closed'
 }
 
 /** Records the skip, so the Checks panel says the host is off instead of showing stale status. */

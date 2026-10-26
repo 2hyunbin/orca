@@ -231,6 +231,8 @@ export function visibleHostedReviewRefreshInputsChanged(
     state.repos !== previous.repos ||
     state.settings !== previous.settings ||
     state.sshConnectionStates !== previous.sshConnectionStates ||
+    // A WSL host turning ready brings its rows back into the refresh (E9).
+    state.wslHostStatuses !== previous.wslHostStatuses ||
     state.prCache !== previous.prCache ||
     state.hostedReviewCache !== previous.hostedReviewCache ||
     state.tabsByWorktree !== previous.tabsByWorktree ||
