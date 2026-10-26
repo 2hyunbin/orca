@@ -67,7 +67,8 @@ export class ConnectorPollClient {
   private releaseWatch: (() => void) | null = null
   // The last hello the cloud took; it scopes the poll and the numbered events.
   private helloRev = 0
-  // What the cloud was last told; null makes the next cycle say hello.
+  // What the last accepted hello said; null until one is accepted, and whenever senders are paused, so
+  // the next cycle says hello. Senders are attached exactly while it is set.
   private helloSaid: string | null = null
   private failures = 0
   private stopReason: Stop | null = null
@@ -225,6 +226,7 @@ export class ConnectorPollClient {
    * again under the new hello.
    */
   private pauseSending(): void {
+    this.helloSaid = null
     this.acks.detach(this.sendAcks)
     this.acks.restart([], () => true)
     this.options.events.detach(this.sendEvents)

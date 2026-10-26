@@ -565,6 +565,29 @@ describe('ConnectorPollClient', () => {
     expect(fake.events).toContainEqual(expect.objectContaining({ kind: 'turn-ended', turnId: 4 }))
     client.stop()
   })
+
+  it('says hello again after a failed one, even when what it says went back to the last accepted hello', async () => {
+    const { client, machine, emit } = startClient()
+    await settle()
+    fake.forced.set(CONNECTOR_PATHS.hello, { status: 503 })
+    machine.agentList = ['claude']
+    poll([])
+    await settle()
+    machine.agentList = ['claude', 'codex']
+    fake.forced.delete(CONNECTOR_PATHS.hello)
+    emit({
+      kind: 'turn-ended',
+      conversation,
+      worktreeId: 'wt',
+      paneKey: 'tab:1',
+      turnId: 4,
+      stopReason: 'success',
+      at: 9
+    })
+    await settle(30_000)
+    expect(fake.events).toContainEqual(expect.objectContaining({ kind: 'turn-ended', turnId: 4 }))
+    client.stop()
+  })
 })
 
 function isRecord(value: unknown): value is Record<string, unknown> {
