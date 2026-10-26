@@ -20902,8 +20902,8 @@
         "reasonOwnFolder": "Uses your own Claude folder",
         "reasonUnknownAccount": "Account unknown",
         "reasonNoSession": "Can't resume",
-        "reviewBodyOne": "1 other Claude session wasn't moved to {{next}}. Restarting continues the conversation on {{next}}.",
-        "reviewBodyOther": "{{count}} other Claude sessions weren't moved to {{next}}. Restarting continues each conversation on {{next}}.",
+        "reviewBodyOne": "1 other Claude session wasn't moved to {{next}}.",
+        "reviewBodyOther": "{{count}} other Claude sessions weren't moved to {{next}}.",
         "notMovedOne": "1 other session wasn't moved.",
         "notMovedOther": "{{count}} other sessions weren't moved.",
         "review": "Review"

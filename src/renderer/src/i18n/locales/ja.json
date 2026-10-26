@@ -20632,8 +20632,8 @@
         "reasonOwnFolder": "独自の Claude フォルダーを使用",
         "reasonUnknownAccount": "アカウント不明",
         "reasonNoSession": "再開できません",
-        "reviewBodyOne": "他の Claude セッション 1 件は {{next}} に移動されませんでした。再起動すると {{next}} で会話を続けます。",
-        "reviewBodyOther": "他の Claude セッション {{count}} 件は {{next}} に移動されませんでした。再起動すると各会話を {{next}} で続けます。",
+        "reviewBodyOne": "他の Claude セッション 1 件は {{next}} に移動されませんでした。",
+        "reviewBodyOther": "他の Claude セッション {{count}} 件は {{next}} に移動されませんでした。",
         "notMovedOne": "他の 1 件のセッションは移動されませんでした。",
         "notMovedOther": "他の {{count}} 件のセッションは移動されませんでした。",
         "review": "確認"

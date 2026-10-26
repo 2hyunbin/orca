@@ -47,23 +47,6 @@ export function resolveClaudePaneFolder(
     : { kind: 'own-folder' }
 }
 
-type ClaudeLogin = { email: string; organizationUuid?: string | null }
-
-/** Strict: a missing organization never matches, since one email can hold personal and team logins. */
-function isExactClaudeLogin(left: ClaudeLogin | null, right: ClaudeLogin | null): boolean {
-  return (
-    !!left?.organizationUuid &&
-    left.organizationUuid === right?.organizationUuid &&
-    left.email.trim().toLowerCase() === right.email.trim().toLowerCase()
-  )
-}
-
-function accountFolderLogin(host: ClaudeHostFolders, accountId: string): ClaudeLogin | null {
-  const account = host.accounts.find((candidate) => candidate.id === accountId)
-  // Why: only a signed-in folder's summary carries that folder's login rather than the saved one.
-  return account && !account.needsSignIn && !account.runsOnSystemDefault ? account : null
-}
-
 /**
  * Whether a pane runs on an account (null is System default). A System default pane also counts
  * when that folder is signed in to the account's own login, as an older Orca's copied login is.
@@ -83,14 +66,16 @@ export function isClaudePaneOnAccount(
   if (accountId === null) {
     return true
   }
+  const account = host?.accounts.find((candidate) => candidate.id === accountId)
+  // Why strict: a missing organization never matches, since one email can hold personal and team logins.
   return (
     !!host?.systemDefaultEmail &&
-    isExactClaudeLogin(
-      {
-        email: host.systemDefaultEmail,
-        organizationUuid: host.systemDefaultOrganizationUuid
-      },
-      accountFolderLogin(host, accountId)
-    )
+    !!host.systemDefaultOrganizationUuid &&
+    !!account &&
+    // Why: only a signed-in folder's summary carries that folder's login rather than the saved one.
+    !account.needsSignIn &&
+    !account.runsOnSystemDefault &&
+    account.organizationUuid === host.systemDefaultOrganizationUuid &&
+    account.email.trim().toLowerCase() === host.systemDefaultEmail.trim().toLowerCase()
   )
 }

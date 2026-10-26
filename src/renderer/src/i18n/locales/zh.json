@@ -20632,8 +20632,8 @@
         "reasonOwnFolder": "使用你自己的 Claude 文件夹",
         "reasonUnknownAccount": "账户未知",
         "reasonNoSession": "无法恢复",
-        "reviewBodyOne": "另有 1 个 Claude 会话未移至 {{next}}。重启后会在 {{next}} 上继续该对话。",
-        "reviewBodyOther": "另有 {{count}} 个 Claude 会话未移至 {{next}}。重启后会在 {{next}} 上继续每个对话。",
+        "reviewBodyOne": "另有 1 个 Claude 会话未移至 {{next}}。",
+        "reviewBodyOther": "另有 {{count}} 个 Claude 会话未移至 {{next}}。",
         "notMovedOne": "另有 1 个会话未移动。",
         "notMovedOther": "另有 {{count}} 个会话未移动。",
         "review": "查看"

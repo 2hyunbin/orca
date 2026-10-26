@@ -20633,8 +20633,8 @@
         "reasonOwnFolder": "Utilise votre propre dossier Claude",
         "reasonUnknownAccount": "Compte inconnu",
         "reasonNoSession": "Reprise impossible",
-        "reviewBodyOne": "1 autre session Claude n'a pas été déplacée vers {{next}}. Le redémarrage poursuit la conversation sur {{next}}.",
-        "reviewBodyOther": "{{count}} autres sessions Claude n'ont pas été déplacées vers {{next}}. Le redémarrage poursuit chaque conversation sur {{next}}.",
+        "reviewBodyOne": "1 autre session Claude n'a pas été déplacée vers {{next}}.",
+        "reviewBodyOther": "{{count}} autres sessions Claude n'ont pas été déplacées vers {{next}}.",
         "notMovedOne": "1 autre session n'a pas été déplacée.",
         "notMovedOther": "{{count}} autres sessions n'ont pas été déplacées.",
         "review": "Vérifier"

@@ -275,24 +275,26 @@ export async function findClaudeSwitchSessions(args: {
     const row = scanPane(pane, scanArgs)
     return row ? [row] : []
   })
-  const inForeground = await Promise.all(scanned.map(({ pane }) => isClaudeRunning(state, pane)))
+  const inspected = await Promise.all(
+    scanned.map(async (row) => ({ ...row, running: await isClaudeRunning(state, row.pane) }))
+  )
   const unchecked: ClaudeSessionMoveCandidate[] = []
-  scanned.forEach((row, index) => {
-    const running = inForeground[index]
-    if (running === 'unchecked' && row.group === 'onAccount') {
-      unchecked.push(toCandidate(row.pane))
+  for (const row of inspected) {
+    const candidate = toCandidate(row.pane)
+    if (row.running === 'unchecked' && row.group === 'onAccount') {
+      unchecked.push(candidate)
     }
-    if (running !== true) {
-      return
+    if (row.running !== true) {
+      continue
     }
     if (row.group === 'onAccount') {
-      found.onAccount.push(toCandidate(row.pane))
+      found.onAccount.push(candidate)
     } else if (row.group === 'elsewhere') {
-      found.elsewhere.push({ ...toCandidate(row.pane), accountId: row.accountId })
+      found.elsewhere.push({ ...candidate, accountId: row.accountId })
     } else {
-      found.cantMove.push({ ...toCandidate(row.pane), reason: row.reason })
+      found.cantMove.push({ ...candidate, reason: row.reason })
     }
-  })
+  }
   if (unchecked.length > 0) {
     args.onUnchecked?.(unchecked)
   }

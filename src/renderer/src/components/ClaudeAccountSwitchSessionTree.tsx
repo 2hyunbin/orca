@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useLayoutEffect, useRef, useState } from 'react'
 import { Folder, GitBranch } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { AgentIcon } from '@/lib/agent-catalog'
@@ -97,26 +97,25 @@ function useNextGroupBelowFold(
   groupCount: number
 ): number {
   const [pinned, setPinned] = useState(-1)
-  const update = useCallback(() => {
+  useLayoutEffect(() => {
     const tree = treeRef.current
     if (!tree) {
       return
     }
-    const viewBottom = tree.scrollTop + tree.clientHeight
-    const anchors = [...tree.querySelectorAll<HTMLElement>('[data-group-anchor]')]
-    // Why the header height: a header that is only partly visible still needs pinning.
-    setPinned(
-      anchors.findIndex(
-        (anchor) => anchor.offsetTop + (anchor.nextElementSibling?.clientHeight ?? 0) > viewBottom
+    const update = (): void => {
+      const viewBottom = tree.scrollTop + tree.clientHeight
+      const anchors = [...tree.querySelectorAll<HTMLElement>('[data-group-anchor]')]
+      // Why the header height: a header that is only partly visible still needs pinning.
+      setPinned(
+        anchors.findIndex(
+          (anchor) => anchor.offsetTop + (anchor.nextElementSibling?.clientHeight ?? 0) > viewBottom
+        )
       )
-    )
-  }, [treeRef])
-  useLayoutEffect(() => {
+    }
     update()
-    const tree = treeRef.current
-    tree?.addEventListener('scroll', update, { passive: true })
-    return () => tree?.removeEventListener('scroll', update)
-  }, [update, treeRef, groupCount])
+    tree.addEventListener('scroll', update, { passive: true })
+    return () => tree.removeEventListener('scroll', update)
+  }, [treeRef, groupCount])
   return pinned
 }
 

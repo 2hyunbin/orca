@@ -147,12 +147,12 @@ function promptDescription(prompt: ClaudeAccountSwitchPrompt): string {
     return count === 1
       ? translate(
           'accounts.claude.switchSessions.reviewBodyOne',
-          "1 other Claude session wasn't moved to {{next}}. Restarting continues the conversation on {{next}}.",
+          "1 other Claude session wasn't moved to {{next}}.",
           { next }
         )
       : translate(
           'accounts.claude.switchSessions.reviewBodyOther',
-          "{{count}} other Claude sessions weren't moved to {{next}}. Restarting continues each conversation on {{next}}.",
+          "{{count}} other Claude sessions weren't moved to {{next}}.",
           { count, next }
         )
   }

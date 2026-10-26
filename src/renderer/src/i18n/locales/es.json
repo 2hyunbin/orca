@@ -20483,8 +20483,8 @@
         "reasonOwnFolder": "Usa tu propia carpeta de Claude",
         "reasonUnknownAccount": "Cuenta desconocida",
         "reasonNoSession": "No se puede reanudar",
-        "reviewBodyOne": "Otra sesión de Claude no se movió a {{next}}. Al reiniciar, la conversación continúa con {{next}}.",
-        "reviewBodyOther": "Otras {{count}} sesiones de Claude no se movieron a {{next}}. Al reiniciar, cada conversación continúa con {{next}}.",
+        "reviewBodyOne": "Otra sesión de Claude no se movió a {{next}}.",
+        "reviewBodyOther": "Otras {{count}} sesiones de Claude no se movieron a {{next}}.",
         "notMovedOne": "Otra sesión no se movió.",
         "notMovedOther": "Otras {{count}} sesiones no se movieron.",
         "review": "Revisar"

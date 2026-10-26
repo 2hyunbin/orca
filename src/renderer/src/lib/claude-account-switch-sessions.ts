@@ -4,7 +4,7 @@ import { useAppStore } from '@/store'
 import type { CodexAccountSelectionTarget } from '../../../shared/codex-selection-lane'
 import type { ClaudeAccountSwitchRunningSessions } from '../../../shared/claude-account-switch-settings'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
-import { INLINE_ACTION_CLASS_NAMES } from '@/components/native-chat-restart-action-notifications'
+import { INLINE_ACTION_CLASS_NAMES } from '@/components/ui/sonner'
 import { getClaudeAccountLabel } from './claude-account-label'
 import type { ClaudeHostFolders } from './claude-pane-account-folder'
 import {

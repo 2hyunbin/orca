@@ -20632,8 +20632,8 @@
         "reasonOwnFolder": "자체 Claude 폴더 사용",
         "reasonUnknownAccount": "계정 알 수 없음",
         "reasonNoSession": "재개할 수 없음",
-        "reviewBodyOne": "다른 Claude 세션 1개가 {{next}}(으)로 옮겨지지 않았습니다. 다시 시작하면 {{next}}에서 대화를 이어갑니다.",
-        "reviewBodyOther": "다른 Claude 세션 {{count}}개가 {{next}}(으)로 옮겨지지 않았습니다. 다시 시작하면 {{next}}에서 각 대화를 이어갑니다.",
+        "reviewBodyOne": "다른 Claude 세션 1개가 {{next}}(으)로 옮겨지지 않았습니다.",
+        "reviewBodyOther": "다른 Claude 세션 {{count}}개가 {{next}}(으)로 옮겨지지 않았습니다.",
         "notMovedOne": "다른 세션 1개는 옮겨지지 않았습니다.",
         "notMovedOther": "다른 세션 {{count}}개는 옮겨지지 않았습니다.",
         "review": "검토"

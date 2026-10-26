@@ -20764,8 +20764,8 @@
         "reasonOwnFolder": "Usa sua própria pasta do Claude",
         "reasonUnknownAccount": "Conta desconhecida",
         "reasonNoSession": "Não é possível retomar",
-        "reviewBodyOne": "1 outra sessão do Claude não foi movida para {{next}}. Reiniciar continua a conversa em {{next}}.",
-        "reviewBodyOther": "{{count}} outras sessões do Claude não foram movidas para {{next}}. Reiniciar continua cada conversa em {{next}}.",
+        "reviewBodyOne": "1 outra sessão do Claude não foi movida para {{next}}.",
+        "reviewBodyOther": "{{count}} outras sessões do Claude não foram movidas para {{next}}.",
         "notMovedOne": "1 outra sessão não foi movida.",
         "notMovedOther": "{{count}} outras sessões não foram movidas.",
         "review": "Revisar"
