@@ -1,3 +1,4 @@
+import { readGitMaintenanceActivity } from '../git/git-maintenance-activity'
 import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
 import os from 'node:os'
@@ -48,7 +49,7 @@ export async function collectMemorySnapshot(store: MemorySnapshotStore): Promise
   inflight = runSnapshot(store)
     .catch((err) => {
       console.warn('[memory] snapshot failed; returning empty', err)
-      return emptyMemorySnapshot()
+      return { ...emptyMemorySnapshot(), gitMaintenance: readGitMaintenanceActivity() }
     })
     .finally(() => {
       inflight = null
@@ -338,6 +339,7 @@ async function runSnapshot(store: MemorySnapshotStore): Promise<MemorySnapshot> 
     ),
     totalCpu: appBuckets.cpu + sessionCpuTotal,
     totalMemory: appBuckets.memory + sessionMemoryTotal,
+    gitMaintenance: readGitMaintenanceActivity(),
     collectedAt: now
   }
 }

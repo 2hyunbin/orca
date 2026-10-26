@@ -17,6 +17,7 @@ type ExecFileCaptureOptions = Omit<ExecFileOptions, 'timeout'> & {
   stdin?: string
   terminationBarrier?: boolean
   onChildTerminated?: () => void
+  onChildSpawned?: () => void
   admissionTier?: GitAdmissionTier
   createTimeoutError?: () => Error
   /** Called once when the deadline — not an abort — is what ended the process. */
@@ -249,6 +250,9 @@ export function execFileCapture(
       }
     })
     child.once('close', reportChildTerminated)
+    if (options.onChildSpawned) {
+      child.once('spawn', options.onChildSpawned)
+    }
     if (options.lowPriority && process.platform === 'win32' && child.pid) {
       try {
         setPriority(

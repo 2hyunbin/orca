@@ -93,4 +93,37 @@ describe('runtime host resources', () => {
       toRuntimeHostResourceSamples({ 'env b': { status: 'sampled', worktrees: [] } }, () => 'Lab')
     ).toEqual([{ hostId: 'runtime:env%20b', hostLabel: 'Lab', worktrees: [] }])
   })
+
+  it('preserves host-scoped maintenance and tolerates old or malformed activity fields', async () => {
+    const call = vi.fn().mockResolvedValue({
+      worktrees: [],
+      gitMaintenance: [
+        { repoPath: '/repo', phase: 'objects' },
+        { repoPath: 'C:\\repo', phase: 'refs' },
+        { repoPath: '/bad-phase', phase: 'future-phase' },
+        { phase: 'objects' },
+        null
+      ]
+    })
+    const result = await readRuntimeHostResources('env-a', call)
+    expect(toRuntimeHostResourceSamples({ 'env-a': result }, () => 'Build host')).toEqual([
+      {
+        hostId: 'runtime:env-a',
+        hostLabel: 'Build host',
+        worktrees: [],
+        gitMaintenance: [
+          { repoPath: '/repo', phase: 'objects' },
+          { repoPath: 'C:\\repo', phase: 'refs' }
+        ]
+      }
+    ])
+    for (const gitMaintenance of [undefined, null, 'invalid']) {
+      await expect(
+        readRuntimeHostResources(
+          'old',
+          vi.fn().mockResolvedValue({ worktrees: [], gitMaintenance })
+        )
+      ).resolves.toEqual({ status: 'sampled', worktrees: [] })
+    }
+  })
 })

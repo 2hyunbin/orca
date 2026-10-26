@@ -1,5 +1,5 @@
 import type { BrowserWorkspace } from '../../../../shared/browser-workspace-types'
-import type { WorktreeMemory } from '../../../../shared/process-stats-types'
+import type { MemorySnapshot, WorktreeMemory } from '../../../../shared/process-stats-types'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import type {
@@ -90,4 +90,5 @@ export type RuntimeHostResourceSample = {
   hostId: `runtime:${string}`
   hostLabel: string
   worktrees: readonly WorktreeMemory[]
+  gitMaintenance?: MemorySnapshot['gitMaintenance']
 }

@@ -46,6 +46,7 @@ vi.mock('../../../shared/git-fetch-head-lock', async (importOriginal) => {
 import { RuntimeRemoteFetchController } from '../../runtime/runtime-remote-fetch-controller'
 import { gitExecFileAsync, gitExecFileAsyncBuffer } from './git-exec-file'
 import { execFileCapture } from './exec-file-capture'
+import { readGitMaintenanceActivity } from '../git-maintenance-activity'
 import { isGitWorktreeMutationInFlight } from '../git-worktree-mutation-state'
 import {
   acquireGitAdmission,
@@ -56,9 +57,9 @@ import {
 
 type ExecCallback = (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void
 
-function mockChild(pid: number | undefined = 1234): ChildProcess {
+function mockChild(pid: number | null = 1234): ChildProcess {
   const child = new EventEmitter() as EventEmitter & Record<string, unknown>
-  child.pid = pid
+  child.pid = pid ?? undefined
   child.kill = vi.fn(() => true)
   child.stdin = Object.assign(new EventEmitter(), { end: vi.fn() })
   child.stdout = new EventEmitter()
@@ -176,6 +177,88 @@ describe('git exec admission lifetime', () => {
       await expect(isGitWorktreeMutationInFlight('/repo', {})).resolves.toBe(false)
     }
   )
+
+  it('reports maintenance only after spawn and retains it after timeout until close', async () => {
+    const child = mockChild()
+    execFileMock.mockReturnValue(child)
+    const pending = gitExecFileAsync(['multi-pack-index', 'write'], {
+      cwd: '/repo',
+      timeout: 10,
+      maintenancePhase: 'pack-index'
+    })
+    const rejection = expect(pending).rejects.toThrow('timed out')
+    await settleAdmissionGrant()
+    expect(readGitMaintenanceActivity()).toEqual([])
+    child.emit('spawn')
+    const running = readGitMaintenanceActivity()
+    expect(running).toEqual([{ repoPath: '/repo', phase: 'pack-index' }])
+    expect(readGitMaintenanceActivity()).toBe(running)
+    await vi.advanceTimersByTimeAsync(10)
+    await rejection
+    expect(readGitMaintenanceActivity()).toBe(running)
+    child.emit('close', null, 'SIGKILL')
+    expect(readGitMaintenanceActivity()).toEqual([])
+  })
+
+  it.each(['success', 'failure'] as const)(
+    'clears maintenance on child close after %s',
+    async (outcome) => {
+      const child = mockChild()
+      let callback: ExecCallback | undefined
+      execFileMock.mockImplementation((_command, _args, _options, received: ExecCallback) => {
+        callback = received
+        return child
+      })
+      const pending = gitExecFileAsync(['pack-refs', '--all'], {
+        cwd: '/repo',
+        maintenancePhase: 'refs'
+      })
+      const settled = outcome === 'failure' ? expect(pending).rejects.toThrow('failed') : pending
+      await settleAdmissionGrant()
+      child.emit('spawn')
+      expect(readGitMaintenanceActivity()).toHaveLength(1)
+      callback?.(outcome === 'failure' ? new Error('failed') : null, '', '')
+      await settled
+      expect(readGitMaintenanceActivity()).toHaveLength(1)
+      child.emit('close', outcome === 'failure' ? 1 : 0, null)
+      expect(readGitMaintenanceActivity()).toEqual([])
+    }
+  )
+
+  it('does not report maintenance when the child fails to spawn', async () => {
+    const child = mockChild(null)
+    execFileMock.mockReturnValue(child)
+    const pending = gitExecFileAsync(['multi-pack-index', 'write'], {
+      cwd: '/repo',
+      maintenancePhase: 'pack-index'
+    })
+    const rejection = expect(pending).rejects.toThrow('ENOENT')
+    await settleAdmissionGrant()
+    child.emit('error', Object.assign(new Error('ENOENT'), { code: 'ENOENT' }))
+    child.emit('close', -2, null)
+    await rejection
+    expect(readGitMaintenanceActivity()).toEqual([])
+  })
+
+  it('does not report maintenance queued or canceled before spawn', async () => {
+    _resetGitAdmissionForTests(new GitAdmissionScheduler({ generalCap: 1, generalHeadroom: 0 }))
+    const blocker = await acquireGitAdmission({ args: ['status'], cwd: '/repo' })
+    const controller = new AbortController()
+    const pending = gitExecFileAsync(['multi-pack-index', 'write'], {
+      cwd: '/repo',
+      admissionSignal: controller.signal,
+      maintenancePhase: 'pack-index'
+    })
+    const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    await settleAdmissionGrant()
+    expect(_gitAdmissionSnapshotForTests().queued).toBe(1)
+    expect(readGitMaintenanceActivity()).toEqual([])
+    expect(execFileMock).not.toHaveBeenCalled()
+    controller.abort()
+    await rejection
+    blocker.release()
+    expect(readGitMaintenanceActivity()).toEqual([])
+  })
 
   it('retains the buffer-exec permit after maxBuffer settlement until close', async () => {
     const child = mockChild()

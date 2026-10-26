@@ -79,7 +79,14 @@ export type HostMemory = {
   loadAverage1m: number
 }
 
+export type GitMaintenanceActivity = {
+  repoPath: string
+  phase: 'objects' | 'pack-index' | 'refs'
+}
+
 export type MemorySnapshot = {
+  /** Orca-owned writers on this execution host; absent on older hosts. */
+  gitMaintenance?: readonly GitMaintenanceActivity[]
   app: AppMemory
   worktrees: WorktreeMemory[]
   host: HostMemory

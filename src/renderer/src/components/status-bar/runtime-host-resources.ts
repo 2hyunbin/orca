@@ -1,10 +1,18 @@
 import { translate } from '@/i18n/i18n'
 import { parseExecutionHostId, toRuntimeExecutionHostId } from '../../../../shared/execution-host'
-import type { SessionMemory, WorktreeMemory } from '../../../../shared/process-stats-types'
+import type {
+  MemorySnapshot,
+  SessionMemory,
+  WorktreeMemory
+} from '../../../../shared/process-stats-types'
 import type { RuntimeHostResourceSample } from './resource-usage-merge-types'
 
 export type RuntimeHostResourceResult =
-  | { status: 'sampled'; worktrees: WorktreeMemory[] }
+  | {
+      status: 'sampled'
+      worktrees: WorktreeMemory[]
+      gitMaintenance?: MemorySnapshot['gitMaintenance']
+    }
   // Why: a server that never answered is unverifiable, so the panel names it instead of showing it idle.
   | { status: 'unreachable' }
   | { status: 'update-required' }
@@ -30,8 +38,13 @@ export async function readRuntimeHostResources(
   call: RuntimeHostResourceCall
 ): Promise<RuntimeHostResourceResult> {
   try {
-    const worktrees = parseSnapshotWorktrees(await call(environmentId))
-    return worktrees ? { status: 'sampled', worktrees } : { status: 'update-required' }
+    const snapshot = await call(environmentId)
+    const worktrees = parseSnapshotWorktrees(snapshot)
+    if (!worktrees) {
+      return { status: 'update-required' }
+    }
+    const gitMaintenance = parseSnapshotGitMaintenance(snapshot)
+    return { status: 'sampled', worktrees, ...(gitMaintenance ? { gitMaintenance } : {}) }
   } catch (error) {
     return hasErrorCode(error, 'method_not_found')
       ? { status: 'update-required' }
@@ -49,7 +62,8 @@ export function toRuntimeHostResourceSamples(
       samples.push({
         hostId: toRuntimeExecutionHostId(environmentId),
         hostLabel: hostLabel(environmentId),
-        worktrees: result.worktrees
+        worktrees: result.worktrees,
+        ...(result.gitMaintenance ? { gitMaintenance: result.gitMaintenance } : {})
       })
     }
   }
@@ -93,6 +107,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function parseSnapshotGitMaintenance(value: unknown): MemorySnapshot['gitMaintenance'] {
+  if (!isRecord(value) || !Array.isArray(value.gitMaintenance)) {
+    return undefined
+  }
+  return value.gitMaintenance.flatMap((row) =>
+    isRecord(row) &&
+    typeof row.repoPath === 'string' &&
+    (row.phase === 'objects' || row.phase === 'pack-index' || row.phase === 'refs')
+      ? [{ repoPath: row.repoPath, phase: row.phase }]
+      : []
+  )
 }
 
 // Why: servers ship independently; keep well-formed rows and drop the rest rather than trusting the shape.

@@ -2524,6 +2524,7 @@
           },
           "ResourceUsageStatusSegment": {
             "1b24a32d3a": "Memory",
+            "27a74f91f0": "Nothing running right now",
             "4bb076fa89": "Kill",
             "6449a95c78": "How much of this machine's physical RAM the Orca-tracked processes are sitting on.",
             "6d9793d4bc": "Resource Manager - Terminals",

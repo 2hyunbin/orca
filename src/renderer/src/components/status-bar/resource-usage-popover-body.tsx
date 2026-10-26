@@ -142,10 +142,7 @@ export function renderResourceUsagePopoverBody({
 
         {unifiedRepos.length === 0 && resourceSnapshot && (
           <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-            {translate(
-              'auto.components.status.bar.ResourceUsageStatusSegment.27a74f91f0',
-              'Nothing running right now'
-            )}
+            {translate('resourceManager.noTerminalSessions', 'No terminal sessions running')}
           </div>
         )}
 

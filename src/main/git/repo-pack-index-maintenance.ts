@@ -107,6 +107,7 @@ export async function maintainRepoPackIndex(
       ...(args.wslDistro ? { wslDistro: args.wslDistro } : {}),
       admissionTier: 'background',
       timeout: PACK_INDEX_TIMEOUT_MS,
+      maintenancePhase: 'pack-index',
       admissionSignal: signal,
       canStart: args.canWrite
     })
