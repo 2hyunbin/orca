@@ -157,23 +157,23 @@ async function guestMemory(): Promise<Receipt> {
   return { orcaRssKiB, guestUsedKiB }
 }
 
-async function waitFor<T>(
+/** Polls a real distro, whose state no fake clock moves. */
+function waitFor<T>(
   what: string,
   read: () => Promise<T | null>,
   timeoutMs: number,
   intervalMs = 1_000
 ): Promise<T> {
-  const deadline = performance.now() + timeoutMs
-  for (;;) {
-    const value = await read()
-    if (value !== null) {
+  return vi.waitFor(
+    async () => {
+      const value = await read()
+      if (value === null) {
+        throw new Error(`Timed out after ${timeoutMs} ms waiting for ${what}`)
+      }
       return value
-    }
-    if (performance.now() > deadline) {
-      throw new Error(`Timed out after ${timeoutMs} ms waiting for ${what}`)
-    }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs))
-  }
+    },
+    { timeout: timeoutMs, interval: intervalMs }
+  )
 }
 
 async function idleReleasePhase(): Promise<void> {
@@ -189,6 +189,7 @@ async function idleReleasePhase(): Promise<void> {
 
   // No client, but a live terminal: orcad must not idle-exit and the holder must stay.
   await manager.dispose()
+  // ast-grep-ignore: test-no-real-time-wait -- proves the distro stays up across the whole real idle window
   await new Promise((resolve) => setTimeout(resolve, HELD_WITH_TERMINAL_MS))
   expect(await plainRunning(), 'a live terminal keeps the distro').toBe(true)
   expect(await holder.holderState(PLAIN)).toBe('live')
@@ -242,6 +243,7 @@ describe.runIf(RUN && process.platform === 'win32')('WSL distro idle release', (
     writeFileSync(join(RECEIPT_DIR, 'idle-release.json'), `${JSON.stringify(receipt, null, 2)}\n`)
   })
 
+  // Real idle timeout, holder poll, WSL's own stop and VM shutdown, all on a live distro.
   it(
     'keeps a distro with a live terminal, then lets it stop once orcad idle-exits',
     idleReleasePhase,

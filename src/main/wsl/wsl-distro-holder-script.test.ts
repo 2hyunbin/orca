@@ -42,6 +42,7 @@ function startHolder(env: NodeJS.ProcessEnv = { HOME: home, PATH: process.env.PA
 function within(ms: number, promise: Promise<number | null>): Promise<number | null | 'running'> {
   return Promise.race([
     promise,
+    // ast-grep-ignore: test-no-real-time-wait -- a real shell must still be holding after this long
     new Promise<'running'>((resolve) => setTimeout(() => resolve('running'), ms))
   ])
 }
