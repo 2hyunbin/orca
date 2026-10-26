@@ -19,6 +19,7 @@ export type {
 import { randomUUID } from 'node:crypto'
 import { recognizeAgentProcess } from '../../../shared/agent-process-recognition'
 import type { TerminalInterfaceObservation } from '../../../shared/terminal-interface-observation'
+import type { TerminalInputKind } from '../../../shared/terminal-input-kind'
 
 /** Execution-host observations live with terminal bindings, independently of turn rows. */
 export class TerminalInterfaceAuthority {
@@ -121,7 +122,7 @@ export class TerminalInterfaceAuthority {
     }
   }
 
-  input(ptyId: string, _kind: 'driving' | 'launch'): void {
+  input(ptyId: string, _kind: Exclude<TerminalInputKind, 'query-reply'>): void {
     this.syncInventory()
     const entry = this.entries.get(ptyId)
     if (!entry) {

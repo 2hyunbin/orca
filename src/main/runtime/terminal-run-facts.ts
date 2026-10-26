@@ -50,10 +50,12 @@ export class TerminalRunFactsRegister {
   private readonly inputListeners = new Set<(ptyId: string, now: number) => void>()
 
   private readonly observationInputListeners = new Set<
-    (ptyId: string, kind: 'driving' | 'launch') => void
+    (ptyId: string, kind: Exclude<TerminalInputKind, 'query-reply'>) => void
   >()
 
-  onObservationInput(listener: (ptyId: string, kind: 'driving' | 'launch') => void): () => void {
+  onObservationInput(
+    listener: (ptyId: string, kind: Exclude<TerminalInputKind, 'query-reply'>) => void
+  ): () => void {
     this.observationInputListeners.add(listener)
     return () => this.observationInputListeners.delete(listener)
   }
