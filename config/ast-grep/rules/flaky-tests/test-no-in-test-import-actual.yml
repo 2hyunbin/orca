@@ -21,22 +21,12 @@ rule:
       - kind: function_expression
       - kind: function_declaration
       - kind: method_definition
+  # vi.doMock is not exempt: its factory runs on the next import, which is usually inside a test.
   not:
-    any:
-      - inside:
-          stopBy: end
-          kind: call_expression
-          has: { field: function, regex: '^(vi\.(mock|hoisted)|beforeAll)$' }
-      # A doMock factory runs on the next import, so one registered inside a test loads there.
-      - inside:
-          stopBy: end
-          kind: call_expression
-          has: { field: function, regex: '^vi\.doMock$' }
-          not:
-            inside:
-              stopBy: end
-              kind: call_expression
-              has: { field: function, regex: '^(it|test|beforeEach|afterEach)\b' }
+    inside:
+      stopBy: end
+      kind: call_expression
+      has: { field: function, regex: '^(vi\.(mock|hoisted)|beforeAll)$' }
 ---
 id: test-no-in-test-import-actual-tsx
 language: tsx
@@ -58,19 +48,9 @@ rule:
       - kind: function_expression
       - kind: function_declaration
       - kind: method_definition
+  # vi.doMock is not exempt: its factory runs on the next import, which is usually inside a test.
   not:
-    any:
-      - inside:
-          stopBy: end
-          kind: call_expression
-          has: { field: function, regex: '^(vi\.(mock|hoisted)|beforeAll)$' }
-      # A doMock factory runs on the next import, so one registered inside a test loads there.
-      - inside:
-          stopBy: end
-          kind: call_expression
-          has: { field: function, regex: '^vi\.doMock$' }
-          not:
-            inside:
-              stopBy: end
-              kind: call_expression
-              has: { field: function, regex: '^(it|test|beforeEach|afterEach)\b' }
+    inside:
+      stopBy: end
+      kind: call_expression
+      has: { field: function, regex: '^(vi\.(mock|hoisted)|beforeAll)$' }
