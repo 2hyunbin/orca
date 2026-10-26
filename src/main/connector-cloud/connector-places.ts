@@ -15,7 +15,7 @@ import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import { isFolderRepo } from '../../shared/repo-kind'
 import type { AgentLaunchParams } from '../../shared/rpc-contract/agent-launch-params'
 import { parseWslUncPath } from '../../shared/wsl-paths'
-import { readAllWorktreeMetaForRepo } from '../persistence/host-qualified-worktree-meta'
+import { readAllWorktreeMetaForHost } from '../persistence/host-qualified-worktree-meta'
 import type { RuntimeStore } from '../runtime/runtime-store-contract'
 import {
   runtimeVisibleProjectGroups,
@@ -93,6 +93,19 @@ function placeWhere(
   return wsl ? { kind: 'wsl', label: displayText(wsl.distro) } : { kind: 'local' }
 }
 
+/** The latest time per key, in one pass. */
+function latestBy<T>(
+  items: Iterable<T>,
+  key: (item: T) => string,
+  at: (item: T) => number
+): Map<string, number> {
+  const latest = new Map<string, number>()
+  for (const item of items) {
+    latest.set(key(item), Math.max(latest.get(key(item)) ?? 0, at(item)))
+  }
+  return latest
+}
+
 /** At most the contract's display length, never splitting a surrogate pair. */
 function displayText(text: string): string {
   const max = CONNECTOR_CLIENT_LIMITS.maxDisplayTextLength
@@ -109,6 +122,20 @@ function displayText(text: string): string {
  */
 export function connectorProjects(store: ConnectorPlacesStore): ConnectorProject[] {
   const projects: { project: ConnectorProject; usedAt: number }[] = []
+  // Each host's worktree activity, read once and keyed by repo id; same-id repos on other hosts stay apart.
+  const activityByHost = new Map<ExecutionHostId, Map<string, number>>()
+  const repoActivity = (hostId: ExecutionHostId): Map<string, number> => {
+    let activity = activityByHost.get(hostId)
+    if (!activity) {
+      activity = latestBy(
+        Object.entries(readAllWorktreeMetaForHost(store, hostId)),
+        ([worktreeId]) => getRepoIdFromWorktreeId(worktreeId),
+        ([, meta]) => meta.lastActivityAt
+      )
+      activityByHost.set(hostId, activity)
+    }
+    return activity
+  }
   for (const repo of runtimeVisibleRepos(store)) {
     const hostId = getRepoExecutionHostId(repo)
     const where = isFolderRepo(repo) ? null : placeWhere(hostId, repo.path, store)
@@ -116,13 +143,7 @@ export function connectorProjects(store: ConnectorPlacesStore): ConnectorProject
       continue
     }
     const remote = splitGitRemoteKey(repo.gitRemoteIdentity?.canonicalKey, (host) => host)?.tail
-    const usedAt = Object.entries(readAllWorktreeMetaForRepo(store, repo)).reduce(
-      (latest, [worktreeId, meta]) =>
-        getRepoIdFromWorktreeId(worktreeId) === repo.id
-          ? Math.max(latest, meta.lastActivityAt)
-          : latest,
-      repo.addedAt
-    )
+    const usedAt = Math.max(repo.addedAt, repoActivity(hostId).get(repo.id) ?? 0)
     projects.push({
       project: {
         placeId: encodePlace(['git', hostId, repo.id]),
@@ -134,17 +155,17 @@ export function connectorProjects(store: ConnectorPlacesStore): ConnectorProject
       usedAt
     })
   }
-  const folders = store.getFolderWorkspaces?.() ?? []
+  const folderActivity = latestBy(
+    store.getFolderWorkspaces?.() ?? [],
+    (folder) => folder.projectGroupId,
+    (folder) => folder.lastActivityAt
+  )
   for (const group of runtimeVisibleProjectGroups(store)) {
     const where = group.parentPath
       ? placeWhere(getRepoExecutionHostId(group), group.parentPath, store)
       : null
     if (where) {
-      const usedAt = folders.reduce(
-        (latest, folder) =>
-          folder.projectGroupId === group.id ? Math.max(latest, folder.lastActivityAt) : latest,
-        group.updatedAt
-      )
+      const usedAt = Math.max(group.updatedAt, folderActivity.get(group.id) ?? 0)
       projects.push({
         project: {
           placeId: encodePlace(['folder', group.id]),

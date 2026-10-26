@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { CONNECTOR_CLIENT_LIMITS } from '../../shared/connector-cloud-contract'
 import { ConnectorTurnEvents } from './connector-turn-events'
@@ -33,6 +33,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   rmSync(userDataPath, { recursive: true, force: true })
 })
 
@@ -101,6 +102,8 @@ describe('ConnectorTurnEvents', () => {
   })
 
   it('names each conversation’s latest turn in the snapshot', () => {
+    const now = 1_800_000_000_000
+    vi.useFakeTimers({ toFake: ['Date'], now })
     const events = new ConnectorTurnEvents(userDataPath, 'ada')
     const entry = { conversation, worktreeId: 'wt', paneKey: 'tab:1', agent: 'claude' } as const
     events.observe({
@@ -113,7 +116,7 @@ describe('ConnectorTurnEvents', () => {
           working: false,
           prompt: null,
           turnId: null,
-          activeAt: Date.now()
+          activeAt: now
         }
       ]
     })
