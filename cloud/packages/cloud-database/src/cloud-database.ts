@@ -149,8 +149,8 @@ export async function runClientTransaction<T>(
   client: pg.ClientBase,
   operation: (transaction: CloudDatabase) => Promise<T>
 ): Promise<T> {
-  await client.query('BEGIN')
   try {
+    await client.query('BEGIN')
     const result = await operation(new PostgresTransaction(client))
     await client.query('COMMIT')
     return result
@@ -193,12 +193,8 @@ class PostgresDatabase implements CloudDatabase {
     for (let attempt = 1; attempt <= POSTGRES_TRANSACTION_ATTEMPTS; attempt++) {
       const client = await this.pool.connect()
       try {
-        await client.query('BEGIN')
-        const result = await operation(new PostgresTransaction(client))
-        await client.query('COMMIT')
-        return result
+        return await runClientTransaction(client, operation)
       } catch (error) {
-        await client.query('ROLLBACK').catch(() => undefined)
         if (
           !retryablePostgresTransactionError(error) ||
           attempt === POSTGRES_TRANSACTION_ATTEMPTS

@@ -1,5 +1,4 @@
 import { once } from 'node:events'
-import { setTimeout as sleep } from 'node:timers/promises'
 import { createAdaptorServer } from '@hono/node-server'
 import {
   acquireLeadership,
@@ -14,24 +13,25 @@ import { startDiscordGatewaySession } from './discord-gateway-session.js'
 import { createDiscordRestApi } from './discord-rest.js'
 
 const LEADER_KEY = 'orca-connector-discord-gateway'
-// Cloud Run sends SIGKILL ten seconds after SIGTERM; past this the process exits regardless.
-const CLOSE_DEADLINE_MS = 8_000
 
 // The discord-gateway role: one leader across instances holds the gateway session and routes each
 // message in the transaction that commits its checkpoint, on the lock's own connection, so a leader
-// that lost the lock can't commit. Resolves with the exit code.
+// that lost the lock can't commit. Resolves with the exit code; `onStopping` runs as soon as it
+// starts to stop, so the caller can bound the rest of the shutdown.
 export async function runDiscordGatewayWorker(input: {
   config: ConnectorConfig
   database: CloudDatabase
   notifications: CloudNotifications
   signal: AbortSignal
+  onStopping: () => void
 }): Promise<number> {
-  const { config, database, notifications, signal } = input
+  const { config, database, notifications, signal, onStopping } = input
   const runtime = createConnectorRuntime(config, database, notifications, { now: Date.now })
   const discord = runtime.discord
   if (!config.discord || !discord) {
     throw new Error('The discord-gateway role needs the Discord settings')
   }
+  const { botToken, guildIds } = config.discord
   const stopped = signal.aborted ? Promise.resolve() : once(signal, 'abort').then(() => undefined)
   // Cloud Run needs a listening port; health is all this role serves.
   const app = new Hono()
@@ -45,7 +45,15 @@ export async function runDiscordGatewayWorker(input: {
       key: LEADER_KEY,
       applicationName: 'orca-connector',
       signal
+    }).catch((error: unknown) => {
+      if (signal.aborted) {
+        return null
+      }
+      throw error
     })
+    if (!leadership) {
+      return 0
+    }
     try {
       const fatal = Promise.withResolvers<string>()
       const ended = Promise.race([
@@ -53,35 +61,34 @@ export async function runDiscordGatewayWorker(input: {
         leadership.lost.then(() => 'leadership_lost'),
         stopped.then(() => 'stopping')
       ])
-      const starting = startDiscordGatewaySession({
-        token: config.discord.botToken,
-        api: createDiscordRestApi(),
-        guildIds: config.discord.guildIds,
-        resumeFrom: await loadCheckpoint(database),
-        commit: (step) =>
-          leadership.transaction(async (transaction) => {
-            await saveCheckpoint(transaction, step.checkpoint)
-            if (step.message) {
-              await discord.routeIn(transaction, runtime.core, step.message)
-            }
-          }),
-        onFatal: fatal.resolve
-      })
+      void ended.then(onStopping)
+      const starting = (async () =>
+        await startDiscordGatewaySession({
+          token: botToken,
+          api: createDiscordRestApi(),
+          guildIds,
+          resumeFrom: await leadership.transaction(loadCheckpoint),
+          commit: (step) =>
+            leadership.transaction(async (transaction) => {
+              await saveCheckpoint(transaction, step.checkpoint)
+              if (step.message) {
+                await discord.routeIn(transaction, runtime.core, step.message)
+              }
+            }),
+          onFatal: fatal.resolve
+        }))()
       // A stop or lost lock during startup ends the process, which closes the half-open session.
       const session = await Promise.race([starting, ended])
       const reason = typeof session === 'string' ? session : await ended
       console.log(JSON.stringify({ event: 'orca_connector_discord_gateway_stopping', reason }))
       if (typeof session !== 'string') {
-        await Promise.race([
-          session.close({ drain: reason === 'stopping' }),
-          sleep(CLOSE_DEADLINE_MS, undefined, { ref: false })
-        ])
+        await session.close({ drain: reason === 'stopping' })
       }
       return reason === 'stopping' ? 0 : 1
     } finally {
       await leadership.release()
     }
   } finally {
-    await new Promise((resolve) => server.close(resolve))
+    server.close()
   }
 }

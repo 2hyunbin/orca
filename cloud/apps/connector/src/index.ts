@@ -63,12 +63,16 @@ async function runDiscordGateway(): Promise<void> {
   const stop = new AbortController()
   process.once('SIGTERM', () => stop.abort())
   process.once('SIGINT', () => stop.abort())
+  // Cloud Run sends SIGKILL ten seconds after SIGTERM; a stop of any cause gets the same bound.
+  const bound = () => setTimeout(() => process.exit(1), 9_000).unref()
   const exitCode = await runDiscordGatewayWorker({
     config,
     database,
     notifications,
-    signal: stop.signal
+    signal: stop.signal,
+    onStopping: bound
   })
+  bound()
   await database.close()
   process.exit(exitCode)
 }
