@@ -7,6 +7,10 @@ import {
   type TypeCyclableTab
 } from '@/components/terminal/tab-type-cycle'
 import { sanitizeRecentTabIds } from '../store/slices/tab-group-state'
+import {
+  activateBrowserTabOnOwner,
+  activateTerminalTabAtActiveLeafOnOwner
+} from '@/lib/terminal-tab-owner-activation'
 
 type AppStoreState = ReturnType<typeof useAppStore.getState>
 
@@ -51,12 +55,16 @@ export function activateCyclableTab(store: AppStoreState, next: TypeCyclableTab)
       store.activateTab?.(next.tabId)
     }
     store.setActiveTabType('terminal', worktreeId)
+    activateTerminalTabAtActiveLeafOnOwner(worktreeId, next.id)
   } else if (next.type === 'browser') {
     store.setActiveBrowserTab(next.id)
     if (next.tabId) {
       store.activateTab?.(next.tabId)
     }
     store.setActiveTabType('browser', worktreeId)
+    if (worktreeId && next.tabId) {
+      activateBrowserTabOnOwner(worktreeId, next.tabId, next.id)
+    }
   } else if (next.type === 'simulator') {
     store.setActiveTab(next.tabId ?? next.id)
     if (next.tabId) {
@@ -324,5 +332,6 @@ export function handleSwitchTerminalTab(direction: number): boolean {
   }
   store.setActiveTab(next.id)
   store.setActiveTabType('terminal', worktreeId)
+  activateTerminalTabAtActiveLeafOnOwner(worktreeId, next.id)
   return true
 }
