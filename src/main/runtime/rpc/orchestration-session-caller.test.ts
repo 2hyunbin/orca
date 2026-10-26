@@ -280,11 +280,16 @@ describe('orchestration session callers at the dispatch entry', () => {
     it('a released lease reading its mail, while its background commands still send as it', async () => {
       h.records.set(SESSION_X, sessionRecord(SESSION_X, { lease: { claimStatus: 'released' } }))
       const { messageId } = seedPendingMail()
-      for (const params of [{}, { wait: true, timeoutMs: 1 }, { peek: true }]) {
+      for (const [method, params] of [
+        ['orchestration.check', {}],
+        ['orchestration.check', { wait: true, timeoutMs: 1 }],
+        ['orchestration.check', { peek: true }],
+        ['orchestration.ask', { question: 'q', to: 'term_worker', timeoutMs: 1 }]
+      ] as const) {
         const response = await h.dispatch(
-          orchestrationRequest('orchestration.check', params, { sessionId: SESSION_X })
+          orchestrationRequest(method, params, { sessionId: SESSION_X })
         )
-        expect(response).toMatchObject({
+        expect(response, method).toMatchObject({
           ok: false,
           error: { code: CODES.notLive, message: expect.stringMatching(/is not running right now/) }
         })
