@@ -35,7 +35,7 @@ export type ConnectorServerOptions = {
   fetch?: typeof fetch
 }
 
-type MachineVariables = { hostId: string }
+type MachineVariables = { hostId: string; sessionId: string }
 
 function readBearer(header: string | undefined): string | null {
   const [scheme, token] = header?.split(' ') ?? []
@@ -120,6 +120,7 @@ export function createConnectorServer(
       return context.json({ error: 'rate_limited' }, 429)
     }
     context.set('hostId', session.hostFingerprint)
+    context.set('sessionId', session.sessionId)
     await next()
     return
   }
@@ -160,7 +161,9 @@ export function createConnectorServer(
     if (!ConnectorSignOutRequestSchema.safeParse(await readJson(context)).success) {
       return context.json({ error: 'invalid_request' }, 400)
     }
-    await hostLinks.unbind(context.get('hostId'))
+    if (!(await hostLinks.unbind(context.get('hostId'), context.get('sessionId')))) {
+      return context.json({ error: 'invalid_token' }, 401)
+    }
     return context.body(null, 204)
   })
 
