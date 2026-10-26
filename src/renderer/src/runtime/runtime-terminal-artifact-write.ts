@@ -67,6 +67,15 @@ async function hostHoldsContent(
 ): Promise<boolean> {
   try {
     return (await readGrantedText(args, grantId)) === args.content
+  } catch (error) {
+    if (!isRenewableGrantError(error)) {
+      return false
+    }
+  }
+  // Why: a dropped connection revokes the client's grants, so read back through a fresh one.
+  try {
+    const renewed = await renewTerminalArtifactGrant(args)
+    return renewed !== null && (await readGrantedText(args, renewed.grantId)) === args.content
   } catch {
     return false
   }

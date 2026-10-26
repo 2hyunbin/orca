@@ -195,4 +195,23 @@ describe('saving a granted host file outside every workspace', () => {
 
     await expect(save('# new', '# old')).resolves.toEqual({ ok: true })
   })
+
+  it('reads back through a fresh grant when the dropped reply also revoked the old one', async () => {
+    let written = false
+    runtimeEnvironmentCall.mockImplementation(async ({ method, params }) => {
+      if (method === 'files.resolveTerminalPath') {
+        return granted('g-2')
+      }
+      if (method === 'files.writeTerminalArtifact') {
+        written = true
+        return refused('Request timed out')
+      }
+      if (written && grantIdOf(params) === 'g-1') {
+        return refused('terminal_file_grant_expired')
+      }
+      return read(written ? '# new' : '# old')
+    })
+
+    await expect(save('# new', '# old')).resolves.toEqual({ ok: true })
+  })
 })
