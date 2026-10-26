@@ -210,9 +210,10 @@ async function holdForThreadStart(
 // the first one never reached the agent (offline, refused).
 async function continueConversation(route: Route, thread: ThreadRow): Promise<void> {
   const { deps, transaction, messageKey, place } = route
-  const prompt = await withTeammateContext(transaction, thread.externalId, route.text, deps.now())
-  if (await hasLiveStart(transaction, thread)) {
-    await deliver(route, { ...thread, body: { kind: 'send', text: prompt } })
+  // Context is consumed only once there is a delivery to carry it.
+  const prompt = () => withTeammateContext(transaction, thread.externalId, route.text, deps.now())
+  if (await hasLiveStart(transaction, thread, deps.now())) {
+    await deliver(route, { ...thread, body: { kind: 'send', text: await prompt() } })
     return
   }
   const [host] = await transaction.query(
@@ -228,7 +229,7 @@ async function continueConversation(route: Route, thread: ThreadRow): Promise<vo
   }
   await deliver(route, {
     ...thread,
-    body: { kind: 'start', agent, placeId: thread.placeId, prompt }
+    body: { kind: 'start', agent, placeId: thread.placeId, prompt: await prompt() }
   })
 }
 
@@ -297,12 +298,16 @@ async function threadsIn(transaction: CloudDatabase, place: SlackPlace): Promise
 }
 
 // Linked on the machine, on its way there, or accepted by it.
-async function hasLiveStart(transaction: CloudDatabase, thread: ThreadRow): Promise<boolean> {
+async function hasLiveStart(
+  transaction: CloudDatabase,
+  thread: ThreadRow,
+  now: number
+): Promise<boolean> {
   if (thread.paneKey !== null) {
     return true
   }
   const [start] = await transaction.query(
-    `SELECT state, result FROM connector_inbox
+    `SELECT state, result, expires_at FROM connector_inbox
      WHERE host_id = ? AND external_id = ? AND kind = 'start' ORDER BY seq DESC LIMIT 1`,
     [thread.hostId, thread.externalId]
   )
@@ -312,7 +317,11 @@ async function hasLiveStart(transaction: CloudDatabase, thread: ThreadRow): Prom
       'accepted'
     )
   }
-  return start?.state === 'pending' || start?.state === 'leased' || start?.state === 'received'
+  // A pending start past its deadline will never go out, swept yet or not.
+  if (start?.state === 'pending') {
+    return Number(start.expires_at) > now
+  }
+  return start?.state === 'leased' || start?.state === 'received'
 }
 
 function knownHost(row: SqlRow): KnownHost | null {

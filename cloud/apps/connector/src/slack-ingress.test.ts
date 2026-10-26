@@ -443,4 +443,38 @@ describe('Slack event ingress', () => {
     const [start] = await harness.poll()
     expect(start?.kind === 'start' ? start.prompt : '').toContain('couldn’t be read')
   })
+
+  it('starts afresh when the first start passed its deadline before the sweep ran', async () => {
+    const harness = await linkedOwner()
+    await harness.message(mention())
+    harness.advance(5 * 60_000 + 1)
+    await harness.message({ text: 'try again', ts: '1800000000.000500', thread_ts: THREAD })
+    await harness.runtime.inbox.expireDue(harness.edge.onExpired)
+    const [retry] = await harness.poll()
+    expect(retry).toMatchObject({ kind: 'start', prompt: 'try again' })
+  })
+
+  it('keeps teammates’ context when the owner only gets an update notice', async () => {
+    const harness = await linkedOwner()
+    await harness.message(mention())
+    harness.advance(5 * 60_000 + 1)
+    await harness.runtime.inbox.expireDue(harness.edge.onExpired)
+    await harness.database.query(
+      `UPDATE connector_hosts SET hello = REPLACE(hello, '"claude","codex"', '"gemini"')`
+    )
+    await harness.message({
+      user: TEAMMATE,
+      text: 'see the logs',
+      ts: '1800000000.000500',
+      thread_ts: THREAD
+    })
+    await harness.edge.members.checkContextAuthors()
+    await harness.message({ text: 'retry', ts: '1800000000.000600', thread_ts: THREAD })
+    expect((await harness.posts()).map((post) => post.post_id)).toContain(
+      `update:${TEAM}:${CHANNEL}:1800000000.000600`
+    )
+    expect(await harness.database.query('SELECT text FROM connector_thread_context')).toEqual([
+      { text: 'see the logs' }
+    ])
+  })
 })
