@@ -25,7 +25,12 @@ const reportedPaneByWorkspace = new Map<string, string>()
 /** Each workspace's latest frame, so opening a workspace can report without waiting for a new one. */
 const latestFrameByWorkspace = new Map<
   string,
-  { environmentId: string; snapshot: RuntimeMobileSessionTabsResult }
+  {
+    environmentId: string
+    snapshot: RuntimeMobileSessionTabsResult
+    /** The pairing and connection the frame came over; a later one cannot speak for it. */
+    generation: string
+  }
 >()
 const pendingCheckByWorkspace = new Map<string, ReturnType<typeof setTimeout>>()
 let stopWatchingActiveWorkspace: (() => void) | null = null
@@ -34,16 +39,29 @@ let stopWatchingActiveWorkspace: (() => void) | null = null
  *  report can never race the user's own pick to the server. */
 export const VISIBLE_TAB_PICK_SETTLE_MS = 1500
 
+function connectionGeneration(environmentId: string): string {
+  return `${captureWebSessionIntentOwner(environmentId).pairingRevision}\0${getRuntimeEnvironmentConnectionGeneration(environmentId)}`
+}
+
+// One outstanding check per workspace reads the latest frame when it fires, so a busy workspace's
+// stream of frames cannot keep postponing it.
 function scheduleCheck(frameKey: string): void {
-  clearTimeout(pendingCheckByWorkspace.get(frameKey))
+  if (pendingCheckByWorkspace.has(frameKey)) {
+    return
+  }
   pendingCheckByWorkspace.set(
     frameKey,
     setTimeout(() => {
       pendingCheckByWorkspace.delete(frameKey)
       const frame = latestFrameByWorkspace.get(frameKey)
-      if (frame) {
-        reportIfStale(frame.environmentId, frame.snapshot)
+      if (!frame) {
+        return
       }
+      if (frame.generation !== connectionGeneration(frame.environmentId)) {
+        latestFrameByWorkspace.delete(frameKey)
+        return
+      }
+      reportIfStale(frame.environmentId, frame.snapshot)
     }, VISIBLE_TAB_PICK_SETTLE_MS)
   )
 }
@@ -71,12 +89,17 @@ export function reportVisibleTabPickToHost(
   environmentId: string,
   snapshot: RuntimeMobileSessionTabsResult
 ): void {
+  const frameKey = `${environmentId}\0${snapshot.worktree}`
   // Only servers that keep a pick per device project it; an older one would move the host instead.
   if (!snapshot.publicationEpoch.endsWith(CLIENT_NAVIGATION_PUBLICATION_EPOCH_SUFFIX)) {
+    latestFrameByWorkspace.delete(frameKey)
     return
   }
-  const frameKey = `${environmentId}\0${snapshot.worktree}`
-  latestFrameByWorkspace.set(frameKey, { environmentId, snapshot })
+  latestFrameByWorkspace.set(frameKey, {
+    environmentId,
+    snapshot,
+    generation: connectionGeneration(environmentId)
+  })
   watchActiveWorkspace()
   scheduleCheck(frameKey)
 }

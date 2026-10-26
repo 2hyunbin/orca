@@ -149,6 +149,22 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
     expect(mocks.call).not.toHaveBeenCalled()
   })
 
+  it('checks a busy workspace on schedule, against its latest frame', () => {
+    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    vi.advanceTimersByTime(VISIBLE_TAB_PICK_SETTLE_MS - 1)
+    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    vi.advanceTimersByTime(1)
+    expect(mocks.call).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops a frame whose connection was replaced before the check', () => {
+    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    setRuntimeEnvironmentConnectionGenerationForTests(ENV, 9)
+    vi.advanceTimersByTime(VISIBLE_TAB_PICK_SETTLE_MS)
+    expect(mocks.call).not.toHaveBeenCalled()
+    setRuntimeEnvironmentConnectionGenerationForTests(ENV, 0)
+  })
+
   it('reports again on a new connection', () => {
     deliver(frame('host-tab-2'))
     setRuntimeEnvironmentConnectionGenerationForTests(ENV, 7)

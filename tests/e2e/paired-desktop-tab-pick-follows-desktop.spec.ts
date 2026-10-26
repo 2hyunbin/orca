@@ -96,9 +96,9 @@ test('a desktop restart brings a stale server pick back to the tab the desktop s
       { environmentId, worktreeId, tabId: hostTabId(order[1]) }
     )
 
-    await expect
-      .poll(() => serverPickedTab(page, environmentId, worktreeId))
-      .toBe(hostTabId(order[1]))
+    // A pane this desktop already reported is not reported again within its connection.
+    await page.waitForTimeout(3_000)
+    expect(await serverPickedTab(page, environmentId, worktreeId)).toBe(hostTabId(order[1]))
 
     // Restart the desktop: it reopens on its own saved tab and brings the server's pick back to it.
     const userDataDir = client.userDataDir
