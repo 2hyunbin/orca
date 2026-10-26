@@ -18,7 +18,9 @@ const notifications = openCloudNotifications({
 })
 const runtime = createConnectorServer(config, database, notifications)
 const active = config.mode === 'active'
-if (active) await runtime.waker.start()
+if (active) {
+  await runtime.waker.start()
+}
 const stopBackground = active ? startConnectorBackground(runtime) : () => {}
 
 runtime.server.listen(config.port, () => {

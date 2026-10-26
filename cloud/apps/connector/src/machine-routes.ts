@@ -33,7 +33,9 @@ export function registerMachineRoutes(
 
   app.put(CONNECTOR_PATHS.hello, limitBody, async (context) => {
     const body = ConnectorHelloRequestSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {
+      return context.json({ error: 'invalid_request' }, 400)
+    }
     if (body.data.contract < CONNECTOR_CONTRACT_VERSION) {
       return context.json({ error: 'client_too_old' }, 426)
     }
@@ -46,7 +48,9 @@ export function registerMachineRoutes(
 
   app.post(CONNECTOR_PATHS.poll, limitBody, async (context) => {
     const body = ConnectorPollRequestSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {
+      return context.json({ error: 'invalid_request' }, 400)
+    }
     const hostId = context.get('hostId')
     const { helloRev } = body.data
     await hostLinks.touch(hostId)
@@ -59,17 +63,25 @@ export function registerMachineRoutes(
         // Each pass decides under the host lock, so a revoke or newer hello either lands before it
         // (and this refuses) or after it has committed what it hands out.
         const pass = await session.locked(context, async (transaction, current) => {
-          if ((await hostLinks.helloRev(transaction, hostId)) !== helloRev) return null
+          if ((await hostLinks.helloRev(transaction, hostId)) !== helloRev) {
+            return null
+          }
           const recovered = await inbox.takeFirstPollUnsettled(transaction, hostId, current.sessionId)
           return { recovered, ...(await inbox.claim(transaction, hostId)) }
         })
-        if (pass instanceof Response) return pass
-        if (pass === null) return context.json({ error: 'hello_required' }, 409)
+        if (pass instanceof Response) {
+          return pass
+        }
+        if (pass === null) {
+          return context.json({ error: 'hello_required' }, 409)
+        }
         deliveries = pass.deliveries
         unsettled = pass.recovered
         const remaining = holdUntil - Date.now()
         const ready = deliveries.length > 0 || unsettled.length > 0
-        if (ready || remaining <= 0 || waker.draining) break
+        if (ready || remaining <= 0 || waker.draining) {
+          break
+        }
         // A lease running out sends no notification, so wake for the next one too.
         const leaseDueMs =
           pass.nextLeaseDueAt === null ? remaining : Math.max(0, pass.nextLeaseDueAt - now())
@@ -91,7 +103,9 @@ export function registerMachineRoutes(
 
   app.post(CONNECTOR_PATHS.acks, limitBody, async (context) => {
     const body = ConnectorAcksRequestSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {
+      return context.json({ error: 'invalid_request' }, 400)
+    }
     const hostId = context.get('hostId')
     const acknowledged = await session.locked(context, (transaction) =>
       inbox.acknowledge(transaction, hostId, body.data.acks)
@@ -101,7 +115,9 @@ export function registerMachineRoutes(
 
   app.post(CONNECTOR_PATHS.events, limitBody, async (context) => {
     const body = ConnectorEventsRequestSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {
+      return context.json({ error: 'invalid_request' }, 400)
+    }
     const hostId = context.get('hostId')
     const applied = await session.locked(context, (transaction) =>
       threads.applyEvents(transaction, hostId, body.data.events)

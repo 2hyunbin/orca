@@ -65,7 +65,9 @@ export class ConnectorInbox {
         hostId
       ]
     )
-    if (Number(inserted?.changes ?? 0) === 0) return 'duplicate'
+    if (Number(inserted?.changes ?? 0) === 0) {
+      return 'duplicate'
+    }
     if (body.kind === 'cancel') {
       // A start the machine never received is dropped, with everything queued behind it, this
       // cancel included, so a retried cancel reads as a duplicate.
@@ -77,7 +79,9 @@ export class ConnectorInbox {
              AND s.state = 'pending')`,
         [now, hostId, externalId]
       )
-      if (Number(dropped?.changes ?? 0) > 0) return 'dropped'
+      if (Number(dropped?.changes ?? 0) > 0) {
+        return 'dropped'
+      }
     }
     await this.wake(transaction, hostId)
     return 'queued'
@@ -114,7 +118,9 @@ export class ConnectorInbox {
            AND (state = 'pending' OR (state = 'leased' AND lease_until <= ?))`,
         [now + CONNECTOR_LIMITS.leaseMs, hostId, row.delivery_id, now]
       )
-      if (Number(leased?.changes ?? 0) === 0) continue
+      if (Number(leased?.changes ?? 0) === 0) {
+        continue
+      }
       deliveries.push(
         ConnectorDeliverySchema.parse({
           ...JSON.parse(String(row.payload)),
@@ -146,7 +152,9 @@ export class ConnectorInbox {
        WHERE token_hash = ? AND host_fingerprint = ? AND first_polled_at IS NULL`,
       [this.now(), sessionId, hostId]
     )
-    if (Number(first?.changes ?? 0) === 0) return []
+    if (Number(first?.changes ?? 0) === 0) {
+      return []
+    }
     const rows = await transaction.query(
       `SELECT delivery_id, external_id FROM connector_inbox
        WHERE host_id = ? AND state = 'received' ORDER BY seq`,
@@ -187,7 +195,9 @@ export class ConnectorInbox {
       changed += Number(result?.changes ?? 0)
     }
     // A received head lets the conversation's next delivery go out.
-    if (changed > 0) await this.wake(transaction, hostId)
+    if (changed > 0) {
+      await this.wake(transaction, hostId)
+    }
   }
 
   // Pending past its deadline, or leased and never received 30 s after it. Returns the threads hit.

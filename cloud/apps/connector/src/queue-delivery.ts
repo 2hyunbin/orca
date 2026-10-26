@@ -21,7 +21,9 @@ export async function queueDelivery(
   return await deps.database.transaction(async (transaction) => {
     await lockConnectorHost(transaction, hostId)
     const accountId = await deps.hostLinks.accountOf(transaction, hostId)
-    if (!accountId) return 'host_not_linked'
+    if (!accountId) {
+      return 'host_not_linked'
+    }
     if (!(await deps.threads.bind(transaction, { ...input.thread, accountId }))) {
       return 'not_this_hosts_thread'
     }

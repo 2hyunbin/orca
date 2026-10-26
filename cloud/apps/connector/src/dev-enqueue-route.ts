@@ -23,7 +23,9 @@ export function registerDevEnqueueRoute<E extends Env>(
 ): void {
   app.post('/dev/enqueue', deps.limitBody, async (context) => {
     const body = DevEnqueueSchema.safeParse(await context.req.json().catch(() => null))
-    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!body.success) {
+      return context.json({ error: 'invalid_request' }, 400)
+    }
     const { hostId, externalId, placeId } = body.data
     const deliveryId = body.data.deliveryId ?? randomUUID()
     const delivery = ConnectorDeliverySchema.safeParse({
@@ -33,7 +35,9 @@ export function registerDevEnqueueRoute<E extends Env>(
       expiresAt: 1,
       conversation: { source: 'slack', externalId }
     })
-    if (!delivery.success) return context.json({ error: 'invalid_request' }, 400)
+    if (!delivery.success) {
+      return context.json({ error: 'invalid_request' }, 400)
+    }
     const { deliveryId: _id, seq: _seq, expiresAt: _expiresAt, conversation: _c, ...rest } =
       delivery.data
     const status = await deps.queue({
@@ -49,8 +53,12 @@ export function registerDevEnqueueRoute<E extends Env>(
       deliveryId,
       body: rest
     })
-    if (status === 'host_not_linked') return context.json({ error: status }, 404)
-    if (status === 'not_this_hosts_thread') return context.json({ error: status }, 409)
+    if (status === 'host_not_linked') {
+      return context.json({ error: status }, 404)
+    }
+    if (status === 'not_this_hosts_thread') {
+      return context.json({ error: status }, 409)
+    }
     return context.json({ deliveryId, status })
   })
 }

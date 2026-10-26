@@ -25,7 +25,9 @@ function collector() {
     until: async (done: () => boolean, timeoutMs = 10_000) => {
       const deadline = Date.now() + timeoutMs
       while (!done()) {
-        if (Date.now() > deadline) throw new Error('timed out')
+        if (Date.now() > deadline) {
+          throw new Error('timed out')
+        }
         await new Promise<void>((resolve) => {
           wake = resolve
           setTimeout(resolve, 50)

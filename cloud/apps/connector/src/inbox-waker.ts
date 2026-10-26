@@ -28,7 +28,9 @@ export class InboxWaker {
     this.waiters.set(hostId, waiters)
     const cancel = (): void => {
       waiters.delete(wake)
-      if (waiters.size === 0 && this.waiters.get(hostId) === waiters) this.waiters.delete(hostId)
+      if (waiters.size === 0 && this.waiters.get(hostId) === waiters) {
+        this.waiters.delete(hostId)
+      }
     }
     return {
       wait: async (ms) => {
@@ -56,10 +58,16 @@ export class InboxWaker {
   }
 
   private wake(hostId: string): void {
-    for (const wake of this.waiters.get(hostId) ?? []) wake()
+    for (const wake of this.waiters.get(hostId) ?? []) {
+      wake()
+    }
   }
 
   private wakeAll(): void {
-    for (const waiters of this.waiters.values()) for (const wake of waiters) wake()
+    for (const waiters of this.waiters.values()) {
+      for (const wake of waiters) {
+        wake()
+      }
+    }
   }
 }

@@ -10,7 +10,7 @@ const CHANNEL_NAME = /^[a-z][a-z0-9_]{0,62}$/
 
 export type ListenHandlers = { onNotify: (payload: string) => void; onReconnect: () => void }
 
-export interface CloudNotifications {
+export type CloudNotifications = {
   // Postgres: NOTIFY on the caller's connection, so inside a transaction it is sent at commit.
   // SQLite: wakes this process's listeners at once; they re-read, so a rollback costs one query.
   notify(database: CloudDatabase, channel: string, payload: string): Promise<void>
@@ -20,7 +20,9 @@ export interface CloudNotifications {
 }
 
 function requireChannel(channel: string): string {
-  if (!CHANNEL_NAME.test(channel)) throw new Error('invalid_listen_channel')
+  if (!CHANNEL_NAME.test(channel)) {
+    throw new Error('invalid_listen_channel')
+  }
   return channel
 }
 
@@ -80,7 +82,9 @@ class PostgresListener {
   async connect(): Promise<void> {
     const client = new pg.Client(this.connection)
     client.on('notification', (message) => {
-      if (message.channel === this.channel) this.handlers.onNotify(message.payload ?? '')
+      if (message.channel === this.channel) {
+        this.handlers.onNotify(message.payload ?? '')
+      }
     })
     client.on('error', () => this.drop(client))
     client.on('end', () => this.drop(client))
@@ -102,19 +106,26 @@ class PostgresListener {
   }
 
   private drop(client: pg.Client): void {
-    if (this.client !== client) return
+    if (this.client !== client) {
+      return
+    }
     this.client = null
     void client.end().catch(() => undefined)
     this.scheduleReconnect()
   }
 
   private scheduleReconnect(): void {
-    if (this.closed) return
+    if (this.closed) {
+      return
+    }
     this.retry = setTimeout(() => {
       this.connect().then(
         () => {
-          if (this.closed) void this.client?.end().catch(() => undefined)
-          else this.handlers.onReconnect()
+          if (this.closed) {
+            void this.client?.end().catch(() => undefined)
+          } else {
+            this.handlers.onReconnect()
+          }
         },
         () => {
           this.retryMs = Math.min(this.retryMs * 2, LISTEN_RETRY_MAX_MS)

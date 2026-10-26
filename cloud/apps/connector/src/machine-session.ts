@@ -33,14 +33,15 @@ export function createMachineSession(deps: {
   const middleware: MiddlewareHandler<MachineEnv> = async (context, next) => {
     const bearer = readBearer(context.req.header('authorization'))
     const session = bearer ? await sessions.resolve(bearer) : null
-    if (!session?.ok) return refuse(context, session)
+    if (!session?.ok) {
+      return refuse(context, session)
+    }
     if (!hostRequests.allow(session.hostFingerprint)) {
       return context.json({ error: 'rate_limited' }, 429)
     }
     context.set('hostId', session.hostFingerprint)
     context.set('sessionId', session.sessionId)
     await next()
-    return
   }
 
   // Runs under the host lock that every link and session change takes, against the session as it
@@ -54,7 +55,9 @@ export function createMachineSession(deps: {
     return await database.transaction(async (transaction) => {
       await lockConnectorHost(transaction, hostId)
       const session = await sessions.resolve(bearer, transaction)
-      if (!session.ok || session.hostFingerprint !== hostId) return refuse(context, session)
+      if (!session.ok || session.hostFingerprint !== hostId) {
+        return refuse(context, session)
+      }
       return await run(transaction, session)
     })
   }
