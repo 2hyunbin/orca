@@ -1,3 +1,5 @@
+import { sanitizeRendererSettingsUpdate } from './renderer-settings-update'
+import { confirmBrowserPasswordOwner } from '../browser-passwords/browser-password-reauth'
 import { getClaudeAgentViewService } from '../claude/agent-view-service'
 import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron'
 import type { Store } from '../persistence'
@@ -44,20 +46,6 @@ import { resolveAiVaultSearchSettings } from '../../shared/ai-vault-search-setti
 import { applySessionSearchSettingsChange } from '../ai-vault-search/session-search-enablement'
 
 const SETTINGS_CHANGED_WHITELIST_SET = new Set<string>(SETTINGS_CHANGED_WHITELIST)
-
-type LegacyTerminalScrollbackSettingsUpdate = Partial<GlobalSettings> & {
-  terminalScrollbackBytes?: unknown
-}
-
-function sanitizeRendererSettingsUpdate(args: Partial<GlobalSettings>): Partial<GlobalSettings> {
-  const { terminalScrollbackBytes: _legacyScrollbackBytes, ...sanitizedArgs } =
-    args as LegacyTerminalScrollbackSettingsUpdate
-  void _legacyScrollbackBytes
-  // Plugin consent and enablement require main's reviewed-fingerprint handlers.
-  delete sanitizedArgs.pluginConsents
-  delete sanitizedArgs.disabledPlugins
-  return sanitizedArgs
-}
 
 // Electron menus do not react to settings; rebuild appearance checkboxes after writes.
 const APPEARANCE_MENU_KEYS: readonly (keyof GlobalSettings)[] = [
@@ -176,6 +164,15 @@ export function registerSettingsHandlers(
     }
     if (args.theme) {
       nativeTheme.themeSource = args.theme
+    }
+    if (
+      sanitizedArgs.browserPasswordsFillRequiresReauth === false &&
+      (store.getSettings().browserPasswordsFillRequiresReauth !== true ||
+        !(await confirmBrowserPasswordOwner('turn off saved password fill authentication', {
+          always: true
+        })))
+    ) {
+      delete sanitizedArgs.browserPasswordsFillRequiresReauth
     }
     // No-op UI saves must not inflate settings_changed adoption telemetry.
     const before = store.getSettings()
