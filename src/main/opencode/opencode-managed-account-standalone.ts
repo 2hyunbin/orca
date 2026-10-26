@@ -28,10 +28,7 @@ export function launchesManagedOpenCodeAccount(env: Record<string, string> | und
   )
 }
 
-/**
- * OpenCode 2's background service binds one fixed port per machine and serves only the data dir
- * that started it, so a second account's service cannot start; a private server picks its own port.
- */
+/** OpenCode 2's one-port background service serves one data dir; a private server picks its own port. */
 export function withOpenCodeStandaloneServer(command: string, shell: AgentStartupShell): string {
   const parsed = tokenizeStartupCommand(command, shell)
   if (!parsed.ok || findOptionOccurrence(parsed.tokens, ['--standalone', '--server'], true)) {
@@ -44,7 +41,7 @@ export function withOpenCodeStandaloneServer(command: string, shell: AgentStartu
   }
   const run = findOpenCodeRunCommand(tokens, shell)
   const next = tokens[executable + 1]
-  // Other subcommands reject the root-only flag.
+  // Skip other positionals: OpenCode rejects `opencode --standalone session ...`.
   const anchor = run ? run.runIndex : next === undefined || next.startsWith('-') ? executable : -1
   const span = spans[anchor]
   if (!span || span.divergesFromShell) {
