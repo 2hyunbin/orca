@@ -432,10 +432,19 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
       })
       const insert = () =>
         db.insertMessage({ from: 'worker', to: mailbox, runId, subject: 'result' })
+      const body = message(history === 'fresh' ? 'working before mail' : 'release mail')
+      const personal = envelope('agentSession.send', { body })
+      const accepted = await f.host.send(CALLER, { envelope: personal, body, userSend: true })
+      expect(accepted.ok).toBe(true)
+      expect(
+        await f.host.readMailHandoffEvidence(SESSION, personal.clientOperationId)
+      ).toMatchObject({
+        submission: { origin: 'client', source: { kind: 'user' } },
+        mailHold: { ambiguous: false, members: new Set() }
+      })
+      const working = await f.rig.frame('session/prompt')
       if (history !== 'fresh') {
-        await send(f.host, 'release mail')
-        const release = await f.rig.frame('session/prompt')
-        f.rig.child().agent.reply(release, { stopReason: 'end_turn' })
+        f.rig.child().agent.reply(working, { stopReason: 'end_turn' })
         await waitFor(() => expect(pointerHost.takesMailNow?.(SESSION)).toBe(true))
       }
       const first = insert()
@@ -453,8 +462,6 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
         )
         prompts = 2
       } else if (history === 'fresh') {
-        await send(f.host, 'working before mail')
-        const working = await f.rig.frame('session/prompt')
         f.rig.child().agent.notify('session/update', replyChunk(promptIdOf(working), 'working'))
         await f.rig.settle()
         await f.host.flushStreamedEvents(SESSION)

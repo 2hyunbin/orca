@@ -555,9 +555,9 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     await finishWorker(taskId)
     await finishWorker(idOf(second.task), { handle: 'term_worker_2', paneKey: WORKER_2_PANE })
     await edgesAnswered()
-    const pending = db
-      .getUnreadMessages(`run:${runId}`)
-      .filter((message) => message.delivered_at === null)
+    const pendingMail = () =>
+      db.getUnreadMessages(`run:${runId}`).filter((message) => message.delivered_at === null)
+    const pending = pendingMail()
     expect(pending.map((message) => message.from_handle)).toEqual(['term_worker', 'term_worker_2'])
     expect(chat.turns).toHaveLength(1)
     expect(await userTexts(COORDINATOR)).toEqual(['go'])
@@ -573,13 +573,7 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     await edgesAnswered()
     expect(chat.turns).toHaveLength(2)
     await vi.waitFor(
-      () =>
-        expect(
-          db
-            .getUnreadMessages(`run:${runId}`)
-            .filter((message) => message.delivered_at === null)
-            .map((message) => message.id)
-        ).toEqual([pending[1]!.id]),
+      () => expect(pendingMail().map((message) => message.id)).toEqual([pending[1]!.id]),
       WAIT
     )
 
@@ -615,13 +609,7 @@ describe('a worker result reaches the structured chat that coordinates it', () =
       )
     )
     expect(new Set(await mailSends()).size).toBe(2)
-    await vi.waitFor(
-      () =>
-        expect(
-          db.getUnreadMessages(`run:${runId}`).filter((message) => message.delivered_at === null)
-        ).toEqual([]),
-      WAIT
-    )
+    await vi.waitFor(() => expect(pendingMail()).toEqual([]), WAIT)
     runtime.onStructuredSessionStatusForMail({ sessionId: COORDINATOR, status: 'idle' })
     await new Promise((resolve) => setTimeout(resolve, 200))
     expect(chat.turns).toHaveLength(3)
