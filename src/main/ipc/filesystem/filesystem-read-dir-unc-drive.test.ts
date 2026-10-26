@@ -51,6 +51,7 @@ vi.mock(
   async () => (await import('./filesystem-test-harness')).pullRequestLinkedIssueMock
 )
 
+import { PATH_OUTSIDE_ALLOWED_DIRECTORIES } from '../../../shared/local-file-access'
 import { registerFilesystemHandlers } from './filesystem'
 import {
   invalidateAuthorizedRootsCache,
@@ -97,6 +98,35 @@ describe('fs:readDir on a UNC drive-mount project', () => {
         { name: 'README.md', isDirectory: false, isSymlink: false }
       ])
       expect(readdirMock).toHaveBeenCalledWith('C:\\src\\app', { withFileTypes: true })
+    }
+  )
+
+  it.runIf(process.platform === 'win32')(
+    'still refuses a junction under the project that lands on another drive or outside it',
+    async () => {
+      const unc = path.win32.join('\\\\wsl.localhost\\Ubuntu', 'mnt', 'c', 'src', 'app')
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The harness store implements the accessors root registration reads.
+      registerWorktreeRootsForRepo(store as never, 'repo-1', [unc])
+      const junctions: Record<string, string> = {
+        'C:\\src\\app\\other-drive': 'D:\\elsewhere',
+        'C:\\src\\app\\outside': 'C:\\Users\\me\\secrets'
+      }
+      realpathMock.mockImplementation(async (target: string) => {
+        if (target.startsWith('\\\\')) {
+          throw eperm('realpath', target)
+        }
+        return junctions[target] ?? target
+      })
+      readdirMock.mockResolvedValue([])
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The harness store implements the accessors these handlers read.
+      registerFilesystemHandlers(store as never)
+
+      for (const name of ['other-drive', 'outside']) {
+        await expect(
+          handlers.get('fs:readDir')!(null, { dirPath: path.win32.join(unc, name) })
+        ).rejects.toThrow(PATH_OUTSIDE_ALLOWED_DIRECTORIES)
+      }
+      expect(readdirMock).not.toHaveBeenCalled()
     }
   )
 })
