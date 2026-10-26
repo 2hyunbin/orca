@@ -17,37 +17,21 @@ export function createChatPersonActions(deps: {
     const host = deps.host()
     if (!host.deps.store.getRecord(sessionId)) {
       const fresh = attachParams(sessionId)
-      expect(
-        await host.create(
-          { callerKey: 'test-surface' },
-          {
-            ...fresh,
-            envelope: {
-              ...fresh.envelope,
-              payloadFingerprint: computeAgentSessionPayloadFingerprint({
-                method: 'agentSession.create',
-                sessionId,
-                fields: { worktree: `id:${fresh.location.workspaceId}`, agent: fresh.agent }
-              })
-            }
-          }
-        )
-      ).toMatchObject({ ok: true })
+      fresh.envelope.payloadFingerprint = computeAgentSessionPayloadFingerprint({
+        method: 'agentSession.create',
+        sessionId,
+        fields: { worktree: `id:${fresh.location.workspaceId}`, agent: fresh.agent }
+      })
+      expect(await host.create({ callerKey: 'test-surface' }, fresh)).toMatchObject({ ok: true })
     }
-    const params = attachParams(sessionId)
-    const current = {
-      ...params,
-      envelope: {
-        ...params.envelope,
-        expectedRuntimeFence: host.deps.store.getRecord(sessionId)!.lease.runtimeFence
-      }
-    }
-    current.envelope.payloadFingerprint = computeAgentSessionPayloadFingerprint({
+    const params: Parameters<StructuredAgentSessionHost['attach']>[1] = attachParams(sessionId)
+    params.envelope.expectedRuntimeFence = host.deps.store.getRecord(sessionId)!.lease.runtimeFence
+    params.envelope.payloadFingerprint = computeAgentSessionPayloadFingerprint({
       method: 'agentSession.attach',
       sessionId,
-      fields: attachFingerprintFields(current)
+      fields: attachFingerprintFields(params)
     })
-    return host.attach({ callerKey: 'test-surface' }, current)
+    return host.attach({ callerKey: 'test-surface' }, params)
   }
 
   function envelope(sessionId: string, method: string, fields: Record<string, unknown>) {

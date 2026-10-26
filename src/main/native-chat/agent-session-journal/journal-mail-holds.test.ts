@@ -1,7 +1,8 @@
-import { clearedMailRecord as clearedRecord } from '../../runtime/orchestration/mail-handoff.test-fixture'
-import { afterEach, expect, it, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import {
+  clearedMailRecord as clearedRecord,
+  mailTestResources
+} from '../../runtime/orchestration/mail-handoff.test-fixture'
+import { expect, it, vi } from 'vitest'
 import { join } from 'node:path'
 import { agentSessionRecordFixture } from '../agent-session-record-test-fixture'
 import { encodeAgentSessionRecord } from '../../../shared/agent-session-record-stored-form'
@@ -19,17 +20,10 @@ import {
   readMailHoldFacts
 } from './journal-mail-holds'
 
-const roots: string[] = []
-const databases: { close: () => void }[] = []
-afterEach(() => {
-  databases.splice(0).forEach((db) => db.close())
-  roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true }))
-})
+const resources = mailTestResources('pr28567-mail-holds-')
 function harness() {
-  const root = mkdtempSync(join(tmpdir(), 'pr28567-mail-holds-'))
-  roots.push(root)
-  const database = JournalHostDatabase.open(root)
-  databases.push(database)
+  const root = resources.directory()
+  const database = resources.track(JournalHostDatabase.open(root))
   const record = agentSessionRecordFixture({
     sessionId: testOrcaSessionId('4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37')
   })
@@ -55,13 +49,13 @@ function harness() {
     target.transaction((db) => receipt.write(db))
     receipt.committed()
   }
-  const stop = (ids?: string[], extra = { write: () => {}, committed: () => {} }) =>
+  const stop = (
+    capture: Parameters<typeof mailStopReceipt>[1] = () => ({}),
+    extra = { write: () => {}, committed: () => {} }
+  ) =>
     writer.append(
       journalStopEventRowBuilder(() => state, { reason: 'user-stop' }, 1),
-      composeJournalOperationReceipts(
-        mailStopReceipt(record.sessionId, () => ({ members: ids })),
-        extra
-      )
+      composeJournalOperationReceipts(mailStopReceipt(record.sessionId, capture), extra)
     )
   return { root, database, record, facts, apply, stop, writer, state }
 }
@@ -70,17 +64,20 @@ it('persists exact unreserved obligations across restatement/reopen and repeated
   const h = harness()
   expect(mailAdmissionPermission(h.facts(), ['fresh'])).toBe(false)
   h.apply(mailReleaseReceipt(h.record.sessionId))
-  await h.stop(['A', 'B'])
+  await h.stop()
+  await h.stop(() => ({ members: ['A'] }))
+  expect(mailAdmissionPermission(h.facts(), ['C'])).toBe(false)
+  h.apply(mailReleaseReceipt(h.record.sessionId))
+  await h.stop(() => ({ members: ['A', 'B'] }))
   expect(mailAdmissionPermission(h.facts(), ['A'])).toBe(false)
   expect(mailAdmissionPermission(h.facts(), ['C'])).toBe(true)
   await h.writer.append(journalStopEventRowBuilder(() => h.state, { reason: 'user-stop' }, 1))
   await h.writer.append(journalStopEventRowBuilder(() => h.state, { reason: 'host-stop' }, 1))
   expect([...h.facts().members]).toEqual(['A', 'B'])
-  await h.stop(['C'])
+  await h.stop(() => ({ members: ['C'] }))
   expect([...h.facts().members]).toEqual(['A', 'B', 'C'])
   h.database.close()
-  const reopened = JournalHostDatabase.open(h.root)
-  databases.push(reopened)
+  const reopened = resources.track(JournalHostDatabase.open(h.root))
   expect(h.facts(reopened.db).members).toEqual(new Set(['A', 'B', 'C']))
   h.apply(mailReleaseReceipt(h.record.sessionId), reopened)
   expect(mailAdmissionPermission(h.facts(reopened.db), ['A', 'B'])).toBe(true)
@@ -89,8 +86,7 @@ it('persists exact unreserved obligations across restatement/reopen and repeated
 it('rolls back Stop, hold and receipt together, cleaning up before any fold/publication even on failed COMMIT', async () => {
   const h = harness()
   h.apply(mailReleaseReceipt(h.record.sessionId))
-  const mail = new OrchestrationDb(join(h.root, 'mail.db'))
-  databases.push(mail)
+  const mail = resources.track(new OrchestrationDb(join(h.root, 'mail.db')))
   const row = mail.insertMessage({
     from: 'worker',
     to: `orca_session_id:${h.record.sessionId}`,
@@ -104,31 +100,28 @@ it('rolls back Stop, hold and receipt together, cleaning up before any fold/publ
   })
   const committed = vi.fn()
   const stop = () =>
-    h.writer.append(
-      journalStopEventRowBuilder(() => h.state, { reason: 'user-stop' }, 1),
-      composeJournalOperationReceipts(
-        mailStopReceipt(h.record.sessionId, (id, records, scope) => {
-          const captured = captureSessionMailAtStop(mail, id, records, retire, scope)
-          expect(captured.members).toEqual([row.id])
-          return {
-            ...captured,
-            finished: () => {
-              captured.finished?.()
-              finished()
-            }
+    h.stop(
+      (id, records, scope) => {
+        const captured = captureSessionMailAtStop(mail, id, records, retire, scope)
+        expect(captured.members).toEqual([row.id])
+        return {
+          ...captured,
+          finished: () => {
+            captured.finished?.()
+            finished()
           }
-        }),
-        {
-          write: () => {
-            h.database.db.exec('PRAGMA defer_foreign_keys = ON')
-            h.database.db.exec(
-              'CREATE TABLE IF NOT EXISTS bad_fk (parent INTEGER REFERENCES agent_session_mail_holds(intent_order))'
-            )
-            h.database.db.prepare('INSERT INTO bad_fk VALUES (?)').run(9999)
-          },
-          committed
         }
-      )
+      },
+      {
+        write: () => {
+          h.database.db.exec('PRAGMA defer_foreign_keys = ON')
+          h.database.db.exec(
+            'CREATE TABLE IF NOT EXISTS bad_fk (parent INTEGER REFERENCES agent_session_mail_holds(intent_order))'
+          )
+          h.database.db.prepare('INSERT INTO bad_fk VALUES (?)').run(9999)
+        },
+        committed
+      }
     )
   await expect(stop()).rejects.toThrow()
   expect(finished).toHaveBeenCalledOnce()
@@ -139,37 +132,13 @@ it('rolls back Stop, hold and receipt together, cleaning up before any fold/publ
   expect(h.database.db.prepare('SELECT count(*) AS n FROM journal_rows').get()?.n).toBe(0)
 })
 
-it('carries UNKNOWN through a later exact capture until a witnessed release and preserves alias release floors', async () => {
-  const h = harness()
-  h.apply(mailReleaseReceipt(h.record.sessionId))
-  await h.stop()
-  await h.stop(['A'])
-  expect(mailAdmissionPermission(h.facts(), ['C'])).toBe(false)
-  const successor = agentSessionRecordFixture({ sessionId: 'successor' })
-  const predecessor = clearedRecord(h.record, successor.sessionId)
-  const aliases = () => [predecessor, successor]
-  h.apply(mailReleaseReceipt(successor.sessionId))
-  const released = readMailHoldFacts(h.database.db, successor.sessionId, aliases, 1)
-  expect(mailAdmissionPermission(released, ['A'])).toBe(true)
-  for (const record of aliases()) {
-    h.database.db
-      .prepare('INSERT OR REPLACE INTO agent_session_records VALUES (?, ?)')
-      .run(record.sessionId, JSON.stringify(encodeAgentSessionRecord(record)))
-  }
-  h.apply(mailStopReceipt(successor.sessionId, () => ({ members: ['C'] })))
-  const later = readMailHoldFacts(h.database.db, successor.sessionId, aliases, 2)
-  expect([...later.members]).toEqual(['C'])
-  expect(later.ambiguous).toBe(false)
-})
-
 it.each([100, 1000])(
   'shares one linear lineage fold across %i aliases and preserves unrelated component permission tokens',
   (count) => {
     const h = harness()
     let visits = 0
     const records = Array.from({ length: count }, (_, index) => ({
-      ...h.record,
-      sessionId: `lineage-${index}`,
+      ...agentSessionRecordFixture({ sessionId: `lineage-${index}` }),
       get conversationCommand() {
         visits++
         return index + 1 < count
@@ -192,6 +161,22 @@ it.each([100, 1000])(
     expect(changed.key).not.toBe(facts.key)
     expect(read).toHaveBeenCalledOnce()
     expect(readMailHoldFacts(h.database.db, h.record.sessionId, read, 2).key).toBe(unrelated.key)
+    for (const record of records) {
+      h.database.db
+        .prepare('INSERT INTO agent_session_records VALUES (?, ?)')
+        .run(record.sessionId, JSON.stringify(encodeAgentSessionRecord(record)))
+    }
+    const successor = records.at(-1)!.sessionId
+    h.apply(mailStopReceipt(records[0].sessionId, () => ({ members: ['A'] })))
+    h.apply(mailReleaseReceipt(successor))
+    expect(
+      mailAdmissionPermission(readMailHoldFacts(h.database.db, successor, read, 2), ['A'])
+    ).toBe(true)
+    h.apply(mailStopReceipt(successor, () => ({ members: ['C'] })))
+    expect(readMailHoldFacts(h.database.db, successor, read, 2)).toMatchObject({
+      members: new Set(['C']),
+      ambiguous: false
+    })
     const missing = clearedRecord(records[0], 'absent')
     expect(readMailHoldFacts(h.database.db, missing.sessionId, () => [missing], 3).ambiguous).toBe(
       true

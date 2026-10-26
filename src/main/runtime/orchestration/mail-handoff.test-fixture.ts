@@ -1,9 +1,26 @@
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
-import { vi } from 'vitest'
+import { onTestFinished, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import type Database from '../../sqlite/sync-database'
 import type { SqliteBindings, SqliteRow } from '../../sqlite/sqlite-statement'
 import type { StructuredMailHandoff } from './mail-handoff'
 import { mintAgentSessionOperationId } from './structured-pointer-operation-id'
+
+export function mailTestResources(prefix: string) {
+  return {
+    directory: () => {
+      const root = mkdtempSync(join(tmpdir(), prefix))
+      onTestFinished(() => rmSync(root, { recursive: true, force: true }))
+      return root
+    },
+    track: <T extends { close: () => void | Promise<void> }>(resource: T): T => {
+      onTestFinished(() => resource.close())
+      return resource
+    }
+  }
+}
 
 export function mailHandoffFixture(patch: Partial<StructuredMailHandoff>): StructuredMailHandoff {
   const id = mintAgentSessionOperationId(Date.now())
