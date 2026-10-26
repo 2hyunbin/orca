@@ -6,6 +6,7 @@ import {
   CONNECTOR_CONTRACT_VERSION,
   CONNECTOR_PATHS,
   ConnectorDeliveryId,
+  ConnectorHelloResponse,
   ConnectorPollControl,
   ConnectorPollResponse,
   type ConnectorReplyResponse,
@@ -41,8 +42,6 @@ export type ConnectorPollClientOptions = {
   events: ConnectorTurnEvents
   seam: ExternalConversationSeam
   machine: ConnectorMachine
-  /** A hello revision above every earlier one from this install, across clients and restarts. */
-  nextHelloRev: () => number
   random?: () => number
 }
 
@@ -81,7 +80,7 @@ export class ConnectorPollClient {
     this.random = options.random ?? Math.random
     this.host = options.machine.conversationHost()
     this.acks = new ConnectorOutbox<ConnectorAck>({
-      maxBatch: MAX_ACKS_PER_REQUEST,
+      headSize: () => MAX_ACKS_PER_REQUEST,
       onAccepted: (sent) => {
         for (const ack of sent) {
           if (ack.step === 'done') {
@@ -182,12 +181,10 @@ export class ConnectorPollClient {
       return null
     }
     if (!polled.ok) {
-      // The cloud wants hello again.
-      if (polled.status === 409) {
-        this.helloRev = null
-        return null
-      }
-      return stopFor(polled) ?? this.backoff(polled)
+      // A lost answer may have carried this hello's one list of unsettled deliveries; a new hello lists
+      // them again. A 409 means the cloud wants one anyway.
+      this.helloRev = null
+      return polled.status === 409 ? null : (stopFor(polled) ?? this.backoff(polled))
     }
     this.failures = 0
     const response = polled.value
@@ -211,12 +208,10 @@ export class ConnectorPollClient {
     const { machine } = this.options
     // From here the cloud may take this hello and answer the last one's requests 204 without applying them.
     this.helloRev = null
-    const helloRev = this.options.nextHelloRev()
     const answer = await this.transport.call(
       CONNECTOR_PATHS.hello,
       {
         v: 1,
-        helloRev,
         contract: CONNECTOR_CONTRACT_VERSION,
         orcaVersion: machine.orcaVersion,
         platform: process.platform,
@@ -227,7 +222,7 @@ export class ConnectorPollClient {
         features: FEATURES,
         projects: said.projects
       },
-      z.unknown(),
+      ConnectorHelloResponse,
       { method: 'PUT', signal: this.stopped.signal }
     )
     if (!answer.ok) {
@@ -239,7 +234,7 @@ export class ConnectorPollClient {
     this.helloSaid = JSON.stringify(said)
     // A fresh watch's first event is the snapshot, which opens this hello's numbered events.
     this.watch()
-    this.helloRev = helloRev
+    this.helloRev = answer.value.helloRev
     this.eventSender.resume()
     this.ackSender.resume()
     return null
@@ -322,7 +317,9 @@ export class ConnectorPollClient {
   }
 
   private async post(path: string, body: unknown): Promise<ConnectorFailure | null> {
-    const sent = await this.transport.call(path, body, z.unknown(), { signal: this.stopped.signal })
+    const sent = await this.transport.call(path, body, z.undefined(), {
+      signal: this.stopped.signal
+    })
     if (sent.ok) {
       return null
     }

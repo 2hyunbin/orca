@@ -44,6 +44,8 @@ export type ConversationSnapshot = {
     agent: ConnectorAgent
     working: boolean
     prompt: PendingPrompt | null
+    /** The pane's latest turn, as its turn events name it; null before any. */
+    turnId: number | null
   })[]
 }
 
@@ -200,11 +202,17 @@ export class ConversationEvents {
       kind: 'snapshot',
       conversations: [...allLinks(this.deps.store)].map(({ workspace, link }) => {
         const row = this.deps.readHookRow(link.paneKey)
+        const working = row ? hookRowAgentPhase(row) === 'working' : false
         return {
           ...pane(link, workspace.worktreeId),
           agent: link.agent,
-          working: row ? hookRowAgentPhase(row) === 'working' : false,
-          prompt: this.deps.pendingPrompt(link)
+          working,
+          prompt: this.deps.pendingPrompt(link),
+          // The same id started() and takeTurnId() give this turn.
+          turnId:
+            this.turnStartedAt.get(link.paneKey) ??
+            row?.turnStartedAt ??
+            (row && working ? row.stateStartedAt : null)
         }
       })
     }

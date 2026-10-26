@@ -2,6 +2,7 @@
 import { readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import type { PendingPrompt } from '../../shared/agent-pending-prompt'
 import {
   CONNECTOR_CLIENT_LIMITS,
   type ConnectorConversation,
@@ -20,7 +21,8 @@ const TURN_OUTBOX_FILE = 'connector-turn-outbox.json'
 const MAX_TURN_ENDS = 200
 // Live events past this are dropped oldest first; a fresh hello and snapshot then restate them.
 const MAX_LIVE_EVENTS = 500
-const MAX_EVENTS_PER_REQUEST = 50
+// Room for the request's own fields around its events.
+const EVENTS_BUDGET_BYTES = CONNECTOR_CLIENT_LIMITS.maxRequestBytes - 1024
 
 type TurnEnded = Extract<ConnectorEvent, { kind: 'turn-ended' }>
 
@@ -62,19 +64,68 @@ function capUtf8(text: string, maxBytes: number): string {
   return bytes.subarray(0, end).toString('utf8')
 }
 
+const jsonBytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value))
+
+/** As many leading events as fit in one request, and at least one. */
+function eventsHeadSize(events: readonly ConnectorEvent[]): number {
+  let bytes = 0
+  for (const [index, event] of events.entries()) {
+    bytes += jsonBytes(event) + 1
+    if (bytes > EVENTS_BUDGET_BYTES) {
+      return Math.max(1, index)
+    }
+  }
+  return events.length
+}
+
+const unsupported = (prompt: PendingPrompt): PendingPrompt => ({
+  kind: 'unsupported',
+  promptId: prompt.promptId
+})
+
+/** Within the per-event cap: a prompt too large to carry is offered as one only Orca can answer. */
+function withinEventCap(event: ConnectorEvent): ConnectorEvent {
+  if (jsonBytes(event) <= CONNECTOR_CLIENT_LIMITS.maxEventBytes) {
+    return event
+  }
+  if (event.kind === 'prompt') {
+    return { ...event, prompt: unsupported(event.prompt) }
+  }
+  if (event.kind === 'snapshot') {
+    return {
+      ...event,
+      conversations: event.conversations.map((entry) =>
+        entry.prompt ? { ...entry, prompt: unsupported(entry.prompt) } : entry
+      )
+    }
+  }
+  return event
+}
+
 export function toConnectorEvent(
   event: ConversationSnapshot | ConversationEvent
 ): ConnectorEvent | null {
   if (event.kind === 'snapshot') {
-    return {
+    return withinEventCap({
       kind: 'snapshot',
       conversations: event.conversations.flatMap(
-        ({ conversation, paneKey, agent, working, prompt }) => {
+        ({ conversation, paneKey, agent, working, prompt, turnId }) => {
           const slack = slackConversation(conversation)
-          return slack ? [{ conversation: slack, paneKey, agent, working, prompt }] : []
+          return slack
+            ? [
+                {
+                  conversation: slack,
+                  paneKey,
+                  agent,
+                  working,
+                  prompt,
+                  ...(turnId === null ? {} : { turnId })
+                }
+              ]
+            : []
         }
       )
-    }
+    })
   }
   const conversation = slackConversation(event.conversation)
   if (!conversation) {
@@ -85,7 +136,7 @@ export function toConnectorEvent(
     case 'linked':
       return { kind: 'linked', conversation, paneKey, agent: event.agent }
     case 'prompt':
-      return { kind: 'prompt', conversation, paneKey, prompt: event.prompt }
+      return withinEventCap({ kind: 'prompt', conversation, paneKey, prompt: event.prompt })
     case 'turn-started':
       return { kind: 'turn-started', conversation, paneKey, at: event.at }
     case 'turn-ended':
@@ -143,7 +194,7 @@ export class ConnectorTurnEvents {
   ) {
     this.filePath = join(userDataPath, TURN_OUTBOX_FILE)
     this.outbox = new ConnectorOutbox<ConnectorEvent>({
-      maxBatch: MAX_EVENTS_PER_REQUEST,
+      headSize: eventsHeadSize,
       initial: this.readStored(),
       bound: (events, sent) => {
         const kept = boundEvents(events, sent)
@@ -179,6 +230,10 @@ export class ConnectorTurnEvents {
 
   accepted(stamp: ConnectorStamp): void {
     this.outbox.accepted(stamp)
+  }
+
+  refused(stamp: ConnectorStamp): ConnectorEvent | null {
+    return this.outbox.refused(stamp)
   }
 
   /** Drops everything, file included: no other account can report these turns. */
