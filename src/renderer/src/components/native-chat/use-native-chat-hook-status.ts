@@ -1,5 +1,5 @@
-import { useAgentStatusField } from '@/store/agent-status'
-import { useAppStore } from '../../store'
+import { useAgentStatusField, useAgentStatusSelector } from '@/store/agent-status'
+import { useMemo } from 'react'
 import { isExplicitAgentStatusFresh } from '@/lib/agent-status'
 import {
   AGENT_STATUS_STALE_AFTER_MS,
@@ -28,12 +28,12 @@ export function useNativeChatHookStatus(
   paneKey: string
 ): readonly [AgentStatusState | null, number | null, boolean] {
   // Subscribe to TTL expiry so silent working rows eventually stop keeping chat busy.
-  const agentStatusEpoch = useAppStore((store) => store.agentStatusEpoch)
-  void agentStatusEpoch
+  const keys = useMemo(() => [paneKey], [paneKey])
   // Primitive selectors avoid rerenders for unrelated status changes.
-  const state = useAgentStatusField(paneKey, (entry) => {
-    return resolveNativeChatHookState(entry)
-  })
+  const state = useAgentStatusSelector(
+    (current) => resolveNativeChatHookState(current.agentStatusByPaneKey[paneKey]),
+    keys
+  )
   const stateStartedAt = useAgentStatusField(paneKey, (entry) => entry?.stateStartedAt ?? null)
   // Only children started in this parent epoch may delay settlement; missed stops and reused panes leave stale roster entries.
   const hasWorkingSubagents = useAgentStatusField(paneKey, (entry) => {

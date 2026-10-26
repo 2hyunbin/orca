@@ -40,13 +40,54 @@ export type StatusStage = {
   readRetirement: ReturnType<typeof prepareStructuredReadRetirement> | null
   read: AgentStatusReadState | null
 }
-export function readAgentStatusFold(stage: StatusStage): AgentStatusReadState {
-  stage.read ??= {
-    ...stage.app,
-    get agentStatusByPaneKey() {
-      return stage.draft ?? stage.live
+function createAgentStatusReadView(
+  app: () => AppState,
+  statuses: () => AgentStatusSnapshot
+): AgentStatusReadState {
+  const read = (key: PropertyKey): unknown => {
+    if (key === 'agentStatusByPaneKey') {
+      return statuses()
     }
+    return Reflect.get(app(), key)
   }
+  const refuse = () => false
+  return new Proxy<AgentStatusReadState>(Object.create(Object.prototype), {
+    get: (target, key, receiver) =>
+      key === 'agentStatusByPaneKey' || Object.getOwnPropertyDescriptor(app(), key)?.enumerable
+        ? read(key)
+        : Reflect.get(target, key, receiver),
+    has: (_target, key) =>
+      key === 'agentStatusByPaneKey' ||
+      Object.getOwnPropertyDescriptor(app(), key)?.enumerable === true ||
+      Reflect.has(Object.prototype, key),
+    ownKeys: () => {
+      const source = app()
+      const keys = Reflect.ownKeys(source).filter(
+        (key) => Object.getOwnPropertyDescriptor(source, key)?.enumerable
+      )
+      return [
+        ...keys.filter((key) => typeof key === 'string' && key !== 'agentStatusByPaneKey'),
+        'agentStatusByPaneKey',
+        ...keys.filter((key) => typeof key === 'symbol')
+      ]
+    },
+    getOwnPropertyDescriptor: (_target, key) =>
+      key === 'agentStatusByPaneKey' || Object.getOwnPropertyDescriptor(app(), key)?.enumerable
+        ? { configurable: true, enumerable: true, writable: false, value: read(key) }
+        : undefined,
+    set: refuse,
+    defineProperty: refuse,
+    deleteProperty: refuse,
+    setPrototypeOf: refuse,
+    preventExtensions: refuse
+  })
+}
+
+export function readAgentStatusFold(stage: StatusStage): AgentStatusReadState {
+  stage.read ??= createAgentStatusReadView(
+    () => stage.app,
+    () => stage.draft ?? stage.live
+  )
   return stage.read
 }
 
@@ -63,16 +104,10 @@ export function writeAgentStatusFold(stage: StatusStage, ...args: StoreSetArgs<A
     for (const key of Object.keys(stage.app)) {
       if (!(key in next)) {
         Reflect.deleteProperty(stage.app, key)
-        if (stage.read) {
-          Reflect.deleteProperty(stage.read, key)
-        }
       }
     }
   }
   Object.assign(stage.app, next)
-  if (stage.read) {
-    Object.assign(stage.read, next)
-  }
   stage.appRevision++
 }
 
@@ -86,7 +121,10 @@ export function createAgentStatusReadViews() {
     }
     let view = byStatus.get(statuses)
     if (!view) {
-      view = { ...app, agentStatusByPaneKey: statuses }
+      view = createAgentStatusReadView(
+        () => app,
+        () => statuses
+      )
       byStatus.set(statuses, view)
     }
     return view

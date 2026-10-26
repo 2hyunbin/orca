@@ -106,7 +106,7 @@ describe('real AppStore status commit boundary', () => {
           transaction.setEntry(String(key), { ...current, prompt: 'folded' })
         }
       })
-      expect(materializations).toHaveBeenCalledTimes(paired ? 3 : 1)
+      expect(materializations).toHaveBeenCalledTimes(0)
       expect(new Set(reads).size).toBe(1)
       expect(app).not.toHaveBeenCalled()
       if (paired) {

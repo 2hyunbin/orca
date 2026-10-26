@@ -132,7 +132,7 @@ describe('canonical status writers and their real consumers', () => {
         fold(false)
         expect(roots.size).toBe(1)
         expect(views.size).toBe(1)
-        expect(copies).toHaveBeenCalledTimes(paired ? 3 : 2)
+        expect(copies).toHaveBeenCalledTimes(1)
         expect(app).toHaveBeenCalledTimes(1)
         expect(store.getState()).toBe([...roots][0])
         expect(store.getState().agentStatusEpoch).toBe(count)
@@ -230,5 +230,161 @@ describe('canonical status writers and their real consumers', () => {
     )
     expect(finalize).toHaveBeenCalledTimes(1)
     completion.cleanupRunObservers()
+  })
+})
+
+describe('source-backed canonical read joins', () => {
+  it('does not read or enumerate data sources until requested, and copies only the real prepared root', () => {
+    const store = createStore(createAppState)
+    const owner = getAgentStatusOwner(store)
+    const marker = Symbol('data')
+    const data = { ...store.getState() }
+    Object.defineProperty(data, marker, { value: 'captured', enumerable: true })
+    let reads = 0
+    let enumerations = 0
+    const source = new Proxy(data, {
+      get(target, key, receiver) {
+        if (key === marker) {
+          reads++
+        }
+        return Reflect.get(target, key, receiver)
+      },
+      ownKeys(target) {
+        enumerations++
+        return Reflect.ownKeys(target)
+      }
+    })
+    store.setState(source, true)
+    reads = 0
+    enumerations = 0
+    const committed = owner.getState()
+    expect(owner.getState()).toBe(committed)
+    expect(reads).toBe(0)
+    expect(enumerations).toBe(0)
+    owner.transact((transaction) => {
+      const staged = transaction.getState()
+      expect(transaction.getState()).toBe(staged)
+      expect(reads).toBe(0)
+      expect(enumerations).toBe(0)
+      store.setState({ activeWorktreeId: 'prepared' })
+      expect(reads).toBe(1)
+      expect(enumerations).toBe(1)
+      expect(transaction.getState()).toBe(staged)
+      expect(staged.activeWorktreeId).toBe('prepared')
+      expect(Reflect.get(staged, marker)).toBe('captured')
+      expect(store.getState()).toBe(source)
+    })
+    expect(store.getState().activeWorktreeId).toBe('prepared')
+    expect(committed.activeWorktreeId).toBeNull()
+    expect(Reflect.get(committed, marker)).toBe('captured')
+  })
+
+  it('reflects own enumerable strings and symbols without letting a read mutate its sources', () => {
+    const store = createStore(createAppState)
+    const owner = getAgentStatusOwner(store)
+    const marker = Symbol('value')
+    const hidden = Symbol('hidden')
+    const source = { ...store.getState() }
+    Object.defineProperty(source, marker, { value: 42, enumerable: true })
+    Object.defineProperty(source, hidden, { value: 99 })
+    Object.defineProperty(source, 'hidden', { value: 'hidden' })
+    store.setState(source, true)
+    const read = owner.getState()
+    expect(Object.keys(read)).toEqual([...Object.keys(source), 'agentStatusByPaneKey'])
+    expect(Reflect.ownKeys(read)).toEqual([...Object.keys(source), 'agentStatusByPaneKey', marker])
+    expect(Object.getOwnPropertyDescriptor(read, marker)).toEqual({
+      value: 42,
+      enumerable: true,
+      configurable: true,
+      writable: false
+    })
+    expect(Reflect.get(read, marker)).toBe(42)
+    expect(Reflect.get(read, hidden)).toBeUndefined()
+    expect(Reflect.get(read, 'hidden')).toBeUndefined()
+    expect(Reflect.has(read, marker)).toBe(true)
+    expect(Reflect.has(read, hidden)).toBe(false)
+    expect(Reflect.has(read, 'hidden')).toBe(false)
+    expect(Reflect.get(read, 'toString')).toBe(Object.prototype.toString)
+    expect(Reflect.get(read, '__proto__')).toBe(Object.prototype)
+    const spread = { ...read }
+    expect(Reflect.get(spread, marker)).toBe(42)
+    expect(spread.agentStatusByPaneKey).toBe(owner.getSnapshot())
+    expect(Reflect.set(read, 'activeWorktreeId', 'wrong')).toBe(false)
+    expect(Reflect.defineProperty(read, 'activeWorktreeId', { value: 'wrong' })).toBe(false)
+    expect(Reflect.deleteProperty(read, 'activeWorktreeId')).toBe(false)
+    expect(Reflect.setPrototypeOf(read, null)).toBe(false)
+    expect(Reflect.preventExtensions(read)).toBe(false)
+    expect(store.getState()).toBe(source)
+    expect(source.activeWorktreeId).toBeNull()
+    expect(Object.getPrototypeOf(read)).toBe(Object.prototype)
+  })
+
+  it('keeps staged reads coherent after replacement and historical app/status pairs fixed', () => {
+    vi.useFakeTimers()
+    const store = createStore(createAppState)
+    const owner = getAgentStatusOwner(store)
+    store.getState().setAgentStatus('history:1', { state: 'working', prompt: 'first' })
+    const before = owner.getState()
+    const pairs: AgentStatusTransition[] = []
+    owner.subscribeTransitions((pair) => pairs.push(pair))
+    owner.transact((transaction) => {
+      const read = transaction.getState()
+      const replacement = {
+        ...owner.getAppState(),
+        transient: 'remove me',
+        activeWorktreeId: 'new'
+      }
+      store.setState(replacement, true)
+      expect(read.activeWorktreeId).toBe('new')
+      expect(Reflect.get(read, 'transient')).toBe('remove me')
+      Reflect.deleteProperty(replacement, 'transient')
+      store.setState(replacement, true)
+      expect(transaction.getState()).toBe(read)
+      expect(Reflect.has(read, 'transient')).toBe(false)
+      expect(Reflect.get(read, 'transient')).toBeUndefined()
+      expect(Object.keys(read)).not.toContain('transient')
+      store.getState().setAgentStatus('history:1', { state: 'done', prompt: 'second' })
+      expect(read.agentStatusByPaneKey['history:1'].state).toBe('done')
+      expect(before.agentStatusByPaneKey['history:1'].state).toBe('working')
+    })
+    expect(pairs).toHaveLength(1)
+    const after = pairs[0].next
+    expect(pairs[0].previous).toBe(before)
+    expect(after.activeWorktreeId).toBe('new')
+    store.setState({ activeWorktreeId: 'later' })
+    store.getState().removeAgentStatus('history:1')
+    expect(before.activeWorktreeId).toBeNull()
+    expect(before.agentStatusByPaneKey['history:1'].prompt).toBe('first')
+    expect(after.activeWorktreeId).toBe('new')
+    expect(after.agentStatusByPaneKey['history:1'].state).toBe('done')
+    expect(owner.getState().activeWorktreeId).toBe('later')
+    expect(owner.getState().agentStatusByPaneKey['history:1']).toBeUndefined()
+  })
+
+  it('still evaluates actual app-root preparation before acceptance or effects', () => {
+    const store = createStore(createAppState)
+    const owner = getAgentStatusOwner(store)
+    const source = { ...store.getState() }
+    Object.defineProperty(source, 'activeWorktreeId', {
+      enumerable: true,
+      get() {
+        throw new Error('real root preparation')
+      }
+    })
+    store.setState(source, true)
+    const previousLive = owner.getSnapshot()
+    const effect = vi.fn()
+    const notify = vi.fn()
+    store.subscribe(notify)
+    expect(() =>
+      owner.transact((transaction) => {
+        transaction.afterCommit(effect)
+        store.setState({ agentStatusEpoch: 1 })
+      })
+    ).toThrow('real root preparation')
+    expect(store.getState()).toBe(source)
+    expect(owner.getSnapshot()).toBe(previousLive)
+    expect(notify).not.toHaveBeenCalled()
+    expect(effect).not.toHaveBeenCalled()
   })
 })
