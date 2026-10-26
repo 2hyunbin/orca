@@ -23,9 +23,15 @@ export function evidenceCallerTerminal(
   runtime: OrcaRuntimeService,
   evidence: OrchestrationCompatibilityEvidence | undefined
 ): LiveCallerTerminal | null {
-  const own = evidence?.terminalHandle ? liveTerminal(runtime, evidence.terminalHandle) : null
-  // A remint invalidates the env handle; the env pane key still finds the same terminal.
+  const envHandle = evidence?.terminalHandle
+  const own = envHandle ? liveTerminal(runtime, envHandle) : null
+  // A remint invalidates the env handle and the env pane key still finds the same terminal; an exited one's pane may hold another.
+  const exited = envHandle
+    ? runtime.getTerminalLivenessVerdict(envHandle)?.status === 'exited'
+    : false
   const remintedHandle =
-    !own && evidence?.paneKey ? runtime.getTerminalHandleForPaneKey(evidence.paneKey) : null
+    !own && !exited && evidence?.paneKey
+      ? runtime.getTerminalHandleForPaneKey(evidence.paneKey)
+      : null
   return own ?? (remintedHandle ? liveTerminal(runtime, remintedHandle) : null)
 }

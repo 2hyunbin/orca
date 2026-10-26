@@ -108,6 +108,11 @@ describe("orchestration.check of another live terminal's mailbox", () => {
     ['no evidence', undefined, 'term_b'],
     ['an unknown pane only', { paneKey: 'tab_x:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }, 'term_b'],
     ['an exited own handle', { terminalHandle: 'term_gone' }, 'term_b'],
+    [
+      'an exited own handle whose pane now holds another terminal',
+      { terminalHandle: 'term_gone', paneKey: 'tab_term_gone:leaf_term_gone' },
+      'term_b'
+    ],
     ['an exited mailbox', { terminalHandle: 'term_coord' }, 'term_gone']
   ])('is consumed as before with %s', async (_name, evidence, mailbox) => {
     setup()
@@ -120,7 +125,16 @@ describe("orchestration.check of another live terminal's mailbox", () => {
         ? coordinatorPaneKey
         : handle === 'term_b' || handle === 'term_gone'
           ? `tab_${handle}:leaf_${handle}`
-          : null
+          : handle === 'term_c'
+            ? 'tab_term_gone:leaf_term_gone'
+            : null
+    )
+    // term_gone exited, and term_c has since started in its pane.
+    vi.spyOn(runtime, 'getTerminalLivenessVerdict').mockImplementation((handle) =>
+      handle === 'term_gone' ? { status: 'exited' } : null
+    )
+    vi.spyOn(runtime, 'getTerminalHandleForPaneKey').mockImplementation((paneKey) =>
+      paneKey === 'tab_term_gone:leaf_term_gone' ? 'term_c' : null
     )
     db.insertMessage({ from: 'sender', to: mailbox, subject: 'leftover' })
 
