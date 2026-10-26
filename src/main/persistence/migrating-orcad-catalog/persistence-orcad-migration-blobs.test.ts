@@ -51,7 +51,7 @@ describe('orcad migration blobs through the store', () => {
     rmSync(testState.dir, { recursive: true, force: true })
   })
 
-  it('reports staged progress across a restart and refuses commit until complete', async () => {
+  it('reloads staged progress from disk and refuses commit until complete', async () => {
     const input = manifest()
     const store = createStore()
     store.stageOrcadMigrationCatalog(input)

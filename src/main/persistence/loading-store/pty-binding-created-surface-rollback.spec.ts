@@ -46,6 +46,7 @@ export function registerPtyBindingCreatedSurfaceRollbackTests(): void {
         }
         tab.ptyId = 'sibling-pty'
       }
+      const expectedRoot = structuredClone(layout.root)
       gate.finish.reject(
         new ProfileStateWriterError('test-disk-failure', 'disk refused', 'known-failure')
       )
@@ -64,7 +65,7 @@ export function registerPtyBindingCreatedSurfaceRollbackTests(): void {
         })
       )
       expect(persisted.terminalLayoutsByTabId[binding.tabId]).toMatchObject({
-        root: layout.root,
+        root: expectedRoot,
         ...(edit === 'pane title' ? { titlesByLeafId: { [binding.leafId]: 'new title' } } : {})
       })
       if (edit === 'new sibling') {
