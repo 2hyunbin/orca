@@ -9,35 +9,51 @@ const CODEX_THREAD_TITLE_PROMPT_PREFIX = 'Generate a concise, single-line task t
 
 // A /side thread shares the pane/process but cannot change its status; identify it from SessionStart or the persisted pane thread.
 // Persisted identity survives restart and does not depend on parsed rollout availability.
-export function isForeignEphemeralCodexThread(
+// Returns the event to apply: undefined drops a foreign thread's hook.
+export function codexHookEventForEphemeralThread(
   state: HookListenerState,
   paneKey: string,
   eventName: unknown,
   hookPayload: Record<string, unknown>
-): boolean {
+): unknown {
   const sessionId = readString(hookPayload, 'session_id')
   if (!sessionId || readString(hookPayload, 'agent_id') || hookPayload.transcript_path !== null) {
-    return false
+    return eventName
   }
   const forks = state.codexEphemeralForkSessionsByPaneKey.get(paneKey) ?? []
   if (forks.includes(sessionId)) {
-    return true
+    return undefined
   }
-  const source = eventName === 'SessionStart' ? readString(hookPayload, 'source') : undefined
-  const isTitleThreadPrompt =
-    eventName === 'UserPromptSubmit' &&
-    readString(hookPayload, 'prompt')?.startsWith(CODEX_THREAD_TITLE_PROMPT_PREFIX)
-  if (source === 'fork' || isTitleThreadPrompt) {
+  const recordFork = (): undefined => {
     state.codexEphemeralForkSessionsByPaneKey.set(
       paneKey,
       [...forks, sessionId].slice(-MAX_FORKS_PER_PANE)
     )
-    return true
+    return undefined
+  }
+  const source = eventName === 'SessionStart' ? readString(hookPayload, 'source') : undefined
+  if (source === 'fork') {
+    return recordFork()
+  }
+  const row = state.lastStatusByPaneKey.get(paneKey)
+  // Codex's hidden title thread starts like a new conversation; only its prompt tells them apart.
+  if (source === 'startup' && rowHoldsOtherCodexThread(row, sessionId)) {
+    state.codexHeldEphemeralStartByPaneKey.set(paneKey, sessionId)
+    return undefined
+  }
+  if (state.codexHeldEphemeralStartByPaneKey.get(paneKey) === sessionId) {
+    if (eventName !== 'UserPromptSubmit') {
+      return undefined
+    }
+    state.codexHeldEphemeralStartByPaneKey.delete(paneKey)
+    const prompt = readString(hookPayload, 'prompt')
+    // Replay the held start so every receiver lets the new conversation take the pane.
+    return prompt?.startsWith(CODEX_THREAD_TITLE_PROMPT_PREFIX) ? recordFork() : 'SessionStart'
   }
   if (source === 'startup' || source === 'clear') {
-    return false
+    return eventName
   }
-  return rowHoldsOtherCodexThread(state.lastStatusByPaneKey.get(paneKey), sessionId)
+  return rowHoldsOtherCodexThread(row, sessionId) ? undefined : eventName
 }
 
 /** Whether the pane's stored Codex row is a different thread, one with a rollout. */
