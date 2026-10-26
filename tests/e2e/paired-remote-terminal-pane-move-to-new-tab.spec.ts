@@ -37,6 +37,7 @@ function hostLeavesByTab(result: RuntimeMobileSessionTabsResult): HostLeaves {
 test('a pane moved to a new tab on a paired server workspace stays in its new tab', async ({
   testRepoPath
 }, testInfo) => {
+  // Why: launches a headless server and a paired Electron client, then waits on both.
   test.setTimeout(240_000)
   const host = await launchHeadlessPairedRuntimeHost()
   try {
@@ -186,11 +187,23 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
         movedInSource: await page.locator(`${PANE}[data-leaf-id="${movedLeafId}"]`).count(),
         movedFirst: (await readClientTabOrder())[0] === movedTabId
       })
-      const settled = { tabs: tabCount + 1, sourcePanes: 1, movedInSource: 0, movedFirst: true }
-      for (let sample = 0; sample < 10; sample += 1) {
-        expect(await readClient()).toEqual(settled)
-        await page.waitForTimeout(300)
-      }
+      // A rename published after all of that fences the check: once this window draws it, it has
+      // applied every server snapshot since the move, any of which would have pulled the pane back.
+      const fence = `moved-${Date.now()}`
+      await host.client.call('session.tabs.setTabProps', {
+        worktree,
+        tabId: hostTabOfMovedLeaf,
+        customTitle: fence
+      })
+      await expect(page.locator(`${TAB}[data-tab-id="${movedTabId}"]`)).toContainText(fence, {
+        timeout: 15_000
+      })
+      expect(await readClient()).toEqual({
+        tabs: tabCount + 1,
+        sourcePanes: 1,
+        movedInSource: 0,
+        movedFirst: true
+      })
     } finally {
       await desktop.dispose()
     }
@@ -204,6 +217,7 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
 test('a pane move the server refuses goes back into its split, terminal intact', async ({
   orcaPage
 }, testInfo) => {
+  // Why: launches a second, paired Electron client next to the server's own window.
   test.setTimeout(200_000)
   const worktreeId = await orcaPage.evaluate(() => window.__store?.getState().activeWorktreeId)
   if (!worktreeId) {
