@@ -354,6 +354,7 @@ export function AppRootSurfaces(props: {
               <RecoverableRenderErrorBoundary
                 boundaryId="modal.onboarding"
                 surface="modal"
+                className="fixed inset-0 z-40 bg-background"
                 title={translate('auto.App.f02d37278a', 'Onboarding hit an error.')}
                 description={translate(
                   'auto.App.221a95ba38',

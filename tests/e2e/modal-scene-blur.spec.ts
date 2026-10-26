@@ -46,6 +46,40 @@ for (const theme of ['dark', 'light'] as const) {
   })
 }
 
+test('Space window dialogs blur their scene and release it on close', async ({
+  electronApp,
+  orcaPage
+}, testInfo) => {
+  const spaceWindow = electronApp.waitForEvent('window')
+  await orcaPage.evaluate(async () => {
+    await window.api.workspaceSpace.openWindow?.()
+  })
+  const spacePage = await spaceWindow
+  await spacePage.waitForFunction(() => Boolean(window.__store))
+  const scene = spacePage.locator('.app-layout > :first-child')
+  await expect(scene).toHaveCSS('filter', 'none')
+  await spacePage.evaluate(() => {
+    window.__store?.getState().openModal('preserved-branch-review', {
+      branches: [{ worktreeId: 'blur-preview', branchName: 'preview' }]
+    })
+  })
+  const dialog = spacePage.getByRole('dialog', { name: 'Review kept branches' })
+  await expect(dialog).toBeVisible()
+  await expect(scene).toHaveCSS('filter', 'blur(2px)')
+  await expect(dialog).toHaveCSS('filter', 'none')
+  await expect(dialog).toHaveCSS('backdrop-filter', 'none')
+  const windows = await electronApp.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().map((window) => ({
+      visible: window.isVisible(),
+      focused: window.isFocused()
+    }))
+  )
+  expect(windows.every((window) => !window.visible && !window.focused)).toBe(true)
+  await spacePage.screenshot({ path: testInfo.outputPath('space-dialog-blur.png') })
+  await spacePage.keyboard.press('Escape')
+  await expect(scene).toHaveCSS('filter', 'none')
+})
+
 test.describe('onboarding scene blur', () => {
   test.use({ dismissOnboarding: false })
 
@@ -65,5 +99,37 @@ test.describe('onboarding scene blur', () => {
     await confirmation.getByRole('button', { name: /No, keep going/i }).click()
     await expect(onboarding).toHaveCSS('filter', 'none')
     await expect(scene).toHaveCSS('filter', 'blur(2px)')
+  })
+
+  test('onboarding render recovery stays within the viewport', async ({ orcaPage }, testInfo) => {
+    await expect(orcaPage.locator('[data-onboarding-overlay]')).toBeVisible()
+    await orcaPage.evaluate(async () => {
+      const onboarding = await window.api.onboarding.get()
+      Object.defineProperty(onboarding, 'lastCompletedStep', {
+        get() {
+          throw new Error('Injected onboarding render failure')
+        }
+      })
+      window.dispatchEvent(new CustomEvent('orca:onboarding-reopened', { detail: onboarding }))
+    })
+
+    const crashReport = orcaPage.getByRole('dialog').filter({
+      has: orcaPage.getByRole('heading', { name: 'Orca hit a recoverable UI error' })
+    })
+    await crashReport.getByRole('button', { name: 'Close', exact: true }).click()
+    const recovery = orcaPage.getByRole('alert').filter({ hasText: 'Onboarding hit an error.' })
+    const retry = recovery.getByRole('button', { name: 'Retry', exact: true })
+    await expect(retry).toBeInViewport()
+    await orcaPage.screenshot({ path: testInfo.outputPath('onboarding-render-recovery.png') })
+
+    await orcaPage.evaluate(async () => {
+      window.dispatchEvent(
+        new CustomEvent('orca:onboarding-reopened', { detail: await window.api.onboarding.get() })
+      )
+    })
+    await retry.click()
+    await expect(recovery).toHaveCount(0)
+    await expect(orcaPage.locator('[data-onboarding-overlay]')).toBeVisible()
+    await expect(orcaPage.locator('.app-layout > :first-child')).toHaveCSS('filter', 'blur(2px)')
   })
 })
