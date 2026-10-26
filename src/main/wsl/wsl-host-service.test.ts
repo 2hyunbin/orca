@@ -16,6 +16,8 @@ import type { WslHostDistroCandidate } from './wsl-host-distro-list'
 import { WslHostService, type WslHostConnector } from './wsl-host-service'
 import { wakeRememberedWslHosts } from './wsl-host-early-wake'
 import { WslOrcadLaunchDeferredError } from './wsl-orcad-connection-errors'
+import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
+import { isRecoverableRemoteRuntimeConnectionError } from '../../shared/remote-runtime/remote-runtime-client-error-classification'
 import type { WslOrcadConnection } from './wsl-orcad-connection'
 
 const KEY = Buffer.alloc(32, 3).toString('base64')
@@ -512,6 +514,34 @@ describe('WslHostService', () => {
     expect(connector.connect).not.toHaveBeenCalled()
   })
 
+  it('passes a failed reconnect for open work through the retryable mapping', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    service.setVisibleWork(['wsl:ubuntu'])
+    await connector.disconnect('Ubuntu')
+    connector.connect.mockRejectedValueOnce(new Error('orcad exited'))
+    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toBeInstanceOf(
+      RemoteRuntimeClientError
+    )
+  })
+
+  it('keeps a parked host’s refusal final, never a retryable failure', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    service.setVisibleWork(['wsl:ubuntu'])
+    await connector.disconnect('Ubuntu')
+    connector.distro.state = 'stopped'
+
+    const refusal = await service
+      .ensureForRuntimeCall('wsl:ubuntu')
+      .catch((error: unknown) => error)
+    expect(refusal).not.toBeInstanceOf(RemoteRuntimeClientError)
+    expect(String(refusal)).toContain('Ubuntu was stopped')
+    expect(isRecoverableRemoteRuntimeConnectionError({ message: String(refusal) })).toBe(false)
+  })
+
   it('parks a host the moment a poll finds its distro confirmed stopped, never booting it', async () => {
     const connector = makeConnector([UBUNTU])
     const service = makeService(connector)
@@ -537,7 +567,12 @@ describe('WslHostService', () => {
     // The watch just exited and WSL still lists the stopping distro as running.
     connector.distro.state = 'running'
     connector.isSettling.mockReturnValue(true)
-    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toThrow('isn’t connected')
+    // Retryable, so a pane attaching in this window recovers instead of dead-ending; still no boot.
+    const settling = await service
+      .ensureForRuntimeCall('wsl:ubuntu')
+      .catch((error: unknown) => error)
+    expect(settling).toMatchObject({ code: 'remote_runtime_unavailable' })
+    expect(isRecoverableRemoteRuntimeConnectionError({ message: String(settling) })).toBe(true)
     // Liveness then confirms the stop: the host parks, and polls keep refusing.
     service.handleConnectionChange('Ubuntu', null, {
       state: 'distro-stopped',
