@@ -196,7 +196,7 @@ export ORCA_SERVE_GPU=1
 orca-ide serve --pairing-address 100.64.1.20
 ```
 
-If the server stops starting or browser panes crash with it set, unset it to go back to software rendering.
+This only stops Orca from turning the GPU off. Chromium may still render in software on Orca's own Xvfb, which has no GPU of its own; open `chrome://gpu` in a browser pane to check, and point `DISPLAY` at a GPU-backed X server if it reports software rendering. If you installed the server with `orca serve service install`, add the variable to the service unit yourself. If the server stops starting or browser panes crash with it set, unset it to go back to software rendering.
 
 ### Mobile from a headless server
 

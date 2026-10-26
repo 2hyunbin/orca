@@ -166,6 +166,13 @@ describe('applyBackgroundActivationPolicy', () => {
         platform: 'darwin'
       })
     ).toBe(false)
+    expect(
+      applyServeDesktopWindowActivationPolicy({
+        app,
+        env: { ORCA_E2E_HEADFUL: '1' },
+        platform: 'darwin'
+      })
+    ).toBe(false)
     expect(app.setActivationPolicy).not.toHaveBeenCalled()
   })
 

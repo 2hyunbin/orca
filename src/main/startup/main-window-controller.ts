@@ -50,9 +50,6 @@ const AGENT_STATE_CRASH_BREADCRUMB_MIN_INTERVAL_MS = 30_000
 
 export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}): BrowserWindow {
   logStartupMilestone('open-main-window-start')
-  if (state.isServeMode) {
-    applyServeDesktopWindowActivationPolicy({ warn: console.warn })
-  }
   const { store, keybindings } = requireMainWindowServices({
     store: state.store,
     runtime: state.runtime,
@@ -93,6 +90,9 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
     if (probeDispatched) {
       noteWindowsInstallDirAclProbePending()
     }
+  }
+  if (state.isServeMode) {
+    applyServeDesktopWindowActivationPolicy({ warn: console.warn })
   }
   const window = createMainWindow(store, {
     getIsQuitting: () => state.isQuitting,

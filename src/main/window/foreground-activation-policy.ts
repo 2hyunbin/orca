@@ -71,7 +71,8 @@ export function applyServeDesktopWindowActivationPolicy(
   options: Omit<ActivationPolicyOptions, 'serveWithoutDesktopWindow'> = {}
 ): boolean {
   const platform = options.platform ?? process.platform
-  if (platform !== 'darwin' || isWindowlessLaunch(options.env ?? process.env)) {
+  // dock.show() activates the app, so automated launches keep the accessory policy.
+  if (platform !== 'darwin' || isBackgroundLaunch(options.env ?? process.env)) {
     return false
   }
   try {
