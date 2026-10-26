@@ -42,8 +42,11 @@ function SheetOverlay({
 }
 
 const sheetContentVariants = cva(
-  // Match dropdown/dialog surface/border/shadow tokens for a visible edge in either theme.
-  'fixed z-50 flex flex-col gap-0 bg-background/96 text-foreground shadow-[0_20px_60px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-2xl outline-none transition ease-in-out dark:bg-[rgba(23,23,23,0.96)] dark:shadow-[0_24px_72px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.06)] data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:duration-300',
+  // Why: bg-background in dark mode equals the canvas color, and border-border/60
+  // is still ~4% white over that canvas. The translucent surface + solid 14%
+  // border + dual shadow + 2xl backdrop blur match the dropdown-menu / dialog
+  // recipe and give the sheet a clearly visible edge in both light and dark.
+  'fixed z-50 flex flex-col gap-0 bg-dialog-surface text-foreground shadow-[0_20px_60px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-2xl outline-none transition ease-in-out dark:shadow-[0_24px_72px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.06)] data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:duration-300',
   {
     variants: {
       side: {
