@@ -36,7 +36,17 @@ export async function installWslChatFixture(lane: WslChatHost) {
   await writeChatFixtureFile(
     lane,
     cli,
-    `#!/bin/sh\nexec ${quotePosixShell(runtime)} ${quotePosixShell(script)} "$@"\n`
+    `#!/bin/sh
+previous=
+for argument in "$@"; do
+  if [ "$previous" = --output-format ] && [ "$argument" = text ]; then
+    cat > /dev/null
+    printf '%s\\n' 'WSL fixture title'
+    exit 0
+  fi
+  previous=$argument
+done
+exec ${quotePosixShell(runtime)} ${quotePosixShell(script)} "$@"\n`
   )
   await lane.guest(`chmod 700 ${quotePosixShell(cli)}`)
   await lane.rpc('settings.mutateAgentLaunch', {
@@ -45,7 +55,6 @@ export async function installWslChatFixture(lane: WslChatHost) {
     value: quotePosixShell(cli)
   })
   await lane.rpc('settings.update', {
-    nativeChatAutoName: false,
     nativeChatPermissionMode: 'ask',
     agentDefaultEnv: {
       claude: {

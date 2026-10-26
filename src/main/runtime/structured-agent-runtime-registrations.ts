@@ -155,7 +155,6 @@ function createAcpAdapter(
         ...deps.acpLaunchCommand,
         dataDirectory: deps.stateDirectory
       },
-      readJournal,
       resolveLaunch: composeStructuredLaunch(definition, sources, part),
       readLaunch: composeStructuredLaunchRead(definition, sources, part),
       dataDirectory: deps.stateDirectory,

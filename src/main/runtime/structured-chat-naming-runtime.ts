@@ -8,7 +8,7 @@ import {
   sanitizeGeneratedConversationName
 } from '../../shared/conversation-name-generation'
 import { chatNamingAgentTarget } from './structured-chat-naming-agent-launch'
-import type { GlobalSettings } from '../../shared/global-settings-types'
+import type { AgentLaunchProfileSettings } from '../../shared/tui-agent-launch-defaults'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
 import type { CommitMessageAgentEnvironmentResolvers } from '../text-generation/commit-message-agent-environment'
 import type { StructuredChatNamingDeps } from '../native-chat/structured-chat-naming'
@@ -36,7 +36,7 @@ type StructuredChatNamingRuntime = {
 export function structuredChatNamingDeps(
   getStore: () => {
     getSettings: () => Parameters<typeof resolveTextGenerationParams>[0] &
-      Partial<Pick<GlobalSettings, 'agentDefaultEnv'>> &
+      AgentLaunchProfileSettings &
       ReturnType<StructuredChatNamingDeps['getSettings']>
   },
   runtime: StructuredChatNamingRuntime,
@@ -87,13 +87,15 @@ export function structuredChatNamingDeps(
           if (!recipe.commandInputTemplate?.trim()) {
             throw new Error('Chat name template is empty')
           }
-          const name = sanitizeGeneratedConversationName(
-            await generateText({
-              agent: record.provider,
-              accountHome: record.accountHome,
-              prompt: renderConversationNamePrompt({ firstPrompt }, recipe)
-            })
-          )
+          const output = await generateText({
+            agent: record.provider,
+            accountHome: record.accountHome,
+            prompt: renderConversationNamePrompt({ firstPrompt }, recipe)
+          })
+          if (output === null) {
+            return null
+          }
+          const name = sanitizeGeneratedConversationName(output)
           if (name) {
             return { name }
           }
@@ -134,7 +136,7 @@ export function structuredChatNamingDeps(
             record,
             workspace.path,
             runtime.resolveNamingEnvironment,
-            current.agentDefaultEnv
+            current
           )
         : await resolveGenerationTarget(workspace.path, settings.params.agentId, runtime)
       if (!target) {

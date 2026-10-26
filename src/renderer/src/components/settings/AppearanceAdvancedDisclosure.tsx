@@ -7,7 +7,6 @@ import { normalizeSettingsSearchQuery } from './settings-search'
 import { translate } from '@/i18n/i18n'
 
 type AppearanceAdvancedDisclosureProps = {
-  /** Optional override label; defaults to "Advanced". */
   label?: string
   forceOpen?: boolean
   showTopBorder?: boolean
@@ -16,9 +15,7 @@ type AppearanceAdvancedDisclosureProps = {
   children: React.ReactNode
 }
 
-/** Inline "Advanced" disclosure for low-frequency controls. An active settings
- *  search force-opens it so matching controls stay reachable instead of being
- *  hidden behind a collapsed trigger. */
+/** Search force-opens advanced controls so matches remain reachable. */
 export function AppearanceAdvancedDisclosure({
   label,
   forceOpen = false,

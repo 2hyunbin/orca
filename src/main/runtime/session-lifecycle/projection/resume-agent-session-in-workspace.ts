@@ -1,5 +1,3 @@
-// A targeted resume of one recorded agent conversation into a fresh pane of its workspace.
-
 import { OrcaRuntimeWithAgentSessionResumeOwnership } from './agent-session-resume-ownership'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import {
@@ -14,7 +12,7 @@ import {
 } from '../../../../shared/execution-host'
 import type { OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal as OwnedMobileTerminalCreate } from '../../terminal/launch/mobile-terminal-owned-create'
 import { deterministicAgentSessionUuid } from '../../runtime-agent-launch-resolution'
-import { isWindowWakeSleepRecord } from './window-wake-sleep-record'
+import { isUnclaimedRunningSleepRecord } from './sleep-record-pane-claim'
 import type { ResumedAgentSession } from './agent-session-resume-claims'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
 
@@ -34,10 +32,7 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
     ...args: Parameters<OwnedMobileTerminalCreate['createRuntimeOwnedMobileSessionTerminal']>
   ): ReturnType<OwnedMobileTerminalCreate['createRuntimeOwnedMobileSessionTerminal']>
 
-  /**
-   * Resumes one recorded conversation in a fresh pane of its workspace: the exact new binding, or
-   * a refusal. Never a plain shell or a fresh agent.
-   */
+  /** Resume the recorded conversation into a fresh bound pane or refuse; never substitute a plain shell or fresh agent. */
   async resumeAgentSessionInWorkspace(
     worktreeId: string,
     request: {
@@ -62,7 +57,8 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
     const session: ResumedAgentSession = { agent: request.agent, providerSession }
     const claim = this.agentSessionResumeClaims.claim(
       session,
-      makePaneKey(identity.tabId, identity.leafId)
+      makePaneKey(identity.tabId, identity.leafId),
+      seed
     )
     if (!claim) {
       return { ok: false, reason: 'held_elsewhere' }
@@ -111,11 +107,11 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
     } catch {
       return refuse('no_resume_command')
     }
-    // Why: a session id names a transcript on the host that reported it; elsewhere it cannot resume.
+    // Provider session ids name transcripts only on their reporting execution host.
     if (getConnectionExecutionHostId(workspace.connectionId) !== request.captureHostId) {
       return refuse('no_resume_command')
     }
-    // Why its own pane: a retry of this request reconciles the pane it started.
+    // Retries reconcile this request's pane instead of spawning another.
     const ownPaneKey = makePaneKey(create.identity.tabId, create.identity.leafId)
     if (await this.isProviderSessionLiveInAnotherPane(session, ownPaneKey)) {
       return refuse('held_elsewhere')
@@ -131,7 +127,7 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
     if (records.some((record) => !this.isPaneOwnedResumeRecord(record))) {
       return refuse('window_owns_wake')
     }
-    // Why: a session two panes record is never resumed automatically (resolvePaneOwnedResumeStartup).
+    // A session recorded by two panes cannot resume automatically (resolvePaneOwnedResumeStartup).
     if (records.length > 1) {
       return refuse('held_elsewhere')
     }
@@ -143,21 +139,18 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
     if (!resume) {
       return refuse('no_resume_command')
     }
-    // Why: pane-owned before the spawn, so a window attaching mid-spawn cannot relaunch it.
-    if (record && isWindowWakeSleepRecord(record)) {
-      if (!(await this.claimWindowWakeRecord(worktreeId, record))) {
-        return refuse(
-          this.getAvailableAuthoritativeWindow() ? 'window_owns_wake' : 'held_elsewhere'
-        )
+    // Claim pane ownership before spawn to prevent a second resume writer.
+    if (record && isUnclaimedRunningSleepRecord(record)) {
+      if (!(await this.claimSleepRecord(worktreeId, record))) {
+        return refuse('held_elsewhere')
       }
     }
     if (request.signal?.aborted) {
       return refuse('aborted')
     }
-    // Why: the create publishes onto the worktree's snapshot, which must hold its saved tabs first.
+    // Seed saved tabs before create publishes onto the workspace snapshot.
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
-    // Why the runtime-owned create: it spawns with the runtime the command was quoted for, and a
-    // window-made create can time out here while its agent still starts.
+    // Runtime-owned create uses the quoting host; a window create may time out while its agent still starts.
     const created = await this.createRuntimeOwnedMobileSessionTerminal(
       worktreeId,
       false,

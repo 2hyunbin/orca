@@ -287,7 +287,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       closeTerminal: vi.fn(),
       closeSessionTab: vi.fn(),
-      sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
@@ -305,7 +304,6 @@ describe('OrcaRuntimeService', () => {
         ptyId: 'pty-renderer',
         viewMode: 'chat'
       })
-      // As the renderer's spawn commit: the bound terminal registers.
       registerBoundPty(runtime, 'pty-renderer', TEST_WORKTREE_ID, null, {
         tabId: 'tab-renderer',
         leafId: HEADLESS_LEAF_ID
@@ -458,7 +456,7 @@ describe('OrcaRuntimeService', () => {
       ]
     })
 
-    // With the switch on the window's graph does not edit main's layout, which still binds the pane.
+    // A renderer graph cannot clear a binding held by main's layout.
     expect((await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs).toEqual(
       ORCA_LAYOUT_OWNER_IS_MAIN
         ? [expect.objectContaining({ parentTabId: 'tab-renderer', ptyId: 'pty-renderer' })]
@@ -479,7 +477,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       closeTerminal: vi.fn(),
       closeSessionTab: vi.fn(),
-      sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
@@ -564,7 +561,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       closeTerminal: vi.fn(),
       closeSessionTab: vi.fn(),
-      sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
@@ -621,7 +617,7 @@ describe('OrcaRuntimeService', () => {
       activate: false,
       clientMutationId: 'mutation-lost-response'
     })
-    // Why: the phone retries the same key when the create response was lost; within the retention window it must reuse the terminal.
+    // A retry within the retention window must reuse the terminal when its create reply was lost.
     const retried = await runtime.createMobileSessionTerminal(`id:${TEST_WORKTREE_ID}`, {
       activate: false,
       clientMutationId: 'mutation-lost-response'

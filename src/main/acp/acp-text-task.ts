@@ -32,7 +32,7 @@ const TASK_ENV_TO_DELETE = [
 export class AcpTextTasks {
   private readonly children = new ProviderAcquisitionStarts<AcpStructuredConnection>()
   private readonly shutdown = new AbortController()
-  private readonly pending = new Set<Promise<string>>()
+  private readonly pending = new Set<Promise<string | null>>()
 
   constructor(
     private readonly deps: Pick<
@@ -41,16 +41,18 @@ export class AcpTextTasks {
     >
   ) {}
 
-  generate = async (input: TextInput): Promise<string> => {
+  generate = async (input: TextInput): Promise<string | null> => {
     const gate = this.deps.spec.launchGate?.enter(this.shutdown.signal)
-    const task = this.run(input, gate?.signal ?? this.shutdown.signal)
+    let rootExited = Promise.resolve()
+    const task = this.run(input, gate?.signal ?? this.shutdown.signal, (connection) => {
+      rootExited = new Promise((resolve) => connection.onExit(() => resolve()))
+    })
     this.pending.add(task)
-    try {
-      return await task
-    } finally {
+    const finalized = task.finally(() => {
       this.pending.delete(task)
       gate?.leave()
-    }
+    })
+    return input.shouldExecute ? finalized.finally(() => rootExited) : finalized
   }
 
   async closeAll(): Promise<boolean> {
@@ -61,7 +63,11 @@ export class AcpTextTasks {
     ).every(Boolean)
   }
 
-  private async run(input: TextInput, parent: AbortSignal): Promise<string> {
+  private async run(
+    input: TextInput,
+    parent: AbortSignal,
+    observeRoot: (connection: AcpStructuredConnection) => void
+  ): Promise<string | null> {
     const { spec } = this.deps
     const deadline = new AbortController()
     const timer = setTimeout(
@@ -69,6 +75,13 @@ export class AcpTextTasks {
       SOURCE_CONTROL_GENERATION_TIMEOUT_MS
     )
     const signal = AbortSignal.any([parent, deadline.signal])
+    const stale = Symbol('stale naming task')
+    const checkCurrent = (): void => {
+      signal.throwIfAborted()
+      if (input.shouldExecute?.() === false) {
+        throw stale
+      }
+    }
     let connection: AcpStructuredConnection | undefined
     let cwd: string | undefined
     let home = ''
@@ -158,6 +171,7 @@ export class AcpTextTasks {
             onExtensionNotification: notification
           }
         )
+        observeRoot(connection)
         this.children.retainFailed(promptId, connection)
         spec.launchGate?.retain(connection)
         connection.onExit(() => {
@@ -167,9 +181,9 @@ export class AcpTextTasks {
       }
       const server = await waitForPromiseWithSignal(
         spec.privateTempDirectory
-          ? acpPrivateTempConnect(this.deps, () => signal.throwIfAborted()).then(spawn)
+          ? acpPrivateTempConnect(this.deps, checkCurrent).then(spawn)
           : Promise.resolve().then(() => {
-              signal.throwIfAborted()
+              checkCurrent()
               return spawn(this.deps.connect)
             }),
         signal
@@ -230,6 +244,11 @@ export class AcpTextTasks {
       }
       completed = true
       return output
+    } catch (error) {
+      if (error === stale) {
+        return null
+      }
+      throw error
     } finally {
       clearTimeout(timer)
       unsubscribe()

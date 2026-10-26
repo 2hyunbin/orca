@@ -18,6 +18,10 @@ import {
   BrowserNetworkTunnelAttachParams
 } from '../browser-client-host-protocol'
 import { BrowserClientPageMetadataParams } from '../browser-client-page-metadata-protocol'
+import {
+  BundledSkillExecuteRequestSchema,
+  BundledSkillPlanRequestSchema
+} from '../bundled-skill-plan'
 import { DelegatedMobileDeviceSyncParamsSchema } from '../delegated-mobile-device-contract'
 import {
   DesktopBrowserBridgeAttachParams,
@@ -173,7 +177,14 @@ import {
   SetValue,
   TypeText
 } from './computer-schemas-params'
-import { ConnectorSend, ConnectorStart } from './connector-params'
+import {
+  ConnectorAnswer,
+  ConnectorCancel,
+  ConnectorPendingPrompt,
+  ConnectorSend,
+  ConnectorStart,
+  ConnectorWatch
+} from './connector-params'
 import {
   AttachParams as AttachParamsOfEmulatorParams,
   AxParams,
@@ -573,6 +584,7 @@ import {
   QueuedMessageEditHoldParams,
   QueuedMessageUpdateParams
 } from './structured-agent-session-queued-edit-params'
+import { RenameParams } from './structured-agent-session-rename-params'
 import { TerminalDaemonRestartSeveredParams } from './terminal-daemon-params'
 import { TerminalAdoptOrphans } from './terminal-orphan-params'
 import { TerminalQuickCommandsUpdate } from './terminal-quick-command-params'
@@ -643,6 +655,7 @@ import {
   WorktreeResolvePrBase,
   WorktreeSelector as WorktreeSelectorOfWorktreeParams,
   WorktreeSet,
+  WorktreeSleepParams,
   WorktreeSortOrder,
   WorktreeTeardownMissingTerminalsParams
 } from './worktree-params'
@@ -734,6 +747,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'agentSession.readVisual': ReadVisualParams,
   'agentSession.regenerateName': OptionsParams,
   'agentSession.release': HoldParams,
+  'agentSession.rename': RenameParams,
   'agentSession.respondToApproval': RespondParams,
   'agentSession.respondToQuestion': RespondToQuestionParams,
   'agentSession.restartContinue': RestartResumeParams,
@@ -889,8 +903,12 @@ export const RPC_PARAMS_BY_METHOD = {
   'computer.scroll': ScrollOfComputerSchemasParams,
   'computer.setValue': SetValue,
   'computer.typeText': TypeText,
+  'connector.answer': ConnectorAnswer,
+  'connector.cancel': ConnectorCancel,
+  'connector.pendingPrompt': ConnectorPendingPrompt,
   'connector.send': ConnectorSend,
   'connector.start': ConnectorStart,
+  'connector.watch': ConnectorWatch,
   'desktopBrowserBridge.attach': DesktopBrowserBridgeAttachParams,
   'desktopBrowserBridge.result': DesktopBrowserBridgeResultParams,
   'diagnostics.memory': null,
@@ -1321,10 +1339,12 @@ export const RPC_PARAMS_BY_METHOD = {
   'skills.commitUpload': SkillUploadCommitRequestSchema,
   'skills.delete': SkillDeleteRequestSchema,
   'skills.discover': SkillsDiscoverParams,
+  'skills.executeBundledOrca': BundledSkillExecuteRequestSchema,
   'skills.getInstallProgress': SkillsGetInstallProgressParams,
   'skills.install': SkillInstallRequestSchema,
   'skills.installBundle': SkillBundleInstallRequestSchema,
   'skills.listManagedInstalls': null,
+  'skills.planBundledOrca': BundledSkillPlanRequestSchema,
   'skills.previewDelete': SkillDeleteRequestSchema,
   'skills.previewInstall': SkillInstallPreviewRequestSchema,
   'skills.removeInstall': SkillRemoveRequestSchema,
@@ -1429,7 +1449,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'worktree.rm': WorktreeRemove,
   'worktree.set': WorktreeSet,
   'worktree.show': WorktreeSelectorOfWorktreeParams,
-  'worktree.sleep': WorktreeSelectorOfWorktreeParams,
+  'worktree.sleep': WorktreeSleepParams,
   'worktree.teardownMissingTerminals': WorktreeTeardownMissingTerminalsParams
 } as const
 

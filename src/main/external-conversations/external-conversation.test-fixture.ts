@@ -2,16 +2,23 @@ import { vi } from 'vitest'
 import type { AgentLaunchResult } from '../../shared/agent-launch-intent'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type { Repo } from '../../shared/repo-types'
+import type { PtyLivenessVerdict } from '../../shared/pty-liveness-verdict'
 import type { RuntimeTerminalSend } from '../../shared/runtime-terminal-send-contract'
 import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 import type { AgentPaneWorkspace } from '../agent-hooks/agent-transition-detector'
+import type { LaunchedAgentForeground } from '../runtime/launched-agent-foreground'
 import type { AgentLaunchPublishedSurface } from '../agent-launch/agent-launch-execution'
 import type { ExternalConversationLinkStore } from './external-conversation-links'
-import type { FollowUpTerminal } from './external-conversation-send'
+import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
+import type { RuntimeTerminalWait } from '../../shared/runtime-terminal-contracts'
+import type { AgentSessionResumeResult } from '../runtime/session-lifecycle/projection/resume-agent-session-in-workspace'
+import type { ConversationTerminal } from './external-conversation-seam'
 import type { ConversationLauncher } from './external-conversation-start'
 
 export const WORKTREE = 'repo-1::/work/a'
 export const PANE = 'tab-1:11111111-1111-4111-8111-111111111111'
+export const REOPENED_PANE = 'tab-2:22222222-2222-4222-8222-222222222222'
+export const SESSION = { key: 'session_id' as const, id: 'claude-session-1' }
 export const LOCAL_REPO: Repo = {
   id: 'repo-1',
   path: '/work',
@@ -22,10 +29,7 @@ export const LOCAL_REPO: Repo = {
 
 type LinkRow = { externalConversations?: unknown; hostId?: ExecutionHostId }
 
-/**
- * The real store's two projections: each host's canonical rows, and the locator-keyed map that
- * keeps only the first host to write an id.
- */
+/** Model canonical host rows separately from the locator map that keeps the first same-path host. */
 export function fakeLinkStore(repos: Repo[] = [LOCAL_REPO]) {
   const byHost = new Map<ExecutionHostId, Record<string, LinkRow>>()
   const legacy: Record<string, LinkRow> = {}
@@ -95,7 +99,6 @@ export function launchResult(
   }
 }
 
-/** Publishes, then settles as `settle` says; `workspace` is the pane's host-qualified workspace. */
 export function fakeLauncher(
   settle: () => Promise<AgentLaunchResult>,
   workspace: AgentPaneWorkspace = { worktreeId: WORKTREE, sshHostId: null },
@@ -124,19 +127,45 @@ type WriteOptions = {
   expectedBinding?: { ptyId: string; processIncarnation: string }
 }
 
-/**
- * A terminal whose prompt writer keeps the shared writer's order: hold while blocked (under
- * `wait`), then the binding fence, the guard, the signal, and the write.
- */
+export function sessionRow(
+  paneKey: string,
+  connectionId: string | null = null,
+  session = SESSION
+): AgentStatusIpcPayload {
+  return {
+    paneKey,
+    connectionId,
+    agentType: 'claude',
+    state: 'done',
+    prompt: '',
+    receivedAt: 1,
+    stateStartedAt: 1,
+    providerSession: session
+  }
+}
+
+/** Preserve writer ordering: approval wait, binding fence, guard, abort check, then write. */
 export function fakeTerminal() {
-  const state: { ptyId: string | null; incarnation: number; blocked: boolean } = {
+  const state: {
+    ptyId: string | null
+    paneKey: string
+    incarnation: number
+    blocked: boolean
+    rows: AgentStatusIpcPayload[] | null
+    liveness: PtyLivenessVerdict | null
+  } = {
     ptyId: 'pty-1',
+    paneKey: PANE,
     incarnation: 1,
-    blocked: false
+    blocked: false,
+    rows: null,
+    liveness: null
   }
   const current = (): string =>
     `inc-${state.ptyId}${state.incarnation > 1 ? `-${state.incarnation}` : ''}`
   const writes: string[] = []
+  /** Raw keys written outside the prompt writer: prompt answers. */
+  const keys: string[] = []
   const waiters = new Set<(error?: Error) => void>()
   const hold = (signal: AbortSignal | undefined): Promise<void> =>
     new Promise((resolve, reject) => {
@@ -176,9 +205,41 @@ export function fakeTerminal() {
       return { handle, accepted: true, bytesWritten: 1 }
     }
   )
+  const sendTerminal = vi.fn(
+    async (
+      handle: string,
+      action: { text?: string },
+      options: {
+        beforeWrite?: (ptyId: string) => unknown
+        reserveWrite?: (ptyId: string) => void
+      }
+    ): Promise<RuntimeTerminalSend> => {
+      if (!state.ptyId) {
+        throw new Error('terminal_not_writable')
+      }
+      await options.beforeWrite?.(state.ptyId)
+      options.reserveWrite?.(state.ptyId)
+      keys.push(action.text ?? '')
+      return { handle, accepted: true, bytesWritten: 1, writeSettlement: { outcome: 'accepted' } }
+    }
+  )
+  const resumeAgentSessionInWorkspace = vi.fn(
+    async (
+      _worktreeId: string,
+      _request: { signal?: AbortSignal; mutationId: string }
+    ): Promise<AgentSessionResumeResult> => ({ ok: false, reason: 'held_elsewhere' })
+  )
+  const ready: RuntimeTerminalWait = {
+    handle: 'term-2',
+    condition: 'tui-idle',
+    satisfied: true,
+    status: 'running',
+    exitCode: null
+  }
+  const waitForFreshWorkerComposer = vi.fn(async () => ready)
   const terminal = {
     getTerminalHandleForPaneKey: (paneKey: string) =>
-      paneKey === PANE && state.ptyId ? 'term-1' : null,
+      paneKey === state.paneKey && state.ptyId ? (paneKey === PANE ? 'term-1' : 'term-2') : null,
     getTerminalPromptRequestBinding: () => {
       if (!state.ptyId) {
         throw new Error('terminal_not_writable')
@@ -186,15 +247,36 @@ export function fakeTerminal() {
       return { ptyId: state.ptyId, processIncarnation: current(), generation: 1 }
     },
     sendTerminalAgentPrompt,
-    readLaunchedAgentForeground: vi.fn(async () => 'agent' as const),
-    subscribeToTerminalData: () => () => {}
-  } satisfies FollowUpTerminal
+    sendTerminal,
+    getPtyLivenessVerdict: (_ptyId: string) => state.liveness,
+    readLaunchedAgentForeground: vi.fn(
+      async (_ptyId: string): Promise<LaunchedAgentForeground> => 'agent'
+    ),
+    subscribeToTerminalData: () => () => {},
+    getAgentStatusRowsForPane: (paneKey: string) =>
+      state.rows ?? (paneKey === state.paneKey && state.ptyId ? [sessionRow(paneKey)] : []),
+    resumeAgentSessionInWorkspace,
+    waitForFreshWorkerComposer,
+    waitForTerminal: vi.fn(async () => ready)
+  } satisfies ConversationTerminal
   return {
     terminal,
     state,
     writes,
+    keys,
+    sendTerminal,
     sendTerminalAgentPrompt,
-    /** Holds waiting on the approval. */
+    resumeAgentSessionInWorkspace,
+    waitForFreshWorkerComposer,
+    reopenable() {
+      resumeAgentSessionInWorkspace.mockImplementation(async () => {
+        state.paneKey = REOPENED_PANE
+        state.ptyId = 'pty-2'
+        state.incarnation = 1
+        return { ok: true, handle: 'term-2', paneKey: REOPENED_PANE, ptyId: 'pty-2' }
+      })
+    },
+
     held: () => waiters.size,
     answer() {
       state.blocked = false
@@ -204,7 +286,7 @@ export function fakeTerminal() {
       state.ptyId = null
       ;[...waiters].forEach((settle) => settle(new Error('terminal_not_writable')))
     },
-    /** A new process in the same pane and PTY id; `answer` then hands held writes to it. */
+    /** Replace the process without changing pane or PTY IDs, exercising the incarnation fence. */
     replace() {
       state.incarnation += 1
     }
