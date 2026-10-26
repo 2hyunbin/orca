@@ -4,9 +4,34 @@ import type { RuntimeReadableFileContent } from './runtime-file-client-types'
 import { callRuntimeRpc } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
+import {
+  isRenewableGrantError,
+  renewTerminalArtifactGrant
+} from './runtime-terminal-artifact-grant'
 
-/** Reads a host file outside every workspace through the grant its host issued for it. */
+/** Reads a host file outside every workspace through its grant, renewing a lapsed or stale one. */
 export async function readRuntimeTerminalArtifactContent(args: {
+  target: RuntimeClientTarget & { kind: 'environment' }
+  worktreeId: string
+  absolutePath: string
+  grantId: string
+}): Promise<RuntimeReadableFileContent> {
+  try {
+    return await readThroughGrant(args)
+  } catch (error) {
+    if (!isRenewableGrantError(error)) {
+      throw error
+    }
+  }
+  // Why: a file changed on its host stales the tab's grant; Reload and Compare must still read it.
+  const renewed = await renewTerminalArtifactGrant(args)
+  if (!renewed) {
+    throw new Error(`File not found on its host: ${args.absolutePath}`)
+  }
+  return readThroughGrant({ ...args, grantId: renewed.grantId })
+}
+
+async function readThroughGrant(args: {
   target: RuntimeClientTarget & { kind: 'environment' }
   worktreeId: string
   absolutePath: string

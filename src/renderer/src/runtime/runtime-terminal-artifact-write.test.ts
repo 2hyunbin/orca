@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { writeRuntimeTerminalArtifactFile } from './runtime-terminal-artifact-write'
 import {
   fsWriteFile,
@@ -31,14 +31,15 @@ const granted = (grantId: string) =>
     openTarget: { kind: 'absolute-file', provider: 'local', absolutePath: PATH, grantId }
   })
 
-function save(content: string, baseline: string) {
+function save(content: string, baseline: string, onGrantRenewed?: (grantId: string) => void) {
   return writeRuntimeTerminalArtifactFile({
     target: { kind: 'environment', environmentId: 'env-1' },
     worktreeId: 'wt-1',
     absolutePath: PATH,
     grantId: 'g-1',
     content,
-    precondition: { expectedSignature: getDiskBaselineSignature(baseline), allowMissing: false }
+    precondition: { expectedSignature: getDiskBaselineSignature(baseline), allowMissing: false },
+    onGrantRenewed
   })
 }
 
@@ -85,8 +86,10 @@ describe('saving a granted host file outside every workspace', () => {
       return method === 'files.readTerminalArtifact' ? read('# old') : ok({ ok: true })
     })
 
-    await expect(save('# new', '# old')).resolves.toEqual({ ok: true })
+    const onGrantRenewed = vi.fn()
+    await expect(save('# new', '# old', onGrantRenewed)).resolves.toEqual({ ok: true })
 
+    expect(onGrantRenewed).toHaveBeenCalledWith('g-2')
     expect(callsTo('files.resolveTerminalPath')[0]?.params).toEqual({
       worktree: 'id:wt-1',
       pathText: PATH,
@@ -95,5 +98,30 @@ describe('saving a granted host file outside every workspace', () => {
     expect(callsTo('files.writeTerminalArtifact').map((c) => c.params)).toEqual([
       expect.objectContaining({ grantId: 'g-2', content: '# new' })
     ])
+  })
+
+  // Why: a host change stales the grant; the renewed read must still raise the conflict banner.
+  it('reports a host-side change behind a stale grant as a conflict', async () => {
+    runtimeEnvironmentCall.mockImplementation(async ({ method, params }) => {
+      if (method === 'files.resolveTerminalPath') {
+        return granted('g-2')
+      }
+      if ((params as { grantId?: string }).grantId === 'g-1') {
+        return refused('terminal_file_grant_stale')
+      }
+      return method === 'files.readTerminalArtifact' ? read('# theirs') : ok({ ok: true })
+    })
+
+    await expect(save('# new', '# old')).resolves.toEqual({ ok: false, diskConflict: 'changed' })
+    expect(callsTo('files.writeTerminalArtifact')).toHaveLength(0)
+  })
+
+  it('reports a file deleted on its host as missing', async () => {
+    runtimeEnvironmentCall.mockImplementation(async () =>
+      refused("ENOENT: no such file or directory, open '/private/tmp/handoff.md'")
+    )
+
+    await expect(save('# new', '# old')).resolves.toEqual({ ok: false, diskConflict: 'missing' })
+    expect(callsTo('files.writeTerminalArtifact')).toHaveLength(0)
   })
 })

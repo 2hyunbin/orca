@@ -1,8 +1,4 @@
-import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
-import type {
-  RuntimeFileReadResult,
-  RuntimeTerminalPathResolution
-} from '../../../shared/runtime-file-contracts'
+import type { RuntimeFileReadResult } from '../../../shared/runtime-file-contracts'
 import {
   compareDiskWritePrecondition,
   FILE_WRITE_OK,
@@ -13,49 +9,17 @@ import {
 import { callRuntimeRpc } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
+import { isMissingRuntimePathError } from './runtime-file-metadata-client'
+import {
+  isRenewableGrantError,
+  renewTerminalArtifactGrant,
+  type TerminalArtifactGrantTarget
+} from './runtime-terminal-artifact-grant'
 
-// Why: the host refuses a grant whose file changed, expired, or belongs to an earlier connection.
-const RENEWABLE_GRANT_ERRORS = new Set([
-  'terminal_file_grant_stale',
-  'terminal_file_grant_expired',
-  'terminal_file_grant_mismatch'
-])
+// Why: hosts cap a grant write at their mobile read budget; refuse before sending the bytes.
+const TERMINAL_ARTIFACT_WRITE_MAX_BYTES = 512 * 1024
 
-type GrantTarget = {
-  target: RuntimeClientTarget & { kind: 'environment' }
-  worktreeId: string
-  absolutePath: string
-}
-
-function isRenewableGrantError(error: unknown): boolean {
-  return error instanceof RuntimeRpcCallError && RENEWABLE_GRANT_ERRORS.has(error.message)
-}
-
-/** A fresh grant for the same host path, or null when the host no longer has the file. */
-async function renewGrant(args: GrantTarget): Promise<string | null> {
-  const resolved = await callRuntimeRpc<RuntimeTerminalPathResolution>(
-    args.target,
-    'files.resolveTerminalPath',
-    {
-      worktree: toRuntimeWorktreeSelector(args.worktreeId),
-      pathText: args.absolutePath,
-      crossWorkspace: true
-    },
-    { timeoutMs: 15_000 }
-  )
-  const openTarget = resolved.openTarget
-  if (openTarget?.kind === 'absolute-file' && openTarget.absolutePath === args.absolutePath) {
-    if (openTarget.readOnly) {
-      throw new Error('This host opens the file read-only.')
-    }
-    return openTarget.grantId
-  }
-  if (!resolved.exists) {
-    return null
-  }
-  // Why: never redirect the save elsewhere; the host must grant this exact path.
-  throw new Error(`The host no longer grants ${args.absolutePath}`)
-}
+type GrantTarget = TerminalArtifactGrantTarget
 
 /** The decoded text on the host, null when missing, undefined when not comparable text. */
 async function readGrantedText(
@@ -75,7 +39,17 @@ async function readGrantedText(
     )
     return result.truncated ? undefined : result.content
   } catch (error) {
-    if (error instanceof RuntimeRpcCallError && error.message === 'binary_file') {
+    if (isRenewableGrantError(error)) {
+      throw error
+    }
+    if (isMissingRuntimePathError(error)) {
+      return null
+    }
+    // Why: binary or oversized host text can't be compared, so it counts as changed.
+    if (
+      error instanceof RuntimeRpcCallError &&
+      (error.message === 'binary_file' || error.message === 'file_too_large')
+    ) {
       return undefined
     }
     throw error
@@ -89,8 +63,13 @@ export async function writeRuntimeTerminalArtifactFile(
     content: string
     precondition?: FileWriteDiskPrecondition
     beforeSend?: () => void
+    /** The tab keeps the renewed grant so later reads and saves skip renewal. */
+    onGrantRenewed?: (grantId: string) => void
   }
 ): Promise<FileWriteResult> {
+  if (new TextEncoder().encode(args.content).byteLength > TERMINAL_ARTIFACT_WRITE_MAX_BYTES) {
+    throw new Error('This file is too large to save to its host (512 KB limit).')
+  }
   const refusal = async (grantId: string | null): Promise<FileWriteResult | null> => {
     if (!args.precondition) {
       return null
@@ -125,13 +104,19 @@ export async function writeRuntimeTerminalArtifactFile(
     }
   }
   // Why: the tab's grant lapsed or its file changed; a fresh grant and the same disk check decide.
-  const renewed = await renewGrant(args)
-  const refused = await refusal(renewed)
+  const renewed = await renewTerminalArtifactGrant(args)
+  if (renewed?.readOnly) {
+    throw new Error('This host opens the file read-only.')
+  }
+  if (renewed !== null) {
+    args.onGrantRenewed?.(renewed.grantId)
+  }
+  const refused = await refusal(renewed?.grantId ?? null)
   if (refused) {
     return refused
   }
   if (renewed === null) {
     throw new Error(`File not found on its host: ${args.absolutePath}`)
   }
-  return send(renewed)
+  return send(renewed.grantId)
 }

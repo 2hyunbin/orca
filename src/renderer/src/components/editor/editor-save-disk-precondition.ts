@@ -108,6 +108,17 @@ export function editorSavePrecondition(
   }
 }
 
+/** The tab's host grant for a file outside every workspace; a renewed grant is kept on the tab. */
+export function editorSaveGrant(
+  file: OpenFile,
+  getState: () => Pick<AppState, 'setTerminalArtifactGrant'>
+): { grantId: string; onRenewed: (grantId: string) => void } | undefined {
+  const grantId = file.terminalArtifactGrantId
+  return grantId
+    ? { grantId, onRenewed: (renewed) => getState().setTerminalArtifactGrant(file.id, renewed) }
+    : undefined
+}
+
 export function writeEditorSave(
   context: RuntimeFileOperationArgs,
   filePath: string,
@@ -115,7 +126,7 @@ export function writeEditorSave(
   access: LocalFileAccess | undefined,
   write: EditorSaveWrite,
   beforeSend?: () => void,
-  terminalArtifactGrantId?: string
+  grant?: { grantId: string; onRenewed: (grantId: string) => void }
 ): Promise<FileWriteResult> {
   const precondition =
     write.kind === 'guarded'
@@ -125,7 +136,7 @@ export function writeEditorSave(
           ...(write.requireLosslessUtf8 ? { requireLosslessUtf8: true } : {})
         }
       : undefined
-  if (terminalArtifactGrantId) {
+  if (grant) {
     // Why: a granted host file must never fall through to a write of this computer's same path.
     if (context.target.kind !== 'environment' || !context.worktreeId) {
       throw new Error('This file belongs to a host that is no longer this tab’s owner.')
@@ -134,10 +145,11 @@ export function writeEditorSave(
       target: context.target,
       worktreeId: context.worktreeId,
       absolutePath: filePath,
-      grantId: terminalArtifactGrantId,
+      grantId: grant.grantId,
       content,
       precondition,
-      beforeSend
+      beforeSend,
+      onGrantRenewed: grant.onRenewed
     })
   }
   return writeRuntimeFile(context, filePath, content, access, precondition, beforeSend)
