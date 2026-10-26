@@ -246,3 +246,7 @@ describe('terminal prompt presentation with the production view, card and compos
     }
   )
 })
+
+vi.mock('./MobileQueuedMessageComposer', () => ({
+  MobileQueuedMessageComposer: 'QueuedMessageComposer'
+}))

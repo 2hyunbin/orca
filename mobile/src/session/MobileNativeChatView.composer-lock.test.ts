@@ -175,3 +175,7 @@ describe('MobileNativeChatView: composer lock and prompt cards', () => {
     })
   })
 })
+
+vi.mock('./MobileQueuedMessageComposer', () => ({
+  MobileQueuedMessageComposer: 'QueuedMessageComposer'
+}))

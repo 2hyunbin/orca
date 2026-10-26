@@ -149,7 +149,7 @@ export function useMobileStructuredSendWithOutcome(args: {
       )
       if (skills.length > MAX_SKILL_REFS) {
         onSendError(
-          `Your message was not sent to ${tuiAgentDisplayName(agent) ?? agent ?? 'the agent'}. Keep at most ${MAX_SKILL_REFS} selected skill files and try again.`
+          `Your message was not sent to ${(agent ? tuiAgentDisplayName(agent) : null) ?? agent ?? 'the agent'}. Keep at most ${MAX_SKILL_REFS} selected skill files and try again.`
         )
         return 'rejected'
       }

@@ -1,4 +1,6 @@
 import { createElement } from 'react'
+import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
+import type { MobileQueuedMessageInlineEditor } from './mobile-queued-message-edit-draft'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ActionSheetAction } from '../components/ActionSheetModal'
@@ -34,6 +36,29 @@ vi.mock('lucide-react-native', () => ({
 }))
 
 vi.mock('../components/ActionSheetModal', () => ({ ActionSheetModal: 'ActionSheetModal' }))
+
+vi.mock('./MobileQueuedMessageComposer', () => ({
+  MobileQueuedMessageComposer: 'QueuedMessageComposer'
+}))
+
+function inlineEditor(
+  fields: Partial<MobileQueuedMessageInlineEditor> & { messageId: string }
+): MobileQueuedMessageInlineEditor {
+  return {
+    scopeKey: 'edit-scope',
+    sessionId: 'session',
+    client: new FakeSession('connected'),
+    imagesCapable: true,
+    text: 'edited text',
+    saving: false,
+    canSave: true,
+    change: vi.fn(),
+    save: vi.fn(async () => true),
+    removeImage: vi.fn(),
+    cancel: vi.fn(),
+    ...fields
+  }
+}
 
 function card(
   overrides: Partial<MobileQueuedMessageCard> & { messageId: string }
@@ -86,75 +111,19 @@ describe('MobileNativeChatQueuedMessages', () => {
     return mounted.root.find((node) => String(node.type) === 'ActionSheetModal')
   }
 
-  it('edits in place of the card row with an X and a checkmark while keeping another card visible', async () => {
-    const change = vi.fn()
-    const save = vi.fn(async () => true)
-    const cancel = vi.fn()
+  it('mounts the real composer boundary in the edited row and leaves other cards visible', async () => {
+    const editor = inlineEditor({ messageId: 'a' })
     const mounted = await mount({
-      cards: [
-        card({
-          messageId: 'a',
-          attribution: 'From Alex',
-          caption: 'Returned',
-          needsAttention: true,
-          state: 'returned'
-        }),
-        card({ messageId: 'b' })
-      ],
-      editor: {
-        messageId: 'a',
-        text: 'edited text',
-        saving: false,
-        canSave: true,
-        change,
-        save,
-        cancel
-      }
+      cards: [card({ messageId: 'a', attribution: 'From Alex' }), card({ messageId: 'b' })],
+      editor
     })
-    const input = mounted.root.findByProps({ accessibilityLabel: 'Edit queued message' })
-    expect(input.props.value).toBe('edited text')
-    const editedRow = mounted.root.findAllByProps({ testID: 'queued-card-row' })[0]!
-    expect(texts(mounted)).toContain('From Alex')
-    expect(texts(mounted)).not.toContain('Editing message')
-    expect(texts(mounted)).not.toContain('Returned')
-    expect(nodeTypes(editedRow)).toEqual(expect.arrayContaining(['X', 'Check']))
-    expect(nodeTypes(editedRow)).not.toContain('Pencil')
-    expect(nodeTypes(editedRow)).not.toContain('AlertCircle')
-    expect(
-      editedRow.findAll((node) => node.props.accessibilityLabel === 'Delete this queued message')
-    ).toHaveLength(0)
-    act(() => input.props.onChangeText('updated text'))
-    expect(change).toHaveBeenCalledWith('updated text')
-    const button = (label: string) => mounted.root.findByProps({ accessibilityLabel: label })
-    await act(async () => button('Save edited message').props.onPress())
-    expect(save).toHaveBeenCalledOnce()
-    act(() => button('Cancel editing').props.onPress())
-    expect(cancel).toHaveBeenCalledOnce()
+    const child = mounted.root.findByType('QueuedMessageComposer')
+    expect(child.props.editor).toBe(editor)
+    expect(child.props.attribution).toBe('From Alex')
     expect(mounted.root.findAllByProps({ testID: 'queued-card-row' })).toHaveLength(2)
     expect(mounted.root.findByProps({ accessibilityLabel: 'More actions' }).props.disabled).toBe(
       true
     )
-    const editAgain = (state: { saving: boolean; canSave: boolean }) =>
-      act(async () =>
-        mounted.update(
-          createElement(MobileNativeChatQueuedMessages, {
-            cards: [card({ messageId: 'a' })],
-            editor: { messageId: 'a', text: '', change, save, cancel, ...state }
-          })
-        )
-      )
-    await editAgain({ saving: false, canSave: false })
-    expect(button('Save edited message').props.disabled).toBe(true)
-    expect(button('Cancel editing').props.disabled).toBe(false)
-    await editAgain({ saving: true, canSave: true })
-    const saveButton = button('Save edited message')
-    expect(saveButton.props.disabled).toBe(true)
-    expect(saveButton.props.accessibilityState).toEqual({ disabled: true })
-    expect(saveButton.props['aria-busy']).toBe(true)
-    expect(nodeTypes(saveButton)).toContain('ActivityIndicator')
-    expect(nodeTypes(saveButton)).not.toContain('Check')
-    expect(button('Cancel editing').props.disabled).toBe(true)
-    expect(button('Edit queued message').props.editable).toBe(false)
   })
 
   it('draws a plain waiting card as one compact row with no caption', async () => {
@@ -617,7 +586,7 @@ describe('MobileNativeChatQueuedMessages', () => {
       try {
         const mounted = await mountPaused({
           pause: { reason: 'stopped' },
-          editor: {
+          editor: inlineEditor({
             messageId: 'waiting-1',
             text: 'next',
             saving: false,
@@ -625,7 +594,7 @@ describe('MobileNativeChatQueuedMessages', () => {
             change: vi.fn(),
             save: vi.fn(async () => true),
             cancel: vi.fn()
-          }
+          })
         })
         const header = mounted.root.findByProps({ testID: 'queued-header' })
         for (const label of ['Delete every queued message', 'Resume sending the queued messages']) {

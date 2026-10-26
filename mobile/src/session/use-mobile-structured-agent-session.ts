@@ -226,6 +226,7 @@ export function useMobileStructuredAgentSession(
   )
   const queued = useMobileStructuredQueuedMessageControls({
     ...args,
+    appendComposerText: args.appendComposerText,
     sessionKey,
     agentName: agent ? (tuiAgentDisplayName(agent) ?? agent) : undefined,
     journalItems: state.items,

@@ -1,11 +1,9 @@
 import { setMobileNativeChatDraftText } from './native-chat/composer/mobile-native-chat-draft-store'
 import { appendReturnedDraftText } from '../../../src/shared/returned-draft-text'
-import { createContext, useContext, useEffect, useRef, useCallback } from 'react'
+import { useContext, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { MobileQueuedMessageComposerContext } from './mobile-queued-message-composer-context'
 import { Text, type TextInput, View } from 'react-native'
-import {
-  MobileNativeChatComposer,
-  type MobileNativeChatStructuredComposer
-} from './native-chat/composer/MobileNativeChatComposer'
+import { MobileNativeChatComposer } from './native-chat/composer/MobileNativeChatComposer'
 import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
 import { useMobileNativeChatFileAttachments } from './native-chat/composer/use-mobile-native-chat-file-attachments'
 import { useMobileNativeChatImageUpload } from './native-chat/composer/use-mobile-native-chat-image-upload'
@@ -20,19 +18,6 @@ import {
 } from '../../../src/shared/structured-agent-session-composer'
 import { colors } from '../theme/mobile-theme'
 import { createUuidV4 } from '../../../src/shared/uuid-v4'
-
-export const MobileQueuedMessageComposerContext = createContext<{
-  agent: string | null
-  structured: MobileNativeChatStructuredComposer | null
-  filePaths: string[]
-  onNeedFiles: ((query: string) => void) | undefined
-  onError: (text: string) => void
-  onMicPress: (() => void) | undefined
-  micActive: boolean
-  dictationMode: string | undefined
-  onMicPressIn: () => void
-  onMicPressOut: () => void
-} | null>(null)
 
 export function MobileQueuedMessageComposer({
   editor,
@@ -67,7 +52,9 @@ export function MobileQueuedMessageComposer({
       }))
   })
   const latestEditor = useRef(editor)
-  latestEditor.current = editor
+  useLayoutEffect(() => {
+    latestEditor.current = editor
+  }, [editor])
   const destination = useRef(mobileNativeChatDraftDestination(editor.scopeKey)).current
   const insertDictation = useCallback(
     (text: string) => {

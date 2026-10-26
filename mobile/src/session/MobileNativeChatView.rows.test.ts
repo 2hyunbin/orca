@@ -66,3 +66,7 @@ describe('MobileNativeChatView: rows and the streaming bubble', () => {
     expect(renderedRow('pending-1').props).not.toHaveProperty('queued')
   })
 })
+
+vi.mock('./MobileQueuedMessageComposer', () => ({
+  MobileQueuedMessageComposer: 'QueuedMessageComposer'
+}))

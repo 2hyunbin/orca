@@ -208,3 +208,7 @@ describe('MobileNativeChatView: history paging and anchoring', () => {
     })
   })
 })
+
+vi.mock('./MobileQueuedMessageComposer', () => ({
+  MobileQueuedMessageComposer: 'QueuedMessageComposer'
+}))

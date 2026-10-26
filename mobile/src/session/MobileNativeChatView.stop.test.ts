@@ -97,3 +97,7 @@ describe('MobileNativeChatView: Stop control', () => {
     expect(stops()).toHaveLength(1)
   })
 })
+
+vi.mock('./MobileQueuedMessageComposer', () => ({
+  MobileQueuedMessageComposer: 'QueuedMessageComposer'
+}))

@@ -196,3 +196,7 @@ describe('useMobileNativeChatComposerTray', () => {
     expect(duplicateKeys).toEqual([])
   })
 })
+
+vi.mock('../../MobileQueuedMessageComposer', () => ({
+  MobileQueuedMessageComposer: 'QueuedMessageComposer'
+}))

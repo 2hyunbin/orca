@@ -1,4 +1,5 @@
 import { createElement } from 'react'
+import { resetMobileNativeChatDraftInputsForTests } from './native-chat/composer/mobile-native-chat-draft-inputs'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
@@ -66,6 +67,7 @@ describe('useMobileSessionImageAttachments', () => {
   }
 
   beforeEach(() => {
+    resetMobileNativeChatDraftInputsForTests()
     vi.useFakeTimers()
     resetMobileNativeChatStaleInputForTests()
     resetMobileNativeChatTerminalWritesForTests()

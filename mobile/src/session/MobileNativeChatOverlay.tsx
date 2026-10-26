@@ -1,4 +1,4 @@
-import { MobileQueuedMessageComposerContext } from './MobileQueuedMessageComposer'
+import { MobileQueuedMessageComposerContext } from './mobile-queued-message-composer-context'
 import { useCallback, useLayoutEffect, useMemo } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { MobileNativeChatView, type MobileNativeChatInputLockReason } from './MobileNativeChatView'
