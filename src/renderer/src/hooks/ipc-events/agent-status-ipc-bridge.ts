@@ -20,7 +20,6 @@ import { registerAgentStatusStartupSnapshot } from './agent-status-startup-snaps
 const PENDING_AGENT_STATUS_RETRY_MS = 100
 const PENDING_AGENT_STATUS_TTL_MS = 15_000
 const MAX_PENDING_AGENT_STATUS_EVENTS = 100
-const LIVE_AGENT_STATUS_BURST_WINDOW_MS = 33
 
 export type AgentStatusIpcBridge = {
   disposeAsyncState: () => void
@@ -34,8 +33,6 @@ export function registerAgentStatusIpcBridge(unsubs: (() => void)[]): AgentStatu
   let pendingAgentStatusRetryTimer: ReturnType<typeof setTimeout> | null = null
   let isFlushingAgentStatuses = false
   const liveAgentStatusBurstQueue: AgentStatusIpcPayload[] = []
-  let liveAgentStatusBurstTimer: ReturnType<typeof setTimeout> | null = null
-  let lastLiveAgentStatusApplyAt = 0
   function schedulePendingAgentStatusFlush(): void {
     if (pendingAgentStatusRetryTimer !== null || pendingAgentStatusEvents.length === 0) {
       return
@@ -204,57 +201,20 @@ export function registerAgentStatusIpcBridge(unsubs: (() => void)[]): AgentStatu
     })
   }
 
-  function applyLiveAgentStatusBatch(batch: readonly AgentStatusIpcPayload[]): boolean {
-    return applyAgentStatusBatch(batch.map((data) => ({ data }))).some(
-      (result) => result === 'applied'
-    )
-  }
-
-  function flushLiveAgentStatusBurst(): void {
-    liveAgentStatusBurstTimer = null
-    lastLiveAgentStatusApplyAt = Date.now()
-    // Why: splice before publishing — synchronous Zustand subscribers can enqueue the next burst.
-    const batch = liveAgentStatusBurstQueue.splice(0)
-    if (!applyLiveAgentStatusBatch(batch)) {
-      lastLiveAgentStatusApplyAt = 0
-    }
-  }
-
-  function drainQueuedLiveAgentStatusesForPane(paneKey: string): void {
-    const queuedForPane: AgentStatusIpcPayload[] = []
-    const remaining: AgentStatusIpcPayload[] = []
-    for (const queued of liveAgentStatusBurstQueue) {
-      if (queued.paneKey === paneKey) {
-        queuedForPane.push(queued)
-      } else {
-        remaining.push(queued)
-      }
-    }
-    liveAgentStatusBurstQueue.length = 0
-    liveAgentStatusBurstQueue.push(...remaining)
-    applyLiveAgentStatusBatch(queuedForPane)
+  function drainQueuedLiveAgentStatusesForPane(_paneKey: string): void {
+    // A synchronous clear must observe every earlier event in arrival order.
+    useAppStore.getState().flushAgentStatuses()
   }
 
   function enqueueLiveAgentStatus(data: AgentStatusIpcPayload): void {
-    const now = Date.now()
-    if (
-      liveAgentStatusBurstTimer === null &&
-      now - lastLiveAgentStatusApplyAt >= LIVE_AGENT_STATUS_BURST_WINDOW_MS
-    ) {
-      lastLiveAgentStatusApplyAt = now
-      // Only applied events incur burst latency; dropped/pending leading edges must leave successors immediate.
-      if (applyAgentStatus(data) !== 'applied') {
-        lastLiveAgentStatusApplyAt = 0
-      }
-      return
-    }
     liveAgentStatusBurstQueue.push(data)
-    if (liveAgentStatusBurstTimer === null) {
-      liveAgentStatusBurstTimer = globalThis.setTimeout(
-        flushLiveAgentStatusBurst,
-        LIVE_AGENT_STATUS_BURST_WINDOW_MS
-      )
-    }
+    useAppStore.getState().queueAgentStatuses(() => {
+      const index = liveAgentStatusBurstQueue.indexOf(data)
+      if (!disposed && index !== -1) {
+        liveAgentStatusBurstQueue.splice(index, 1)
+        applyAgentStatusBatch([{ data }])
+      }
+    })
   }
 
   registerAgentStatusListeners({
@@ -289,10 +249,7 @@ export function registerAgentStatusIpcBridge(unsubs: (() => void)[]): AgentStatu
         globalThis.clearTimeout(pendingAgentStatusRetryTimer)
       }
       pendingAgentStatusEvents.length = 0
-      if (liveAgentStatusBurstTimer !== null) {
-        globalThis.clearTimeout(liveAgentStatusBurstTimer)
-        liveAgentStatusBurstTimer = null
-      }
+      useAppStore.getState().flushAgentStatuses()
       liveAgentStatusBurstQueue.length = 0
     },
     unsubscribeStore: unsubscribeAgentStatusStore

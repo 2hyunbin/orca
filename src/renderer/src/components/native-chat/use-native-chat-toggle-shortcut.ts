@@ -48,6 +48,7 @@ export function useNativeChatToggleShortcut(worktreeId: string, isWorktreeActive
       if (e.repeat || !matchesNativeChatToggleShortcut(e, isMac)) {
         return
       }
+      useAppStore.getState().flushAgentStatuses()
       const state = useAppStore.getState()
       // Main and floating surfaces can coexist; only the key’s originating surface may act.
       if (resolveKeyboardWorkspaceId(e.target, state.activeWorktreeId) !== worktreeId) {

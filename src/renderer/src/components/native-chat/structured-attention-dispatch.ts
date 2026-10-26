@@ -70,6 +70,7 @@ function dispatchStructuredAttention(
     return
   }
   const attentionKey = agentSessionAttentionKey(edge)
+  useAppStore.getState().flushAgentStatuses()
   const state = useAppStore.getState()
   const paneKey = structuredAgentSessionPaneKey(tab.id, tab.entityId)
   const decision = resolveAgentAttention(

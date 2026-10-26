@@ -99,6 +99,8 @@ export const createAgentStatusSlice: StateCreator<AppState, [], [], AgentStatusS
   }
   return {
     ...actions,
+    queueAgentStatuses: runtime.queueAgentStatuses,
+    flushAgentStatuses: runtime.flushAgentStatuses,
     agentStatusByPaneKey: {},
     runtimeAgentOrchestrationByPaneKey: {},
     migrationUnsupportedByPtyId: {},

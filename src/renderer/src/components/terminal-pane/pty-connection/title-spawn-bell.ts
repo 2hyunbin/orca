@@ -21,6 +21,7 @@ export function installTitleSpawnBell(session: ConnectPanePtySession): void {
     rawTitle: string,
     meta?: { staleWorkingTitleClear?: boolean }
   ): void => {
+    useAppStore.getState().flushAgentStatuses()
     if (!meta?.staleWorkingTitleClear && resolveCommittedTitleAgentType(rawTitle)) {
       session.paneForegroundAgentTracker.onAgentStartupObserved()
     }

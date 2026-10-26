@@ -26,6 +26,7 @@ export type ParkedTerminalCommandStatusPolicy = {
 
 // Only working rows prove a live Command Code turn; stale done rows could arm a recreated detector against its replacement.
 export function readInFlightCommandCodeTurn(paneKey: string): { prompt: string } | null {
+  useAppStore.getState().flushAgentStatuses()
   const entry = useAppStore.getState().agentStatusByPaneKey?.[paneKey]
   if (entry?.agentType !== 'command-code' || entry.state !== 'working') {
     return null
@@ -49,6 +50,7 @@ export function createParkedTerminalCommandStatusPolicy(options: {
     if (disposed) {
       return undefined
     }
+    useAppStore.getState().flushAgentStatuses()
     const state = useAppStore.getState()
     return resolveLiveAgentStatusConnectionRouting({
       state,
@@ -59,6 +61,7 @@ export function createParkedTerminalCommandStatusPolicy(options: {
   }
 
   const canApplyCommandCodeOutputStatus = (): boolean => {
+    useAppStore.getState().flushAgentStatuses()
     const state = useAppStore.getState()
     const tab = (state.tabsByWorktree[worktreeId] ?? []).find((entry) => entry.id === tabId)
     const foreground = state.paneForegroundAgentByPaneKey[paneKey]
@@ -77,6 +80,7 @@ export function createParkedTerminalCommandStatusPolicy(options: {
 
   // Mirror mounted same-turn status drops without interrupt inference: parked panes receive no key events.
   const dropCommandFinishedStatusIfSameTurn = (entry: AgentStatusEntry | undefined): void => {
+    useAppStore.getState().flushAgentStatuses()
     const state = useAppStore.getState()
     if (!entry) {
       // An agent can exit before its first hook; clear launch identity on command exit like mounted panes.
@@ -108,6 +112,7 @@ export function createParkedTerminalCommandStatusPolicy(options: {
     if (!routing) {
       return
     }
+    useAppStore.getState().flushAgentStatuses()
     const currentState = useAppStore.getState()
     const currentEntry = currentState.agentStatusByPaneKey[paneKey]
     if (currentEntry?.agentType !== 'command-code' || currentEntry.state !== 'working') {
@@ -158,6 +163,7 @@ export function createParkedTerminalCommandStatusPolicy(options: {
         processName = null
       }
     }
+    useAppStore.getState().flushAgentStatuses()
     const state = useAppStore.getState()
     if (disposed || state.paneForegroundAgentByPaneKey[paneKey] !== entry) {
       return
@@ -179,6 +185,7 @@ export function createParkedTerminalCommandStatusPolicy(options: {
       if (parseAppSshPtyId(ptyId) === null) {
         return
       }
+      useAppStore.getState().flushAgentStatuses()
       dropCommandFinishedStatusIfSameTurn(useAppStore.getState().agentStatusByPaneKey[paneKey])
     },
 
@@ -192,6 +199,7 @@ export function createParkedTerminalCommandStatusPolicy(options: {
       if (!routing) {
         return
       }
+      useAppStore.getState().flushAgentStatuses()
       const currentState = useAppStore.getState()
       const currentEntry = currentState.agentStatusByPaneKey[paneKey]
       const currentTitle = currentState.runtimePaneTitlesByTabId?.[tabId]?.[paneId]

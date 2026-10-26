@@ -187,7 +187,7 @@ function installStatusProjection(): () => void {
       }
     }
     if (dirty.length || removed.length) {
-      useAppStore.getState().transactAgentStatuses((transaction) => {
+      useAppStore.getState().queueAgentStatuses((transaction) => {
         for (const old of removed) {
           if (!members.has(old.paneKey)) {
             transaction.getState().removeAgentStatus(old.paneKey)

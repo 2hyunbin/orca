@@ -22,9 +22,6 @@ export function resolveNativeChatHookState(
 export function useNativeChatHookStatus(
   paneKey: string
 ): readonly [AgentStatusState | null, number | null, boolean] {
-  // Subscribe to TTL expiry so silent working rows eventually stop keeping chat busy.
-  const agentStatusEpoch = useAppStore((store) => store.agentStatusEpoch)
-  void agentStatusEpoch
   // Primitive selectors avoid rerenders for unrelated status changes.
   const state = useAppStore((store) => {
     const entry = store.agentStatusByPaneKey[paneKey]

@@ -87,6 +87,10 @@ export type AgentStatusSlice = {
   /** Publish ordered status batch once; generated/tab titles publish separately (three writes, not 2N). */
   setAgentStatuses: (updates: readonly AgentStatusBatchUpdate[]) => boolean[]
 
+  /** Coalesce asynchronous feed patches in arrival order into one status publication per frame. */
+  queueAgentStatuses: (operation: (transaction: AgentStatusBatchTransaction) => void) => void
+  flushAgentStatuses: () => void
+
   /** Fold caller-derived updates against exact staged state, committing one status publication. */
   transactAgentStatuses: <Result>(
     operation: (transaction: AgentStatusBatchTransaction) => Result

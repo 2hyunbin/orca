@@ -12,6 +12,8 @@ export type AgentStatusStateUpdate =
 
 export type AgentStatusRuntime = {
   get: () => AppState
+  queueAgentStatuses: (operation: (transaction: AgentStatusBatchTransaction) => void) => void
+  flushAgentStatuses: () => void
   set: (update: AgentStatusStateUpdate) => void
   runAfterCommit: (effect: () => void) => void
   applyGeneratedTabTitleUpdate: (update: GeneratedTabTitleUpdate) => void
@@ -38,10 +40,42 @@ export function createAgentStatusRuntime(
   let batchedAgentStatusEffects: (() => void)[] | null = null
   let batchedGeneratedTabTitleUpdates: GeneratedTabTitleUpdate[] | null = null
   let batchedAgentStatusFreshnessRequested = false
-  const get = (): AppState => batchedAgentStatusState ?? storeGet()
+  const frameOperations: ((transaction: AgentStatusBatchTransaction) => void)[] = []
+  let frame: number | null = null
+  const flushAgentStatuses = (): void => {
+    if (batchedAgentStatusState || frameOperations.length === 0) {
+      return
+    }
+    if (frame !== null) {
+      cancelAnimationFrame(frame)
+      frame = null
+    }
+    const operations = frameOperations.splice(0)
+    transactAgentStatuses((transaction) => {
+      for (const operation of operations) {
+        operation(transaction)
+      }
+    })
+  }
+  const queueAgentStatuses = (
+    operation: (transaction: AgentStatusBatchTransaction) => void
+  ): void => {
+    frameOperations.push(operation)
+    if (frame === null) {
+      frame = requestAnimationFrame(() => {
+        frame = null
+        flushAgentStatuses()
+      })
+    }
+  }
+  const get = (): AppState => {
+    flushAgentStatuses()
+    return batchedAgentStatusState ?? storeGet()
+  }
 
   // Omit replace from this write type so no slice call can request replacement the batch cannot express.
   const set = (update: AgentStatusStateUpdate): void => {
+    flushAgentStatuses()
     const staged = batchedAgentStatusState
     if (staged === null) {
       storeSet(update, false)
@@ -132,6 +166,7 @@ export function createAgentStatusRuntime(
     if (batchedAgentStatusState) {
       return operation(batchTransaction)
     }
+    flushAgentStatuses()
     const initialState = storeGet()
     const touchedKeys = new Set<keyof AppState>()
     const revisionAtStart = batchedAgentStatusRevision
@@ -208,6 +243,8 @@ export function createAgentStatusRuntime(
   }
 
   return {
+    queueAgentStatuses,
+    flushAgentStatuses,
     get,
     set,
     runAfterCommit,

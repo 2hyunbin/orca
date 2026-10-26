@@ -19,10 +19,11 @@ type ActivityActions = Pick<
   | 'clearManuallyUnreadTurns'
 >
 
-export function createUiActivityActions(set: UISliceSet, _get: UISliceGet): ActivityActions {
+export function createUiActivityActions(set: UISliceSet, get: UISliceGet): ActivityActions {
   return {
     acknowledgedAgentsByPaneKey: {},
     acknowledgeAgents: (paneKeys, reads, intent) => {
+      get().flushAgentStatuses()
       emitAgentSubjectReads(paneKeys, reads, intent)
       const notificationIdsToDismiss = new Set<string>()
       set((s) => {
@@ -93,7 +94,8 @@ export function createUiActivityActions(set: UISliceSet, _get: UISliceGet): Acti
         void window.api?.notifications?.dismiss?.([...notificationIdsToDismiss], paneKeys)
       }
     },
-    unacknowledgeAgents: (paneKeys) =>
+    unacknowledgeAgents: (paneKeys) => {
+      get().flushAgentStatuses()
       set((s) => {
         if (paneKeys.length === 0) {
           return s
@@ -123,7 +125,8 @@ export function createUiActivityActions(set: UISliceSet, _get: UISliceGet): Acti
           ...(next ? { acknowledgedAgentsByPaneKey: next } : {}),
           ...(nextManual ? { manuallyUnreadTurnsByPaneKey: nextManual } : {})
         }
-      }),
+      })
+    },
     manuallyUnreadTurnsByPaneKey: {},
     clearManuallyUnreadTurns: (paneKeys) =>
       set((s) => {
