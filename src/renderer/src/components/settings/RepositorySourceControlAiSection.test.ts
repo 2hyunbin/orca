@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
 import { act, render } from '@testing-library/react'
-import './settings-persistence-test-fixture'
+import './__fixtures__/settings-persistence-test-fixture'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { normalizeRepoSourceControlAiOverrides } from '../../../../shared/source-control-ai'
