@@ -135,6 +135,46 @@ describe('ConnectorCloud sign-in', () => {
     await expect(cloud.finishSignIn(older.flowId)).rejects.toThrow('no longer running')
   })
 
+  it('lets nothing retired link a key: a logout, a disable, or a login that finished first', async () => {
+    fake.signInAnswers = [{ status: 'authorized', email: 'ada@example.com' }]
+    const cloud = connectorCloud()
+    const loggedOut = finish(cloud, await cloud.beginSignIn())
+    expect(await cloud.signOut()).toEqual({ signedOut: false })
+    expect(await loggedOut).toEqual({ ok: false, message: 'Sign-in was cancelled.' })
+
+    const disabled = finish(cloud, await cloud.beginSignIn())
+    enabled = false
+    expect(await disabled).toEqual({ ok: false, message: 'connectors_disabled' })
+    enabled = true
+
+    const other = connectorCloud()
+    const first = await cloud.beginSignIn()
+    const second = await other.beginSignIn()
+    expect(await finish(other, second)).toMatchObject({ ok: true })
+    expect(await finish(cloud, first)).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('Already connected')
+    })
+    expect(readConnectorHostIdentity(userDataPath)?.link.hostId).toBe(other.status().link?.hostId)
+  })
+
+  it('a delayed logout never deletes the key of a login that finished meanwhile', async () => {
+    fake.signInAnswers = [{ status: 'authorized', email: 'ada@example.com' }]
+    const cloud = connectorCloud()
+    await finish(cloud, await cloud.beginSignIn())
+    fake.hang = true
+    const delayed = cloud.signOut()
+    await vi.advanceTimersByTimeAsync(0)
+    fake.hang = false
+    const other = connectorCloud()
+    expect(await other.signOut()).toEqual({ signedOut: true })
+    await finish(other, await other.beginSignIn())
+    const fresh = other.status().link?.hostId
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(await delayed).toEqual({ signedOut: true })
+    expect(readConnectorHostIdentity(userDataPath)?.link.hostId).toBe(fresh)
+  })
+
   it('names an older cloud without sign-in, and an unreachable one', async () => {
     fake.forced.set(CONNECTOR_PATHS.signInStart, { status: 404, body: { error: 'not_found' } })
     await expect(connectorCloud().beginSignIn()).rejects.toThrow(

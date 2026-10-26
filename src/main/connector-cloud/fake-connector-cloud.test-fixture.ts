@@ -22,6 +22,8 @@ export class FakeConnectorCloud {
   /** Forces a status on every request to these paths, e.g. 404 from an older cloud. */
   readonly forced = new Map<string, Reply>()
   online = true
+  /** Requests never answer, as on a stalled network. */
+  hang = false
   readonly linked = new Map<string, string>()
   /** The key the last sign-in start offered. */
   signInPublicKeyB64: string | null = null
@@ -32,6 +34,9 @@ export class FakeConnectorCloud {
   readonly fetch: typeof globalThis.fetch = async (input, init) => {
     if (!this.online) {
       throw new TypeError('fetch failed')
+    }
+    if (this.hang) {
+      return new Promise<never>(() => {})
     }
     const url = new URL(String(input))
     const path = url.pathname

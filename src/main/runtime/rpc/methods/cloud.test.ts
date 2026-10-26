@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { classifyRuntimeLongPoll } from '../../runtime-rpc/runtime-rpc-long-poll'
 import { eraseRpcMethods, type RpcContext } from '../core'
 import { CLOUD_METHODS } from './cloud'
 
@@ -37,6 +38,17 @@ describe('cloud RPC methods', () => {
       expect(cloud.status).not.toHaveBeenCalled()
     }
   )
+
+  it('admits finishSignIn as a long poll, so the transport hands it the disconnect signal', () => {
+    expect(
+      classifyRuntimeLongPoll({
+        id: 'req_cloud',
+        authToken: 'token',
+        method: 'cloud.finishSignIn',
+        params: { flowId: 'flow-1' }
+      })
+    ).toBe('wait')
+  })
 
   it('hands the caller signal to finishSignIn so a closed CLI cancels the sign-in', async () => {
     const context = { ...contextFor(undefined), signal: new AbortController().signal }
