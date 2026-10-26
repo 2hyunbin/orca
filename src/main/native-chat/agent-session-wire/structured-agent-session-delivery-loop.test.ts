@@ -100,7 +100,7 @@ describe('delivery iteration settlement and ownership', () => {
       if (attempts++ > 8) {
         throw new Error('iteration bound')
       }
-      return { dispatch: async () => async () => {} }
+      return { run: async (commit) => commit(async () => {}) }
     })
   }
   async function pending() {
@@ -190,26 +190,28 @@ describe('delivery iteration settlement and ownership', () => {
     const boundary = vi
       .spyOn(handover, 'beginSubmissionHandover')
       .mockImplementation(async (ctx) => ({
-        dispatch: async () => {
-          // Dispatch itself writes, before the serialized resolver exists.
-          await ctx.journal.appendItem(
-            { provider: 'codex', threadId: 'thread', turnId: 'settled', itemId: 'settled' },
-            { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'settled' }] },
-            { fence: ctx.fence }
-          )
-          entered.resolve()
-          await held.promise
-          return async () => {
-            void loop().wake(SESSION)
+        run: async (commit) => {
+          try {
+            // Dispatch itself writes, before the serialized resolver exists.
+            await ctx.journal.appendItem(
+              { provider: 'codex', threadId: 'thread', turnId: 'settled', itemId: 'settled' },
+              { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'settled' }] },
+              { fence: ctx.fence }
+            )
+            entered.resolve()
+            await held.promise
+            await commit(async () => {
+              void loop().wake(SESSION)
+            })
+          } finally {
+            boundary.mockImplementation(async () => {
+              if (boundary.mock.calls.length > 8) {
+                throw new Error('iteration bound')
+              }
+              return { run: async (commit) => commit(async () => {}) }
+            })
           }
-        },
-        release: () =>
-          boundary.mockImplementation(async () => {
-            if (boundary.mock.calls.length > 8) {
-              throw new Error('iteration bound')
-            }
-            return { dispatch: async () => async () => {} }
-          })
+        }
       }))
     const sending = rig.host.send(CALLER, restTestSend('settlement wake', fence()))
     await entered.promise
@@ -227,10 +229,10 @@ describe('delivery iteration settlement and ownership', () => {
     vi.spyOn(deps.deliveryOrder, 'parkSends').mockImplementationOnce((id) => {
       park(id)
       boundary.mockImplementationOnce(async () => ({
-        dispatch: async () => {
+        run: async (commit) => {
           successorEntered.resolve()
           await successorHeld.promise
-          return async () => {}
+          await commit(async () => {})
         }
       }))
       successor = loop().wake(id)
