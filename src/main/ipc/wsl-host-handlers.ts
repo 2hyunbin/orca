@@ -1,7 +1,3 @@
-/**
- * IPC for WSL hosts (WSL-via-orcad C7); Windows only, or an e2e fake on any OS, and only with the
- * internal gate open.
- */
 import { BrowserWindow, ipcMain } from 'electron'
 import {
   WSL_HOST_STATUS_CHANNEL,
@@ -17,6 +13,7 @@ import {
 } from '../wsl/wsl-host-e2e-fake-connector'
 import { hasOrcadTemplate } from '../orcad/orcad-artifact-materializer'
 import { WslHostService } from '../wsl/wsl-host-service'
+import { WslHostVisibleWorkByWindow } from './wsl-host-visible-work-windows'
 import { wslHostsGateOpen } from '../wsl/wsl-host-gate'
 import { getWslHostService, setWslHostService } from '../wsl/wsl-host-service-instance'
 import { retireRemovedRuntimeEnvironment } from './runtime-environments/runtime-environment-removal-cleanup'
@@ -40,6 +37,7 @@ export const WSL_HOST_HANDLER_CHANNELS = [
   'wslHosts:connect',
   'wslHosts:getStatuses',
   'wslHosts:setVisibleWork',
+  'wslHosts:focusHost',
   'wslHosts:getCapability'
 ] as const
 
@@ -55,7 +53,6 @@ function publish(status: WslHostStatus): void {
   }
 }
 
-/** Removal reaches orcad the way every other call to the host does: by environment id. */
 function wslHostRuntimeAccess(getUserDataPath: () => string): WslHostRuntimeAccess {
   return {
     isReady: (environmentId) =>
@@ -106,7 +103,7 @@ type WslHostHandlerArgs = {
 }
 
 function createService(args: WslHostHandlerArgs): WslHostService | null {
-  // Closed gate: no service, so no holder adoption, wsl.exe spawn or reconnect can start.
+  // A closed gate must prevent service adoption, WSL spawns and reconnects.
   if (!wslHostsGateOpen()) {
     return null
   }
@@ -130,7 +127,12 @@ function createService(args: WslHostHandlerArgs): WslHostService | null {
       }
     },
     removed: (environmentId) =>
-      retireRemovedRuntimeEnvironment(environmentId, args.invalidateTransport, args.store)
+      retireRemovedRuntimeEnvironment(
+        environmentId,
+        args.invalidateTransport,
+        args.store,
+        args.getUserDataPath()
+      )
   })
   const onChange = created.handleConnectionChange.bind(created)
   const isKnownDistro = (distro: string): boolean => created.isKnownDistro(distro)
@@ -179,7 +181,7 @@ export function registerWslHostHandlers(args: WslHostHandlerArgs): void {
   for (const channel of WSL_HOST_HANDLER_CHANNELS) {
     ipcMain.removeHandler(channel)
   }
-  // Why none at all: without a service (gate closed, or not Windows) the preload exposes no API.
+  // Install no API without a service, matching the preload gate.
   const wsl = getWslHostService() ?? startService(args)
   if (!wsl) {
     return
@@ -210,7 +212,20 @@ export function registerWslHostHandlers(args: WslHostHandlerArgs): void {
     serverFiles: wsl.hasServerFiles()
   }))
   ipcMain.handle('wslHosts:getStatuses', () => wsl.getStatuses())
-  ipcMain.handle('wslHosts:setVisibleWork', (_event, request: { environmentIds: string[] }) => {
-    wsl.setVisibleWork(Array.isArray(request.environmentIds) ? request.environmentIds : [])
+  const visibleWork = new WslHostVisibleWorkByWindow()
+  ipcMain.handle('wslHosts:setVisibleWork', (event, request: { environmentIds: string[] }) => {
+    const sender = event.sender
+    const windowId = sender.id
+    const ids = Array.isArray(request.environmentIds) ? request.environmentIds : []
+    if (!visibleWork.has(windowId)) {
+      sender.once('destroyed', () => wsl.setVisibleWork(visibleWork.forget(windowId)))
+    }
+    wsl.setVisibleWork(visibleWork.report(windowId, ids))
+  })
+  // The user switched to a workspace on this host: the focus entry that may boot its distro.
+  ipcMain.handle('wslHosts:focusHost', (_event, request: { environmentId: string }) => {
+    if (typeof request?.environmentId === 'string') {
+      wsl.focusHost(request.environmentId)
+    }
   })
 }

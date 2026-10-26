@@ -1,4 +1,3 @@
-/** The production WSL side of `WslHostService`: one holder, connection manager and supervisor. */
 import { createWslOrcadPairingRecovery } from './wsl-orcad-pairing-repair'
 import { readConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
 import { parsePairingCode } from '../../shared/pairing'
@@ -8,7 +7,7 @@ import { resolveEnvironmentPairingOffer } from '../../shared/runtime-environment
 import { findWslHostDeployment } from '../../shared/runtime-environment-wsl-host-store'
 import { createWslDistroHolder, type WslDistroHolder } from './wsl-distro-holder'
 import { listWslHostDistros } from './wsl-host-distro-list'
-import type { WslHostConnector } from './wsl-host-service'
+import type { WslHostConnector, WslHostReachability } from './wsl-host-service'
 import { readWslDistroOrcadPublicKey } from './wsl-host-ssh-orcad-conflict'
 import {
   WslOrcadConnectionManager,
@@ -37,7 +36,7 @@ function transportFor(distro: string) {
   return createWslOrcadHostTransport({ target: targetFor(distro) })
 }
 
-type Reachability = 'available' | 'unreachable' | 'stopped' | 'unavailable'
+type Reachability = WslHostReachability
 
 export function createWslHostConnector(options: {
   userDataPath: string
@@ -55,7 +54,7 @@ export function createWslHostConnector(options: {
     userDataPath: options.userDataPath,
     onHolderExit: (distro, exit) => supervisor?.noteHolderExit(distro, exit)
   })
-  // Why guard here: liveness recovery and deploy both reach these without the service.
+  // Guard here because liveness recovery and deploy can bypass the service.
   const holder: WslDistroHolder = {
     ...unguardedHolder,
     ensureHeld: (distro) =>
@@ -71,6 +70,8 @@ export function createWslHostConnector(options: {
       findWslHostDeployment(options.userDataPath, environmentId)
         ? resolveEnvironmentPairingOffer(options.userDataPath, environmentId)
         : null,
+    recordedLocalPort: (environmentId) =>
+      findWslHostDeployment(options.userDataPath, environmentId)?.localPort ?? null,
     onChange: options.onChange,
     deployAndLaunch: (distro, deployOptions) =>
       options.isKnownDistro(distro)
@@ -96,7 +97,7 @@ export function createWslHostConnector(options: {
     environmentId: string,
     connection: WslOrcadConnection | null
   ): Promise<Reachability> => {
-    // Dialing the bridge starts wsl.exe, so passive checks must first confirm the distro runs.
+    // Bridge dialing spawns wsl.exe; passive checks must first prove the distro runs.
     const running = await readConfirmedRunningWslDistros()
     if (running.status === 'unavailable') {
       return 'unavailable'
@@ -149,6 +150,11 @@ export function createWslHostConnector(options: {
     isReachable: async (distro, environmentId) =>
       options.runtime.isReady?.(environmentId) ||
       (await coldReachability(distro, environmentId)) === 'available',
+    isSettling: (distro) => liveness.isSettling(distro),
+    reachability: async (distro, environmentId) =>
+      options.runtime.isReady?.(environmentId)
+        ? 'available'
+        : coldReachability(distro, environmentId),
     disconnect: (distro) => liveness.stop(distro),
     stopServer: async (distro, environmentId) => {
       const reachability = await coldReachability(distro, environmentId)
