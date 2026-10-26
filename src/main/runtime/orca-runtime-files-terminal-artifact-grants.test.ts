@@ -136,7 +136,7 @@ describe('RuntimeFileCommands', () => {
 
       await expect(
         commands.resolveTerminalPath('id:wt-1', '/dev/null', null, 'client-a')
-      ).rejects.toThrow('Only regular files and folders')
+      ).rejects.toThrow('Not a regular file')
     })
 
     it('resolves a relative path against the terminal cwd, not a stale client cwd', async () => {

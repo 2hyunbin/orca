@@ -32,7 +32,8 @@ export async function localTerminalArtifactContentDigest(
   if (size > LOCAL_PREVIEWABLE_BINARY_MAX_BYTES) {
     return null
   }
-  const buffer = await readFileHandleBufferBounded(handle, LOCAL_PREVIEWABLE_BINARY_MAX_BYTES + 1)
+  // Why: link-hover probes mint grants for any path, so size the read to the file, not the cap.
+  const buffer = await readFileHandleBufferBounded(handle, size + 1)
   return terminalArtifactContentDigest(buffer)
 }
 

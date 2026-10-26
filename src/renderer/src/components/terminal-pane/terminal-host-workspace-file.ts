@@ -51,9 +51,10 @@ function workspaceRootOf(absolutePath: string, relativePath: string): string | n
 
 async function statClientLocalFile(
   environmentId: string,
-  absolutePath: string,
-  hostRefusal: Error
+  absolutePath: string
 ): Promise<ClientLocalFile> {
+  // Why: built only on refusal, so a local file that opens costs no extra host status check.
+  const hostRefusal = (): Promise<Error> => hostAbsentRefusal(environmentId, absolutePath)
   if (
     // Why: a paired web client's filesystem bridge answers from the server, not this computer.
     isPairedWebClientWindow() ||
@@ -63,19 +64,20 @@ async function statClientLocalFile(
       15_000
     ))
   ) {
-    throw hostRefusal
+    throw await hostRefusal()
   }
+  let stat: Awaited<ReturnType<typeof statRuntimePath>>
   try {
-    const stat = await statRuntimePath(
+    stat = await statRuntimePath(
       { target: CLIENT_LOCAL_FILE_TARGET, worktreeId: null, worktreePath: null },
       absolutePath,
       userNamedFileAccess()
     )
-    return { kind: 'client', isDirectory: stat.isDirectory }
   } catch {
     // Why: absent here too, so the host may still hold it outside its workspaces.
-    throw hostRefusal
+    throw await hostRefusal()
   }
+  return { kind: 'client', isDirectory: stat.isDirectory }
 }
 
 /** For paired paths outside the source workspace, ask the server for an owning workspace or a file grant; only paths the host lacks fall to this computer. Null when inapplicable; rejects when neither can open. */
@@ -120,11 +122,7 @@ export async function resolveHostWorkspaceFile(
       // Why: hosts grant files, not folders; the folder is still the host's, never this computer's.
       throw new HostFileRefusal(`${absolutePath} is a folder outside every workspace on its host`)
     }
-    return statClientLocalFile(
-      environmentId,
-      absolutePath,
-      await hostAbsentRefusal(environmentId, absolutePath)
-    )
+    return statClientLocalFile(environmentId, absolutePath)
   }
   if (!resolved.exists) {
     throw new HostFileRefusal(`File not found on its host: ${absolutePath}`)

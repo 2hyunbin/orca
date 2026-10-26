@@ -17,8 +17,6 @@ import { isBinaryBuffer } from '../../../../shared/binary-buffer'
 import type { RuntimeFilePreviewResult } from '../../../../shared/runtime-types'
 
 const OPEN_NOFOLLOW = typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0
-// Why: a FIFO or device would otherwise block a host threadpool thread until written to.
-export const OPEN_NONBLOCK = typeof constants.O_NONBLOCK === 'number' ? constants.O_NONBLOCK : 0
 
 export async function readLocalTerminalArtifactFileFromHandle(
   handle: FileHandle,
@@ -91,7 +89,8 @@ export async function openLocalTerminalArtifactGrant(
 ): Promise<FileHandle> {
   await assertLocalTerminalArtifactPathStillCanonical(grant.absolutePath)
   try {
-    return await open(grant.absolutePath, flags | OPEN_NOFOLLOW | OPEN_NONBLOCK)
+    // Why: a path swapped for a FIFO would otherwise block a host threadpool thread.
+    return await open(grant.absolutePath, flags | OPEN_NOFOLLOW | (constants.O_NONBLOCK ?? 0))
   } catch (error) {
     if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ELOOP') {
       throw new Error('terminal_file_grant_stale')
