@@ -244,15 +244,21 @@ describe("a new tab during startup, before this computer's runtime answered", ()
     }
   )
 
-  it('opens the terminal chat after the cap when they never arrive, and says why', async () => {
+  it('keeps an awaited terminal refusal notified without claiming a surface opened', async () => {
     vi.useFakeTimers()
     const route = awaitingRoute('claude')
-    const relaunch = fakeRelaunch()
+    const refused = { delivered: false, failureNotified: true }
+    const relaunch = vi.fn((_next: LaunchAgentInNewTabArgs) => ({ refused }))
 
-    const result = launchOnceHostAnswered(route, { ...args, agent: 'claude' }, relaunch)
+    const result = launchOnceHostAnswered(
+      route,
+      { ...args, agent: 'claude', prompt: 'keep this prompt' },
+      relaunch
+    )
     await vi.advanceTimersByTimeAsync(HOST_ANSWER_WAIT_MS - 1)
     expect(relaunch).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
+    expect((await result?.promptDeliveryResult)?.failureNotified).toBe(true)
 
     await expect(result?.structuredSettlement).resolves.toEqual({
       kind: 'cancelled',
