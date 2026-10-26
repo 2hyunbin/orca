@@ -10,6 +10,7 @@ import {
 import type { StructuredAgentSessionComposerOptions } from '../../../src/shared/structured-agent-session-composer'
 import type { AgentSessionSlashCommand } from '../../../src/shared/agent-session-wire'
 import type { StructuredAgentSessionState } from '../../../src/shared/structured-agent-session-reducer'
+import { structuredAgentSessionQueueEnabled } from '../../../src/shared/structured-agent-session-queued-cards'
 import type { RpcClient } from '../transport/rpc-client'
 import type { MobileNativeChatSendOutcome } from './native-chat/mobile-native-chat-send'
 import { dispatchMobileStructuredCommand } from './mobile-structured-composer-command'
@@ -24,13 +25,18 @@ import {
   actionableStructuredQuestion
 } from './mobile-structured-actionable-prompt'
 
-// An unsupported pending prompt would hold queued sends forever; start a turn instead.
 export function mobileStructuredSendQueues(
   queueCapable: boolean,
-  state: Pick<StructuredAgentSessionState, 'items' | 'currentRequests'>
+  queueFollowUps: boolean,
+  state: Pick<StructuredAgentSessionState, 'items' | 'currentRequests' | 'queuedMessages'>
 ): boolean {
   return (
-    queueCapable && !pendingPromptsAllUnanswerableHere(selectAgentSessionCurrentRequests(state))
+    queueCapable &&
+    structuredAgentSessionQueueEnabled(
+      queueFollowUps,
+      state,
+      selectAgentSessionCurrentRequests(state)
+    )
   )
 }
 
@@ -44,6 +50,7 @@ export function useMobileStructuredSendWithOutcome(args: {
   sessionId: string | null
   enabled: boolean
   queueCapable: boolean
+  queueFollowUps: boolean
   commandsWait: boolean
   stateRef: { readonly current: StructuredAgentSessionState }
   stopping: boolean
@@ -75,6 +82,7 @@ export function useMobileStructuredSendWithOutcome(args: {
     hold,
     onSendError,
     queueCapable,
+    queueFollowUps,
     sendOptions,
     sessionCommands,
     sessionId,
@@ -156,7 +164,7 @@ export function useMobileStructuredSendWithOutcome(args: {
         expectedRuntimeFence: currentFence,
         text: wireText,
         attachments: imageAttachments,
-        ...(mobileStructuredSendQueues(queueCapable, stateRef.current)
+        ...(mobileStructuredSendQueues(queueCapable, queueFollowUps, stateRef.current)
           ? { delivery: 'queue-if-active' as const }
           : {}),
         ...(options ? { options } : {}),
@@ -182,6 +190,7 @@ export function useMobileStructuredSendWithOutcome(args: {
       hold,
       onSendError,
       queueCapable,
+      queueFollowUps,
       sendOptions,
       sessionCommands,
       sessionId,
