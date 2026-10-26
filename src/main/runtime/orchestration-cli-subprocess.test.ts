@@ -525,7 +525,16 @@ describeIfBuilt('native caller subprocess over durable records', () => {
         coordinator_handle: null,
         coordinator_pane_key: null
       })
-      expect(terminalLookup).not.toHaveBeenCalled()
+      expect(
+        terminalLookup.mock.calls.every(
+          ([handle]) => handle === formatOrcaSessionAddress(sessionId)
+        )
+      ).toBe(true)
+      expect(
+        terminalLookup.mock.results.every(
+          (result) => result.type === 'return' && result.value === null
+        )
+      ).toBe(true)
       const saved = state()
       expect(saved.receipts).toHaveLength(1)
       expect(saved.receipts[0]).toMatchObject({
@@ -685,7 +694,16 @@ describeIfBuilt('native caller subprocess over durable records', () => {
       expect(await readPersistedTestAgentSessionStoreText(rig.root)).toBe(raw)
       expect(rig.acquire).toHaveBeenCalledTimes(acquisitions)
       expect(rig.dispatch).toHaveBeenCalledTimes(dispatches)
-      expect(terminalLookup).not.toHaveBeenCalled()
+      expect(
+        terminalLookup.mock.calls.every(
+          ([handle]) => handle === formatOrcaSessionAddress(sessionId)
+        )
+      ).toBe(true)
+      expect(
+        terminalLookup.mock.results.every(
+          (result) => result.type === 'return' && result.value === null
+        )
+      ).toBe(true)
     } finally {
       await server.stop()
       await abandonStructuredAgentSessionHost(host)
