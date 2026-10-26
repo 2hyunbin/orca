@@ -42,6 +42,7 @@ import { runTrackedWslMove } from '../telemetry/wsl-move-telemetry'
 import { readWslDistroRegistrations } from '../wsl/wsl-distro-registry-id'
 import { wslHostsGateOpen } from '../wsl/wsl-host-gate'
 import { getWslHostService } from '../wsl/wsl-host-service-instance'
+import { onWslHostUserAction } from '../wsl/wsl-host-user-actions'
 import { getTrustedUIRendererWebContents, getTrustedUIRendererWindow } from './ui'
 import { onWslMoveReleasedByUser, releaseWslMoveChainHere } from './wsl-move-release-here'
 import { createWslMoveUndoPorts } from './wsl-move-undo-wiring'
@@ -318,6 +319,10 @@ export function registerWslMoveOrchestrator(
     orchestrator = created
     followHostReadiness(created)
     onWslMoveReleasedByUser((distro) => created.releasedByUser(distro))
+    // A Remove is the user declining the host; only their own Add (or Retry) takes it back.
+    onWslHostUserAction(({ kind, distro }) =>
+      kind === 'removed' ? created.releasedByUser(distro) : created.hostAddedByUser(distro)
+    )
   } catch (error) {
     console.warn('[wsl-move] Move orchestrator did not start:', error)
   }

@@ -716,4 +716,38 @@ describe('WslMoveOrchestrator', () => {
       expect(orchestrator.list()).toEqual([])
     })
   })
+
+  // A deliberate Remove of the host is the user declining it: nothing re-adds it on its own.
+  describe('a host the user removed', () => {
+    it('is never readied again by any automatic trigger, only by the user', async () => {
+      const ports = fakePorts()
+      const orchestrator = new WslMoveOrchestrator(ports)
+      orchestrator.releasedByUser('Ubuntu')
+      ports.clock.now += 365 * 86_400_000
+      for (const trigger of ['connect', 'project-opened', 'startup', 'timer'] as const) {
+        await orchestrator.trigger('Ubuntu', trigger)
+      }
+      expect(ports.prepareHost).not.toHaveBeenCalled()
+      expect(ports.preview).not.toHaveBeenCalled()
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'parked', reason: 'declined' })
+    })
+
+    it('resumes once the user adds the host again', async () => {
+      const ports = fakePorts()
+      const orchestrator = new WslMoveOrchestrator(ports)
+      orchestrator.releasedByUser('Ubuntu')
+      orchestrator.hostAddedByUser('Ubuntu')
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'pending' })
+      await orchestrator.trigger('Ubuntu', 'connect')
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
+    })
+
+    it('leaves other parks alone when the user adds a host', () => {
+      const ports = fakePorts()
+      const orchestrator = new WslMoveOrchestrator(ports)
+      void orchestrator.userAction('Ubuntu', 'not-now')
+      orchestrator.hostAddedByUser('Ubuntu')
+      expect(stateOf(orchestrator, 'Ubuntu')).toMatchObject({ kind: 'parked', reason: 'not-now' })
+    })
+  })
 })

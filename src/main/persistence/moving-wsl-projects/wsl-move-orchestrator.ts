@@ -21,6 +21,7 @@ import type {
 import {
   applyWslMoveOutcome,
   applyWslMovedDistroVerdict,
+  applyWslMoveHostAddedByUser,
   applyWslMoveHostRemovalPending,
   applyWslMoveReleasedByUser,
   applyWslMoveUserAction,
@@ -116,7 +117,19 @@ export class WslMoveOrchestrator {
     }
   }
 
-  /** "Use on this computer again" ran for the distro: park it until the user asks again. */
+  /** The user added the distro's host themselves, which takes back a decline. */
+  hostAddedByUser(distro: string): void {
+    const key = wslMoveJournalKey(distro)
+    const current = this.records.get(key)
+    if (current) {
+      this.commit(key, 'user', applyWslMoveHostAddedByUser(current, this.ports.now()))
+    }
+  }
+
+  /**
+   * "Use on this computer again" ran for the distro, or the user removed its host: park it until
+   * the user adds the host or presses Retry.
+   */
   releasedByUser(distro: string): void {
     const key = wslMoveJournalKey(distro)
     this.commit(

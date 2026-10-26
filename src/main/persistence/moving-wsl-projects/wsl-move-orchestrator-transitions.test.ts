@@ -7,6 +7,7 @@ import type { WslMoveOrchestratorRecord } from '../../../shared/wsl-move/wsl-mov
 import {
   applyWslMovedDistroVerdict,
   applyWslMoveOutcome,
+  applyWslMoveHostAddedByUser,
   applyWslMoveHostRemovalPending,
   applyWslMoveReleasedByUser,
   applyWslMoveUserAction,
@@ -349,5 +350,12 @@ describe('review fixes (#33802)', () => {
     for (const trigger of ['connect', 'project-opened', 'startup', 'timer'] as const) {
       expect(mayStartWslMove(parked, trigger, NOW + 365 * 86_400_000, '9.0.0')).toBe(false)
     }
+  })
+
+  it('takes back only a decline when the user adds the host', () => {
+    const declined = record({ kind: 'parked', reason: 'declined' })
+    expect(applyWslMoveHostAddedByUser(declined, NOW).state).toEqual({ kind: 'pending' })
+    const snoozed = record({ kind: 'parked', reason: 'not-now', until: NOW })
+    expect(applyWslMoveHostAddedByUser(snoozed, NOW)).toBe(snoozed)
   })
 })

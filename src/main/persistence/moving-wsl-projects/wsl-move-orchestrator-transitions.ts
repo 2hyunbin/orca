@@ -310,6 +310,16 @@ export function applyWslMoveReleasedByUser(
   return withState(record, { kind: 'parked', reason: 'declined' }, now)
 }
 
+/** The user added the host themselves: a decline (theirs, by Remove or release) is taken back. */
+export function applyWslMoveHostAddedByUser(
+  record: WslMoveOrchestratorRecord,
+  now: number
+): WslMoveOrchestratorRecord {
+  return record.state.kind === 'parked' && record.state.reason === 'declined'
+    ? withState(record, { kind: 'pending' }, now)
+    : record
+}
+
 /** A host whose Remove is unfinished is the user's to settle; park the distro until they act. */
 export function applyWslMoveHostRemovalPending(
   record: WslMoveOrchestratorRecord,

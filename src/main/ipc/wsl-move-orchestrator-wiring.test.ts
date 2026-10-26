@@ -101,6 +101,17 @@ vi.mock('../persistence/moving-wsl-projects/wsl-move-orchestrator-store', () => 
   },
   writeWslMoveOrchestratorRecords: () => {}
 }))
+const hostActions = vi.hoisted(() => ({
+  listeners: new Array<(action: { kind: 'added' | 'removed'; distro: string }) => void>()
+}))
+vi.mock('../wsl/wsl-host-user-actions', () => ({
+  onWslHostUserAction: (
+    listener: (action: { kind: 'added' | 'removed'; distro: string }) => void
+  ) => {
+    hostActions.listeners.push(listener)
+    return () => {}
+  }
+}))
 const releases = vi.hoisted(() => ({ listeners: new Array<(distro: string) => void>() }))
 vi.mock('./wsl-move-release-here', () => ({
   releaseWslMoveChainHere: vi.fn(),
@@ -160,6 +171,7 @@ beforeEach(() => {
   host.running = { status: 'confirmed', distros: ['Ubuntu'] }
   host.added = []
   releases.listeners.length = 0
+  hostActions.listeners.length = 0
   deployments.clear()
   store.reads = 0
   store.records = new Map()
@@ -349,6 +361,28 @@ describe('WSL move orchestrator wiring', () => {
     }
     expect(await handlers.get('wslMoveOrchestrator:list')?.({})).toEqual([
       expect.objectContaining({ state: { kind: 'restore-offered' } })
+    ])
+  })
+
+  // A user Remove declines the host: T2 must not add it back; the user's own Add resumes.
+  it('never re-adds a host the user removed, until the user adds it', async () => {
+    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
+    await register()
+    for (const listener of hostActions.listeners) {
+      listener({ kind: 'removed', distro: 'Ubuntu' })
+    }
+    await handlers.get('wslMoveOrchestrator:projectOpened')?.(
+      { sender: { id: MAIN_WINDOW_ID } },
+      'Ubuntu'
+    )
+    await answerWindow()
+    expect(host.added).toEqual([])
+    expect(driver.previewWslMove).not.toHaveBeenCalled()
+    for (const listener of hostActions.listeners) {
+      listener({ kind: 'added', distro: 'Ubuntu' })
+    }
+    expect(await handlers.get('wslMoveOrchestrator:list')?.({})).toEqual([
+      expect.objectContaining({ distro: 'Ubuntu', state: { kind: 'pending' } })
     ])
   })
 })
