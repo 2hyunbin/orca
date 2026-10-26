@@ -174,7 +174,7 @@ function requestedRelaunch(listing: string, bundlePath: string): boolean {
       return (
         !!request &&
         label === `${request.bundleIdentifier}.ShipIt` &&
-        normalize(fileURLToPath(request.targetBundleURL)) === bundlePath
+        normalize(fileURLToPath(request.targetBundleURL)).replace(/\/$/, '') === bundlePath
       )
     } catch {
       return false

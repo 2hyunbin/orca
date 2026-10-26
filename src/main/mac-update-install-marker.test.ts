@@ -107,7 +107,7 @@ function writeRequest(overrides: object = {}) {
     JSON.stringify({
       launchAfterInstallation: true,
       bundleIdentifier: 'com.stablyai.orca',
-      targetBundleURL: pathToFileURL(bundle).href,
+      targetBundleURL: pathToFileURL(`${bundle}/`).href,
       ...overrides
     })
   )
