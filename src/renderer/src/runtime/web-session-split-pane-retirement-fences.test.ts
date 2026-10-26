@@ -9,7 +9,15 @@ import {
   type RetiredPaneRemovals
 } from '../components/terminal-pane/terminal-live-layout-reconciliation'
 import { toRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
-import { beginPendingHostPaneMove } from './pending-host-pane-moves'
+import {
+  beginPendingHostPaneMove,
+  clearPendingHostPaneMovesForTests,
+  confirmHostPaneMovesInSnapshot,
+  holdHostPaneMoveUntilSnapshot,
+  isPendingHostPaneMoveTarget
+} from './pending-host-pane-moves'
+import { makePaneKey } from '../../../shared/stable-pane-id'
+import { collectPanesMovedElsewhere } from './web-session-terminal-moved-panes'
 import { applyFreshWebSessionTabsSnapshot } from './web-session-tabs-sync/snapshot-api'
 import {
   clearWebSessionTerminalOrphanRecoveryForTests,
@@ -98,6 +106,7 @@ function createReconciliation() {
 
   return {
     call,
+    state: () => state,
     plan: (secondPtyId: string | null): number[] => planRemovals(secondPtyId).closed,
     planRemovals,
     layoutOf: (tabId: string) => state.terminalLayoutsByTabId[tabId],
@@ -147,6 +156,7 @@ describe('host snapshot fences before split-pane retirement', () => {
   beforeEach(() => {
     resetWebSessionTabsSyncTestState()
     clearWebSessionTerminalOrphanRecoveryForTests()
+    clearPendingHostPaneMovesForTests()
   })
 
   it('keeps a null-transport pane when an older layout arrives', async () => {
@@ -185,10 +195,19 @@ describe('host snapshot fences before split-pane retirement', () => {
     await view.receive(snapshot(2))
     view.plan('remote:second')
     // The host moved the second pane, same terminal, into a new tab.
-    await view.receive(
-      snapshot(3, mountedLeaves, (leafId) => (leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'))
+    const moved = snapshot(3, mountedLeaves, (leafId) =>
+      leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'
     )
     const movedPtyId = toRemoteRuntimePtyId(`terminal-${SECOND_LEAF_ID}`, ENV)
+    // The pane's records follow it even when no mounted source tab reconciles the move.
+    expect(collectPanesMovedElsewhere(view.state(), moved, ENV)).toEqual([
+      {
+        fromPaneKey: makePaneKey(TAB_ID, SECOND_LEAF_ID),
+        toPaneKey: makePaneKey('web-terminal-host-tab-2', SECOND_LEAF_ID),
+        ptyId: movedPtyId
+      }
+    ])
+    await view.receive(moved)
     expect(view.call).not.toHaveBeenCalled()
     expect(view.leaves()).toEqual([LEAF_ID])
     expect(view.layoutOf('web-terminal-host-tab-2')?.ptyIdsByLeafId).toEqual({
@@ -213,6 +232,25 @@ describe('host snapshot fences before split-pane retirement', () => {
     expect(view.layoutOf(targetTabId)?.ptyIdsByLeafId).toEqual({
       [SECOND_LEAF_ID]: toRemoteRuntimePtyId(`terminal-${SECOND_LEAF_ID}`, ENV)
     })
+  })
+
+  it('keeps a move the host committed until a host snapshot shows it, even after the reply', async () => {
+    const view = createReconciliation()
+    await view.receive(snapshot(2))
+    const targetTabId = 'web-terminal-host-tab-2'
+    view.moveSecondLocally(targetTabId)
+    // The host's reply settled the move before its snapshot of the move arrived.
+    beginPendingHostPaneMove(targetTabId, SECOND_LEAF_ID)()
+    holdHostPaneMoveUntilSnapshot(targetTabId, SECOND_LEAF_ID)
+    expect(collectPanesMovedElsewhere(view.state(), snapshot(3), ENV)).toEqual([])
+    await view.receive(snapshot(3))
+    expect(view.layoutOf(targetTabId)?.ptyIdsByLeafId).toEqual({
+      [SECOND_LEAF_ID]: toRemoteRuntimePtyId(`terminal-${SECOND_LEAF_ID}`, ENV)
+    })
+    confirmHostPaneMovesInSnapshot(
+      snapshot(4, mountedLeaves, (leafId) => (leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'))
+    )
+    expect(isPendingHostPaneMoveTarget(targetTabId, SECOND_LEAF_ID)).toBe(false)
   })
 
   it('clears deferred retirement when the host reintroduces the leaf before detach', async () => {

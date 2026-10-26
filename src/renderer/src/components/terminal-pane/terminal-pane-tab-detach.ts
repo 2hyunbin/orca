@@ -19,7 +19,10 @@ import {
   settleHostPaneMove
 } from '@/runtime/web-runtime-leaf-move'
 import { resolveHostTabDropTarget } from '@/runtime/web-runtime-session-tab-move'
-import { beginPendingHostPaneMove } from '@/runtime/pending-host-pane-moves'
+import {
+  beginPendingHostPaneMove,
+  holdHostPaneMoveUntilSnapshot
+} from '@/runtime/pending-host-pane-moves'
 export {
   isTerminalTabStripDropTarget,
   resolveTerminalTabStripDropTarget
@@ -181,7 +184,15 @@ async function moveLeafToNewTab(
       throw error
     }
     void hostMove
-      .then((outcome) => settleHostPaneMove(paneMoveHost, request, outcome, applied !== null))
+      .then(async (outcome) => {
+        // Why: the host's reply can beat its snapshot of the move, so a committed move stays
+        // pending until a snapshot shows it.
+        if (
+          (await settleHostPaneMove(paneMoveHost, request, outcome, applied !== null)) === 'kept'
+        ) {
+          holdHostPaneMoveUntilSnapshot(request.targetTabId, leafId)
+        }
+      })
       .catch((error: unknown) => console.warn('[terminal-pane-detach] move not settled', error))
       .finally(releasePending)
     return applied
