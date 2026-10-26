@@ -87,17 +87,18 @@ export async function dispatchClaudeMessage(
   timeoutMs: number | undefined,
   logger: StructuredAgentSessionLogger = defaultLogger
 ): ReturnType<StructuredAgentSessionAdapter['dispatch']> {
-  // Input joining a running turn, and Orca mail notices, run on the choices Claude already has;
-  // new choices apply at the next new turn.
-  const messageOptions =
-    session.translator?.currentTurnId || input.body.from?.orchestration?.message === 'mail-notice'
-      ? undefined
-      : input.executionOptions
   let ranOptions: Record<string, string> = {}
   const outcome = await dispatchClaudeTurn(session, input, async () => {
     await input.beforeDispatch?.()
     try {
       input.signal?.throwIfAborted()
+      // Input joining a running turn, and Orca mail notices, run on the choices Claude already has;
+      // new choices apply at the next new turn.
+      const messageOptions =
+        session.translator?.currentTurnId ||
+        input.body.from?.orchestration?.message === 'mail-notice'
+          ? undefined
+          : input.executionOptions
       input.onInputPreparation?.()
       if (messageOptions !== undefined) {
         await applyClaudeMessageOptions(session, messageOptions, timeoutMs, input.signal)

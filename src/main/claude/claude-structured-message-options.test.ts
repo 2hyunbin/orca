@@ -11,6 +11,7 @@ import {
 import { captureStructuredExecutionOptions } from '../native-chat/agent-session-wire/structured-agent-session-execution-options'
 import { claudeAndCodexAgents } from '../native-chat/agent-session-wire/structured-agent-session-adapter-router-test-support'
 import type { ClaudeStructuredSessionEvent } from './claude-structured-session-state'
+import * as dispatchContent from './claude-structured-dispatch-content'
 import { ClaudeControlRequestError } from './claude-stream-json-connection'
 
 /** Claude ends a turn; a message sent before this joins the running turn on its choices. */
@@ -440,4 +441,48 @@ describe('Claude accepted message choices', () => {
     expect(models()).toEqual(['sonnet', 'opus'])
     expect(connection.sent).toHaveLength(4)
   })
+})
+
+it('uses the new turn selection when a live turn ends during content preparation', async () => {
+  const claude = fakeClaude({ initModel: 'claude-opus-5-5[1m]' })
+  const adapter = await acquired(claude)
+  const connection = claude.connections[0]!
+  const send = (id: string, model: string) =>
+    adapter.dispatch({
+      sessionId: 'session-1',
+      clientMessageId: id,
+      body: USER_MESSAGE,
+      executionOptions: { model },
+      fence: 7
+    })
+  let release!: () => void
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const original = dispatchContent.claudeDispatchMessageContent
+  try {
+    await send('opening', 'opus[1m]')
+    const content = vi
+      .spyOn(dispatchContent, 'claudeDispatchMessageContent')
+      .mockImplementationOnce(async (body) => {
+        await held
+        return original(body)
+      })
+    const delayed = send('delayed', 'sonnet')
+    await vi.waitFor(() => expect(content).toHaveBeenCalledTimes(1))
+    claudeTurnEnds(connection)
+    release()
+    expect(await delayed).toMatchObject({ state: 'admitted' })
+    expect(
+      connection.calls
+        .filter((call) => call.subtype === 'set_model')
+        .map((call) => call.params?.model)
+    ).toEqual(['opus[1m]', 'sonnet'])
+    expect(connection.sent).toHaveLength(2)
+    content.mockRestore()
+  } finally {
+    release()
+    vi.restoreAllMocks()
+    await adapter.closeAll()
+  }
 })

@@ -151,9 +151,7 @@ export async function recordStructuredAgentSessionRanOptions(
   const { message, executed } = handed
   const reported = childRuns.get(child)?.reported
   const newerModel = checkpoint && reported !== checkpoint.reported ? reported?.model : undefined
-  const model = executed
-    ? (executed.model ?? message?.model ?? newerModel)
-    : (message?.model ?? reported?.model)
+  const model = executed ? (executed.model ?? newerModel) : (message?.model ?? reported?.model)
   childRuns.set(child, { ...childRuns.get(child), owed: model ? undefined : handed })
   if (!model) {
     return
