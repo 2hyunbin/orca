@@ -8,6 +8,7 @@ import { filterEntries, joinPath, parentPath, type DirEntry } from './remote-fil
 import { RemoteFileBrowserBreadcrumbs } from './RemoteFileBrowserBreadcrumbs'
 import { RemoteFileBrowserEntryList } from './RemoteFileBrowserEntryList'
 import { initialRemoteFileBrowserHighlight } from './remote-file-browser-highlight'
+import type { PreviewState } from './remote-file-browser-path-preview-resolver'
 import { useRemoteFileBrowserFilterKeyCommands } from './use-remote-file-browser-filter-key-commands'
 import { useRemoteFileBrowserListing } from './use-remote-file-browser-listing'
 import { useRemoteFileBrowserPathPreview } from './use-remote-file-browser-path-preview'
@@ -42,9 +43,11 @@ export function RemoteFileBrowser({
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
   const [fileHint, setFileHint] = useState(false)
-  // Tied to the list it was moved on, so any new listing or filter starts from its own default.
+  // Tied to the list and path preview it was moved on, so any new listing, filter or preview starts
+  // from its own default (a cached listing can reappear as the same array under a typed path).
   const [highlight, setHighlight] = useState<{
     entries: readonly DirEntry[]
+    preview: PreviewState | null
     index: number
   } | null>(null)
   const listboxId = useId()
@@ -173,12 +176,12 @@ export function RemoteFileBrowser({
   // Why: a resolving preview keeps its prior rows on screen, but they are no longer targetable.
   const activeIndex = preview?.loading
     ? -1
-    : highlight?.entries === displayEntries
+    : highlight?.entries === displayEntries && highlight.preview === preview
       ? highlight.index
       : initialRemoteFileBrowserHighlight(displayEntries, preview !== null && preview.filter === '')
   const moveHighlight = useCallback(
-    (index: number) => setHighlight({ entries: displayEntries, index }),
-    [displayEntries]
+    (index: number) => setHighlight({ entries: displayEntries, preview, index }),
+    [displayEntries, preview]
   )
 
   const triggerFileHint = useCallback(() => {

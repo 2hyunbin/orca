@@ -128,4 +128,30 @@ describe('RemoteFileBrowser keyboard navigation', () => {
     expect(browseDir).toHaveBeenCalledTimes(1)
     await act(async () => root.unmount())
   })
+
+  // Why: the cached home listing comes back as the same array under `~/`, which must not keep the moved row.
+  it('commits a typed path instead of a row highlighted before typing it', async () => {
+    vi.useFakeTimers()
+    const { input, root } = await render()
+    await press(input, 'ArrowDown')
+    browseDir.mockClear()
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      valueSetter?.call(input, '~/')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => {
+      vi.advanceTimersByTime(300)
+      await flushPromises()
+    })
+    await press(input, 'Enter')
+
+    expect(browseDir).not.toHaveBeenCalledWith({
+      targetId: 'target-1',
+      dirPath: '/home/alice/src'
+    })
+    vi.useRealTimers()
+    await act(async () => root.unmount())
+  })
 })
