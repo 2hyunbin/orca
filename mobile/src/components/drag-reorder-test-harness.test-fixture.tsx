@@ -1,7 +1,8 @@
 import type * as ReactModule from 'react'
 import { createElement, type ReactNode } from 'react'
 import { act, create } from 'react-test-renderer'
-import Animated, { useAnimatedRef, useSharedValue } from 'react-native-reanimated'
+import type Animated from 'react-native-reanimated'
+import { useAnimatedRef, useSharedValue } from 'react-native-reanimated'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 type DragEvent = { absoluteY: number; translationY: number }

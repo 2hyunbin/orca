@@ -774,7 +774,7 @@ describe('MobileNativeChatQueuedMessages', () => {
         sessionKey: 's',
         reorderCapable: true,
         enabled: true,
-        // SAFETY: this hook only requests queuedMessageMove; both deferred replies use its checked result type.
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Vitest erases the generic result signature; this hook only requests queuedMessageMove, and both deferred replies are checked as MoveReply.
         mutate: mutate as MobileStructuredAgentMutate,
         onSendError: () => {}
       })
