@@ -41,6 +41,10 @@ export const CONNECTOR_REPLY_ERROR_CODES = [
   'connector_unavailable'
 ] as const
 
+// What a reply from a pane with no connector conversation on this machine (SSH, a paired server) answers.
+export const CONNECTOR_REPLY_UNAVAILABLE =
+  "Replies aren't available from this host yet; the agent's final message is posted to the thread when the turn ends."
+
 /** An agent's reply to its conversation's thread, from the pane it runs in; one replyId posts at most once. */
 export const ConnectorReply = z.object({
   paneKey: z.string().min(1, 'Missing pane key'),
