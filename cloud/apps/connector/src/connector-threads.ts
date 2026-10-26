@@ -112,7 +112,7 @@ export class ConnectorThreads {
         case 'turn-started':
           await transaction.query(
             `UPDATE connector_threads SET pane_key = ?, open_turn_id = ?, turn_state = 'working',
-               turn_stop_reason = NULL, turn_last_message = NULL, pending_prompt = NULL
+               turn_stop_reason = NULL, pending_prompt = NULL
              WHERE ${ON_BOUND_PANE} AND (open_turn_id IS NULL OR open_turn_id < ?)`,
             [event.paneKey, event.at, ...onPane, event.at]
           )
@@ -120,13 +120,12 @@ export class ConnectorThreads {
         case 'turn-ended':
           await transaction.query(
             `UPDATE connector_threads SET pane_key = ?, open_turn_id = ?, turn_state = 'ended',
-               turn_stop_reason = ?, turn_last_message = ?, pending_prompt = NULL
+               turn_stop_reason = ?, pending_prompt = NULL
              WHERE ${ON_BOUND_PANE} AND (open_turn_id IS NULL OR open_turn_id <= ?)`,
             [
               event.paneKey,
               event.turnId,
               event.stopReason,
-              event.lastAssistantMessage ?? null,
               ...onPane,
               event.turnId
             ]

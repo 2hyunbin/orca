@@ -28,7 +28,7 @@ async function setup(options: Parameters<typeof createConnectorHarness>[1] = {})
   const thread = async () =>
     (
       await harness.database.query(
-        `SELECT pane_key, agent, open_turn_id, turn_state, turn_stop_reason, turn_last_message,
+        `SELECT pane_key, agent, open_turn_id, turn_state, turn_stop_reason,
            pending_prompt FROM connector_threads`
       )
     )[0]
@@ -78,7 +78,6 @@ describe('connector turn events', () => {
       open_turn_id: 100,
       turn_state: 'ended',
       turn_stop_reason: 'end_turn',
-      turn_last_message: 'done',
       pending_prompt: null
     }
     const row = await thread()
@@ -86,7 +85,7 @@ describe('connector turn events', () => {
     expect({ ...row, open_turn_id: Number(row?.open_turn_id) }).toEqual(settled)
     // A resent start for the same turn changes nothing.
     await events([started, ended, started])
-    expect(await thread()).toMatchObject({ turn_state: 'ended', turn_last_message: 'done' })
+    expect(await thread()).toMatchObject({ turn_state: 'ended', turn_stop_reason: 'end_turn' })
   })
 
   it('reads an open turn the snapshot no longer shows as unverifiable, never as done', async () => {
