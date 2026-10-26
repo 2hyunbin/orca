@@ -17,10 +17,11 @@ const SlackEnvSchema = z.object({
   ORCA_CONNECTOR_SLACK_TOKEN_KEY: z.string().min(1).optional()
 })
 
-export function decodeSlackTokenKey(value: string): Buffer {
+// AES-256 key sealing a provider's stored tokens; `name` is the env var it came from.
+export function decodeTokenKey(value: string, name: string): Buffer {
   const key = Buffer.from(value, 'base64')
   if (key.length !== 32 || key.toString('base64') !== value) {
-    throw new Error('ORCA_CONNECTOR_SLACK_TOKEN_KEY must be 32 bytes in canonical base64')
+    throw new Error(`${name} must be 32 bytes in canonical base64`)
   }
   return key
 }
@@ -43,6 +44,9 @@ export function parseSlackConfig(env: Record<string, string | undefined>): Slack
     signingSecret: secret,
     teamIds: new Set(teamIds),
     paused: parsed.ORCA_CONNECTOR_SLACK_PAUSED === 'true',
-    tokenKey: decodeSlackTokenKey(parsed.ORCA_CONNECTOR_SLACK_TOKEN_KEY)
+    tokenKey: decodeTokenKey(
+      parsed.ORCA_CONNECTOR_SLACK_TOKEN_KEY,
+      'ORCA_CONNECTOR_SLACK_TOKEN_KEY'
+    )
   }
 }

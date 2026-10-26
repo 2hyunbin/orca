@@ -33,7 +33,7 @@ export async function cleanupConnectorHarnesses(): Promise<void> {
   await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()))
 }
 
-async function openTestDatabase(): Promise<{ database: CloudDatabase; databaseUrl?: string }> {
+export async function openTestDatabase(): Promise<{ database: CloudDatabase; databaseUrl?: string }> {
   if (!testDatabaseUrl) {
     const database = await openInMemoryConnectorDatabase()
     cleanups.push(() => database.close())
