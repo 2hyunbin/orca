@@ -834,18 +834,32 @@ describe('WslMoveOrchestrator', () => {
         )
         .mockImplementation(async (distro) => ready(distro))
       const ports = fakePorts({ preview })
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
       const orchestrator = new WslMoveOrchestrator(ports)
       const step = orchestrator.trigger('Ubuntu', 'connect')
       await vi.waitFor(() => expect(preview).toHaveBeenCalled())
       await orchestrator.trigger('Ubuntu', 'project-opened')
-      // The first step's write fails, so the step throws out of its commit.
-      vi.spyOn(ports, 'save').mockImplementationOnce(() => {
-        throw new Error('disk full')
+      // Publishing the first step's state fails, so the step throws out of its commit.
+      vi.mocked(ports.publish).mockImplementationOnce(() => {
+        throw new Error('window gone')
       })
       answer()
-      await step.catch(() => undefined)
+      await expect(step).resolves.toBeUndefined()
       await orchestrator.whenIdle()
       expect(preview).toHaveBeenCalledTimes(2)
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
+    })
+
+    // Reviewer nit: a failed sidecar save must neither reject a fire-and-forget trigger nor lose
+    // the decision in memory.
+    it('keeps going in memory when the sidecar cannot be saved', async () => {
+      const ports = fakePorts()
+      vi.spyOn(ports, 'save').mockImplementation(() => {
+        throw new Error('disk full')
+      })
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await expect(orchestrator.trigger('Ubuntu', 'connect')).resolves.toBeUndefined()
       expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
     })
   })

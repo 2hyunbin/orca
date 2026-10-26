@@ -100,6 +100,9 @@ export class WslMoveOrchestrator {
     const running = (async () => {
       try {
         await this.step(key, distro, trigger)
+      } catch (error) {
+        // Triggers are fire-and-forget (status events, timers): a throw must not go unhandled.
+        console.warn('[wsl-move] Orchestrator step failed:', error)
       } finally {
         this.busy.delete(key)
         // In `finally`, so a step that throws never strands the wake queued behind it.
@@ -250,7 +253,12 @@ export class WslMoveOrchestrator {
       return previous ?? next
     }
     this.records.set(key, next)
-    this.ports.save(this.records)
+    try {
+      this.ports.save(this.records)
+    } catch (error) {
+      // The sidecar is the orchestrator's memory, not the move's record: keep going in memory.
+      console.warn('[wsl-move] Orchestrator state not saved:', error)
+    }
     // Every new attempt is reported too, so a backoff series shows each failure.
     if (previous?.state.kind !== next.state.kind || previous.attempts !== next.attempts) {
       this.ports.track(trigger, next, cause)
