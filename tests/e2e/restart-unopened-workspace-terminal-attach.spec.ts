@@ -60,10 +60,11 @@ async function launchWithUnopenedWorkspace(session: ReturnType<typeof createRest
   return { app, page, call, active, unopened }
 }
 
-function listTerminals(call: RuntimeCall): Promise<RuntimeTerminalSummary[]> {
-  return call<{ terminals: RuntimeTerminalSummary[] }>('terminal.list').then(
-    (listed) => listed.terminals
-  )
+// Scoped to one workspace: an unscoped list refuses while any other pane is still binding its PTY.
+function listTerminals(call: RuntimeCall, worktreeId: string): Promise<RuntimeTerminalSummary[]> {
+  return call<{ terminals: RuntimeTerminalSummary[] }>('terminal.list', {
+    worktree: `id:${worktreeId}`
+  }).then((listed) => listed.terminals)
 }
 
 // oxlint-disable-next-line no-empty-pattern -- Owns both app launches; Playwright needs the fixtures argument.
@@ -94,7 +95,9 @@ test('a surviving printer in a never-opened workspace streams to main after rela
         { timeout: 30_000 }
       )
       .toContain('tick ')
-    const { ptyId } = (await listTerminals(call)).find((t) => t.handle === terminal.handle)!
+    const { ptyId } = (await listTerminals(call, unopened)).find(
+      (t) => t.handle === terminal.handle
+    )!
 
     await session.close(app)
     const second = await session.launch()
@@ -109,19 +112,22 @@ test('a surviving printer in a never-opened workspace streams to main after rela
       )
     ).toBe(false)
     const survivor = async (): Promise<RuntimeTerminalSummary | undefined> =>
-      (await listTerminals(call)).find((terminal) => terminal.ptyId === ptyId)
+      (await listTerminals(call, unopened)).find((terminal) => terminal.ptyId === ptyId)
     await expect.poll(async () => (await survivor())?.connected, { timeout: 60_000 }).toBe(true)
-    let firstOutputAt: number | null = null
-    await expect
-      .poll(
-        async () => {
-          const lastOutputAt = (await survivor())?.lastOutputAt ?? null
-          firstOutputAt ??= lastOutputAt
-          return firstOutputAt !== null && lastOutputAt !== null && lastOutputAt > firstOutputAt
-        },
-        { timeout: 5_000, message: 'main never received the surviving printer output' }
-      )
-      .toBe(true)
+    const expectMainReceiving = async (message: string): Promise<void> => {
+      let baseline: number | null = null
+      await expect
+        .poll(
+          async () => {
+            const lastOutputAt = (await survivor())?.lastOutputAt ?? null
+            baseline ??= lastOutputAt
+            return baseline !== null && lastOutputAt !== null && lastOutputAt > baseline
+          },
+          { timeout: 5_000, message }
+        )
+        .toBe(true)
+    }
+    await expectMainReceiving('main never received the surviving printer output')
 
     // A pane mounting later shares main's daemon client, so main keeps receiving.
     await expect
@@ -161,10 +167,7 @@ test('a surviving printer in a never-opened workspace streams to main after rela
         { timeout: 30_000 }
       )
       .toContain('tick ')
-    const afterMount = (await survivor())!.lastOutputAt!
-    await expect
-      .poll(async () => (await survivor())?.lastOutputAt ?? 0, { timeout: 5_000 })
-      .toBeGreaterThan(afterMount)
+    await expectMainReceiving('main stopped receiving after the pane mounted')
   } finally {
     await session.dispose(app).catch(() => undefined)
   }
