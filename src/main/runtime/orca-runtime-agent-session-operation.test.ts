@@ -149,7 +149,7 @@ describe('agent-session execution namespace', () => {
       allowEmptyPromptLaunch: true,
       cmdOverrides: {},
       platform: 'linux',
-      agentArgs: '--yolo -m old-model -c model_reasoning_effort=low -c model_verbosity=low',
+      agentArgs: '-m old-model -c model_reasoning_effort=low -c model_verbosity=low',
       sessionOptions: { model: 'gpt-5.5', effort: 'high', permissionMode: 'ask' },
       sessionOptionsOverrideAgentArgs: true
     })
@@ -168,7 +168,7 @@ describe('agent-session execution namespace', () => {
       '-s',
       'read-only',
       '-c',
-      'approvals_reviewer="user"'
+      'approvals_reviewer=user'
     ]
     expect(tokenizeStartupCommand(launch?.launchConfig.agentCommand ?? '', 'posix')).toMatchObject({
       ok: true,

@@ -234,7 +234,7 @@ describe('SourceControlAgentActionDialog', () => {
     expect(mocks.onStart).toHaveBeenCalledWith({
       agent: 'codex',
       commandInput: 'Resolve conflicts.',
-      agentArgs: ''
+      agentArgs: '--dangerously-bypass-approvals-and-sandbox'
     })
     expect(mocks.onLaunched).toHaveBeenCalledTimes(1)
     expect(mocks.onSaveAgentDefault).not.toHaveBeenCalled()
@@ -257,7 +257,7 @@ describe('SourceControlAgentActionDialog', () => {
     expect(mocks.onStart).toHaveBeenCalledWith({
       agent: 'codex',
       commandInput: 'Resolve conflicts.',
-      agentArgs: sparse.agentArgs,
+      agentArgs: `--dangerously-bypass-approvals-and-sandbox ${sparse.agentArgs}`,
       sessionOptions: { model: 'gpt-5.6-terra' },
       sessionOptionsYieldToAgentArgs: true
     })
@@ -290,7 +290,7 @@ describe('SourceControlAgentActionDialog', () => {
     expect(mocks.onStart).toHaveBeenCalledWith({
       agent: 'codex',
       commandInput: 'Resolve conflicts.',
-      agentArgs: '--model saved'
+      agentArgs: '--dangerously-bypass-approvals-and-sandbox --model saved'
     })
   })
   // Paired-server agents belong to the workspace owner; the client list cannot detect them (#21429).
