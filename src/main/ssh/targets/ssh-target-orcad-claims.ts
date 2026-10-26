@@ -127,6 +127,19 @@ export class SshTargetOrcadClaims {
     })
   }
 
+  /** The user removed this server: release it and keep automatic dials from deploying another. */
+  releaseForUserRemoval(targetId: string, environmentId: string): SshTarget | null {
+    const target = this.store.getSshTarget(targetId)
+    if (!target) {
+      return null
+    }
+    const owned = getManagedOrcadFenceEnvironmentId(target) === environmentId
+    return this.store.updateSshTarget(targetId, {
+      ...(owned ? { orcadFence: undefined, orcadProvisioning: undefined } : {}),
+      managedServerRemoved: { removedAt: new Date().toISOString() }
+    })
+  }
+
   /** Ownership must be on disk before a remote host acts on it. */
   flush(signal?: AbortSignal): Promise<void> {
     return this.store.flushPendingOrThrowAsync({ signal, drainToStableGeneration: false })

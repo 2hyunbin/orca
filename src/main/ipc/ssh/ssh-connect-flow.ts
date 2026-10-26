@@ -36,6 +36,7 @@ import {
   isSshUserDisconnected
 } from '../../ssh/ssh-user-disconnect'
 import {
+  isManagedServerRemovalHeld,
   liftSshHostUserDisconnect,
   resumeRuntimeEnvironmentStatus
 } from './ssh-host-user-disconnect'
@@ -52,9 +53,9 @@ export async function connectTarget(
   }
   if (options.automatic) {
     // Preserve disconnected status rather than publishing an unwanted failed connect.
-    if (isSshUserDisconnected(targetId)) {
-      const label = getSshTargetRegistryStore()?.getTarget(targetId)?.label ?? targetId
-      throw createSshUserDisconnectedError(label)
+    const target = getSshTargetRegistryStore()?.getTarget(targetId)
+    if (isSshUserDisconnected(targetId) || isManagedServerRemovalHeld(target)) {
+      throw createSshUserDisconnectedError(target?.label ?? targetId)
     }
     return admitConnect(targetId)
   }
