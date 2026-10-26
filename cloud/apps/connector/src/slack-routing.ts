@@ -102,11 +102,7 @@ export async function routeSlackMessage(
       return
     }
     const route = { deps, transaction, message, messageKey, place, text, externalId }
-    if (own) {
-      await continueConversation(route, own)
-    } else {
-      await startConversation(route)
-    }
+    await (own ? continueConversation(route, own) : startConversation(route))
   })
 }
 
