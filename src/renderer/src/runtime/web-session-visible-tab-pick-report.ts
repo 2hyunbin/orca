@@ -202,7 +202,7 @@ function visibleTerminalPane(
   }
   return {
     hostTabId: toHostSessionTabId(visible.entityId),
-    leafId: state.terminalLayoutsByTabId[visible.entityId]?.activeLeafId
+    leafId: state.terminalLayoutsByTabId[visible.entityId]?.activeLeafId ?? undefined
   }
 }
 
