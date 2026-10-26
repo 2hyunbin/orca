@@ -240,6 +240,7 @@ describe('connector inbox', () => {
     await enqueue('a', 'a1', START)
     await enqueue('a', 'a2', SEND)
     await expect(enqueue('a', 'a3', { kind: 'cancel' })).resolves.toBe('dropped')
+    await expect(enqueue('a', 'a3', { kind: 'cancel' })).resolves.toBe('duplicate')
     expect(await ids()).toEqual([])
   })
 

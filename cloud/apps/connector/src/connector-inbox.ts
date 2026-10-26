@@ -47,18 +47,6 @@ export class ConnectorInbox {
   ): Promise<EnqueueResult> {
     const { hostId, externalId, deliveryId, body } = input
     const now = this.now()
-    if (body.kind === 'cancel') {
-      // A start the machine never received is dropped, with everything queued behind it.
-      const [dropped] = await transaction.query(
-        `UPDATE connector_inbox SET state = 'dropped', payload = NULL, settled_at = ?
-         WHERE host_id = ? AND external_id = ? AND state = 'pending'
-           AND EXISTS (SELECT 1 FROM connector_inbox s WHERE s.host_id = connector_inbox.host_id
-             AND s.external_id = connector_inbox.external_id AND s.kind = 'start'
-             AND s.state = 'pending')`,
-        [now, hostId, externalId]
-      )
-      if (Number(dropped?.changes ?? 0) > 0) return 'dropped'
-    }
     const { kind, ...payload } = body
     const [inserted] = await transaction.query(
       `INSERT INTO connector_inbox
@@ -78,6 +66,19 @@ export class ConnectorInbox {
       ]
     )
     if (Number(inserted?.changes ?? 0) === 0) return 'duplicate'
+    if (body.kind === 'cancel') {
+      // A start the machine never received is dropped, with everything queued behind it, this
+      // cancel included, so a retried cancel reads as a duplicate.
+      const [dropped] = await transaction.query(
+        `UPDATE connector_inbox SET state = 'dropped', payload = NULL, settled_at = ?
+         WHERE host_id = ? AND external_id = ? AND state = 'pending'
+           AND EXISTS (SELECT 1 FROM connector_inbox s WHERE s.host_id = connector_inbox.host_id
+             AND s.external_id = connector_inbox.external_id AND s.kind = 'start'
+             AND s.state = 'pending')`,
+        [now, hostId, externalId]
+      )
+      if (Number(dropped?.changes ?? 0) > 0) return 'dropped'
+    }
     await this.wake(transaction, hostId)
     return 'queued'
   }
