@@ -8,7 +8,6 @@ import { safeFit } from '@/lib/pane-manager/pane-tree-ops'
 import { resolvePaneKeyForManager } from '@/lib/pane-manager/pane-key-resolution'
 import {
   isHostAuthoritativeLayout,
-  findPtyBindingInAnotherTab,
   isPtyBoundInAnotherTab,
   planTerminalLiveLayoutInsertions,
   planTerminalLiveLayoutRemovals,
@@ -123,24 +122,15 @@ export function useTerminalPaneReconciliation(controller: TerminalPaneCloseContr
     for (const paneId of closed) {
       executeClosePane(paneId)
     }
-    // Why: one snapshot apply writes the source and target layouts together, so the target that
-    // binds a moved pane's PTY is already in the store when its source tab reconciles.
+    // Why: one snapshot apply writes the source and target layouts together, so the tab that binds a
+    // moved pane's PTY is already in the store when its source tab reconciles.
     for (const paneId of moved) {
-      const ptyId = paneTransportsRef.current.get(paneId)?.getPtyId()
-      const movedTo = ptyId
-        ? findPtyBindingInAnotherTab(useAppStore.getState(), worktreeId, tabId, ptyId)
-        : null
-      if (!ptyId || !movedTo) {
-        continue
-      }
       detachExternallyMovedPane({
         manager,
         paneId,
         tabId,
-        movedTo,
-        ptyId,
-        transferAgentPaneAuthority: (transfer) =>
-          useAppStore.getState().transferAgentPaneAuthority(transfer)
+        retireAgentPaneAuthority: (paneKey) =>
+          useAppStore.getState().retireAgentPaneAuthority(paneKey)
       })
     }
     if (appliedInsertion) {

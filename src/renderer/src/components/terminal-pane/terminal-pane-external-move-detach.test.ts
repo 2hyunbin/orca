@@ -1,35 +1,41 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
+import {
+  resetAgentPaneAuthorityAliasesForTests,
+  transferAgentPaneAuthorityAlias
+} from '@/store/slices/agent-pane-authority'
 import { detachExternallyMovedPane } from './terminal-pane-external-move-detach'
 
 const SOURCE = 'web-terminal-source'
 const TARGET = 'web-terminal-target'
 const LEAF = '11111111-1111-4111-8111-111111111111'
-const PTY = 'remote:env@@term-1'
 
-function detach(detached = true): ReturnType<typeof vi.fn> {
-  const transfer = vi.fn()
+function detach(): ReturnType<typeof vi.fn> {
+  const retire = vi.fn()
   detachExternallyMovedPane({
-    manager: { getLeafId: () => LEAF, detachPaneForExternalMove: () => detached },
+    manager: { getLeafId: () => LEAF, detachPaneForExternalMove: () => true },
     paneId: 2,
     tabId: SOURCE,
-    movedTo: { tabId: TARGET, leafId: LEAF },
-    ptyId: PTY,
-    transferAgentPaneAuthority: transfer
+    retireAgentPaneAuthority: retire
   })
-  return transfer
+  return retire
 }
 
 describe('detachExternallyMovedPane', () => {
-  it('hands the source pane’s agent records to the pane in its new tab', () => {
-    expect(detach()).toHaveBeenCalledWith({
-      fromPaneKey: makePaneKey(SOURCE, LEAF),
-      toPaneKey: makePaneKey(TARGET, LEAF),
-      ptyId: PTY
-    })
+  afterEach(() => resetAgentPaneAuthorityAliasesForTests())
+
+  it('retires the source pane’s agent records after another client moved it', () => {
+    expect(detach()).toHaveBeenCalledWith(makePaneKey(SOURCE, LEAF))
   })
 
-  it('leaves the records alone when the pane could not be detached', () => {
-    expect(detach(false)).not.toHaveBeenCalled()
+  it('keeps the target’s records when this window already moved the pane there', () => {
+    // Why: a pre-move snapshot can redraw the source pane after this window's own move; its
+    // later removal must not retire the live target the source key now aliases.
+    transferAgentPaneAuthorityAlias({
+      fromPaneKey: makePaneKey(SOURCE, LEAF),
+      toPaneKey: makePaneKey(TARGET, LEAF),
+      ptyId: 'remote:env@@term-1'
+    })
+    expect(detach()).not.toHaveBeenCalled()
   })
 })

@@ -167,8 +167,8 @@ export function planTerminalLiveLayoutInsertions(
   return insertions
 }
 
-/** The pane in another tab of the worktree that binds this PTY: where the host moved it, if anywhere. */
-export function findPtyBindingInAnotherTab(
+/** Whether another tab of the worktree binds this PTY: the host moved its pane there. */
+export function isPtyBoundInAnotherTab(
   state: {
     tabsByWorktree: Readonly<Record<string, readonly { id: string }[] | undefined>>
     terminalLayoutsByTabId: Readonly<Record<string, TerminalLayoutSnapshot | undefined>>
@@ -176,28 +176,15 @@ export function findPtyBindingInAnotherTab(
   worktreeId: string,
   tabId: string,
   ptyId: string
-): { tabId: string; leafId: string } | null {
-  for (const tab of state.tabsByWorktree[worktreeId] ?? []) {
+): boolean {
+  return (state.tabsByWorktree[worktreeId] ?? []).some((tab) => {
     const layout = tab.id === tabId ? undefined : state.terminalLayoutsByTabId[tab.id]
     // Why: an off-tree binding is a stale record, not a pane that tab draws.
-    const leafId = layout?.root
-      ? collectLeafIds(layout.root).find((leaf) => layout.ptyIdsByLeafId?.[leaf] === ptyId)
-      : undefined
-    if (leafId) {
-      return { tabId: tab.id, leafId }
-    }
-  }
-  return null
-}
-
-/** Whether another tab of the worktree binds this PTY: the host moved its pane there. */
-export function isPtyBoundInAnotherTab(
-  state: Parameters<typeof findPtyBindingInAnotherTab>[0],
-  worktreeId: string,
-  tabId: string,
-  ptyId: string
-): boolean {
-  return findPtyBindingInAnotherTab(state, worktreeId, tabId, ptyId) !== null
+    return (
+      !!layout?.root &&
+      collectLeafIds(layout.root).some((leafId) => layout.ptyIdsByLeafId?.[leafId] === ptyId)
+    )
+  })
 }
 
 export type RetiredPaneRemovals = { closed: number[]; moved: number[] }

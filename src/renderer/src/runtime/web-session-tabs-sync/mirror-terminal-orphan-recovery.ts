@@ -2,6 +2,7 @@ import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { recoverWebSessionTerminalOrphansBeforeApply } from '../web-session-terminal-orphan-recovery'
 import { isFrameDrawnServerWorkspace } from './frame-drawn-server-workspaces'
+import { confirmHostPaneMovesInSnapshot } from '../pending-host-pane-moves'
 
 /** Orphan recovery for frames the mirror reconciles; a frame-drawn workspace's terminals are not the mirror's to adopt. */
 export function recoverMirroredTerminalOrphansBeforeApply(
@@ -12,5 +13,7 @@ export function recoverMirroredTerminalOrphansBeforeApply(
   if (ORCA_LAYOUT_OWNER_IS_MAIN && isFrameDrawnServerWorkspace(environmentId, frame.worktree)) {
     return Promise.resolve(frame)
   }
+  // Why: the raw frame is host evidence; a recovered one can carry rows this window retained.
+  confirmHostPaneMovesInSnapshot(frame)
   return recoverWebSessionTerminalOrphansBeforeApply(...args)
 }

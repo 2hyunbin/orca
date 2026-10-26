@@ -16,13 +16,9 @@ import {
   holdHostPaneMoveUntilSnapshot,
   isPendingHostPaneMoveTarget
 } from './pending-host-pane-moves'
-import { makePaneKey } from '../../../shared/stable-pane-id'
-import { collectPanesMovedElsewhere } from './web-session-terminal-moved-panes'
+import { recoverMirroredTerminalOrphansBeforeApply } from './web-session-tabs-sync/mirror-terminal-orphan-recovery'
 import { applyFreshWebSessionTabsSnapshot } from './web-session-tabs-sync/snapshot-api'
-import {
-  clearWebSessionTerminalOrphanRecoveryForTests,
-  recoverWebSessionTerminalOrphansBeforeApply
-} from './web-session-terminal-orphan-recovery'
+import { clearWebSessionTerminalOrphanRecoveryForTests } from './web-session-terminal-orphan-recovery'
 import {
   ENV,
   LEAF_ID,
@@ -33,22 +29,7 @@ import {
   resetWebSessionTabsSyncTestState
 } from './web-session-tabs-sync-test-harness'
 
-const store = vi.hoisted(() => {
-  const holder: { state: object; transferAgentPaneAuthority: ReturnType<typeof vi.fn> } = {
-    state: {},
-    transferAgentPaneAuthority: vi.fn()
-  }
-  return holder
-})
-vi.mock('../store', () => ({
-  useAppStore: {
-    setState: vi.fn(),
-    getState: () => ({
-      ...store.state,
-      transferAgentPaneAuthority: store.transferAgentPaneAuthority
-    })
-  }
-}))
+vi.mock('../store', () => ({ useAppStore: { setState: vi.fn() } }))
 vi.mock('@/hooks/agent-hook-completion-notifications', () => ({
   observeAgentHookCompletionForNotification: vi.fn()
 }))
@@ -121,7 +102,6 @@ function createReconciliation() {
 
   return {
     call,
-    state: () => state,
     plan: (secondPtyId: string | null): number[] => planRemovals(secondPtyId).closed,
     planRemovals,
     layoutOf: (tabId: string) => state.terminalLayoutsByTabId[tabId],
@@ -156,12 +136,11 @@ function createReconciliation() {
     removeSecond: () => mounted.delete(SECOND_LEAF_ID),
     leaves: () => collectLeafIds(state.terminalLayoutsByTabId[TAB_ID].root!),
     async receive(incoming: RuntimeMobileSessionTabsResult) {
-      const recovered = await recoverWebSessionTerminalOrphansBeforeApply(state, incoming, ENV, {
+      const recovered = await recoverMirroredTerminalOrphansBeforeApply(state, incoming, ENV, {
         call
       })
       expect(recovered).not.toBeNull()
       if (recovered) {
-        store.state = state
         state = { ...state, ...applyFreshWebSessionTabsSnapshot(state, recovered, ENV) }
       }
     }
@@ -173,7 +152,6 @@ describe('host snapshot fences before split-pane retirement', () => {
     resetWebSessionTabsSyncTestState()
     clearWebSessionTerminalOrphanRecoveryForTests()
     clearPendingHostPaneMovesForTests()
-    store.transferAgentPaneAuthority.mockReset()
   })
 
   it('keeps a null-transport pane when an older layout arrives', async () => {
@@ -212,27 +190,11 @@ describe('host snapshot fences before split-pane retirement', () => {
     await view.receive(snapshot(2))
     view.plan('remote:second')
     // The host moved the second pane, same terminal, into a new tab.
-    const moved = snapshot(3, mountedLeaves, (leafId) =>
-      leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'
+    await view.receive(
+      snapshot(3, mountedLeaves, (leafId) => (leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'))
     )
     const movedPtyId = toRemoteRuntimePtyId(`terminal-${SECOND_LEAF_ID}`, ENV)
-    // The pane's records follow it even when no mounted source tab reconciles the move.
-    expect(collectPanesMovedElsewhere(view.state(), moved, ENV)).toEqual([
-      {
-        fromPaneKey: makePaneKey(TAB_ID, SECOND_LEAF_ID),
-        toPaneKey: makePaneKey('web-terminal-host-tab-2', SECOND_LEAF_ID),
-        ptyId: movedPtyId
-      }
-    ])
-    await view.receive(moved)
     expect(view.call).not.toHaveBeenCalled()
-    await vi.waitFor(() =>
-      expect(store.transferAgentPaneAuthority).toHaveBeenCalledWith({
-        fromPaneKey: makePaneKey(TAB_ID, SECOND_LEAF_ID),
-        toPaneKey: makePaneKey('web-terminal-host-tab-2', SECOND_LEAF_ID),
-        ptyId: movedPtyId
-      })
-    )
     expect(view.leaves()).toEqual([LEAF_ID])
     expect(view.layoutOf('web-terminal-host-tab-2')?.ptyIdsByLeafId).toEqual({
       [SECOND_LEAF_ID]: movedPtyId
@@ -266,29 +228,27 @@ describe('host snapshot fences before split-pane retirement', () => {
     // The host's reply settled the move before its snapshot of the move arrived.
     beginPendingHostPaneMove(targetTabId, SECOND_LEAF_ID)()
     holdHostPaneMoveUntilSnapshot(targetTabId, SECOND_LEAF_ID)
-    expect(collectPanesMovedElsewhere(view.state(), snapshot(3), ENV)).toEqual([])
     await view.receive(snapshot(3))
     expect(view.layoutOf(targetTabId)?.ptyIdsByLeafId).toEqual({
       [SECOND_LEAF_ID]: toRemoteRuntimePtyId(`terminal-${SECOND_LEAF_ID}`, ENV)
     })
-    confirmHostPaneMovesInSnapshot(
+    await view.receive(
       snapshot(4, mountedLeaves, (leafId) => (leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'))
     )
     expect(isPendingHostPaneMoveTarget(targetTabId, SECOND_LEAF_ID)).toBe(false)
   })
 
-  it('moves no records for a snapshot older than the one already applied', async () => {
+  it('a row this window retained for its own move does not count as the host showing it', async () => {
     const view = createReconciliation()
-    await view.receive(snapshot(5))
-    const before = view.state()
-    // A delayed list reply from before a move another client made later; this window drops it.
-    const stale = snapshot(4, mountedLeaves, (leafId) =>
-      leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'
-    )
-    expect(collectPanesMovedElsewhere(before, stale, ENV)).toHaveLength(1)
-    await view.receive(stale)
-    await Promise.resolve()
-    expect(store.transferAgentPaneAuthority).not.toHaveBeenCalled()
+    await view.receive(snapshot(2))
+    const targetTabId = 'web-terminal-host-tab-2'
+    view.moveSecondLocally(targetTabId)
+    const release = beginPendingHostPaneMove(targetTabId, SECOND_LEAF_ID)
+    // A snapshot from before the host move: recovery keeps the target pane with a row of its own.
+    await view.receive(snapshot(3))
+    holdHostPaneMoveUntilSnapshot(targetTabId, SECOND_LEAF_ID)
+    release()
+    expect(isPendingHostPaneMoveTarget(targetTabId, SECOND_LEAF_ID)).toBe(true)
   })
 
   it('needs no hold for a move whose snapshot arrived before its reply', () => {
