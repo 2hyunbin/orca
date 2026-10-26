@@ -43,6 +43,7 @@ import {
   resetLaunchReconnectOptOutsForTests
 } from './ssh-host-user-disconnect'
 import { createSshIpcHarness } from './ssh-ipc-test-harness'
+import { runTargetLifecycle } from './ssh-target-lifecycle-queue'
 
 const { mockSshStore, mockConnectionManager } = mocks
 
@@ -223,6 +224,25 @@ describe('a host whose managed server the user stopped and removed', () => {
       managedServerRemoved: undefined
     })
     expect(decideHostServer).toHaveBeenCalledTimes(1)
+  })
+
+  it('holds a reconnect that queued behind the Stop that wrote the hold', async () => {
+    mockSshStore.getTarget.mockReturnValue(target)
+    let finishStop!: () => void
+    const stopping = runTargetLifecycle(
+      target.id,
+      () => new Promise<void>((resolve) => (finishStop = resolve))
+    )
+    const reconnect = Promise.resolve(
+      handlers.get('ssh:connect')!(null, { targetId: target.id, automatic: true })
+    )
+    mockSshStore.getTarget.mockReturnValue(removed)
+    finishStop()
+    await stopping
+
+    await expect(reconnect).rejects.toThrow('Server was disconnected. Connect to use it again.')
+    const { decideHostServer } = await import('./ssh-host-server-connect')
+    expect(decideHostServer).not.toHaveBeenCalled()
   })
 
   it('still reconnects a server an older desktop deployed for it since', async () => {
