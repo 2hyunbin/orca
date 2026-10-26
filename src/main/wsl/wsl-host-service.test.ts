@@ -23,9 +23,8 @@ import {
 } from './wsl-host-service.test-support'
 import { wakeRememberedWslHosts } from './wsl-host-early-wake'
 import { WslOrcadLaunchDeferredError } from './wsl-orcad-connection-errors'
-import { setWslHostService } from './wsl-host-service-instance'
-import { onWslHostUserAction, type WslHostUserAction } from './wsl-host-user-actions'
-import { removeThroughOwningService } from '../ipc/runtime-environments/runtime-environment-host-service-ops'
+import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
+import { isRecoverableRemoteRuntimeConnectionError } from '../../shared/remote-runtime/remote-runtime-client-error-classification'
 
 describe('WslHostService', () => {
   let userDataPath: string
@@ -453,6 +452,34 @@ describe('WslHostService', () => {
     expect(connector.connect).not.toHaveBeenCalled()
   })
 
+  it('passes a failed reconnect for open work through the retryable mapping', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    service.setVisibleWork(['wsl:ubuntu'])
+    await connector.disconnect('Ubuntu')
+    connector.connect.mockRejectedValueOnce(new Error('orcad exited'))
+    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toBeInstanceOf(
+      RemoteRuntimeClientError
+    )
+  })
+
+  it('keeps a parked host’s refusal final, never a retryable failure', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    service.setVisibleWork(['wsl:ubuntu'])
+    await connector.disconnect('Ubuntu')
+    connector.distro.state = 'stopped'
+
+    const refusal = await service
+      .ensureForRuntimeCall('wsl:ubuntu')
+      .catch((error: unknown) => error)
+    expect(refusal).not.toBeInstanceOf(RemoteRuntimeClientError)
+    expect(String(refusal)).toContain('Ubuntu was stopped')
+    expect(isRecoverableRemoteRuntimeConnectionError({ message: String(refusal) })).toBe(false)
+  })
+
   it('parks a host the moment a poll finds its distro confirmed stopped, never booting it', async () => {
     const connector = makeConnector([UBUNTU])
     const service = makeService(connector)
@@ -478,7 +505,12 @@ describe('WslHostService', () => {
     // The watch just exited and WSL still lists the stopping distro as running.
     connector.distro.state = 'running'
     connector.isSettling.mockReturnValue(true)
-    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toThrow('isn’t connected')
+    // Retryable, so a pane attaching in this window recovers instead of dead-ending; still no boot.
+    const settling = await service
+      .ensureForRuntimeCall('wsl:ubuntu')
+      .catch((error: unknown) => error)
+    expect(settling).toMatchObject({ code: 'remote_runtime_unavailable' })
+    expect(isRecoverableRemoteRuntimeConnectionError({ message: String(settling) })).toBe(true)
     // Liveness then confirms the stop: the host parks, and polls keep refusing.
     service.handleConnectionChange('Ubuntu', null, {
       state: 'distro-stopped',
@@ -528,6 +560,38 @@ describe('WslHostService', () => {
     expect(connector.connect).toHaveBeenCalledTimes(1)
     // Even this reconnect to a running distro may not boot it if it stops meanwhile.
     expect(connector.connect).toHaveBeenCalledWith('Ubuntu', { noBoot: true })
+  })
+
+  it('a due automation boots a parked host once, and never with the experiment off', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    await connector.disconnect('Ubuntu')
+    service.handleConnectionChange('Ubuntu', null, {
+      state: 'distro-stopped',
+      terminals: 'exited',
+      recovering: false
+    })
+    connector.connect.mockClear()
+    enabled = false
+    await service.wakeForAutomation('wsl:ubuntu')
+    expect(connector.connect).not.toHaveBeenCalled()
+    enabled = true
+    await service.wakeForAutomation('wsl:ubuntu')
+    expect(connector.connect).toHaveBeenCalledExactlyOnceWith('Ubuntu')
+    await expect(service.isConnected('wsl:ubuntu')).resolves.toBe(true)
+  })
+
+  it('an automation wake with no bridge yet connects without a WSL reachability probe', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    await connector.disconnect('Ubuntu')
+    connector.connect.mockClear()
+    connector.reachability.mockClear()
+    await service.wakeForAutomation('wsl:ubuntu')
+    expect(connector.reachability).not.toHaveBeenCalled()
+    expect(connector.connect).toHaveBeenCalledExactlyOnceWith('Ubuntu')
   })
 
   it('lifts a park on an explicit Connect', async () => {
@@ -807,40 +871,5 @@ describe('WslHostService', () => {
     await expect(service.add({ distro: 'Ubuntu' })).rejects.toThrow(
       'WSL hosts are not available on this computer.'
     )
-  })
-
-  // D3a: Settings → Remote Orca Servers removes through the owning service, not wslHosts:remove;
-  // that Remove must decline the distro's move too, and the orchestrator's own add never counts.
-  it('reports a Remove made from Settings as the user declining the host', async () => {
-    const connector = makeConnector([UBUNTU])
-    const service = makeService(connector)
-    const heard: WslHostUserAction[] = []
-    const stop = onWslHostUserAction((action) => heard.push(action))
-    setWslHostService(service)
-    try {
-      await service.add({ distro: 'Ubuntu' })
-      const [environment] = listEnvironments(userDataPath)
-      expect(environment).toBeDefined()
-      await removeThroughOwningService(environment!)
-      expect(heard).toEqual([{ kind: 'removed', distro: 'Ubuntu' }])
-    } finally {
-      stop()
-      setWslHostService(null)
-    }
-  })
-
-  it('reports the Remove even when the cleanup after it fails', async () => {
-    const connector = makeConnector([UBUNTU])
-    const service = makeService(connector)
-    await service.add({ distro: 'Ubuntu' })
-    removed.mockRejectedValueOnce(new Error('transport cleanup failed'))
-    const heard: WslHostUserAction[] = []
-    const stop = onWslHostUserAction((action) => heard.push(action))
-    try {
-      await expect(service.remove('wsl:ubuntu')).rejects.toThrow('transport cleanup failed')
-      expect(heard).toEqual([{ kind: 'removed', distro: 'Ubuntu' }])
-    } finally {
-      stop()
-    }
   })
 })

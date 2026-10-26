@@ -28,6 +28,8 @@ export type OrcadMigrationSourceAutomationInspection = {
   blockedRunCount: number
   /** Moved disabled, as the wire requires; the move re-enables these on the host after commit. */
   enabledAtSourceIds: string[]
+  /** Automations held back only by a run still in flight; they move once it finishes. */
+  runningAutomationNames: string[]
 }
 
 export function collectOrcadMigrationSourceAutomationState(
@@ -50,22 +52,26 @@ export function collectOrcadMigrationSourceAutomationState(
   let blockedAutomationCount = 0
   let blockedRunCount = 0
   const enabledAtSourceIds: string[] = []
+  const runningAutomationNames: string[] = []
 
   for (const [automationId, matching] of automationsById) {
     const runs = runsByAutomationId.get(automationId) ?? []
-    const eligible =
+    const transferable =
       matching.length === 1 &&
       automationCanTransfer(matching[0], scope) &&
-      runs.every((run) => runCanTransfer(run, scope))
-    if (!eligible) {
+      runs.every((run) => runContextCanTransfer(run, scope))
+    if (!transferable || !runs.every((run) => isFinalAutomationRunStatus(run.status))) {
+      if (transferable) {
+        runningAutomationNames.push(matching[0].name)
+      }
       blockedAutomationCount += matching.length
       blockedRunCount += runs.length
       continue
     }
     const projected = projectAutomationToDestination(matching[0])
-    if (scope.kind === 'local-wsl' && projected.enabled) {
+    // The projection always sends it disabled; a WSL move re-enables what ran here.
+    if (scope.kind === 'local-wsl' && matching[0].enabled) {
       enabledAtSourceIds.push(projected.id)
-      projected.enabled = false
     }
     automations.push(projected)
     automationRuns.push(...runs.map(projectAutomationRunToDestination))
@@ -84,7 +90,8 @@ export function collectOrcadMigrationSourceAutomationState(
     automationRuns,
     blockedAutomationCount,
     blockedRunCount,
-    enabledAtSourceIds
+    enabledAtSourceIds,
+    runningAutomationNames: runningAutomationNames.sort(compareKeys)
   }
 }
 
@@ -115,7 +122,7 @@ function runTouchesScope(run: AutomationRun, scope: OrcadMigrationSourceScope): 
 
 function automationCanTransfer(automation: Automation, scope: OrcadMigrationSourceScope): boolean {
   if (scope.kind === 'local-wsl') {
-    // This desktop schedules it today; the host's scheduler takes over (enabled state kept).
+    // This desktop schedules it today; the host's scheduler takes over, re-enabled after commit.
     return (
       automation.executionTargetType === 'local' &&
       automation.schedulerOwner === 'local_host_service' &&
@@ -126,7 +133,6 @@ function automationCanTransfer(automation: Automation, scope: OrcadMigrationSour
     )
   }
   return (
-    automation.enabled === false &&
     automation.executionTargetType === 'ssh' &&
     automation.executionTargetId === scope.targetId &&
     automation.schedulerOwner === 'ssh_bridge' &&
@@ -139,9 +145,8 @@ function automationCanTransfer(automation: Automation, scope: OrcadMigrationSour
   )
 }
 
-function runCanTransfer(run: AutomationRun, scope: OrcadMigrationSourceScope): boolean {
+function runContextCanTransfer(run: AutomationRun, scope: OrcadMigrationSourceScope): boolean {
   return (
-    isFinalAutomationRunStatus(run.status) &&
     ownerCanTransfer(run.workspaceId, scope) &&
     contextCanTransfer(run.runContext, scope) &&
     contextCanTransfer(run.sourceContext, scope)
@@ -191,6 +196,8 @@ function projectAutomationToDestination(source: Automation): Automation {
     executionTargetType: 'local',
     executionTargetId: 'local',
     schedulerOwner: 'remote_host_service',
+    // Servers accept only dormant rows; the desktop re-enables moved ones after commit.
+    enabled: false,
     workspaceId: projectOwnerToDestination(source.workspaceId)
   }
   delete destination.executionTargetGeneration
