@@ -9,6 +9,9 @@ import {
 } from '../hang-watchdog/hang-detection-marker'
 
 const events: string[] = []
+const startTelemetryTransport = vi.fn(async () => {})
+const deferTelemetry = vi.fn((_task: () => void, _fallbackMs: number) => {})
+const telemetryEvents: string[] = []
 const breadcrumbData = new Map<string, unknown>()
 let profilePath = ''
 vi.mock('../persistence', () => ({ getCanonicalUserDataPath: () => profilePath }))
@@ -53,9 +56,11 @@ vi.mock('../agent-hooks/hook-status-session-tabs-republish', () => ({
   installHookStatusSessionTabsRepublish: () => () => {}
 }))
 vi.mock('../telemetry/client', () => ({
-  initTelemetry: () => {},
+  initTelemetry: () => telemetryEvents.push('init'),
+  startTelemetryTransport: () => startTelemetryTransport(),
   track: () => {}
 }))
+vi.mock('./first-window-deferral', () => ({ runAfterFirstWindowShown: deferTelemetry }))
 vi.mock('../codex/codex-trust-grant-telemetry', () => ({
   setCodexTrustGrantTelemetry: () => {}
 }))
@@ -105,6 +110,12 @@ describe('main thread hang breadcrumb', () => {
 
     try {
       initializeMainProcessObservers()
+
+      expect(telemetryEvents).toEqual(['init'])
+      expect(startTelemetryTransport).not.toHaveBeenCalled()
+      expect(deferTelemetry).toHaveBeenCalledWith(expect.any(Function), 15_000)
+      deferTelemetry.mock.calls[0]?.[0]()
+      expect(startTelemetryTransport).toHaveBeenCalledTimes(1)
 
       expect(events).toEqual([
         'observability',

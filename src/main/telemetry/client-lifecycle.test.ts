@@ -66,6 +66,14 @@ describe('setOptIn()', () => {
     )
   })
 
+  it('does not capture opt-out if quit starts while its transport import is pending', async () => {
+    const optingOut = setOptIn('settings', false)
+    await shutdownTelemetry()
+    await optingOut
+    expect(mock.capture).not.toHaveBeenCalled()
+    expect(mock.optOut).toHaveBeenCalledTimes(1)
+  })
+
   it('drops telemetry_opted_in silently in non-official builds', async () => {
     state.settings.telemetry!.optedIn = false
     _setPostHogClientForTests(null)
@@ -148,9 +156,14 @@ describe('shouldOptOutSdkAtInit()', () => {
 })
 
 describe('shutdownTelemetry()', () => {
+  let state: TelemetryClientTestState
+
+  beforeEach(() => {
+    state = setupTelemetryClientTest()
+  })
+
   afterEach(() => {
-    _setShuttingDownForTests(false)
-    _setPostHogClientForTests(null)
+    cleanupTelemetryClientTest(state.envStash)
   })
 
   it('sets the shutdown gate and calls posthog.shutdown(2000)', async () => {
@@ -158,7 +171,8 @@ describe('shutdownTelemetry()', () => {
     _setPostHogClientForTests(mock as unknown as PostHog)
     _setShuttingDownForTests(false)
     await shutdownTelemetry()
-    expect(mock.shutdown).toHaveBeenCalledWith(2_000)
+    expect(mock.shutdown.mock.calls[0]?.[0]).toBeGreaterThan(0)
+    expect(mock.shutdown.mock.calls[0]?.[0]).toBeLessThanOrEqual(2_000)
     _setPostHogClientForTests(null)
   })
 

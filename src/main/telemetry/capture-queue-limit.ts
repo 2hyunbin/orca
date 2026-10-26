@@ -1,0 +1,1 @@
+export const MAX_QUEUED_CAPTURES = 5_000

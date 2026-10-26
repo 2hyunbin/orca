@@ -1,27 +1,10 @@
-import { arch as osArch, platform as osPlatform, release as osRelease } from 'node:os'
 import { PostHog } from 'posthog-node'
-import { getAppEnvironment } from '../../shared/app-environment'
-import type { CommonProps, EventName } from '../../shared/telemetry-events'
+import type { EventName } from '../../shared/telemetry-events'
 import type { ConsentState } from './consent'
+import { shouldOptOutSdkAtInit } from './consent'
+import { MAX_QUEUED_CAPTURES } from './capture-queue-limit'
 
 const OPT_OUT_CAPTURE_ENQUEUE_TIMEOUT_MS = 1_000
-
-export function buildCommonProps(
-  installId: string,
-  sid: string,
-  channel: 'stable' | 'rc'
-): CommonProps {
-  // Let authoritative max(64) validation drop overlong versions; truncation would hide invalid data.
-  return {
-    app_version: getAppEnvironment().getVersion(),
-    platform: osPlatform(),
-    arch: osArch(),
-    os_release: osRelease(),
-    install_id: installId,
-    session_id: sid,
-    orca_channel: channel
-  }
-}
 
 export function waitForCaptureEnqueue(
   client: PostHog,
@@ -64,11 +47,6 @@ export function waitForCaptureEnqueue(
   })
 }
 
-/** Reapply SDK opt-out each boot for disabled users. Keep pending-banner SDK enabled so the direct Turn Off capture can enqueue before optOut. */
-export function shouldOptOutSdkAtInit(consent: ConsentState): boolean {
-  return consent.effective === 'disabled'
-}
-
 export function createPostHogClient(writeKey: string, consent: ConsentState): PostHog {
   const client = new PostHog(writeKey, {
     host: 'https://us.i.posthog.com',
@@ -77,7 +55,7 @@ export function createPostHogClient(writeKey: string, consent: ConsentState): Po
     // Disable SDK GeoIP/IP enrichment to keep the wire inside the declared allow-list.
     disableGeoip: true,
     // Increase offline buffer from 1000 to 5000; overflow drops oldest events.
-    maxQueueSize: 5000
+    maxQueueSize: MAX_QUEUED_CAPTURES
   })
 
   if (shouldOptOutSdkAtInit(consent)) {
