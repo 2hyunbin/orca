@@ -1,3 +1,4 @@
+import { registerQuitTask } from '../quit-task-registry'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
@@ -79,6 +80,7 @@ export function startCodexAccountSessionBridgeInBackground(
   },
   dependenciesOverride: Partial<BackgroundBridgeDependencies> = {}
 ): Promise<void> {
+  registerQuitTask('codex-bridges', 'codex-account-session-bridges', stopCodexAccountSessionBridges)
   if (stopping) {
     return Promise.resolve()
   }
