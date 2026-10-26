@@ -1,4 +1,5 @@
 import { createElement } from 'react'
+import { findByHostType } from '../test-support/react-test-renderer-host-nodes'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
 import type { MobileQueuedMessageInlineEditor } from './mobile-queued-message-edit-draft'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
@@ -117,7 +118,7 @@ describe('MobileNativeChatQueuedMessages', () => {
       cards: [card({ messageId: 'a', attribution: 'From Alex' }), card({ messageId: 'b' })],
       editor
     })
-    const child = mounted.root.findByType('QueuedMessageComposer')
+    const child = findByHostType(mounted.root, 'QueuedMessageComposer')
     expect(child.props.editor).toBe(editor)
     expect(child.props.attribution).toBe('From Alex')
     expect(mounted.root.findAllByProps({ testID: 'queued-card-row' })).toHaveLength(2)

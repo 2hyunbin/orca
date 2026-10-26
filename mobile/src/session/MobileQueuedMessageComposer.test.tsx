@@ -1,4 +1,5 @@
 import { createElement } from 'react'
+import { findByHostType } from '../test-support/react-test-renderer-host-nodes'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
@@ -73,7 +74,7 @@ describe('queued phone composer action boundary', () => {
         )
       )
     })
-    const composer = renderer!.root.findByType('Composer')
+    const composer = findByHostType(renderer!.root, 'Composer')
     await act(async () => {
       expect(await composer.props.onSend('/compact')).toBe(false)
       expect(await composer.props.onSend('/goal research')).toBe(false)
