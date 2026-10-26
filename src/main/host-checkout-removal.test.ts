@@ -10,7 +10,12 @@ vi.mock('./asar-transparent-fs', () => ({
   lstat: vi.fn()
 }))
 vi.mock('node:timers/promises', () => ({
-  setTimeout: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+  // Route promise backoff through the clock installed by vi.useFakeTimers.
+  setTimeout: (ms: number) => {
+    const elapsed = Promise.withResolvers<void>()
+    setTimeout(elapsed.resolve, ms)
+    return elapsed.promise
+  }
 }))
 const platform = process.platform
 const root = 'C:/checkout-partition'
