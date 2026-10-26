@@ -1,14 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
-import { track } from '@/lib/telemetry'
+import { useAppStore } from '@/store'
 import NoticeHostGlyph from './NoticeHostGlyph'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
+import {
+  isWorkspaceDiscoveryTelemetryEnabled,
+  trackWorkspaceDiscoveryAction,
+  trackWorkspaceDiscoveryShown
+} from './workspace-discovery-telemetry'
 
-export type ImportedWorktreesVisibilityPlacement = 'repo-group' | 'pinned-fallback'
+export type ImportedWorktreesVisibilityPlacement = 'repo-group' | 'pinned-fallback' | 'standalone'
 export type ImportedWorktreeVisibilityPreview = {
   displayName: string
   path: string
@@ -22,7 +27,6 @@ export type ImportedWorktreesVisibilityLineProps = {
   placement: ImportedWorktreesVisibilityPlacement
   pending: boolean
   error: string | null
-  telemetryEnabled?: boolean
   onReview: () => void
   onKeepHidden?: () => Promise<boolean>
   onFocusRecovery?: () => void
@@ -37,7 +41,6 @@ export default function ImportedWorktreesVisibilityLine({
   placement,
   pending,
   error,
-  telemetryEnabled = false,
   onReview,
   onKeepHidden,
   onFocusRecovery,
@@ -45,18 +48,16 @@ export default function ImportedWorktreesVisibilityLine({
 }: ImportedWorktreesVisibilityLineProps): React.JSX.Element | null {
   const [submitting, setSubmitting] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
-  const tracked = useRef(false)
+  const telemetryEnabled = useAppStore((state) =>
+    isWorkspaceDiscoveryTelemetryEnabled(state.settings?.telemetry)
+  )
   const busy = pending || submitting
   const count = hiddenWorktrees.length
   const scope = hostContextLabel ? `${repoDisplayName} on ${hostContextLabel}` : repoDisplayName
 
   useEffect(() => {
-    if (telemetryEnabled && count > 0 && !tracked.current) {
-      tracked.current = true
-      track('workspace_discovery_shown', {
-        surface: 'suggestion',
-        workspace_count: Math.min(count, 50)
-      })
+    if (telemetryEnabled && count > 0) {
+      trackWorkspaceDiscoveryShown('suggestion', count)
     }
   }, [count, telemetryEnabled])
 
@@ -69,11 +70,7 @@ export default function ImportedWorktreesVisibilityLine({
     try {
       if (await onKeepHidden()) {
         if (telemetryEnabled) {
-          track('workspace_discovery_action', {
-            action: 'dismissed',
-            surface: 'suggestion',
-            workspace_count: Math.min(count, 50)
-          })
+          trackWorkspaceDiscoveryAction('suggestion', 'dismissed', count)
         }
         onFocusRecovery?.()
       } else {
@@ -115,11 +112,7 @@ export default function ImportedWorktreesVisibilityLine({
           )}
           onClick={() => {
             if (telemetryEnabled) {
-              track('workspace_discovery_action', {
-                action: 'reviewed',
-                surface: 'suggestion',
-                workspace_count: Math.min(count, 50)
-              })
+              trackWorkspaceDiscoveryAction('suggestion', 'reviewed', count)
             }
             onReview()
           }}
@@ -127,9 +120,9 @@ export default function ImportedWorktreesVisibilityLine({
         >
           <span className="min-w-0 flex-1">
             {countLabel}
-            {placement === 'pinned-fallback' ? ` · ${scope}` : ''}
+            {placement === 'repo-group' ? '' : ` · ${scope}`}
           </span>
-          {hostContextLabel && placement !== 'pinned-fallback' ? (
+          {hostContextLabel && placement === 'repo-group' ? (
             <span className="inline-flex min-w-0 items-center gap-1">
               {hostContextHostId ? (
                 <NoticeHostGlyph

@@ -259,7 +259,10 @@ export class LoadedStateParsingOperations {
 
     const migrated = {
       ...this.cohorts.migrateTabSwitchKeybindings(
-        this.cohorts.migrateTelemetry(result, fileExistedOnLoad),
+        this.cohorts.assignWorkspaceDiscoveryCohort(
+          this.cohorts.migrateTelemetry(result, fileExistedOnLoad),
+          fileExistedOnLoad
+        ),
         fileExistedOnLoad
       ),
       nativeChatUpgradeTipAudience:

@@ -159,20 +159,6 @@ describe('buildImportedWorktreesCardCandidates', () => {
     ).toBe(0)
   })
 
-  it('keeps candidates visible after a rollback failure forces a shown repo to render the card', () => {
-    const candidates = buildImportedWorktreesCardCandidates({
-      repos: [{ ...repo, externalWorktreeVisibility: 'show' }],
-      visibleWorktrees: [visibleWorktree],
-      detectedWorktreesByRepo: { [repo.id]: detectedResult([detectedWorktree()]) },
-      forceVisibleRepoIds: new Set([repo.id])
-    })
-
-    expect(candidates.get(repo.id)).toMatchObject({
-      repo: { id: repo.id },
-      hiddenWorktrees: [{ id: 'repo-1::/repo-worktree' }]
-    })
-  })
-
   it('builds candidates even when workspace-row filters hide every visible worktree', () => {
     const candidates = buildImportedWorktreesCardCandidates({
       repos: [repo],

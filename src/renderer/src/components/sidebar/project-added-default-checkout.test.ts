@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultOnboardingState } from '../../../../shared/onboarding-defaults'
 import type { Repo } from '../../../../shared/repo-types'
+import type { TelemetrySettings } from '../../../../shared/telemetry-settings-types'
 import type {
   DetectedWorktree,
   DetectedWorktreeListResult,
@@ -12,12 +13,18 @@ import {
   openProjectDefaultCheckout
 } from './project-added-default-checkout'
 
+// A declaration (not a cast) gives the hoisted mock state room for assigned telemetry settings.
+function noSettings(): { telemetry?: TelemetrySettings } | null {
+  return null
+}
+
 const mocks = vi.hoisted(() => ({
   state: {
     activeRepoId: null as string | null,
     filterRepoIds: [] as string[],
     showActiveOnly: false,
     hideDefaultBranchWorkspace: false,
+    settings: noSettings(),
     repos: [] as Repo[],
     worktreesByRepo: {} as Record<string, Worktree[]>,
     detectedWorktreesByRepo: {} as Record<string, DetectedWorktreeListResult>,
@@ -127,6 +134,7 @@ describe('finishProjectAddWithDefaultCheckout', () => {
     mocks.state.filterRepoIds = []
     mocks.state.showActiveOnly = false
     mocks.state.hideDefaultBranchWorkspace = false
+    mocks.state.settings = null
     mocks.state.repos = []
     mocks.state.worktreesByRepo = {}
     mocks.state.detectedWorktreesByRepo = {}
@@ -464,6 +472,11 @@ describe('finishProjectAddWithDefaultCheckout', () => {
       initialCwd: '/repo-feature/packages/web'
     })
     expect(mocks.state.updateRepo).not.toHaveBeenCalled()
+    expect(mocks.track).toHaveBeenCalledWith('add_repo_default_checkout_handoff', {
+      source: 'local_folder_picker',
+      result: 'opened_selected_checkout',
+      reason: 'loaded_default_checkout'
+    })
   })
 
   it('reveals the project if no default checkout is available', async () => {
@@ -511,5 +524,206 @@ describe('finishProjectAddWithDefaultCheckout', () => {
     expect(mocks.state.setActiveRepo).toHaveBeenCalledWith('repo-1')
     expect(mocks.state.setFilterRepoIds).toHaveBeenCalledWith(['repo-2', 'repo-1'])
     expect(mocks.state.setShowActiveOnly).toHaveBeenCalledWith(false)
+  })
+
+  describe('workspace discovery experiment arms', () => {
+    function assignArm(arm: 'control' | 'treatment', population: 'new' | 'existing'): void {
+      mocks.state.settings = {
+        telemetry: {
+          optedIn: true,
+          installId: 'install',
+          existedBeforeTelemetryRelease: population === 'existing',
+          ...(population === 'new'
+            ? { workspaceDiscoveryNewUserCohort: arm }
+            : { workspaceDiscoveryExistingUserCohort: arm })
+        }
+      }
+    }
+
+    function loadDefaultWithHiddenSibling(): void {
+      const defaultCheckout = makeWorktree()
+      mocks.state.worktreesByRepo = { 'repo-1': [defaultCheckout] }
+      mocks.state.detectedWorktreesByRepo = {
+        'repo-1': makeDetectedLinkedWorktrees(defaultCheckout)
+      }
+    }
+
+    it.each([
+      ['control', 'new'],
+      ['treatment', 'new'],
+      ['control', 'existing'],
+      ['treatment', 'existing']
+    ] as const)(
+      'observes eligibility in %s (%s users) before changing visibility',
+      async (arm, population) => {
+        assignArm(arm, population)
+        loadDefaultWithHiddenSibling()
+        mocks.state.updateRepo.mockImplementation(async () => {
+          expect(mocks.track).toHaveBeenCalledWith('workspace_discovery_eligible', {
+            workspace_count: 1
+          })
+          return true
+        })
+
+        await openProjectDefaultCheckout({
+          repoId: 'repo-1',
+          source: 'local_folder_picker',
+          setHideDefaultBranchWorkspace: vi.fn()
+        })
+
+        expect(mocks.track).toHaveBeenCalledWith('workspace_discovery_eligible', {
+          workspace_count: 1
+        })
+        expect(mocks.activateAndRevealWorktree).toHaveBeenCalledWith('repo-1::/repo')
+      }
+    )
+
+    it('reveals every sibling in control, matching the pre-experiment handoff', async () => {
+      assignArm('control', 'existing')
+      loadDefaultWithHiddenSibling()
+
+      await openProjectDefaultCheckout({
+        repoId: 'repo-1',
+        source: 'local_folder_picker',
+        setHideDefaultBranchWorkspace: vi.fn()
+      })
+
+      expect(mocks.state.updateRepo).toHaveBeenCalledExactlyOnceWith('repo-1', {
+        externalWorktreeVisibility: 'show'
+      })
+      expect(mocks.state.fetchWorktrees).toHaveBeenCalledWith('repo-1', {
+        requireAuthoritative: true
+      })
+    })
+
+    it('keeps siblings hidden in treatment', async () => {
+      assignArm('treatment', 'new')
+      loadDefaultWithHiddenSibling()
+
+      await openProjectDefaultCheckout({
+        repoId: 'repo-1',
+        source: 'local_folder_picker',
+        setHideDefaultBranchWorkspace: vi.fn()
+      })
+
+      expect(mocks.state.updateRepo).not.toHaveBeenCalled()
+    })
+
+    it('shows a hidden default checkout through repo visibility in control', async () => {
+      assignArm('control', 'new')
+      const defaultCheckout = makeWorktree()
+      mocks.state.detectedWorktreesByRepo = {
+        'repo-1': {
+          repoId: 'repo-1',
+          authoritative: true,
+          source: 'git',
+          worktrees: [
+            { ...defaultCheckout, ownership: 'external', selectedCheckout: false, visible: false }
+          ]
+        }
+      }
+      mocks.state.fetchWorktrees.mockImplementation(async () => {
+        mocks.state.worktreesByRepo = { 'repo-1': [defaultCheckout] }
+        return true
+      })
+
+      await openProjectDefaultCheckout({
+        repoId: 'repo-1',
+        source: 'local_folder_picker',
+        setHideDefaultBranchWorkspace: vi.fn()
+      })
+
+      expect(mocks.state.updateRepo).toHaveBeenCalledExactlyOnceWith('repo-1', {
+        externalWorktreeVisibility: 'show'
+      })
+      expect(mocks.activateAndRevealWorktree).toHaveBeenCalledWith('repo-1::/repo')
+    })
+
+    it('reveals the project when control cannot show siblings', async () => {
+      assignArm('control', 'new')
+      loadDefaultWithHiddenSibling()
+      mocks.state.updateRepo.mockResolvedValue(false)
+
+      await openProjectDefaultCheckout({
+        repoId: 'repo-1',
+        source: 'local_folder_picker',
+        setHideDefaultBranchWorkspace: vi.fn()
+      })
+
+      expect(mocks.track).toHaveBeenCalledWith('add_repo_default_checkout_handoff', {
+        source: 'local_folder_picker',
+        result: 'revealed_project',
+        reason: 'show_detected_linked_failed'
+      })
+      expect(mocks.activateAndRevealWorktree).not.toHaveBeenCalled()
+      expect(mocks.state.setActiveRepo).toHaveBeenCalledWith('repo-1')
+    })
+
+    it.each(['control', 'treatment'] as const)(
+      'counts a hidden primary as a sibling when %s opens a picked linked checkout',
+      async (arm) => {
+        assignArm(arm, 'new')
+        const primary = makeWorktree()
+        const linked = makeWorktree({
+          id: 'repo-1::/repo-feature',
+          path: '/repo-feature',
+          branch: 'refs/heads/feature',
+          isMainWorktree: false
+        })
+        mocks.state.worktreesByRepo = { 'repo-1': [linked] }
+        mocks.state.detectedWorktreesByRepo = {
+          'repo-1': {
+            repoId: 'repo-1',
+            authoritative: true,
+            source: 'git',
+            worktrees: [
+              { ...primary, ownership: 'external', selectedCheckout: false, visible: false },
+              { ...linked, ownership: 'external', selectedCheckout: true, visible: true }
+            ]
+          }
+        }
+
+        await openProjectDefaultCheckout({
+          repoId: 'repo-1',
+          source: 'local_folder_picker',
+          selectedPath: '/repo-feature',
+          setHideDefaultBranchWorkspace: vi.fn()
+        })
+
+        expect(mocks.track).toHaveBeenCalledWith('workspace_discovery_eligible', {
+          workspace_count: 1
+        })
+        expect(mocks.activateAndRevealWorktree).toHaveBeenCalledWith(linked.id)
+        if (arm === 'control') {
+          expect(mocks.state.updateRepo).toHaveBeenCalledExactlyOnceWith('repo-1', {
+            externalWorktreeVisibility: 'show'
+          })
+        } else {
+          expect(mocks.state.updateRepo).not.toHaveBeenCalled()
+        }
+      }
+    )
+
+    it('does not observe eligibility without hidden siblings or for agent scratch alone', async () => {
+      assignArm('treatment', 'new')
+      const defaultCheckout = makeWorktree()
+      mocks.state.worktreesByRepo = { 'repo-1': [defaultCheckout] }
+      mocks.state.detectedWorktreesByRepo = {
+        'repo-1': makeDetectedLinkedWorktrees(defaultCheckout, {
+          linkedOwnership: 'agent-scratch'
+        })
+      }
+
+      await openProjectDefaultCheckout({
+        repoId: 'repo-1',
+        source: 'local_folder_picker',
+        setHideDefaultBranchWorkspace: vi.fn()
+      })
+
+      expect(mocks.track).not.toHaveBeenCalledWith(
+        'workspace_discovery_eligible',
+        expect.anything()
+      )
+    })
   })
 })

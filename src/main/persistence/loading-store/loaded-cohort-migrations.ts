@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from 'node:crypto'
+import { createHash, randomInt, randomUUID } from 'node:crypto'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import {
   createNewProfileNativeChatUpgradeTipAudience,
@@ -68,6 +68,35 @@ export class LoadedCohortMigrationOperations {
     }
   }
 
+  // Assign once per profile; the file's prior existence decides which population's experiment it joins.
+  assignWorkspaceDiscoveryCohort(
+    state: PersistedState,
+    fileExistedOnLoad: boolean
+  ): PersistedState {
+    const telemetry = state.settings?.telemetry
+    if (
+      !telemetry?.installId ||
+      telemetry.workspaceDiscoveryNewUserCohort ||
+      telemetry.workspaceDiscoveryExistingUserCohort
+    ) {
+      return state
+    }
+    this.runtime.loadNeedsSave = true
+    const cohort = drawWorkspaceDiscoveryCohort(telemetry.installId)
+    return {
+      ...state,
+      settings: {
+        ...state.settings,
+        telemetry: {
+          ...telemetry,
+          ...(fileExistedOnLoad
+            ? { workspaceDiscoveryExistingUserCohort: cohort }
+            : { workspaceDiscoveryNewUserCohort: cohort })
+        }
+      }
+    }
+  }
+
   migrateTelemetry(state: PersistedState, fileExistedOnLoad: boolean): PersistedState {
     const existing = state.settings?.telemetry
     // Partial telemetry blocks still require migration unless all invariants hold.
@@ -97,9 +126,6 @@ export class LoadedCohortMigrationOperations {
         telemetry: {
           ...existing,
           ...(onboardingLanguageCohort ? { onboardingLanguageCohort } : {}),
-          ...(!fileExistedOnLoad && !existing?.workspaceDiscoveryCohort
-            ? { workspaceDiscoveryCohort: randomInt(10) === 0 ? 'control' : 'treatment' }
-            : {}),
           existedBeforeTelemetryRelease: resolvedExistedBefore,
           // Preserve explicit true, false and null; only absence uses the cohort default.
           optedIn:
@@ -120,4 +146,15 @@ export class LoadedCohortMigrationOperations {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** 20% keep the pre-experiment handoff as control; 80% get the new one. */
+export function drawWorkspaceDiscoveryCohort(installId: string): 'control' | 'treatment' {
+  // A salted hash of the random install ID is as random as a fresh draw, reproducible from the
+  // transmitted install_id, and independent of the language experiment's draw.
+  const bucket = createHash('sha256')
+    .update(`workspace_discovery:${installId}`)
+    .digest()
+    .readUInt32BE(0)
+  return bucket % 5 === 0 ? 'control' : 'treatment'
 }

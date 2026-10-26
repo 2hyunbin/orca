@@ -1,13 +1,34 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ImportedWorktreesVisibilityLine, {
   type ImportedWorktreesVisibilityLineProps
 } from './ImportedWorktreesVisibilityLine'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { track } from '@/lib/telemetry'
+import type { TelemetrySettings } from '../../../../shared/telemetry-settings-types'
+import { resetWorkspaceDiscoveryObservationsForTests } from './workspace-discovery-telemetry'
 
+type StoreState = { settings: { telemetry?: TelemetrySettings } | null }
+const store = vi.hoisted(() => {
+  const state: StoreState = { settings: null }
+  return { state }
+})
 vi.mock('@/lib/telemetry', () => ({ track: vi.fn() }))
+vi.mock('@/store', () => ({
+  useAppStore: (selector: (state: typeof store.state) => unknown) => selector(store.state)
+}))
+
+function enrollTelemetry(optedIn: boolean): void {
+  store.state.settings = {
+    telemetry: {
+      optedIn,
+      installId: 'install',
+      existedBeforeTelemetryRelease: false,
+      workspaceDiscoveryNewUserCohort: 'treatment'
+    }
+  }
+}
 
 const hiddenWorktrees = [
   { displayName: 'workspace-one', path: '/worktrees/one' },
@@ -23,7 +44,6 @@ function renderLine(overrides: Partial<ImportedWorktreesVisibilityLineProps> = {
     placement: 'repo-group' as const,
     pending: false,
     error: null,
-    telemetryEnabled: true,
     onReview,
     onKeepHidden,
     ...overrides
@@ -36,9 +56,11 @@ function renderLine(overrides: Partial<ImportedWorktreesVisibilityLineProps> = {
   return { ...view, onReview, onKeepHidden }
 }
 
+beforeEach(() => enrollTelemetry(true))
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  resetWorkspaceDiscoveryObservationsForTests()
 })
 
 describe('workspace discovery hint', () => {
@@ -98,7 +120,8 @@ describe('workspace discovery hint', () => {
   })
 
   it('omits empty hints and keeps actions working outside telemetry enrollment', async () => {
-    const { rerender, onReview, onKeepHidden } = renderLine({ telemetryEnabled: false })
+    enrollTelemetry(false)
+    const { rerender, onReview, onKeepHidden } = renderLine()
     fireEvent.click(screen.getByRole('button', { name: 'Review hidden workspaces for orca' }))
     expect(onReview).toHaveBeenCalledOnce()
     fireEvent.click(screen.getByRole('button', { name: 'Hide workspace suggestions for orca' }))
@@ -115,6 +138,14 @@ describe('workspace discovery hint', () => {
       />
     )
     expect(screen.queryAllByRole('button')).toHaveLength(0)
+  })
+
+  it('reports a suggestion once per session across virtual-row remounts', () => {
+    renderLine().unmount()
+    renderLine()
+    expect(vi.mocked(track).mock.calls).toEqual([
+      ['workspace_discovery_shown', { surface: 'suggestion', workspace_count: 2 }]
+    ])
   })
 
   it('caps telemetry counts without transmitting workspace or host details', () => {

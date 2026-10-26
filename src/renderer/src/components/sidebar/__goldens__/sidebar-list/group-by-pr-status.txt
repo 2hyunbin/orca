@@ -1,6 +1,7 @@
 === sort=manual projectOrder=manual pinnedInGroups=false ===
 visible: orca::/w/feat-a orca-ssh::/w/remote-x orca::/w/feat-b api::/w/api-y lab::/w/gitlab-mr shared::/w/same shared::/w/same orca::/orca orca::/w/Zeta orca-ssh::/orca-ssh api::/api orca::/w/feat-c lab::/lab ext::/ext
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,lab::/w/gitlab-mr,orca::/w/feat-c] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca-ssh::/w/remote-x,orca::/w/feat-b,lab::/w/gitlab-mr,shared::/w/same,orca::/w/feat-c]
 ITEM rowKey=pinned:|orca::/w/feat-a depth=0 groupDepth=0 children=2 lineageKey=lineage:orca::/w/feat-a hostLabel="Local Linux" placement=pinned owning=project:p-orca
 ITEM rowKey=pinned:|orca::/w/feat-b depth=1 groupDepth=0 children=1 lineageKey=lineage:orca::/w/feat-b hostLabel="Local Linux" placement=pinned owning=project:p-orca parent=pinned:|orca::/w/feat-a
@@ -22,7 +23,7 @@ FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
 HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-300" icon=CircleX hostCounts={local:1} hostIds={local:[orca::/w/Zeta]} ids=[orca::/w/Zeta]
 ITEM rowKey=pr:closed:|orca::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
-renderedKeys: 25
+renderedKeys: 26
 placeholders: -
 selectionOrder: |orca::/w/feat-a |orca::/w/feat-b |orca::/w/feat-c |lab::/w/gitlab-mr ssh:gpu-vm|orca-ssh::/w/remote-x ssh:gpu-vm|shared::/w/same runtime:env-1|api::/w/api-y local|shared::/w/same |orca::/orca |orca-ssh::/orca-ssh runtime:env-1|api::/api |lab::/lab |ext::/ext local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote |orca::/w/Zeta
 cmd1-9 mounted: 1=orca::/w/feat-a#lineage:orca::/w/feat-a 2=orca::/w/feat-b#lineage:orca::/w/feat-b 3=orca::/w/feat-c 4=lab::/w/gitlab-mr 5=orca-ssh::/w/remote-x@ssh:gpu-vm 6=shared::/w/same@ssh:gpu-vm 7=api::/w/api-y@runtime:env-1 8=shared::/w/same@local 9=orca::/orca
@@ -31,6 +32,7 @@ cmd ids unmounted: orca::/w/feat-a orca::/w/feat-b orca::/w/feat-c lab::/w/gitla
 -- collapsed: pinned pr:in-progress lineage:orca::/w/feat-a --
 visible: orca::/w/feat-a orca-ssh::/w/remote-x orca::/w/feat-b api::/w/api-y lab::/w/gitlab-mr shared::/w/same shared::/w/same orca::/orca orca::/w/Zeta orca-ssh::/orca-ssh api::/api orca::/w/feat-c lab::/lab ext::/ext
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,lab::/w/gitlab-mr,orca::/w/feat-c] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca-ssh::/w/remote-x,orca::/w/feat-b,lab::/w/gitlab-mr,shared::/w/same,orca::/w/feat-c]
 HEADER key=pr:in-review label="In review" count=1 tone="text-workspace-status-review" icon=ConductorReviewIcon hostCounts={runtime:env-1:1} hostIds={runtime:env-1:[api::/w/api-y]} ids=[api::/w/api-y]
 ITEM rowKey=pr:in-review:runtime:env-1|api::/w/api-y depth=0 groupDepth=0 lastChild=true children=0 hostLabel="env-1" placement=natural owning=project:repo:api
@@ -39,7 +41,7 @@ HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-3
 ITEM rowKey=pr:closed:|orca::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
 SECTION pinned: pinned:|orca::/w/feat-a pinned:|orca::/w/feat-b pinned:|orca::/w/feat-c pinned:|lab::/w/gitlab-mr pinned:ssh:gpu-vm|orca-ssh::/w/remote-x pinned:ssh:gpu-vm|shared::/w/same
 SECTION pr:in-progress: pr:in-progress:local|shared::/w/same pr:in-progress:|orca::/orca pr:in-progress:|orca-ssh::/orca-ssh pr:in-progress:runtime:env-1|api::/api pr:in-progress:|lab::/lab pr:in-progress:|ext::/ext
-renderedKeys: 7
+renderedKeys: 8
 placeholders: -
 selectionOrder: runtime:env-1|api::/w/api-y |orca::/w/Zeta
 cmd1-9 mounted: 1=api::/w/api-y@runtime:env-1 2=orca::/w/Zeta
@@ -48,6 +50,7 @@ cmd ids unmounted: api::/w/api-y orca::/w/Zeta
 === sort=manual projectOrder=manual pinnedInGroups=true ===
 visible: orca::/w/feat-a orca-ssh::/w/remote-x orca::/w/feat-b api::/w/api-y lab::/w/gitlab-mr shared::/w/same shared::/w/same orca::/orca orca::/w/Zeta orca-ssh::/orca-ssh api::/api orca::/w/feat-c lab::/lab ext::/ext
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,lab::/w/gitlab-mr,orca::/w/feat-c] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca-ssh::/w/remote-x,orca::/w/feat-b,lab::/w/gitlab-mr,shared::/w/same,orca::/w/feat-c]
 ITEM rowKey=pinned:|orca::/w/feat-a depth=0 groupDepth=0 children=2 lineageKey=lineage:orca::/w/feat-a hostLabel="Local Linux" placement=pinned owning=project:p-orca
 ITEM rowKey=pinned:|orca::/w/feat-b depth=1 groupDepth=0 children=1 lineageKey=lineage:orca::/w/feat-b hostLabel="Local Linux" placement=pinned owning=project:p-orca parent=pinned:|orca::/w/feat-a
@@ -82,7 +85,7 @@ PREFERRED |orca::/w/feat-c -> pr:in-progress:|orca::/w/feat-c
 PREFERRED |lab::/w/gitlab-mr -> pr:in-progress:|lab::/w/gitlab-mr
 PREFERRED ssh:gpu-vm|orca-ssh::/w/remote-x -> pr:in-progress:ssh:gpu-vm|orca-ssh::/w/remote-x
 PREFERRED ssh:gpu-vm|shared::/w/same -> pr:in-progress:ssh:gpu-vm|shared::/w/same
-renderedKeys: 32
+renderedKeys: 33
 placeholders: -
 selectionOrder: |orca::/w/feat-b |orca::/w/feat-a runtime:env-1|api::/w/api-y ssh:gpu-vm|orca-ssh::/w/remote-x |lab::/w/gitlab-mr local|shared::/w/same ssh:gpu-vm|shared::/w/same |orca::/orca |orca-ssh::/orca-ssh runtime:env-1|api::/api |orca::/w/feat-c |lab::/lab |ext::/ext local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote |orca::/w/Zeta
 cmd1-9 mounted: 1=orca::/w/feat-b#lineage:orca::/w/feat-b 2=orca::/w/feat-a#lineage:orca::/w/feat-a 3=api::/w/api-y@runtime:env-1 4=orca-ssh::/w/remote-x@ssh:gpu-vm 5=lab::/w/gitlab-mr 6=shared::/w/same@local 7=shared::/w/same@ssh:gpu-vm 8=orca::/orca 9=orca-ssh::/orca-ssh
@@ -91,6 +94,7 @@ cmd ids unmounted: orca::/w/feat-b orca::/w/feat-a api::/w/api-y orca-ssh::/w/re
 -- collapsed: pinned pr:in-review pr:closed lineage:orca::/w/feat-a --
 visible: orca::/w/feat-a orca-ssh::/w/remote-x orca::/w/feat-b api::/w/api-y lab::/w/gitlab-mr shared::/w/same shared::/w/same orca::/orca orca::/w/Zeta orca-ssh::/orca-ssh api::/api orca::/w/feat-c lab::/lab ext::/ext
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,lab::/w/gitlab-mr,orca::/w/feat-c] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca-ssh::/w/remote-x,orca::/w/feat-b,lab::/w/gitlab-mr,shared::/w/same,orca::/w/feat-c]
 HEADER key=pr:done label="Done" count=1 tone="text-workspace-status-done" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[orca::/w/feat-b]} ids=[orca::/w/feat-b]
 ITEM rowKey=pr:done:|orca::/w/feat-b depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
@@ -119,7 +123,7 @@ PREFERRED |orca::/w/feat-c -> pr:in-progress:|orca::/w/feat-c
 PREFERRED |lab::/w/gitlab-mr -> pr:in-progress:|lab::/w/gitlab-mr
 PREFERRED ssh:gpu-vm|orca-ssh::/w/remote-x -> pr:in-progress:ssh:gpu-vm|orca-ssh::/w/remote-x
 PREFERRED ssh:gpu-vm|shared::/w/same -> pr:in-progress:ssh:gpu-vm|shared::/w/same
-renderedKeys: 23
+renderedKeys: 24
 placeholders: -
 selectionOrder: |orca::/w/feat-b ssh:gpu-vm|orca-ssh::/w/remote-x |lab::/w/gitlab-mr local|shared::/w/same ssh:gpu-vm|shared::/w/same |orca::/orca |orca-ssh::/orca-ssh runtime:env-1|api::/api |orca::/w/feat-c |lab::/lab |ext::/ext local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote
 cmd1-9 mounted: 1=orca::/w/feat-b 2=orca-ssh::/w/remote-x@ssh:gpu-vm 3=lab::/w/gitlab-mr 4=shared::/w/same@local 5=shared::/w/same@ssh:gpu-vm 6=orca::/orca 7=orca-ssh::/orca-ssh 8=api::/api@runtime:env-1 9=orca::/w/feat-c
@@ -130,6 +134,7 @@ cmd ids unmounted: orca::/w/feat-b orca-ssh::/w/remote-x lab::/w/gitlab-mr share
 === sort=name projectOrder=manual pinnedInGroups=false ===
 visible: api::/w/api-y orca::/w/feat-a orca::/w/feat-b orca::/w/feat-c lab::/w/gitlab-mr api::/api ext::/ext lab::/lab orca-ssh::/orca-ssh orca::/orca orca-ssh::/w/remote-x shared::/w/same shared::/w/same orca::/w/Zeta
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr,orca-ssh::/w/remote-x,shared::/w/same]
 ITEM rowKey=pinned:|orca::/w/feat-a depth=0 groupDepth=0 children=2 lineageKey=lineage:orca::/w/feat-a hostLabel="Local Linux" placement=pinned owning=project:p-orca
 ITEM rowKey=pinned:|orca::/w/feat-b depth=1 groupDepth=0 children=1 lineageKey=lineage:orca::/w/feat-b hostLabel="Local Linux" placement=pinned owning=project:p-orca parent=pinned:|orca::/w/feat-a
@@ -151,7 +156,7 @@ FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
 HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-300" icon=CircleX hostCounts={local:1} hostIds={local:[orca::/w/Zeta]} ids=[orca::/w/Zeta]
 ITEM rowKey=pr:closed:|orca::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
-renderedKeys: 25
+renderedKeys: 26
 placeholders: -
 selectionOrder: |orca::/w/feat-a |orca::/w/feat-b |orca::/w/feat-c |lab::/w/gitlab-mr ssh:gpu-vm|orca-ssh::/w/remote-x ssh:gpu-vm|shared::/w/same runtime:env-1|api::/w/api-y runtime:env-1|api::/api |ext::/ext |lab::/lab |orca-ssh::/orca-ssh |orca::/orca local|shared::/w/same local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote |orca::/w/Zeta
 cmd1-9 mounted: 1=orca::/w/feat-a#lineage:orca::/w/feat-a 2=orca::/w/feat-b#lineage:orca::/w/feat-b 3=orca::/w/feat-c 4=lab::/w/gitlab-mr 5=orca-ssh::/w/remote-x@ssh:gpu-vm 6=shared::/w/same@ssh:gpu-vm 7=api::/w/api-y@runtime:env-1 8=api::/api@runtime:env-1 9=ext::/ext
@@ -160,6 +165,7 @@ cmd ids unmounted: orca::/w/feat-a orca::/w/feat-b orca::/w/feat-c lab::/w/gitla
 -- collapsed: pinned pr:in-progress lineage:orca::/w/feat-a --
 visible: api::/w/api-y orca::/w/feat-a orca::/w/feat-b orca::/w/feat-c lab::/w/gitlab-mr api::/api ext::/ext lab::/lab orca-ssh::/orca-ssh orca::/orca orca-ssh::/w/remote-x shared::/w/same shared::/w/same orca::/w/Zeta
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr,orca-ssh::/w/remote-x,shared::/w/same]
 HEADER key=pr:in-review label="In review" count=1 tone="text-workspace-status-review" icon=ConductorReviewIcon hostCounts={runtime:env-1:1} hostIds={runtime:env-1:[api::/w/api-y]} ids=[api::/w/api-y]
 ITEM rowKey=pr:in-review:runtime:env-1|api::/w/api-y depth=0 groupDepth=0 lastChild=true children=0 hostLabel="env-1" placement=natural owning=project:repo:api
@@ -168,7 +174,7 @@ HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-3
 ITEM rowKey=pr:closed:|orca::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
 SECTION pinned: pinned:|orca::/w/feat-a pinned:|orca::/w/feat-b pinned:|orca::/w/feat-c pinned:|lab::/w/gitlab-mr pinned:ssh:gpu-vm|orca-ssh::/w/remote-x pinned:ssh:gpu-vm|shared::/w/same
 SECTION pr:in-progress: pr:in-progress:runtime:env-1|api::/api pr:in-progress:|ext::/ext pr:in-progress:|lab::/lab pr:in-progress:|orca-ssh::/orca-ssh pr:in-progress:|orca::/orca pr:in-progress:local|shared::/w/same
-renderedKeys: 7
+renderedKeys: 8
 placeholders: -
 selectionOrder: runtime:env-1|api::/w/api-y |orca::/w/Zeta
 cmd1-9 mounted: 1=api::/w/api-y@runtime:env-1 2=orca::/w/Zeta
@@ -177,6 +183,7 @@ cmd ids unmounted: api::/w/api-y orca::/w/Zeta
 === sort=name projectOrder=manual pinnedInGroups=true ===
 visible: api::/w/api-y orca::/w/feat-a orca::/w/feat-b orca::/w/feat-c lab::/w/gitlab-mr api::/api ext::/ext lab::/lab orca-ssh::/orca-ssh orca::/orca orca-ssh::/w/remote-x shared::/w/same shared::/w/same orca::/w/Zeta
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr,orca-ssh::/w/remote-x,shared::/w/same]
 ITEM rowKey=pinned:|orca::/w/feat-a depth=0 groupDepth=0 children=2 lineageKey=lineage:orca::/w/feat-a hostLabel="Local Linux" placement=pinned owning=project:p-orca
 ITEM rowKey=pinned:|orca::/w/feat-b depth=1 groupDepth=0 children=1 lineageKey=lineage:orca::/w/feat-b hostLabel="Local Linux" placement=pinned owning=project:p-orca parent=pinned:|orca::/w/feat-a
@@ -211,7 +218,7 @@ PREFERRED |orca::/w/feat-c -> pr:in-progress:|orca::/w/feat-c
 PREFERRED |lab::/w/gitlab-mr -> pr:in-progress:|lab::/w/gitlab-mr
 PREFERRED ssh:gpu-vm|orca-ssh::/w/remote-x -> pr:in-progress:ssh:gpu-vm|orca-ssh::/w/remote-x
 PREFERRED ssh:gpu-vm|shared::/w/same -> pr:in-progress:ssh:gpu-vm|shared::/w/same
-renderedKeys: 32
+renderedKeys: 33
 placeholders: -
 selectionOrder: |orca::/w/feat-b runtime:env-1|api::/w/api-y |orca::/w/feat-a |orca::/w/feat-c |lab::/w/gitlab-mr runtime:env-1|api::/api |ext::/ext |lab::/lab |orca-ssh::/orca-ssh |orca::/orca ssh:gpu-vm|orca-ssh::/w/remote-x local|shared::/w/same ssh:gpu-vm|shared::/w/same local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote |orca::/w/Zeta
 cmd1-9 mounted: 1=orca::/w/feat-b#lineage:orca::/w/feat-b 2=api::/w/api-y@runtime:env-1 3=orca::/w/feat-a#lineage:orca::/w/feat-a 4=orca::/w/feat-c 5=lab::/w/gitlab-mr 6=api::/api@runtime:env-1 7=ext::/ext 8=lab::/lab 9=orca-ssh::/orca-ssh
@@ -220,6 +227,7 @@ cmd ids unmounted: orca::/w/feat-b api::/w/api-y orca::/w/feat-a orca::/w/feat-c
 -- collapsed: pinned pr:in-review pr:closed lineage:orca::/w/feat-a --
 visible: api::/w/api-y orca::/w/feat-a orca::/w/feat-b orca::/w/feat-c lab::/w/gitlab-mr api::/api ext::/ext lab::/lab orca-ssh::/orca-ssh orca::/orca orca-ssh::/w/remote-x shared::/w/same shared::/w/same orca::/w/Zeta
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr,orca-ssh::/w/remote-x,shared::/w/same]
 HEADER key=pr:done label="Done" count=1 tone="text-workspace-status-done" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[orca::/w/feat-b]} ids=[orca::/w/feat-b]
 ITEM rowKey=pr:done:|orca::/w/feat-b depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
@@ -248,7 +256,7 @@ PREFERRED |orca::/w/feat-c -> pr:in-progress:|orca::/w/feat-c
 PREFERRED |lab::/w/gitlab-mr -> pr:in-progress:|lab::/w/gitlab-mr
 PREFERRED ssh:gpu-vm|orca-ssh::/w/remote-x -> pr:in-progress:ssh:gpu-vm|orca-ssh::/w/remote-x
 PREFERRED ssh:gpu-vm|shared::/w/same -> pr:in-progress:ssh:gpu-vm|shared::/w/same
-renderedKeys: 23
+renderedKeys: 24
 placeholders: -
 selectionOrder: |orca::/w/feat-b |orca::/w/feat-c |lab::/w/gitlab-mr runtime:env-1|api::/api |ext::/ext |lab::/lab |orca-ssh::/orca-ssh |orca::/orca ssh:gpu-vm|orca-ssh::/w/remote-x local|shared::/w/same ssh:gpu-vm|shared::/w/same local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote
 cmd1-9 mounted: 1=orca::/w/feat-b 2=orca::/w/feat-c 3=lab::/w/gitlab-mr 4=api::/api@runtime:env-1 5=ext::/ext 6=lab::/lab 7=orca-ssh::/orca-ssh 8=orca::/orca 9=orca-ssh::/w/remote-x@ssh:gpu-vm
@@ -259,6 +267,7 @@ cmd ids unmounted: orca::/w/feat-b orca::/w/feat-c lab::/w/gitlab-mr api::/api e
 === sort=recent projectOrder=manual pinnedInGroups=false ===
 visible: orca::/w/Zeta orca::/w/feat-a api::/w/api-y orca::/w/feat-b orca::/orca orca::/w/feat-c lab::/w/gitlab-mr api::/api ext::/ext lab::/lab orca-ssh::/orca-ssh orca-ssh::/w/remote-x shared::/w/same shared::/w/same
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr,orca-ssh::/w/remote-x,shared::/w/same]
 ITEM rowKey=pinned:|orca::/w/feat-a depth=0 groupDepth=0 children=2 lineageKey=lineage:orca::/w/feat-a hostLabel="Local Linux" placement=pinned owning=project:p-orca
 ITEM rowKey=pinned:|orca::/w/feat-b depth=1 groupDepth=0 children=1 lineageKey=lineage:orca::/w/feat-b hostLabel="Local Linux" placement=pinned owning=project:p-orca parent=pinned:|orca::/w/feat-a
@@ -280,7 +289,7 @@ FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
 HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-300" icon=CircleX hostCounts={local:1} hostIds={local:[orca::/w/Zeta]} ids=[orca::/w/Zeta]
 ITEM rowKey=pr:closed:|orca::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
-renderedKeys: 25
+renderedKeys: 26
 placeholders: -
 selectionOrder: |orca::/w/feat-a |orca::/w/feat-b |orca::/w/feat-c |lab::/w/gitlab-mr ssh:gpu-vm|orca-ssh::/w/remote-x ssh:gpu-vm|shared::/w/same runtime:env-1|api::/w/api-y |orca::/orca runtime:env-1|api::/api |ext::/ext |lab::/lab |orca-ssh::/orca-ssh local|shared::/w/same local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote |orca::/w/Zeta
 cmd1-9 mounted: 1=orca::/w/feat-a#lineage:orca::/w/feat-a 2=orca::/w/feat-b#lineage:orca::/w/feat-b 3=orca::/w/feat-c 4=lab::/w/gitlab-mr 5=orca-ssh::/w/remote-x@ssh:gpu-vm 6=shared::/w/same@ssh:gpu-vm 7=api::/w/api-y@runtime:env-1 8=orca::/orca 9=api::/api@runtime:env-1
@@ -289,6 +298,7 @@ cmd ids unmounted: orca::/w/feat-a orca::/w/feat-b orca::/w/feat-c lab::/w/gitla
 -- collapsed: pinned pr:in-progress lineage:orca::/w/feat-a --
 visible: orca::/w/Zeta orca::/w/feat-a api::/w/api-y orca::/w/feat-b orca::/orca orca::/w/feat-c lab::/w/gitlab-mr api::/api ext::/ext lab::/lab orca-ssh::/orca-ssh orca-ssh::/w/remote-x shared::/w/same shared::/w/same
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr,orca-ssh::/w/remote-x,shared::/w/same]
 HEADER key=pr:in-review label="In review" count=1 tone="text-workspace-status-review" icon=ConductorReviewIcon hostCounts={runtime:env-1:1} hostIds={runtime:env-1:[api::/w/api-y]} ids=[api::/w/api-y]
 ITEM rowKey=pr:in-review:runtime:env-1|api::/w/api-y depth=0 groupDepth=0 lastChild=true children=0 hostLabel="env-1" placement=natural owning=project:repo:api
@@ -297,7 +307,7 @@ HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-3
 ITEM rowKey=pr:closed:|orca::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
 SECTION pinned: pinned:|orca::/w/feat-a pinned:|orca::/w/feat-b pinned:|orca::/w/feat-c pinned:|lab::/w/gitlab-mr pinned:ssh:gpu-vm|orca-ssh::/w/remote-x pinned:ssh:gpu-vm|shared::/w/same
 SECTION pr:in-progress: pr:in-progress:|orca::/orca pr:in-progress:runtime:env-1|api::/api pr:in-progress:|ext::/ext pr:in-progress:|lab::/lab pr:in-progress:|orca-ssh::/orca-ssh pr:in-progress:local|shared::/w/same
-renderedKeys: 7
+renderedKeys: 8
 placeholders: -
 selectionOrder: runtime:env-1|api::/w/api-y |orca::/w/Zeta
 cmd1-9 mounted: 1=api::/w/api-y@runtime:env-1 2=orca::/w/Zeta
@@ -306,6 +316,7 @@ cmd ids unmounted: api::/w/api-y orca::/w/Zeta
 === sort=recent projectOrder=manual pinnedInGroups=true ===
 visible: orca::/w/Zeta orca::/w/feat-a api::/w/api-y orca::/w/feat-b orca::/orca orca::/w/feat-c lab::/w/gitlab-mr api::/api ext::/ext lab::/lab orca-ssh::/orca-ssh orca-ssh::/w/remote-x shared::/w/same shared::/w/same
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr,orca-ssh::/w/remote-x,shared::/w/same]
 ITEM rowKey=pinned:|orca::/w/feat-a depth=0 groupDepth=0 children=2 lineageKey=lineage:orca::/w/feat-a hostLabel="Local Linux" placement=pinned owning=project:p-orca
 ITEM rowKey=pinned:|orca::/w/feat-b depth=1 groupDepth=0 children=1 lineageKey=lineage:orca::/w/feat-b hostLabel="Local Linux" placement=pinned owning=project:p-orca parent=pinned:|orca::/w/feat-a
@@ -340,7 +351,7 @@ PREFERRED |orca::/w/feat-c -> pr:in-progress:|orca::/w/feat-c
 PREFERRED |lab::/w/gitlab-mr -> pr:in-progress:|lab::/w/gitlab-mr
 PREFERRED ssh:gpu-vm|orca-ssh::/w/remote-x -> pr:in-progress:ssh:gpu-vm|orca-ssh::/w/remote-x
 PREFERRED ssh:gpu-vm|shared::/w/same -> pr:in-progress:ssh:gpu-vm|shared::/w/same
-renderedKeys: 32
+renderedKeys: 33
 placeholders: -
 selectionOrder: |orca::/w/feat-b |orca::/w/feat-a runtime:env-1|api::/w/api-y |orca::/orca |orca::/w/feat-c |lab::/w/gitlab-mr runtime:env-1|api::/api |ext::/ext |lab::/lab |orca-ssh::/orca-ssh ssh:gpu-vm|orca-ssh::/w/remote-x local|shared::/w/same ssh:gpu-vm|shared::/w/same local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote |orca::/w/Zeta
 cmd1-9 mounted: 1=orca::/w/feat-b#lineage:orca::/w/feat-b 2=orca::/w/feat-a#lineage:orca::/w/feat-a 3=api::/w/api-y@runtime:env-1 4=orca::/orca 5=orca::/w/feat-c 6=lab::/w/gitlab-mr 7=api::/api@runtime:env-1 8=ext::/ext 9=lab::/lab
@@ -349,6 +360,7 @@ cmd ids unmounted: orca::/w/feat-b orca::/w/feat-a api::/w/api-y orca::/orca orc
 -- collapsed: pinned pr:in-review pr:closed lineage:orca::/w/feat-a --
 visible: orca::/w/Zeta orca::/w/feat-a api::/w/api-y orca::/w/feat-b orca::/orca orca::/w/feat-c lab::/w/gitlab-mr api::/api ext::/ext lab::/lab orca-ssh::/orca-ssh orca-ssh::/w/remote-x shared::/w/same shared::/w/same
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr,orca-ssh::/w/remote-x,shared::/w/same]
 HEADER key=pr:done label="Done" count=1 tone="text-workspace-status-done" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[orca::/w/feat-b]} ids=[orca::/w/feat-b]
 ITEM rowKey=pr:done:|orca::/w/feat-b depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
@@ -377,7 +389,7 @@ PREFERRED |orca::/w/feat-c -> pr:in-progress:|orca::/w/feat-c
 PREFERRED |lab::/w/gitlab-mr -> pr:in-progress:|lab::/w/gitlab-mr
 PREFERRED ssh:gpu-vm|orca-ssh::/w/remote-x -> pr:in-progress:ssh:gpu-vm|orca-ssh::/w/remote-x
 PREFERRED ssh:gpu-vm|shared::/w/same -> pr:in-progress:ssh:gpu-vm|shared::/w/same
-renderedKeys: 23
+renderedKeys: 24
 placeholders: -
 selectionOrder: |orca::/w/feat-b |orca::/orca |orca::/w/feat-c |lab::/w/gitlab-mr runtime:env-1|api::/api |ext::/ext |lab::/lab |orca-ssh::/orca-ssh ssh:gpu-vm|orca-ssh::/w/remote-x local|shared::/w/same ssh:gpu-vm|shared::/w/same local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote
 cmd1-9 mounted: 1=orca::/w/feat-b 2=orca::/orca 3=orca::/w/feat-c 4=lab::/w/gitlab-mr 5=api::/api@runtime:env-1 6=ext::/ext 7=lab::/lab 8=orca-ssh::/orca-ssh 9=orca-ssh::/w/remote-x@ssh:gpu-vm
@@ -388,6 +400,7 @@ cmd ids unmounted: orca::/w/feat-b orca::/orca orca::/w/feat-c lab::/w/gitlab-mr
 === sort=smart projectOrder=manual pinnedInGroups=false ===
 visible: orca::/w/feat-a orca-ssh::/w/remote-x orca::/w/feat-b api::/w/api-y orca::/w/feat-c lab::/w/gitlab-mr orca::/w/Zeta shared::/w/same shared::/w/same orca::/orca orca-ssh::/orca-ssh api::/api lab::/lab ext::/ext
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca-ssh::/w/remote-x,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr,shared::/w/same]
 ITEM rowKey=pinned:|orca::/w/feat-a depth=0 groupDepth=0 children=2 lineageKey=lineage:orca::/w/feat-a hostLabel="Local Linux" placement=pinned owning=project:p-orca
 ITEM rowKey=pinned:|orca::/w/feat-b depth=1 groupDepth=0 children=1 lineageKey=lineage:orca::/w/feat-b hostLabel="Local Linux" placement=pinned owning=project:p-orca parent=pinned:|orca::/w/feat-a
@@ -409,7 +422,7 @@ FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
 HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-300" icon=CircleX hostCounts={local:1} hostIds={local:[orca::/w/Zeta]} ids=[orca::/w/Zeta]
 ITEM rowKey=pr:closed:|orca::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
-renderedKeys: 25
+renderedKeys: 26
 placeholders: -
 selectionOrder: |orca::/w/feat-a |orca::/w/feat-b |orca::/w/feat-c |lab::/w/gitlab-mr ssh:gpu-vm|orca-ssh::/w/remote-x ssh:gpu-vm|shared::/w/same runtime:env-1|api::/w/api-y local|shared::/w/same |orca::/orca |orca-ssh::/orca-ssh runtime:env-1|api::/api |lab::/lab |ext::/ext local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote |orca::/w/Zeta
 cmd1-9 mounted: 1=orca::/w/feat-a#lineage:orca::/w/feat-a 2=orca::/w/feat-b#lineage:orca::/w/feat-b 3=orca::/w/feat-c 4=lab::/w/gitlab-mr 5=orca-ssh::/w/remote-x@ssh:gpu-vm 6=shared::/w/same@ssh:gpu-vm 7=api::/w/api-y@runtime:env-1 8=shared::/w/same@local 9=orca::/orca
@@ -418,6 +431,7 @@ cmd ids unmounted: orca::/w/feat-a orca::/w/feat-b orca::/w/feat-c lab::/w/gitla
 -- collapsed: pinned pr:in-progress lineage:orca::/w/feat-a --
 visible: orca::/w/feat-a orca-ssh::/w/remote-x orca::/w/feat-b api::/w/api-y orca::/w/feat-c lab::/w/gitlab-mr orca::/w/Zeta shared::/w/same shared::/w/same orca::/orca orca-ssh::/orca-ssh api::/api lab::/lab ext::/ext
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca-ssh::/w/remote-x,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr,shared::/w/same]
 HEADER key=pr:in-review label="In review" count=1 tone="text-workspace-status-review" icon=ConductorReviewIcon hostCounts={runtime:env-1:1} hostIds={runtime:env-1:[api::/w/api-y]} ids=[api::/w/api-y]
 ITEM rowKey=pr:in-review:runtime:env-1|api::/w/api-y depth=0 groupDepth=0 lastChild=true children=0 hostLabel="env-1" placement=natural owning=project:repo:api
@@ -426,7 +440,7 @@ HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-3
 ITEM rowKey=pr:closed:|orca::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
 SECTION pinned: pinned:|orca::/w/feat-a pinned:|orca::/w/feat-b pinned:|orca::/w/feat-c pinned:|lab::/w/gitlab-mr pinned:ssh:gpu-vm|orca-ssh::/w/remote-x pinned:ssh:gpu-vm|shared::/w/same
 SECTION pr:in-progress: pr:in-progress:local|shared::/w/same pr:in-progress:|orca::/orca pr:in-progress:|orca-ssh::/orca-ssh pr:in-progress:runtime:env-1|api::/api pr:in-progress:|lab::/lab pr:in-progress:|ext::/ext
-renderedKeys: 7
+renderedKeys: 8
 placeholders: -
 selectionOrder: runtime:env-1|api::/w/api-y |orca::/w/Zeta
 cmd1-9 mounted: 1=api::/w/api-y@runtime:env-1 2=orca::/w/Zeta
@@ -435,6 +449,7 @@ cmd ids unmounted: api::/w/api-y orca::/w/Zeta
 === sort=smart projectOrder=manual pinnedInGroups=true ===
 visible: orca::/w/feat-a orca-ssh::/w/remote-x orca::/w/feat-b api::/w/api-y orca::/w/feat-c lab::/w/gitlab-mr orca::/w/Zeta shared::/w/same shared::/w/same orca::/orca orca-ssh::/orca-ssh api::/api lab::/lab ext::/ext
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca-ssh::/w/remote-x,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr,shared::/w/same]
 ITEM rowKey=pinned:|orca::/w/feat-a depth=0 groupDepth=0 children=2 lineageKey=lineage:orca::/w/feat-a hostLabel="Local Linux" placement=pinned owning=project:p-orca
 ITEM rowKey=pinned:|orca::/w/feat-b depth=1 groupDepth=0 children=1 lineageKey=lineage:orca::/w/feat-b hostLabel="Local Linux" placement=pinned owning=project:p-orca parent=pinned:|orca::/w/feat-a
@@ -469,7 +484,7 @@ PREFERRED |orca::/w/feat-c -> pr:in-progress:|orca::/w/feat-c
 PREFERRED |lab::/w/gitlab-mr -> pr:in-progress:|lab::/w/gitlab-mr
 PREFERRED ssh:gpu-vm|orca-ssh::/w/remote-x -> pr:in-progress:ssh:gpu-vm|orca-ssh::/w/remote-x
 PREFERRED ssh:gpu-vm|shared::/w/same -> pr:in-progress:ssh:gpu-vm|shared::/w/same
-renderedKeys: 32
+renderedKeys: 33
 placeholders: -
 selectionOrder: |orca::/w/feat-b |orca::/w/feat-a runtime:env-1|api::/w/api-y ssh:gpu-vm|orca-ssh::/w/remote-x |orca::/w/feat-c |lab::/w/gitlab-mr local|shared::/w/same ssh:gpu-vm|shared::/w/same |orca::/orca |orca-ssh::/orca-ssh runtime:env-1|api::/api |lab::/lab |ext::/ext local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote |orca::/w/Zeta
 cmd1-9 mounted: 1=orca::/w/feat-b#lineage:orca::/w/feat-b 2=orca::/w/feat-a#lineage:orca::/w/feat-a 3=api::/w/api-y@runtime:env-1 4=orca-ssh::/w/remote-x@ssh:gpu-vm 5=orca::/w/feat-c 6=lab::/w/gitlab-mr 7=shared::/w/same@local 8=shared::/w/same@ssh:gpu-vm 9=orca::/orca
@@ -478,6 +493,7 @@ cmd ids unmounted: orca::/w/feat-b orca::/w/feat-a api::/w/api-y orca-ssh::/w/re
 -- collapsed: pinned pr:in-review pr:closed lineage:orca::/w/feat-a --
 visible: orca::/w/feat-a orca-ssh::/w/remote-x orca::/w/feat-b api::/w/api-y orca::/w/feat-c lab::/w/gitlab-mr orca::/w/Zeta shared::/w/same shared::/w/same orca::/orca orca-ssh::/orca-ssh api::/api lab::/lab ext::/ext
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,orca-ssh::/w/remote-x,orca::/w/feat-b,orca::/w/feat-c,lab::/w/gitlab-mr,shared::/w/same]
 HEADER key=pr:done label="Done" count=1 tone="text-workspace-status-done" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[orca::/w/feat-b]} ids=[orca::/w/feat-b]
 ITEM rowKey=pr:done:|orca::/w/feat-b depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
@@ -506,7 +522,7 @@ PREFERRED |orca::/w/feat-c -> pr:in-progress:|orca::/w/feat-c
 PREFERRED |lab::/w/gitlab-mr -> pr:in-progress:|lab::/w/gitlab-mr
 PREFERRED ssh:gpu-vm|orca-ssh::/w/remote-x -> pr:in-progress:ssh:gpu-vm|orca-ssh::/w/remote-x
 PREFERRED ssh:gpu-vm|shared::/w/same -> pr:in-progress:ssh:gpu-vm|shared::/w/same
-renderedKeys: 23
+renderedKeys: 24
 placeholders: -
 selectionOrder: |orca::/w/feat-b ssh:gpu-vm|orca-ssh::/w/remote-x |orca::/w/feat-c |lab::/w/gitlab-mr local|shared::/w/same ssh:gpu-vm|shared::/w/same |orca::/orca |orca-ssh::/orca-ssh runtime:env-1|api::/api |lab::/lab |ext::/ext local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote
 cmd1-9 mounted: 1=orca::/w/feat-b 2=orca-ssh::/w/remote-x@ssh:gpu-vm 3=orca::/w/feat-c 4=lab::/w/gitlab-mr 5=shared::/w/same@local 6=shared::/w/same@ssh:gpu-vm 7=orca::/orca 8=orca-ssh::/orca-ssh 9=api::/api@runtime:env-1
@@ -517,6 +533,7 @@ cmd ids unmounted: orca::/w/feat-b orca-ssh::/w/remote-x orca::/w/feat-c lab::/w
 === sort=repo projectOrder=manual pinnedInGroups=false ===
 visible: api::/w/api-y api::/api ext::/ext orca::/w/feat-a lab::/w/gitlab-mr lab::/lab orca::/w/feat-b orca::/w/feat-c orca-ssh::/orca-ssh orca::/orca orca-ssh::/w/remote-x orca::/w/Zeta shared::/w/same shared::/w/same
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,lab::/w/gitlab-mr,orca::/w/feat-b,orca::/w/feat-c] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,lab::/w/gitlab-mr,orca::/w/feat-b,orca::/w/feat-c,orca-ssh::/w/remote-x,shared::/w/same]
 ITEM rowKey=pinned:|orca::/w/feat-a depth=0 groupDepth=0 children=2 lineageKey=lineage:orca::/w/feat-a hostLabel="Local Linux" placement=pinned owning=project:p-orca
 ITEM rowKey=pinned:|lab::/w/gitlab-mr depth=1 groupDepth=0 children=0 hostLabel="Local Linux" showProject=true placement=pinned owning=project:repo:lab parent=pinned:|orca::/w/feat-a
@@ -538,7 +555,7 @@ FOLDER key=folder-workspace:local|folder:fw-notes projectGroup=pg-folders depth=
 FOLDER key=folder-workspace:ssh:gpu-vm|folder:fw-remote projectGroup=pg-remote-folders depth=0 groupDepth=0
 HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-300" icon=CircleX hostCounts={local:1} hostIds={local:[orca::/w/Zeta]} ids=[orca::/w/Zeta]
 ITEM rowKey=pr:closed:|orca::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
-renderedKeys: 25
+renderedKeys: 26
 placeholders: -
 selectionOrder: |orca::/w/feat-a |lab::/w/gitlab-mr |orca::/w/feat-b |orca::/w/feat-c ssh:gpu-vm|orca-ssh::/w/remote-x ssh:gpu-vm|shared::/w/same runtime:env-1|api::/w/api-y runtime:env-1|api::/api |ext::/ext |lab::/lab |orca-ssh::/orca-ssh |orca::/orca local|shared::/w/same local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote |orca::/w/Zeta
 cmd1-9 mounted: 1=orca::/w/feat-a#lineage:orca::/w/feat-a 2=lab::/w/gitlab-mr 3=orca::/w/feat-b#lineage:orca::/w/feat-b 4=orca::/w/feat-c 5=orca-ssh::/w/remote-x@ssh:gpu-vm 6=shared::/w/same@ssh:gpu-vm 7=api::/w/api-y@runtime:env-1 8=api::/api@runtime:env-1 9=ext::/ext
@@ -547,6 +564,7 @@ cmd ids unmounted: orca::/w/feat-a lab::/w/gitlab-mr orca::/w/feat-b orca::/w/fe
 -- collapsed: pinned pr:in-progress lineage:orca::/w/feat-a --
 visible: api::/w/api-y api::/api ext::/ext orca::/w/feat-a lab::/w/gitlab-mr lab::/lab orca::/w/feat-b orca::/w/feat-c orca-ssh::/orca-ssh orca::/orca orca-ssh::/w/remote-x orca::/w/Zeta shared::/w/same shared::/w/same
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,lab::/w/gitlab-mr,orca::/w/feat-b,orca::/w/feat-c] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,lab::/w/gitlab-mr,orca::/w/feat-b,orca::/w/feat-c,orca-ssh::/w/remote-x,shared::/w/same]
 HEADER key=pr:in-review label="In review" count=1 tone="text-workspace-status-review" icon=ConductorReviewIcon hostCounts={runtime:env-1:1} hostIds={runtime:env-1:[api::/w/api-y]} ids=[api::/w/api-y]
 ITEM rowKey=pr:in-review:runtime:env-1|api::/w/api-y depth=0 groupDepth=0 lastChild=true children=0 hostLabel="env-1" placement=natural owning=project:repo:api
@@ -555,7 +573,7 @@ HEADER key=pr:closed label="Closed" count=1 tone="text-zinc-600 dark:text-zinc-3
 ITEM rowKey=pr:closed:|orca::/w/Zeta depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
 SECTION pinned: pinned:|orca::/w/feat-a pinned:|lab::/w/gitlab-mr pinned:|orca::/w/feat-b pinned:|orca::/w/feat-c pinned:ssh:gpu-vm|orca-ssh::/w/remote-x pinned:ssh:gpu-vm|shared::/w/same
 SECTION pr:in-progress: pr:in-progress:runtime:env-1|api::/api pr:in-progress:|ext::/ext pr:in-progress:|lab::/lab pr:in-progress:|orca-ssh::/orca-ssh pr:in-progress:|orca::/orca pr:in-progress:local|shared::/w/same
-renderedKeys: 7
+renderedKeys: 8
 placeholders: -
 selectionOrder: runtime:env-1|api::/w/api-y |orca::/w/Zeta
 cmd1-9 mounted: 1=api::/w/api-y@runtime:env-1 2=orca::/w/Zeta
@@ -564,6 +582,7 @@ cmd ids unmounted: api::/w/api-y orca::/w/Zeta
 === sort=repo projectOrder=manual pinnedInGroups=true ===
 visible: api::/w/api-y api::/api ext::/ext orca::/w/feat-a lab::/w/gitlab-mr lab::/lab orca::/w/feat-b orca::/w/feat-c orca-ssh::/orca-ssh orca::/orca orca-ssh::/w/remote-x orca::/w/Zeta shared::/w/same shared::/w/same
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,lab::/w/gitlab-mr,orca::/w/feat-b,orca::/w/feat-c] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,lab::/w/gitlab-mr,orca::/w/feat-b,orca::/w/feat-c,orca-ssh::/w/remote-x,shared::/w/same]
 ITEM rowKey=pinned:|orca::/w/feat-a depth=0 groupDepth=0 children=2 lineageKey=lineage:orca::/w/feat-a hostLabel="Local Linux" placement=pinned owning=project:p-orca
 ITEM rowKey=pinned:|lab::/w/gitlab-mr depth=1 groupDepth=0 children=0 hostLabel="Local Linux" showProject=true placement=pinned owning=project:repo:lab parent=pinned:|orca::/w/feat-a
@@ -598,7 +617,7 @@ PREFERRED |orca::/w/feat-b -> pr:done:|orca::/w/feat-b
 PREFERRED |orca::/w/feat-c -> pr:in-progress:|orca::/w/feat-c
 PREFERRED ssh:gpu-vm|orca-ssh::/w/remote-x -> pr:in-progress:ssh:gpu-vm|orca-ssh::/w/remote-x
 PREFERRED ssh:gpu-vm|shared::/w/same -> pr:in-progress:ssh:gpu-vm|shared::/w/same
-renderedKeys: 32
+renderedKeys: 33
 placeholders: -
 selectionOrder: |orca::/w/feat-b runtime:env-1|api::/w/api-y |orca::/w/feat-a runtime:env-1|api::/api |ext::/ext |lab::/w/gitlab-mr |lab::/lab |orca::/w/feat-c |orca-ssh::/orca-ssh |orca::/orca ssh:gpu-vm|orca-ssh::/w/remote-x local|shared::/w/same ssh:gpu-vm|shared::/w/same local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote |orca::/w/Zeta
 cmd1-9 mounted: 1=orca::/w/feat-b#lineage:orca::/w/feat-b 2=api::/w/api-y@runtime:env-1 3=orca::/w/feat-a#lineage:orca::/w/feat-a 4=api::/api@runtime:env-1 5=ext::/ext 6=lab::/w/gitlab-mr 7=lab::/lab 8=orca::/w/feat-c 9=orca-ssh::/orca-ssh
@@ -607,6 +626,7 @@ cmd ids unmounted: orca::/w/feat-b api::/w/api-y orca::/w/feat-a api::/api ext::
 -- collapsed: pinned pr:in-review pr:closed lineage:orca::/w/feat-a --
 visible: api::/w/api-y api::/api ext::/ext orca::/w/feat-a lab::/w/gitlab-mr lab::/lab orca::/w/feat-b orca::/w/feat-c orca-ssh::/orca-ssh orca::/orca orca-ssh::/w/remote-x orca::/w/Zeta shared::/w/same shared::/w/same
 PENDING key=pending:creation-1 creation=creation-1 repo=api
+IMPORTED key=imported-worktrees-card:standalone:ext repo=ext placement=standalone hidden=ext::/w/detected-hidden
 HEADER key=pinned label="Pinned" count=6 tone="text-foreground" icon=Pin hostCounts={local:4 ssh:gpu-vm:2} hostIds={local:[orca::/w/feat-a,lab::/w/gitlab-mr,orca::/w/feat-b,orca::/w/feat-c] ssh:gpu-vm:[orca-ssh::/w/remote-x,shared::/w/same]} ids=[orca::/w/feat-a,lab::/w/gitlab-mr,orca::/w/feat-b,orca::/w/feat-c,orca-ssh::/w/remote-x,shared::/w/same]
 HEADER key=pr:done label="Done" count=1 tone="text-workspace-status-done" icon=ConductorDoneIcon hostCounts={local:1} hostIds={local:[orca::/w/feat-b]} ids=[orca::/w/feat-b]
 ITEM rowKey=pr:done:|orca::/w/feat-b depth=0 groupDepth=0 lastChild=true children=0 hostLabel="Local Linux" placement=natural owning=project:p-orca
@@ -635,7 +655,7 @@ PREFERRED |orca::/w/feat-b -> pr:done:|orca::/w/feat-b
 PREFERRED |orca::/w/feat-c -> pr:in-progress:|orca::/w/feat-c
 PREFERRED ssh:gpu-vm|orca-ssh::/w/remote-x -> pr:in-progress:ssh:gpu-vm|orca-ssh::/w/remote-x
 PREFERRED ssh:gpu-vm|shared::/w/same -> pr:in-progress:ssh:gpu-vm|shared::/w/same
-renderedKeys: 23
+renderedKeys: 24
 placeholders: -
 selectionOrder: |orca::/w/feat-b runtime:env-1|api::/api |ext::/ext |lab::/w/gitlab-mr |lab::/lab |orca::/w/feat-c |orca-ssh::/orca-ssh |orca::/orca ssh:gpu-vm|orca-ssh::/w/remote-x local|shared::/w/same ssh:gpu-vm|shared::/w/same local|folder:fw-review local|folder:fw-notes ssh:gpu-vm|folder:fw-remote
 cmd1-9 mounted: 1=orca::/w/feat-b 2=api::/api@runtime:env-1 3=ext::/ext 4=lab::/w/gitlab-mr 5=lab::/lab 6=orca::/w/feat-c 7=orca-ssh::/orca-ssh 8=orca::/orca 9=orca-ssh::/w/remote-x@ssh:gpu-vm

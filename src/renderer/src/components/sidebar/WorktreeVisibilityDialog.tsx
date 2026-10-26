@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/dialog'
 import { isGitRepoKind } from '../../../../shared/repo-kind'
 import { translate } from '@/i18n/i18n'
-import { track } from '@/lib/telemetry'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import type { NewExternalWorktreesInboxActionState } from './new-external-worktrees-inbox-actions'
 import WorktreeVisibilityHelpPopover from './WorktreeVisibilityHelpPopover'
@@ -59,6 +58,10 @@ import { createBrowserUuid } from '@/lib/browser-uuid'
 import { selectDetectedWorktreesByRepo } from '@/store/workspace-record-selectors'
 import { getHiddenImportableExternalWorktrees } from '../../../../shared/external-worktree-inbox'
 import { useWorktreeVisibilityImport } from './use-worktree-visibility-import'
+import {
+  isWorkspaceDiscoveryTelemetryEnabled,
+  trackWorkspaceDiscoveryShown
+} from './workspace-discovery-telemetry'
 
 export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
   const activeModal = useAppStore((s) => s.activeModal)
@@ -93,28 +96,15 @@ export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
   const effectivelyToggling = isToggling || activeMutation?.kind === 'toggle'
   const visibilityDefaults = useRepoOwnerVisibilityDefaults(repo)
   const removableSourceIds = useMemo(() => getRepoCustomWorktreeVisibilitySourceIds(repo), [repo])
-  const telemetry = settings?.telemetry
-  const telemetryEnabled =
-    telemetry?.optedIn === true &&
-    (telemetry.workspaceDiscoveryCohort === 'control' ||
-      telemetry.workspaceDiscoveryCohort === 'treatment')
-  const trackedScope = useRef<string | null>(null)
+  const telemetryEnabled = isWorkspaceDiscoveryTelemetryEnabled(settings?.telemetry)
+  // Only a scope whose scan succeeded during this open counts as shown; a stale ready state never does.
+  const [scannedScope, setScannedScope] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isOpen) {
-      trackedScope.current = null
-    } else if (
-      telemetryEnabled &&
-      listState === 'ready' &&
-      trackedScope.current !== mutationScope
-    ) {
-      trackedScope.current = mutationScope
-      track('workspace_discovery_shown', {
-        surface: 'manage',
-        workspace_count: Math.min(getHiddenImportableExternalWorktrees(detected).length, 50)
-      })
+    if (isOpen && telemetryEnabled && scannedScope === mutationScope) {
+      trackWorkspaceDiscoveryShown('manage', getHiddenImportableExternalWorktrees(detected).length)
     }
-  }, [isOpen, listState, mutationScope, telemetryEnabled, detected])
+  }, [isOpen, telemetryEnabled, scannedScope, mutationScope, detected])
 
   useLayoutEffect(() => {
     currentMutationScopeRef.current = mutationScope
@@ -152,6 +142,7 @@ export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
       (refreshed) => {
         if (!cancelled) {
           setListState(refreshed ? 'ready' : 'failed')
+          setScannedScope(refreshed ? mutationScope : null)
         }
       },
       () => {
@@ -162,6 +153,8 @@ export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
     )
     return () => {
       cancelled = true
+      // Closing or switching projects invalidates the scan before the next open can report it.
+      setScannedScope(null)
     }
   }, [isOpen, mutationScope, refreshTargetRepo, repoId])
 
@@ -173,6 +166,10 @@ export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
     const refreshed = await refreshTargetRepo(repoId, { requireAuthoritative: true })
     if (currentMutationScopeRef.current === mutationScope) {
       setListState(refreshed ? 'ready' : 'failed')
+      // A recovered opening scan is the first time this manager actually displays the list.
+      if (refreshed) {
+        setScannedScope(mutationScope)
+      }
     }
   }, [mutationScope, refreshTargetRepo, repoId])
 

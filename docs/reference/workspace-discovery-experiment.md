@@ -1,32 +1,35 @@
-# Workspace discovery experiment
+# Workspace discovery experiments
 
-`workspace_discovery_v1` compares automatic sidebar suggestions for hidden, external workspaces:
+Adding a project used to reveal every existing sibling worktree in the sidebar. The new handoff opens only the checkout the user picked and leaves the siblings behind a compact **N other workspaces found · Review** hint. Two experiments measure that change, one per population, so new and existing users can respond differently without diluting each other:
 
-| Variant     | Fresh installs | Behavior                              |
-| ----------- | -------------- | ------------------------------------- |
-| `treatment` | 90%            | Show workspace discovery suggestions. |
-| `control`   | 10%            | Hide automatic suggestions.           |
+| Experiment                             | Population                                                | Control/treatment |
+| -------------------------------------- | --------------------------------------------------------- | ----------------- |
+| `workspace_discovery_new_user_v1`      | Profiles created by a build that includes this experiment | 20/80             |
+| `workspace_discovery_existing_user_v1` | Profiles that existed before upgrading to such a build    | 20/80             |
 
-Assignment is independent of the onboarding language experiment and saved as `settings.telemetry.workspaceDiscoveryCohort` before first launch. It survives restarts, settings changes and telemetry opt-out. Existing profiles are excluded and keep suggestions. Both groups can use **Manage workspaces** in the project menu; the experiment changes suggestions, not workspace visibility or imports. Folder projects have no external-workspace discovery and never qualify. The same client assignment applies to local and remote projects. Mobile has no matching suggestion surface and does not enroll users through this flow.
+| Arm         | Project-add handoff                                                                                        |
+| ----------- | ---------------------------------------------------------------------------------------------------------- |
+| `control`   | Pre-experiment behavior: sets the project's external worktree visibility to show, revealing every sibling. |
+| `treatment` | Imports only the selected checkout; hidden siblings surface through the hint.                              |
 
-Suggestions are compact sidebar hints. **Review** and the project menu open the same workspace manager, independently of sidebar expansion, filters, and scrolling. The manager scans its project owner, supports selecting hidden workspaces in a searchable virtualized list, and keeps source controls under **Visibility settings**. Dismissing the hint suppresses suggestions without changing visibility rules or imported paths. Onboarding opens the selected checkout without requiring an import decision.
+Each profile receives exactly one assignment, derived at load from a salted hash of its install ID (so it is reproducible from the transmitted `install_id`) and saved in `settings.telemetry` as `workspaceDiscoveryNewUserCohort` or `workspaceDiscoveryExistingUserCohort`. It survives restarts, settings changes and telemetry opt-out. "Existing" means the profile file existed before the upgrade, so it includes recent installs that have not added a project yet; segment by first `app_opened` if that matters.
+
+Outside the handoff the arms are identical: both show the hint for hidden workspaces, and both can use **Manage workspaces** in the project menu. Dismissing the hint stops suggestions for that project until a visibility source is set to show. Folder projects have no external workspaces and never qualify. Projects added outside the add-project flow (for example via the CLI) skip the handoff and are not observed.
 
 ## Measurement
 
-All transmitted desktop events for enrolled installs carry the frozen `workspace_discovery_v1` property. Existing consent, environment and official-build gates apply. Discovery events are rejected for unenrolled installs. These observations do not write to disk.
+Every transmitted desktop event carries the install's experiment property. Existing consent, environment and official-build gates apply.
 
-- `workspace_discovery_eligible`: emitted in both groups when an authoritative workspace scan first produces an automatic suggestion candidate, before applying the holdout. Deduplicated across windows and sidebar mounts per app session; a rejected observation can retry after settings or consent changes. Count distinct `install_id` values, not event totals; restarts can repeat it. Opening management alone does not establish eligibility.
-- `workspace_discovery_shown`: a suggestion mounted or the manager completed its initial scan. This is a render observation, not a measure of attention. `surface` distinguishes `suggestion` from `manage`; `workspace_count` is capped at 50.
-- `workspace_discovery_action`: `reviewed`, `import_completed` or `dismissed`, with the same surface and capped count. Imports and dismissals are recorded only after success; import counts describe selected workspaces. No workspace IDs, names, paths or host identifiers are transmitted.
+- `workspace_discovery_eligible`: emitted by the add-project handoff when the authoritative scan shows hidden sibling workspaces, before either arm changes visibility, so both arms qualify on identical evidence. `workspace_count` is the number of hidden siblings, capped at 50. It repeats for each qualifying project add; use each install's first event as time zero.
+- `workspace_discovery_shown`: the hint mounted (`surface: suggestion`) or the manager finished its opening scan (`surface: manage`). This is a render observation, not a measure of attention.
+- `workspace_discovery_action`: `reviewed`, `import_completed` or `dismissed`, with the surface and a capped count. Imports and dismissals are recorded only after they succeed.
 
-Each surface observation and action/surface pair is recorded only once per app session, across all windows. Together with eligibility this allows at most nine discovery events per session; duplicates are dropped before consuming the shared telemetry budget or reading settings. These events measure adoption and conversion, not action frequency or total workspace imports. Automatic suggestions wait for settings hydration, so a control user cannot see a suggestion before its assignment loads.
+Shown and action events are recorded at most once per surface and action per window session, so they measure adoption, not frequency. No workspace IDs, names, paths or host identifiers are transmitted.
 
-Suppressing a suggestion preserves its project header even when workspace filters hide every workspace, so **Manage workspaces** remains reachable in both groups. It does not change stored workspace visibility, selected imports, host routing, or folder workspace behavior.
+Analyze each experiment separately and compare **rates** among distinct eligible installs:
 
-Use each install's first eligibility event as time zero. Compare conversion **rates** by variant among distinct eligible installs, rather than raw totals from the unequal groups:
+1. Primary: `agent_prompt_sent` within 24 hours of eligibility for new users and within 7 days for existing users.
+2. Retention: `app_opened` during days 1–7 after eligibility, with complete follow-up for both arms.
+3. Diagnostics: hint review, successful import and dismissal in treatment; management use in both arms.
 
-1. Primary: send an `agent_prompt_sent` within 24 hours of eligibility.
-2. Retention: `app_opened` during days 1–7 after eligibility, with complete follow-up for both groups.
-3. Diagnostics: suggestion review, successful import, dismissal, and use of management to import without a suggestion.
-
-Events before eligibility do not count as experiment outcomes. Keep management events in the control analysis: finding workspaces without a suggestion is part of its experience. Onboarding completion may precede sidebar eligibility, so it is not a post-exposure conversion metric. Report sample sizes and uncertainty; the 10% holdout will take longer to resolve small effects. Profiles without the cohort property and non-consenting installs are outside the measured sample.
+Events before eligibility do not count as experiment outcomes. Report sample sizes and uncertainty for each population; the 20% control arm sets how quickly small effects resolve. Non-consenting installs are outside the measured sample.

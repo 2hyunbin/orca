@@ -1,3 +1,4 @@
+import { appendStandaloneDiscoveryRows } from './discovery-notice-rows'
 import type { FolderWorkspace } from '../folder-workspace-types'
 import type { ProjectGroup } from '../project-group-types'
 import type { Repo } from '../repo-types'
@@ -208,6 +209,16 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
       workspaceStatuses,
       projectGrouping
     })
+    if (groupBy !== 'repo') {
+      appendStandaloneDiscoveryRows({
+        result,
+        importedWorktreesByRepo,
+        newExternalWorktreesInboxByRepo,
+        pinnedSectionWorktrees,
+        renderedNaturalAnchorRepoIds,
+        noticeHostContextLabelByRepoId
+      })
+    }
     emitPinnedGroup(
       pinnedSectionWorktrees,
       repoOf,

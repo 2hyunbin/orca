@@ -5866,17 +5866,6 @@
           "c4f96a6e18": "main worktree",
           "e3be9eba15": "This is the"
         },
-        "ImportedWorktreesVisibilityLine": {
-          "b7a87dc32f": "Show in worktree list",
-          "ad99f4eea9": "Keep hidden",
-          "9f4f14e821": "Change this later from the project menu.",
-          "b2bc47c080": "more locations",
-          "b47ba1a9d2": "{{value0}} preview",
-          "2251d41ebb": "Hidden worktree groups",
-          "f54f2bec5d": "{{value0}} hidden worktrees for {{value1}}",
-          "5a9688802a": "Show {{value0}} more",
-          "294de4aeb2": "Show fewer"
-        },
         "NonGitFolderDialog": {
           "e52454b7f6": "Open as Folder",
           "05b33a17a9": "Cancel",
@@ -6461,11 +6450,9 @@
           "1c68c9cf77": "Enable a source for all current and future worktrees, or show individual worktrees below."
         },
         "HiddenWorktreeRecoveryList": {
-          "64e6f53f05": "Show one without enabling its source.",
           "showWorktree": "Show {{value0}} at {{value1}}"
         },
         "WorktreeVisibilityDialog": {
-          "83a5ba8dd1": "Non-Orca worktrees",
           "f1f71b9f02": "Always show",
           "759371df43": "Hide",
           "25ddf19920": "{{value0}} currently hidden",
@@ -6799,14 +6786,7 @@
           "sleeping": "Sleeping"
         },
         "NewExternalWorktreesInboxLine": {
-          "9f2d4c8b17": "Hide external worktrees permanently for {{value0}}",
-          "5e1b8d3f62": "Hide external worktrees permanently",
-          "2a6f31d8c7": "hidden worktree",
-          "5b90e4a2f6": "hidden worktrees",
-          "7f18c5b0d3": "Review {{value0}} hidden worktree in {{value1}}",
-          "4e2b7a9c05": "Review {{value0}} hidden worktrees in {{value1}}",
-          "c3e8a1f4b2": "Don't show again",
-          "6c07f3a91e": "{{value0}} on {{value1}}"
+          "5e1b8d3f62": "Hide external worktrees permanently"
         },
         "NoticeHostGlyph": {
           "hostDisconnected": "{{hostName}} disconnected",
@@ -6816,16 +6796,7 @@
         },
         "newExternalWorktreesInboxActions": {
           "a11c2f6d89": "Could not keep external worktrees hidden. Try again.",
-          "b7e4d1a062": "Could not import external worktrees. Try again.",
-          "c94f0b3a15": "Could not hide external worktrees permanently. Try again."
-        },
-        "SuppressExternalWorktreeInboxDialog": {
-          "a4c2d8f1b0": "Hide external worktrees?",
-          "6e91b3c4d2": "External worktrees will not be shown in the sidebar or this list anymore for {{value0}}, including ones created later.",
-          "1f8a5d9e73": "You can turn this back on later from project settings.",
-          "8c0b2e7a41": "Open Non-Orca worktrees settings",
-          "5d1c9f0a82": "Cancel",
-          "3b7e4a1c96": "Hide external worktrees"
+          "b7e4d1a062": "Could not import external worktrees. Try again."
         },
         "useAddRepoHostSelection": {
           "connectionFailed": "SSH connection failed.",
@@ -21353,26 +21324,16 @@
     "selectScope": "Select {{name}} at {{path}}",
     "addError": "Could not add workspaces. Try again.",
     "dismissError": "Could not hide suggestions. Try again.",
-    "hiddenCount": "{{count}} hidden workspaces",
-    "hiddenOne": "1 hidden workspace",
     "oneFound": "1 other workspace found",
     "found": "{{count}} other workspaces found",
     "reviewScope": "Review hidden workspaces for {{scope}}",
     "review": "Review",
     "dismissScope": "Hide workspace suggestions for {{scope}}",
     "dismiss": "Hide suggestions for this project.",
-    "recovery": "Find these later in the project menu → Manage workspaces.",
     "description": "These working copies already exist. Select any you want to add to the sidebar.",
     "adding": "Adding…",
     "addCount": "Add {{count}} to sidebar",
     "add": "Add to sidebar",
-    "search": "Find a workspace",
-    "searchPlaceholder": "Find a workspace…",
-    "available": "Workspaces available to add",
-    "checking": "Checking workspaces…",
-    "noMatches": "No matching workspaces.",
-    "noneHidden": "No hidden workspaces.",
-    "scanError": "Could not check workspaces. Reopen Manage workspaces to try again.",
     "updateError": "Could not save workspace visibility. Try again.",
     "manage": "Manage workspaces"
   }

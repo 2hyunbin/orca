@@ -2,7 +2,6 @@ import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction 
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import { translate } from '@/i18n/i18n'
-import { track } from '@/lib/telemetry'
 import { getRepoHostIdentity } from '@/store/slices/repo-host-identity'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import { getHiddenImportableExternalWorktrees } from '../../../../shared/external-worktree-inbox'
@@ -18,6 +17,7 @@ import {
   startVisibilityMutation,
   type ActiveVisibilityMutation
 } from './worktree-visibility-mutation-fence'
+import { trackWorkspaceDiscoveryAction } from './workspace-discovery-telemetry'
 
 export function useWorktreeVisibilityImport({
   repo,
@@ -87,11 +87,7 @@ export function useWorktreeVisibilityImport({
           }
         })
         if (accepted && telemetryEnabled) {
-          track('workspace_discovery_action', {
-            action: 'import_completed',
-            surface: 'manage',
-            workspace_count: Math.min(selectedPaths.length, 50)
-          })
+          trackWorkspaceDiscoveryAction('manage', 'import_completed', selectedPaths.length)
         }
         return accepted
       } catch {

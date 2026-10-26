@@ -16,6 +16,7 @@ import {
   Bell,
   BellOff,
   CircleX,
+  Eye,
   Pencil,
   Pin,
   PinOff,
@@ -27,6 +28,7 @@ import {
   FolderTree
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isGitRepoKind } from '../../../../shared/repo-kind'
 import { WorktreeRowOpenInSubMenu } from './WorktreeRowOpenInSubMenu'
 import { WorktreeDeveloperMenu } from './WorktreeDeveloperMenu'
 import { WorkspaceSleepMenuItems } from './WorkspaceSleepMenuItems'
@@ -67,6 +69,7 @@ export default function WorktreeContextMenuView({ model }: { model: WorktreeCont
     handleCopyName,
     handleCopyPath,
     handleCreateGroupFromRepo,
+    handleManageWorkspaces,
     handleDelete,
     handleMoveProjectToGroup,
     handleOpenParent,
@@ -212,6 +215,12 @@ export default function WorktreeContextMenuView({ model }: { model: WorktreeCont
               {repo ? (
                 <>
                   <DropdownMenuSeparator />
+                  {isGitRepoKind(repo) ? (
+                    <DropdownMenuItem onSelect={handleManageWorkspaces} disabled={isDeleting}>
+                      <Eye className="size-3.5" />
+                      {translate('workspaceDiscovery.manage', 'Manage workspaces')}
+                    </DropdownMenuItem>
+                  ) : null}
                   <DropdownMenuItem onSelect={handleCreateGroupFromRepo} disabled={isDeleting}>
                     <FolderPlus className="size-3.5" />
                     {translate(

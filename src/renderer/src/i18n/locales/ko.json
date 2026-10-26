@@ -5480,17 +5480,6 @@
           "c4f96a6e18": "메인 워크트리",
           "e3be9eba15": "이것은"
         },
-        "ImportedWorktreesVisibilityLine": {
-          "b7a87dc32f": "워크트리 목록에 표시",
-          "ad99f4eea9": "숨김 유지",
-          "9f4f14e821": "나중에 프로젝트 메뉴에서 이를 변경하세요.",
-          "b2bc47c080": "더 많은 위치",
-          "b47ba1a9d2": "{{value0}} 미리보기",
-          "2251d41ebb": "숨겨진 워크트리 그룹",
-          "f54f2bec5d": "{{value1}}의 숨겨진 워크트리 {{value0}}개",
-          "5a9688802a": "{{value0}} 더 보기",
-          "294de4aeb2": "간략히 표시"
-        },
         "NonGitFolderDialog": {
           "e52454b7f6": "폴더로 열기",
           "05b33a17a9": "취소",
@@ -6067,11 +6056,9 @@
           "1c68c9cf77": "소스를 활성화해 현재와 앞으로 생성되는 모든 워크트리를 표시하거나 아래에서 개별 워크트리를 표시하세요."
         },
         "HiddenWorktreeRecoveryList": {
-          "64e6f53f05": "소스를 활성화하지 않고 하나만 표시합니다.",
           "showWorktree": "{{value1}}의 {{value0}} 표시"
         },
         "WorktreeVisibilityDialog": {
-          "83a5ba8dd1": "Orca 외부 워크트리",
           "f1f71b9f02": "항상 표시",
           "759371df43": "숨기기",
           "25ddf19920": "{{value0}} 현재 숨겨짐",
@@ -6477,14 +6464,7 @@
           "sleeping": "자고 있는"
         },
         "NewExternalWorktreesInboxLine": {
-          "9f2d4c8b17": "{{value0}}의 외부 워크트리를 영구적으로 숨기기",
-          "5e1b8d3f62": "외부 워크트리를 영구적으로 숨기기",
-          "c3e8a1f4b2": "다시 표시하지 않기",
-          "2a6f31d8c7": "숨겨진 작업 트리",
-          "5b90e4a2f6": "숨겨진 작업 트리",
-          "7f18c5b0d3": "{{value1}}의 {{value0}} 숨겨진 작업 트리를 검토합니다.",
-          "4e2b7a9c05": "{{value1}}에서 {{value0}} 숨겨진 작업 트리를 검토합니다.",
-          "6c07f3a91e": "{{value1}}의 {{value0}}"
+          "5e1b8d3f62": "외부 워크트리를 영구적으로 숨기기"
         },
         "NoticeHostGlyph": {
           "hostDisconnected": "{{hostName}} 연결 끊김",
@@ -6494,16 +6474,7 @@
         },
         "newExternalWorktreesInboxActions": {
           "a11c2f6d89": "외부 워크트리를 숨김 상태로 유지할 수 없습니다. 다시 시도하세요.",
-          "b7e4d1a062": "외부 워크트리를 가져올 수 없습니다. 다시 시도하세요.",
-          "c94f0b3a15": "외부 워크트리를 영구적으로 숨길 수 없습니다. 다시 시도하세요."
-        },
-        "SuppressExternalWorktreeInboxDialog": {
-          "a4c2d8f1b0": "외부 워크트리를 숨길까요?",
-          "6e91b3c4d2": "{{value0}}에서는 나중에 생성되는 항목을 포함해 외부 워크트리가 사이드바나 이 목록에 더 이상 표시되지 않습니다.",
-          "1f8a5d9e73": "나중에 프로젝트 설정에서 다시 켤 수 있습니다.",
-          "8c0b2e7a41": "Non-Orca 워크트리 설정 열기",
-          "5d1c9f0a82": "취소",
-          "3b7e4a1c96": "외부 워크트리 숨기기"
+          "b7e4d1a062": "외부 워크트리를 가져올 수 없습니다. 다시 시도하세요."
         },
         "useAddRepoHostSelection": {
           "connectionFailed": "SSH 연결에 실패했습니다.",

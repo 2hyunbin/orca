@@ -52,13 +52,15 @@ export function buildImportedWorktreesCardRow(
 
 export function buildNewExternalWorktreesInboxRow(
   candidate: NewExternalWorktreesInboxCandidate,
-  hostContext?: NoticeHostContext
+  hostContext?: NoticeHostContext,
+  placement?: 'standalone'
 ): NewExternalWorktreesInboxRow {
   return {
     type: 'new-external-worktrees-inbox',
-    key: `new-external-worktrees-inbox:${candidate.repo.id}`,
+    key: `new-external-worktrees-inbox:${placement ? `${placement}:` : ''}${candidate.repo.id}`,
     repo: candidate.repo,
     inboxWorktrees: candidate.inboxWorktrees,
+    ...(placement ? { placement } : {}),
     ...(hostContext
       ? { hostContextLabel: hostContext.label, hostContextHostId: hostContext.hostId }
       : {})

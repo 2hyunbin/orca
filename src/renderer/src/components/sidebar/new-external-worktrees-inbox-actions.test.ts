@@ -3,8 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../../../shared/repo-types'
 import {
   importNewExternalWorktreeInboxPaths,
-  keepNewExternalWorktreeInboxHidden,
-  suppressNewExternalWorktreeInbox
+  keepNewExternalWorktreeInboxHidden
 } from './new-external-worktrees-inbox-actions'
 
 const projectId = 'repo-1'
@@ -75,26 +74,6 @@ describe('new external worktree inbox actions', () => {
 
     expect(setInboxState).toHaveBeenNthCalledWith(1, projectId, { pending: true, error: null })
     expect(updateRepo).toHaveBeenCalledWith(projectId, {
-      externalWorktreeInboxBaselinePaths: ['/scratch/old', '/scratch/new']
-    })
-    expect(setInboxState).toHaveBeenLastCalledWith(projectId, null)
-  })
-
-  it('permanently suppresses the inbox and baselines the current batch', async () => {
-    const updateRepo = vi.fn().mockResolvedValue(true)
-    const setInboxState = vi.fn()
-
-    const suppressed = await suppressNewExternalWorktreeInbox({
-      projectId,
-      repo,
-      worktreePaths: ['/scratch/new'],
-      updateRepo,
-      setInboxState
-    })
-
-    expect(suppressed).toBe(true)
-    expect(updateRepo).toHaveBeenCalledWith(projectId, {
-      externalWorktreeDiscoverySuppressedAt: expect.any(Number),
       externalWorktreeInboxBaselinePaths: ['/scratch/old', '/scratch/new']
     })
     expect(setInboxState).toHaveBeenLastCalledWith(projectId, null)

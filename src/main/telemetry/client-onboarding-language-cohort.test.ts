@@ -49,49 +49,27 @@ describe('onboarding language cohort on analytics', () => {
   )
 })
 
-describe('workspace discovery cohort on analytics', () => {
-  it.each(['control', 'treatment', undefined] as const)(
-    'attaches %s to eligibility, activation and return events while respecting consent',
-    (cohort) => {
-      const state = setupTelemetryClientTest({
-        optedIn: true,
-        installId: 'test-install',
-        existedBeforeTelemetryRelease: false,
-        ...(cohort ? { workspaceDiscoveryCohort: cohort } : {})
-      })
-      try {
-        initTelemetry(state.store)
-        expect(track('workspace_discovery_eligible', {})).toBe(Boolean(cohort))
-        const surface = cohort === 'control' ? 'manage' : 'suggestion'
-        expect(track('workspace_discovery_shown', { surface, workspace_count: 2 })).toBe(
-          Boolean(cohort)
-        )
-        expect(
-          track('workspace_discovery_action', {
-            action: 'import_completed',
-            surface,
-            workspace_count: 1
-          })
-        ).toBe(Boolean(cohort))
-        expect(
-          track('activation_checklist_item_completed', {
-            item: 'ranFirstAgent',
-            time_since_completed_ms: 2000
-          })
-        ).toBe(true)
-        expect(track('app_opened', {})).toBe(true)
-        expect(capture).toHaveBeenCalledTimes(cohort ? 5 : 2)
-        for (const [event] of capture.mock.calls) {
-          expect(event.properties.workspace_discovery_v1).toBe(cohort)
-        }
-        if (state.settings.telemetry) {
-          state.settings.telemetry.optedIn = false
-        }
-        expect(track('workspace_discovery_eligible', {})).toBe(false)
-        expect(capture).toHaveBeenCalledTimes(cohort ? 5 : 2)
-      } finally {
-        cleanupTelemetryClientTest(state.envStash)
+describe('workspace discovery cohorts on analytics', () => {
+  it.each([
+    ['workspaceDiscoveryNewUserCohort', 'workspace_discovery_new_user_v1'],
+    ['workspaceDiscoveryExistingUserCohort', 'workspace_discovery_existing_user_v1']
+  ] as const)('attaches %s as %s to every event', (field, property) => {
+    const state = setupTelemetryClientTest({
+      optedIn: true,
+      installId: 'test-install',
+      existedBeforeTelemetryRelease: false,
+      [field]: 'control'
+    })
+    try {
+      initTelemetry(state.store)
+      track('workspace_discovery_eligible', { workspace_count: 3 })
+      track('app_opened', {})
+      expect(capture).toHaveBeenCalledTimes(2)
+      for (const [event] of capture.mock.calls) {
+        expect(event.properties[property]).toBe('control')
       }
+    } finally {
+      cleanupTelemetryClientTest(state.envStash)
     }
-  )
+  })
 })

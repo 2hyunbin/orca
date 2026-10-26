@@ -9,8 +9,10 @@ export type TelemetrySettings = {
   existedBeforeTelemetryRelease: boolean
   /** Frozen 50/50 assignment for fresh installs; absent for profiles predating the experiment. */
   onboardingLanguageCohort?: 'control' | 'treatment'
-  /** Frozen fresh-install assignment: 10% hide suggestions, 90% show them. */
-  workspaceDiscoveryCohort?: 'control' | 'treatment'
+  /** Frozen 20/80 control/treatment assignment for profiles created by a build with workspace discovery. */
+  workspaceDiscoveryNewUserCohort?: 'control' | 'treatment'
+  /** Frozen 20/80 control/treatment assignment for profiles that predate workspace discovery. */
+  workspaceDiscoveryExistingUserCohort?: 'control' | 'treatment'
   /** Local UTC-day cursors cap dashboard observations across restarts; at most two writes a day. */
   agentDashboardActiveDays?: Partial<Record<AgentDashboardSurface, number>>
 }

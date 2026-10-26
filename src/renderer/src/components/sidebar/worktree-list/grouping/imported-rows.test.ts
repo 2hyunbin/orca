@@ -114,20 +114,13 @@ describe('imported worktree virtual rows', () => {
     expect(groupKeyByRowKey.get('all:main')).toBe('all')
   })
 
-  it('only allows keep-hidden actions for repo-group cards that are not forced visible', () => {
-    expect(canKeepImportedWorktreesHidden(makeImportedCardRow(), undefined)).toBe(true)
+  it('allows keep-hidden actions everywhere except the pinned fallback', () => {
+    expect(canKeepImportedWorktreesHidden(makeImportedCardRow())).toBe(true)
     expect(
-      canKeepImportedWorktreesHidden(makeImportedCardRow(), {
-        pending: false,
-        error: 'Could not show discovered worktrees.',
-        forceVisible: true
-      })
-    ).toBe(false)
+      canKeepImportedWorktreesHidden({ ...makeImportedCardRow(), placement: 'standalone' })
+    ).toBe(true)
     expect(
-      canKeepImportedWorktreesHidden(
-        { ...makeImportedCardRow(), placement: 'pinned-fallback' },
-        undefined
-      )
+      canKeepImportedWorktreesHidden({ ...makeImportedCardRow(), placement: 'pinned-fallback' })
     ).toBe(false)
   })
 })

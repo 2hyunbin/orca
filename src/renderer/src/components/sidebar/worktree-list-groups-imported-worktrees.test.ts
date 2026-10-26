@@ -143,7 +143,7 @@ describe('buildRows with pinned worktrees', () => {
     expect(rows).toEqual([])
   })
 
-  it('does not emit unpinned imported worktree cards outside repo grouping', () => {
+  it('emits a standalone imported worktree card for unpinned projects outside repo grouping', () => {
     const rows = buildRows(
       'workspace-status',
       [worktree],
@@ -162,7 +162,9 @@ describe('buildRows with pinned worktrees', () => {
       new Map([[repo.id, { repo, hiddenWorktrees: [makeDetectedWorktree()] }]])
     )
 
-    expect(rows.some((row) => row.type === 'imported-worktrees-card')).toBe(false)
+    expect(rows.filter((row) => row.type === 'imported-worktrees-card')).toEqual([
+      expect.objectContaining({ placement: 'standalone', repo })
+    ])
   })
 
   it('places non-repo imported fallbacks after each repo last pinned row when expanded', () => {
@@ -415,7 +417,7 @@ describe('buildRows with pinned worktrees', () => {
     ).toBe(false)
   })
 
-  it('does not emit new external worktrees inbox rows outside repo grouping', () => {
+  it('emits a standalone new external worktrees inbox row outside repo grouping', () => {
     const rows = buildRows(
       'workspace-status',
       [worktree],
@@ -435,7 +437,9 @@ describe('buildRows with pinned worktrees', () => {
       new Map([[repo.id, { repo, inboxWorktrees: [makeDetectedWorktree()] }]])
     )
 
-    expect(rows.some((row) => row.type === 'new-external-worktrees-inbox')).toBe(false)
+    expect(rows.filter((row) => row.type === 'new-external-worktrees-inbox')).toEqual([
+      expect.objectContaining({ placement: 'standalone', repo })
+    ])
   })
 
   it('emits imported worktree cards in repo groups when visible rows are pinned', () => {
@@ -553,7 +557,7 @@ describe('buildRows with pinned worktrees', () => {
     )
   })
 
-  it('suppresses duplicate-mode imported fallback only when a natural anchor renders', () => {
+  it('moves a duplicate-mode suggestion from the pinned fallback to standalone when a natural anchor renders', () => {
     const pinnedWorktree = { ...worktree, id: 'wt-pinned', isPinned: true }
     const imported = new Map([[repo.id, { repo, hiddenWorktrees: [makeDetectedWorktree()] }]])
     const expanded = buildRows(
@@ -591,12 +595,10 @@ describe('buildRows with pinned worktrees', () => {
       imported
     )
 
-    expect(expanded.some((row) => row.type === 'imported-worktrees-card')).toBe(false)
-    expect(collapsedAll).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: 'imported-worktrees-card', placement: 'pinned-fallback' })
-      ])
-    )
+    const placements = (rows: typeof expanded) =>
+      rows.flatMap((row) => (row.type === 'imported-worktrees-card' ? [row.placement] : []))
+    expect(placements(expanded)).toEqual(['standalone'])
+    expect(placements(collapsedAll)).toEqual(['pinned-fallback'])
   })
 
   it('suppresses pinned imported worktree fallback when the repo has visible unpinned rows', () => {

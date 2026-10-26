@@ -72,7 +72,8 @@ export type ImportedWorktreesCardRow = {
   key: string
   repo: Repo
   hiddenWorktrees: DetectedWorktree[]
-  placement: 'repo-group' | 'pinned-fallback'
+  /** `standalone` hints sit outside any project section, so they name the project themselves. */
+  placement: 'repo-group' | 'pinned-fallback' | 'standalone'
   /** Set only when the row's project is checked out on more than one host. */
   hostContextLabel?: string
   hostContextHostId?: ExecutionHostId
@@ -83,19 +84,12 @@ export type NewExternalWorktreesInboxCandidate = {
   inboxWorktrees: DetectedWorktree[]
 }
 
-/** Desktop-only inputs added to the shared sidebar feed plan. */
-export type SidebarFeedWindowExtras = {
-  forcedVisibleWorktreeIds?: readonly string[]
-  importedWorktreesByRepo?: ReadonlyMap<string, ImportedWorktreesCardCandidate>
-  newExternalWorktreesInboxByRepo?: ReadonlyMap<string, NewExternalWorktreesInboxCandidate>
-  additionalPlaceholderRepoIds?: ReadonlySet<string>
-}
-
 export type NewExternalWorktreesInboxRow = {
   type: 'new-external-worktrees-inbox'
   key: string
   repo: Repo
   inboxWorktrees: DetectedWorktree[]
+  placement?: 'standalone'
   /** Set only when the row's project is checked out on more than one host. */
   hostContextLabel?: string
   hostContextHostId?: ExecutionHostId

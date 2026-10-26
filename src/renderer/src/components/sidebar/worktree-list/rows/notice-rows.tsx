@@ -4,16 +4,14 @@ import type { Row } from '../../../../../../shared/sidebar-list/row-types'
 import { getVirtualRowTransform } from '../viewport/virtual-rows'
 import { PendingWorktreeRow } from '../../PendingWorktreeRow'
 import ImportedWorktreesVisibilityLine from '../../ImportedWorktreesVisibilityLine'
-import { useAppStore } from '@/store'
 import { getRepoHostIdentity } from '@/store/slices/repo-host-identity'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { ImportedWorktreeCardActionState } from '../../imported-worktrees-card-actions'
 
 export function canKeepImportedWorktreesHidden(
-  row: Extract<Row, { type: 'imported-worktrees-card' }>,
-  actionState: ImportedWorktreeCardActionState | undefined
+  row: Extract<Row, { type: 'imported-worktrees-card' }>
 ): boolean {
-  return row.placement === 'repo-group' && actionState?.forceVisible !== true
+  return row.placement !== 'pinned-fallback'
 }
 
 type NoticeRowFrameProps = {
@@ -64,11 +62,6 @@ export function renderImportedWorktreesVirtualRow(args: {
   onKeepHidden: (repo: Repo) => Promise<boolean>
 }): React.JSX.Element {
   const { row, actionState } = args
-  const telemetry = useAppStore.getState().settings?.telemetry
-  const telemetryEnabled =
-    telemetry?.optedIn === true &&
-    (telemetry.workspaceDiscoveryCohort === 'control' ||
-      telemetry.workspaceDiscoveryCohort === 'treatment')
   return (
     <NoticeRowFrame
       key={args.vItem.key}
@@ -81,14 +74,11 @@ export function renderImportedWorktreesVirtualRow(args: {
         hostContextHostId={row.hostContextHostId}
         hiddenWorktrees={row.hiddenWorktrees}
         placement={row.placement}
-        telemetryEnabled={telemetryEnabled}
         pending={actionState?.pending ?? false}
         error={actionState?.error ?? null}
         onReview={() => args.onReview(row.repo)}
         onKeepHidden={
-          canKeepImportedWorktreesHidden(row, actionState)
-            ? () => args.onKeepHidden(row.repo)
-            : undefined
+          canKeepImportedWorktreesHidden(row) ? () => args.onKeepHidden(row.repo) : undefined
         }
         onFocusRecovery={() => focusProjectMenu(row.repo)}
       />
@@ -110,7 +100,7 @@ export function renderNewExternalWorktreesInboxVirtualRow(args: {
       ...args.row,
       type: 'imported-worktrees-card',
       hiddenWorktrees: args.row.inboxWorktrees,
-      placement: 'repo-group'
+      placement: args.row.placement ?? 'repo-group'
     }
   })
 }

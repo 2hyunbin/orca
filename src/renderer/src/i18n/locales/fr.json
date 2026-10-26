@@ -5677,17 +5677,6 @@
           "c4f96a6e18": "worktree principal",
           "e3be9eba15": "Ceci est le"
         },
-        "ImportedWorktreesVisibilityLine": {
-          "b7a87dc32f": "Afficher dans la liste des worktrees",
-          "ad99f4eea9": "Garder masqué",
-          "9f4f14e821": "Modifiable plus tard depuis le menu du projet.",
-          "b2bc47c080": "autres emplacements",
-          "b47ba1a9d2": "Aperçu de {{value0}}",
-          "2251d41ebb": "Groupes de worktrees masqués",
-          "f54f2bec5d": "{{value0}} worktrees masqués pour {{value1}}",
-          "5a9688802a": "Afficher {{value0}} de plus",
-          "294de4aeb2": "Afficher moins"
-        },
         "NonGitFolderDialog": {
           "e52454b7f6": "Ouvrir comme dossier",
           "05b33a17a9": "Annuler",
@@ -6272,11 +6261,9 @@
           "1c68c9cf77": "Activez une source pour tous les worktrees actuels et futurs, ou affichez des worktrees individuels ci-dessous."
         },
         "HiddenWorktreeRecoveryList": {
-          "64e6f53f05": "Affichez-en un sans activer sa source.",
           "showWorktree": "Afficher {{value0}} à {{value1}}"
         },
         "WorktreeVisibilityDialog": {
-          "83a5ba8dd1": "Worktrees non Orca",
           "f1f71b9f02": "Toujours afficher",
           "759371df43": "Masquer",
           "25ddf19920": "{{value0}} actuellement masqués",
@@ -6597,14 +6584,7 @@
           "sleeping": "En veille"
         },
         "NewExternalWorktreesInboxLine": {
-          "9f2d4c8b17": "Masquer définitivement les worktrees externes pour {{value0}}",
-          "5e1b8d3f62": "Masquer définitivement les worktrees externes",
-          "2a6f31d8c7": "worktree masqué",
-          "5b90e4a2f6": "worktrees masqués",
-          "7f18c5b0d3": "Examiner {{value0}} worktree masqué dans {{value1}}",
-          "4e2b7a9c05": "Examiner {{value0}} worktrees masqués dans {{value1}}",
-          "c3e8a1f4b2": "Ne plus afficher",
-          "6c07f3a91e": "{{value0}} sur {{value1}}"
+          "5e1b8d3f62": "Masquer définitivement les worktrees externes"
         },
         "NoticeHostGlyph": {
           "hostDisconnected": "{{hostName}} déconnecté",
@@ -6614,16 +6594,7 @@
         },
         "newExternalWorktreesInboxActions": {
           "a11c2f6d89": "Impossible de garder les worktrees externes masqués. Réessayez.",
-          "b7e4d1a062": "Impossible d'importer les worktrees externes. Réessayez.",
-          "c94f0b3a15": "Impossible de masquer définitivement les worktrees externes. Réessayez."
-        },
-        "SuppressExternalWorktreeInboxDialog": {
-          "a4c2d8f1b0": "Masquer les worktrees externes ?",
-          "6e91b3c4d2": "Les worktrees externes ne seront plus affichés dans la barre latérale ni dans cette liste pour {{value0}}, y compris ceux créés ultérieurement.",
-          "1f8a5d9e73": "Vous pourrez réactiver cela plus tard depuis les paramètres du projet.",
-          "8c0b2e7a41": "Ouvrir les paramètres des worktrees non Orca",
-          "5d1c9f0a82": "Annuler",
-          "3b7e4a1c96": "Masquer les worktrees externes"
+          "b7e4d1a062": "Impossible d'importer les worktrees externes. Réessayez."
         },
         "useAddRepoHostSelection": {
           "connectionFailed": "Échec de la connexion SSH.",

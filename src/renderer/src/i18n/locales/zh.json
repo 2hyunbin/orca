@@ -5480,17 +5480,6 @@
           "c4f96a6e18": "主工作树",
           "e3be9eba15": "这是"
         },
-        "ImportedWorktreesVisibilityLine": {
-          "b7a87dc32f": "在工作树列表中显示",
-          "ad99f4eea9": "保持隐藏",
-          "9f4f14e821": "稍后从项目菜单中更改此设置。",
-          "b2bc47c080": "更多位置",
-          "b47ba1a9d2": "{{value0}} 预览",
-          "2251d41ebb": "隐藏的工作树组",
-          "f54f2bec5d": "{{value0}} 隐藏 {{value1}} 的工作树",
-          "5a9688802a": "显示 {{value0}} 更多",
-          "294de4aeb2": "显示较少"
-        },
         "NonGitFolderDialog": {
           "e52454b7f6": "作为文件夹打开",
           "05b33a17a9": "取消",
@@ -6067,11 +6056,9 @@
           "1c68c9cf77": "启用来源可显示其当前及未来的所有工作树，也可以在下方单独显示工作树。"
         },
         "HiddenWorktreeRecoveryList": {
-          "64e6f53f05": "无需启用来源即可单独显示一个工作树。",
           "showWorktree": "显示位于 {{value1}} 的 {{value0}}"
         },
         "WorktreeVisibilityDialog": {
-          "83a5ba8dd1": "非 Orca 工作树",
           "f1f71b9f02": "始终显示",
           "759371df43": "隐藏",
           "25ddf19920": "当前隐藏 {{value0}}",
@@ -6477,14 +6464,7 @@
           "sleeping": "睡眠"
         },
         "NewExternalWorktreesInboxLine": {
-          "9f2d4c8b17": "永久隐藏 {{value0}} 的外部工作树",
-          "5e1b8d3f62": "永久隐藏外部工作树",
-          "c3e8a1f4b2": "不再显示",
-          "2a6f31d8c7": "隐藏的工作树",
-          "5b90e4a2f6": "隐藏的工作树",
-          "7f18c5b0d3": "查看 {{value1}} 中的 {{value0}} 隐藏工作树",
-          "4e2b7a9c05": "查看 {{value1}} 中的 {{value0}} 隐藏工作树",
-          "6c07f3a91e": "{{value0}} 在 {{value1}} 上"
+          "5e1b8d3f62": "永久隐藏外部工作树"
         },
         "NoticeHostGlyph": {
           "hostDisconnected": "{{hostName}} 已断开连接",
@@ -6494,16 +6474,7 @@
         },
         "newExternalWorktreesInboxActions": {
           "a11c2f6d89": "无法保持外部工作树隐藏。请重试。",
-          "b7e4d1a062": "无法导入外部工作树。请重试。",
-          "c94f0b3a15": "无法永久隐藏外部工作树。请重试。"
-        },
-        "SuppressExternalWorktreeInboxDialog": {
-          "a4c2d8f1b0": "隐藏外部工作树？",
-          "6e91b3c4d2": "对于 {{value0}}，外部工作树将不再显示在侧边栏或此列表中，包括之后创建的工作树。",
-          "1f8a5d9e73": "之后可以在项目设置中重新开启。",
-          "8c0b2e7a41": "打开 Non-Orca 工作树设置",
-          "5d1c9f0a82": "取消",
-          "3b7e4a1c96": "隐藏外部工作树"
+          "b7e4d1a062": "无法导入外部工作树。请重试。"
         },
         "useAddRepoHostSelection": {
           "connectionFailed": "SSH 连接失败。",

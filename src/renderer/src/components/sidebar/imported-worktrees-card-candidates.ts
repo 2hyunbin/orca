@@ -29,7 +29,6 @@ export function buildImportedWorktreesCardCandidates(args: {
   visibleWorktrees?: readonly Worktree[]
   detectedWorktreesByRepo: Readonly<Record<string, DetectedWorktreeListResult | undefined>>
   filterRepoIds?: readonly string[]
-  forceVisibleRepoIds?: ReadonlySet<string>
   settings?: Pick<GlobalSettings, 'worktreeVisibilityDefaults'> | null
   visibilityDefaultsByHost?: Partial<Record<ExecutionHostId, WorktreeVisibilityDefaults | null>>
 }): Map<string, ImportedWorktreesCardCandidate> {
@@ -63,7 +62,7 @@ export function buildImportedWorktreesCardCandidates(args: {
         args.visibilityDefaultsByHost ?? {}
       )
     )
-    if (visibility !== 'hide' && !args.forceVisibleRepoIds?.has(repo.id)) {
+    if (visibility !== 'hide') {
       continue
     }
     const hiddenWorktrees = getHiddenImportedWorktrees(

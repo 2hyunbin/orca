@@ -6,6 +6,8 @@ import { getDefaultSettings } from '../../../../shared/constants'
 import { makeDetectedWorktree, repo } from './worktree-list-groups-test-fixtures'
 import WorktreeVisibilityDialog from './WorktreeVisibilityDialog'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { track } from '@/lib/telemetry'
+import { resetWorkspaceDiscoveryObservationsForTests } from './workspace-discovery-telemetry'
 
 type ManagerState = Pick<
   AppState,
@@ -59,7 +61,11 @@ beforeEach(() => {
     fetchWorktrees: vi.fn().mockResolvedValue(true)
   }
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.clearAllMocks()
+  resetWorkspaceDiscoveryObservationsForTests()
+})
 
 function renderManager() {
   return render(
@@ -193,6 +199,59 @@ describe('workspace management selection', () => {
     expect(screen.getByRole('checkbox').getAttribute('aria-checked')).toBe('false')
     expect(screen.getByRole('button', { name: /Show hidden at/ }).hasAttribute('disabled')).toBe(
       false
+    )
+  })
+
+  it('reports the manager as shown only after its opening scan completes', async () => {
+    state.settings = {
+      ...getDefaultSettings('/tmp'),
+      telemetry: {
+        optedIn: true,
+        installId: 'install',
+        existedBeforeTelemetryRelease: true,
+        workspaceDiscoveryExistingUserCohort: 'control'
+      }
+    }
+    let finishScan: (value: boolean) => void = () => undefined
+    vi.mocked(state.fetchWorktrees).mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishScan = resolve
+        })
+    )
+    const view = renderManager()
+    expect(track).not.toHaveBeenCalled()
+    await act(async () => finishScan(true))
+    expect(vi.mocked(track).mock.calls).toEqual([
+      ['workspace_discovery_shown', { surface: 'manage', workspace_count: 1 }]
+    ])
+    view.rerender(
+      <TooltipProvider>
+        <WorktreeVisibilityDialog />
+      </TooltipProvider>
+    )
+    expect(track).toHaveBeenCalledOnce()
+  })
+
+  it('reports the manager as shown when a retry recovers a failed opening scan', async () => {
+    state.settings = {
+      ...getDefaultSettings('/tmp'),
+      telemetry: {
+        optedIn: true,
+        installId: 'install',
+        existedBeforeTelemetryRelease: false,
+        workspaceDiscoveryNewUserCohort: 'treatment'
+      }
+    }
+    vi.mocked(state.fetchWorktrees).mockResolvedValueOnce(false)
+    renderManager()
+    const retry = await screen.findByRole('button', { name: 'Try again' })
+    expect(track).not.toHaveBeenCalled()
+    fireEvent.click(retry)
+    await waitFor(() =>
+      expect(vi.mocked(track).mock.calls).toEqual([
+        ['workspace_discovery_shown', { surface: 'manage', workspace_count: 1 }]
+      ])
     )
   })
 })

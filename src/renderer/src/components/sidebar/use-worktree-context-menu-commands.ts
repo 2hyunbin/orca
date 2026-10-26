@@ -1,7 +1,10 @@
 import { useCallback } from 'react'
 import type { useAppStore } from '@/store'
 import type { Repo } from '../../../../shared/repo-types'
-import { getRepoExecutionHostId } from '../../../../shared/execution-host'
+import {
+  getRepoExecutionHostId,
+  getWorktreeExecutionHostId
+} from '../../../../shared/execution-host'
 import type { WorkspaceStatusDefinition, Worktree } from '../../../../shared/worktree/types'
 import {
   createWorktreeContextMenuDeleteIntent,
@@ -65,6 +68,16 @@ export function useWorktreeContextMenuCommands(args: {
     }
     args.createGroupDialogActiveRef.current = true
     args.setCreateGroupDialogOpen(true)
+  }, [args])
+  // Workspace rows exist in every grouping, so this keeps hidden-workspace recovery reachable without project headers.
+  const handleManageWorkspaces = useCallback(() => {
+    if (!args.repo) {
+      return
+    }
+    args.openModal('worktree-visibility', {
+      repoId: args.repo.id,
+      hostId: getWorktreeExecutionHostId(args.worktree, args.repo)
+    })
   }, [args])
   const handleCreateGroupDialogOpenChange = useCallback(
     (open: boolean) => {
@@ -185,6 +198,7 @@ export function useWorktreeContextMenuCommands(args: {
     handleCopyPath,
     handleCreateGroupDialogOpenChange,
     handleCreateGroupFromRepo,
+    handleManageWorkspaces,
     handleDelete,
     handleMoveProjectToGroup,
     handleOpenParent,

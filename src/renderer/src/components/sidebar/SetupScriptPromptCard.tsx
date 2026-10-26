@@ -52,10 +52,7 @@ function SetupScriptPromptCard(): React.JSX.Element | null {
   const mountedRef = useMountedRef()
 
   const activeRepo = useMemo(
-    () =>
-      typeof activeWorktree?.createdAt === 'number'
-        ? findSetupScriptPromptRepo({ repos, activeRepoId, activeWorktree, settings })
-        : null,
+    () => findSetupScriptPromptRepo({ repos, activeRepoId, activeWorktree, settings }),
     [activeRepoId, activeWorktree, repos, settings]
   )
   const activeRepoHostIdentity = activeRepo ? getRepoHostIdentity(activeRepo) : null

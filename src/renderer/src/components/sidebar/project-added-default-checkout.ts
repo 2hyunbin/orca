@@ -11,65 +11,28 @@ import { mergeExternalWorktreeInboxPaths } from '../../../../shared/external-wor
 import { relativePathInsideRoot } from '../../../../shared/cross-platform-path'
 import { markOnboardingProjectAdded } from '@/lib/onboarding-project-checklist'
 import { finalizeImportedRepoAfterSkip } from './add-repo-skip-finalization'
-import {
-  getWorktreeExecutionHostId,
-  parseExecutionHostId,
-  type ExecutionHostId
-} from '../../../../shared/execution-host'
+import { getWorktreeExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import {
+  capWorkspaceDiscoveryCount,
+  getWorkspaceDiscoveryArm
+} from './workspace-discovery-telemetry'
+import {
+  countHiddenSiblingWorkspaces,
+  getProjectInitialCheckout,
+  getProjectWorktreesForHost,
+  ownerRefreshOptions,
+  revealDetectedHiddenLinkedExternalWorktrees,
+  showAllExternalWorktrees
+} from './project-added-sibling-workspaces'
 
 type DefaultCheckoutHandoffReason = EventProps<'add_repo_default_checkout_handoff'>['reason']
 
 export function getProjectDefaultCheckout(worktrees: readonly Worktree[]): Worktree | null {
   return worktrees.find((worktree) => worktree.isMainWorktree) ?? null
-}
-
-function getProjectInitialCheckout<T extends Worktree>(
-  worktrees: readonly T[],
-  selectedPath?: string
-): T | null {
-  const selected = selectedPath
-    ? worktrees
-        .filter((worktree) => relativePathInsideRoot(worktree.path, selectedPath) !== null)
-        .sort((left, right) => right.path.length - left.path.length)[0]
-    : undefined
-  return selected ?? worktrees.find((worktree) => worktree.isMainWorktree) ?? null
-}
-
-function getProjectWorktreesForHost<T extends Worktree>(
-  worktrees: readonly T[],
-  executionHostId?: ExecutionHostId
-): T[] {
-  if (!executionHostId) {
-    return [...worktrees]
-  }
-  const parsedHost = parseExecutionHostId(executionHostId)
-  return worktrees.filter((worktree) => {
-    if (parsedHost?.kind === 'runtime') {
-      if (worktree.runtimeOwnerEnvironmentId) {
-        return worktree.runtimeOwnerEnvironmentId === parsedHost.environmentId
-      }
-      // Colliding repo IDs may carry only hostId, so match runtime-qualified hosts too.
-      return worktree.hostId === executionHostId
-    }
-    if (worktree.runtimeOwnerEnvironmentId) {
-      return false
-    }
-    if (worktree.hostId) {
-      return worktree.hostId === executionHostId
-    }
-    return executionHostId === 'local'
-  })
-}
-
-function ownerRefreshOptions(executionHostId?: ExecutionHostId) {
-  return {
-    requireAuthoritative: true as const,
-    ...(executionHostId ? { executionHostId } : {})
-  }
 }
 
 function getDetectedProjectDefaultCheckout(
@@ -90,6 +53,7 @@ function getDetectedProjectDefaultCheckout(
 
 async function findDetectedDefaultCheckout(
   repoId: string,
+  revealSiblings: boolean,
   executionHostId?: ExecutionHostId,
   selectedPath?: string
 ): Promise<{
@@ -110,7 +74,11 @@ async function findDetectedDefaultCheckout(
         detected?.authoritative === true ? 'no_default_checkout' : 'no_authoritative_detection'
     }
   }
-  if (!detectedDefaultCheckout.visible) {
+  if (!detectedDefaultCheckout.visible && revealSiblings) {
+    if (!(await showAllExternalWorktrees(repoId, executionHostId))) {
+      return { worktree: null, reason: 'show_detected_default_failed' }
+    }
+  } else if (!detectedDefaultCheckout.visible) {
     const ownerHostId =
       executionHostId ?? getWorktreeExecutionHostId(detectedDefaultCheckout, undefined)
     const matchingRepos = state.repos.filter((candidate) => candidate.id === repoId)
@@ -174,6 +142,20 @@ export async function openProjectDefaultCheckout({
   setHideDefaultBranchWorkspace: (value: boolean) => void
   executionHostId?: ExecutionHostId
 }): Promise<void> {
+  const initialState = useAppStore.getState()
+  const revealSiblings = getWorkspaceDiscoveryArm(initialState.settings?.telemetry) === 'control'
+  // Measured before either arm changes visibility, so both arms qualify on identical evidence.
+  const hiddenSiblingCount = countHiddenSiblingWorkspaces(
+    selectDetectedWorktreesByRepo(initialState)[repoId],
+    executionHostId,
+    selectedPath
+  )
+  if (hiddenSiblingCount > 0) {
+    track('workspace_discovery_eligible', {
+      workspace_count: capWorkspaceDiscoveryCount(hiddenSiblingCount)
+    })
+  }
+
   let defaultCheckout = getProjectInitialCheckout(
     getProjectWorktreesForHost(
       selectWorktreesByRepo(useAppStore.getState())[repoId] ?? [],
@@ -188,6 +170,7 @@ export async function openProjectDefaultCheckout({
   ) {
     const detectedDefaultCheckout = await findDetectedDefaultCheckout(
       repoId,
+      revealSiblings,
       executionHostId,
       selectedPath
     )
@@ -198,6 +181,18 @@ export async function openProjectDefaultCheckout({
   }
 
   if (defaultCheckout) {
+    const revealLinkedFailureReason = revealSiblings
+      ? await revealDetectedHiddenLinkedExternalWorktrees(repoId, executionHostId, selectedPath)
+      : null
+    if (revealLinkedFailureReason) {
+      track('add_repo_default_checkout_handoff', {
+        source,
+        result: 'revealed_project',
+        reason: revealLinkedFailureReason
+      })
+      finalizeImportedRepoAfterSkip(useAppStore.getState(), repoId)
+      return
+    }
     // Why: the onboarding handoff should land on the default checkout even
     // when the user normally hides default-branch workspaces in the sidebar.
     const state = useAppStore.getState()
@@ -206,7 +201,9 @@ export async function openProjectDefaultCheckout({
     }
     track('add_repo_default_checkout_handoff', {
       source,
-      result: 'opened_default_checkout',
+      result: defaultCheckout.isMainWorktree
+        ? 'opened_default_checkout'
+        : 'opened_selected_checkout',
       reason
     })
     const initialCwd = resolveInitialCwdForDefaultCheckout(defaultCheckout, selectedPath)

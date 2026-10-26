@@ -9,6 +9,7 @@ import {
   makeWorkspaceLineage
 } from './persistence-test-harness'
 import { makeTerminalTab } from './persistence-session-fixtures'
+import { drawWorkspaceDiscoveryCohort } from './loading-store/loaded-cohort-migrations'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writeFileSync, rmSync, mkdtempSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -136,7 +137,11 @@ describe('Store', () => {
     expect(store.getSettings().telemetry).toEqual({
       optedIn: true,
       installId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      existedBeforeTelemetryRelease: false
+      existedBeforeTelemetryRelease: false,
+      // Profiles predating workspace discovery join its existing-user experiment once.
+      workspaceDiscoveryExistingUserCohort: drawWorkspaceDiscoveryCohort(
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+      )
     })
   })
 })

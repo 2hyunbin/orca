@@ -8,12 +8,7 @@ export type NewExternalWorktreesInboxActionState = {
 }
 
 type RepoExternalWorktreeInboxUpdate = Partial<
-  Pick<
-    Repo,
-    | 'externalWorktreeInboxBaselinePaths'
-    | 'importedExternalWorktreePaths'
-    | 'externalWorktreeDiscoverySuppressedAt'
-  >
+  Pick<Repo, 'externalWorktreeInboxBaselinePaths' | 'importedExternalWorktreePaths'>
 >
 
 type NewExternalWorktreesInboxActionDeps = {
@@ -39,13 +34,6 @@ function newExternalWorktreeInboxImportError(): string {
   return translate(
     'auto.components.sidebar.newExternalWorktreesInboxActions.b7e4d1a062',
     'Could not import external worktrees. Try again.'
-  )
-}
-
-function newExternalWorktreeInboxSuppressError(): string {
-  return translate(
-    'auto.components.sidebar.newExternalWorktreesInboxActions.c94f0b3a15',
-    'Could not hide external worktrees permanently. Try again.'
   )
 }
 
@@ -122,27 +110,4 @@ export async function importNewExternalWorktreeInboxPaths(
       )
     }
   )
-}
-
-export async function suppressNewExternalWorktreeInbox(
-  args: Omit<NewExternalWorktreesInboxActionDeps, 'fetchWorktrees'>
-): Promise<boolean> {
-  args.setInboxState(args.projectId, { pending: true, error: null })
-  const externalWorktreeInboxBaselinePaths = mergeExternalWorktreeInboxPaths(
-    args.repo.externalWorktreeInboxBaselinePaths,
-    args.worktreePaths
-  )
-  const updated = await args.updateRepo(args.projectId, {
-    externalWorktreeDiscoverySuppressedAt: Date.now(),
-    externalWorktreeInboxBaselinePaths
-  })
-  if (!updated) {
-    args.setInboxState(args.projectId, {
-      pending: false,
-      error: newExternalWorktreeInboxSuppressError()
-    })
-    return false
-  }
-  args.setInboxState(args.projectId, null)
-  return true
 }
