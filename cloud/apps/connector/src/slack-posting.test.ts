@@ -6,8 +6,15 @@ import {
   CHANNEL,
   createSlackHarness,
   OWNER,
+  conversation,
+  EXTERNAL_ID,
   project,
-  TEAM
+  startedThread,
+  TEAM,
+  THREAD,
+  TURN,
+  turnEnded,
+  turnStarted
 } from './slack-harness.test-fixture.js'
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import { SlackInstalls } from './slack-installs.js'
@@ -19,61 +26,6 @@ afterEach(async () => {
   await cleanupConnectorHarnesses()
   vi.unstubAllGlobals()
 })
-
-const THREAD = '1800000000.000100'
-const EXTERNAL_ID = `${TEAM}:${CHANNEL}:${THREAD}:${OWNER}`
-const conversation = { source: 'slack', externalId: EXTERNAL_ID }
-const TURN = 1_800_000_001_000
-
-async function startedThread() {
-  const harness = await createSlackHarness()
-  await harness.operator(
-    'link',
-    '--team',
-    TEAM,
-    '--user',
-    OWNER,
-    '--account',
-    'user-1',
-    '--default-project',
-    'orca'
-  )
-  const machine = await harness.machineWith('user-1', [project('orca')])
-  await harness.message({ text: `<@${BOT}> fix it`, ts: THREAD })
-  const [start] = ConnectorPollResponseSchema.parse((await machine.poll()).body).deliveries
-  let seq = 0
-  const events = async (...batch: unknown[]) => {
-    const response = await machine.call(CONNECTOR_PATHS.events, {
-      v: 1,
-      helloRev: 1,
-      seq: ++seq,
-      events: batch
-    })
-    expect(response.status).toBe(204)
-  }
-  const status = async () => {
-    const [row] = await harness.database.query(
-      'SELECT body FROM connector_slack_posts WHERE post_id = ?',
-      [`status:${EXTERNAL_ID}`]
-    )
-    return JSON.parse(String(row?.body)).text
-  }
-  const reply = (replyId: string, text: string, by = machine) =>
-    by.call(CONNECTOR_PATHS.replies, { v: 1, replyId, conversation, turnId: TURN, text })
-  const pass = () => harness.edge.worker.sendDue()
-  return { ...harness, machine, start, events, status, reply, pass }
-}
-
-const turnStarted = { kind: 'turn-started', conversation, paneKey: 'pane-1', at: TURN }
-const turnEnded = {
-  kind: 'turn-ended',
-  conversation,
-  paneKey: 'pane-1',
-  turnId: TURN,
-  at: TURN + 5_000,
-  stopReason: 'end_turn',
-  lastAssistantMessage: 'Fixed <!channel> & done'
-}
 
 describe('Slack thread status and posts', () => {
   it('edits one status message as the turn moves, and posts the last message when the agent didn’t reply', async () => {

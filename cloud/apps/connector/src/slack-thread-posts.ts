@@ -1,12 +1,17 @@
 import type { CloudDatabase, SqlRow } from '@orca-cloud/cloud-database'
-import { ConnectorDeliveryResultSchema } from '@orca-cloud/connector-contract'
+import {
+  ConnectorDeliveryResultSchema,
+  type ConnectorHelloRequest
+} from '@orca-cloud/connector-contract'
+import { knownHost } from './slack-machine-choice.js'
+import { answerablePrompt, refreshPromptCards } from './slack-prompt-cards.js'
 import type { SlackPlace, SlackPosts } from './slack-posts.js'
 import { escapeSlackText, slackText } from './slack-text.js'
 
 // A turn's last message is posted only if the agent hasn't replied itself by then.
 const FALLBACK_DELAY_MS = 5_000
 
-type BoundThread = SlackPlace & { hostName: string }
+type BoundThread = SlackPlace & { hostName: string; hello: ConnectorHelloRequest | undefined }
 
 // A Slack thread bound to this host, with its machine's name; null for anyone else's conversation.
 async function boundThread(
@@ -15,7 +20,7 @@ async function boundThread(
   externalId: string
 ): Promise<(BoundThread & { row: SqlRow }) | null> {
   const [row] = await transaction.query(
-    `SELECT t.*, h.host_name FROM connector_threads t
+    `SELECT t.*, h.host_name, h.hello FROM connector_threads t
      JOIN connector_hosts h ON h.host_id = t.host_id
      WHERE t.external_id = ? AND t.host_id = ?`,
     [externalId, hostId]
@@ -26,6 +31,7 @@ async function boundThread(
         channelId: String(row.channel_id),
         threadTs: String(row.thread_ts),
         hostName: String(row.host_name),
+        hello: knownHost(row)?.hello,
         row
       }
     : null
@@ -46,15 +52,18 @@ export async function refreshSlackStatus(
   }
   const [latest] = await transaction.query(
     `SELECT state, result FROM connector_inbox
-     WHERE host_id = ? AND external_id = ? AND kind IN ('start', 'send')
+     WHERE host_id = ? AND external_id = ? AND kind IN ('start', 'send', 'answer')
      ORDER BY seq DESC LIMIT 1`,
     [hostId, externalId]
   )
+  const prompt = answerablePrompt(thread.row.pending_prompt, thread.hello)
+  const place = { teamId: thread.teamId, channelId: thread.channelId, threadTs: thread.threadTs }
   await posts.setStatus(transaction, {
-    ...thread,
+    ...place,
     postId: `status:${externalId}`,
-    text: statusText(thread.row, latest, thread.hostName)
+    text: statusText(thread.row, latest, thread.hostName, prompt !== null)
   })
+  await refreshPromptCards(transaction, posts, { ...place, hostId, externalId }, prompt)
 }
 
 // A turn's reply and its fallback decide under one lock, so exactly one of them wins.
@@ -114,7 +123,12 @@ export async function queueAgentReply(
   return await posts.find(transaction, postId)
 }
 
-function statusText(thread: SqlRow, latest: SqlRow | undefined, hostName: string): string {
+function statusText(
+  thread: SqlRow,
+  latest: SqlRow | undefined,
+  hostName: string,
+  answerableHere: boolean
+): string {
   const result =
     latest?.state === 'done'
       ? ConnectorDeliveryResultSchema.safeParse(JSON.parse(String(latest.result))).data
@@ -124,7 +138,9 @@ function statusText(thread: SqlRow, latest: SqlRow | undefined, hostName: string
     return slackText.status.offline(String(thread.owner_user_id), hostName)
   }
   if (thread.pending_prompt !== null) {
-    return slackText.status.needsAnswer(hostName)
+    return answerableHere
+      ? slackText.status.needsAnswerHere
+      : slackText.status.needsAnswer(hostName)
   }
   if (thread.turn_state === 'working') {
     return slackText.status.working(hostName)
@@ -134,7 +150,10 @@ function statusText(thread: SqlRow, latest: SqlRow | undefined, hostName: string
   }
   switch (result?.outcome) {
     case 'refused':
-      return slackText.status.refused(hostName, result.reason)
+      // An answer to a prompt the agent no longer shows (decision 10).
+      return result.reason === 'prompt_not_pending'
+        ? slackText.alreadyAnswered
+        : slackText.status.refused(hostName, result.reason)
     case 'unsupported':
       return slackText.status.refused(hostName, 'unsupported')
     case 'unknown':

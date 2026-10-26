@@ -1,4 +1,5 @@
 import type { PlaceOption } from './slack-machine-choice.js'
+import type { SlackAnswerablePrompt } from './slack-prompt-cards.js'
 
 // Every line Orca posts in Slack, in one place for review. Replies meant only for the person who
 // wrote (paused, unlinked, update, which project) go out ephemeral. Inputs are escaped here, so
@@ -8,6 +9,8 @@ export function escapeSlackText(text: string): string {
 }
 
 const MAX_LISTED_OPTIONS = 10
+// Slack's limit on a section's text.
+const MAX_SECTION_CHARS = 3_000
 
 export const slackText = {
   paused: 'Orca for Slack is paused.',
@@ -27,6 +30,8 @@ export const slackText = {
     working: (hostName: string) => `Working on ${escapeSlackText(hostName)}…`,
     needsAnswer: (hostName: string) =>
       `Waiting for your answer in Orca on ${escapeSlackText(hostName)}.`,
+    // The prompt's card in the thread has the buttons.
+    needsAnswerHere: 'Waiting for your answer.',
     done: (hostName: string) => `Done on ${escapeSlackText(hostName)}.`,
     // Q18, in the public status: the thread sees who it was waiting on (Slack renders <@U…> as a name).
     offline: (ownerUserId: string, hostName: string) =>
@@ -36,6 +41,22 @@ export const slackText = {
     unknown: 'This may not have reached the agent; check Orca.',
     noUpdate: 'No update from your Orca; check Orca.'
   },
+  // A prompt's card: what the agent asks, then its state once it stops taking answers.
+  promptCard: (prompt: SlackAnswerablePrompt) => {
+    const lines =
+      prompt.kind === 'approval'
+        ? [
+            `*${escapeSlackText(prompt.tool)}* wants approval`,
+            prompt.summary && escapeSlackText(prompt.summary)
+          ]
+        : [prompt.header && `*${escapeSlackText(prompt.header)}*`, escapeSlackText(prompt.question)]
+    return lines.filter(Boolean).join('\n').slice(0, MAX_SECTION_CHARS)
+  },
+  promptAnswered: (ownerUserId: string, label: string) =>
+    `<@${ownerUserId}> answered: ${escapeSlackText(label)}.`,
+  promptClosed: 'No longer waiting for this answer.',
+  onlyOwner: (ownerUserId: string) => `Only <@${ownerUserId}> can answer this.`,
+  alreadyAnswered: 'Already answered or moved on.',
   // Agent-facing, not posted: a mention's earlier thread (null when Slack couldn't be read).
   threadStart: (thread: { name: string; text: string }[] | null, request: string) => {
     if (thread === null) {

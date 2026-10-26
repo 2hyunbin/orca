@@ -5,7 +5,7 @@ import {
   type ConnectorEvent,
   type ConnectorReplyResponse
 } from '@orca-cloud/connector-contract'
-import type { Hono, MiddlewareHandler } from 'hono'
+import type { Context, Hono, MiddlewareHandler } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { every } from './connector-background.js'
 import type { ConnectorInbox, ExpiredThread } from './connector-inbox.js'
@@ -15,6 +15,7 @@ import { readSlackEnvelope } from './slack-events.js'
 import { SlackInstalls } from './slack-installs.js'
 import { SlackMembers } from './slack-members.js'
 import { SlackPostWorker } from './slack-post-worker.js'
+import { answerFromSlack, readSlackClick } from './slack-prompt-answers.js'
 import { SlackPosts } from './slack-posts.js'
 import { routeSlackMessage, type QueueInTransaction } from './slack-routing.js'
 import { verifySlackSignature } from './slack-signature.js'
@@ -63,9 +64,14 @@ export function createSlackEdge(deps: {
     }
   }
 
-  function registerRoutes(app: Hono<MachineEnv>, limitMachineBody: MiddlewareHandler): void {
+  // Slack's own requests: signed over the raw body, size-capped.
+  const fromSlack = (
+    app: Hono<MachineEnv>,
+    path: string,
+    handle: (context: Context<MachineEnv>, rawBody: string) => Promise<Response>
+  ) =>
     app.post(
-      '/slack/events',
+      path,
       bodyLimit({
         maxSize: MAX_SLACK_BODY_BYTES,
         onError: (context) => context.json({ error: 'request_too_large' }, 413)
@@ -79,32 +85,48 @@ export function createSlackEdge(deps: {
           rawBody,
           nowMs: now()
         })
-        if (!verified) {
-          return context.json({ error: 'invalid_signature' }, 401)
-        }
-        let payload: unknown
-        try {
-          payload = JSON.parse(rawBody)
-        } catch {
-          return context.json({ error: 'invalid_request' }, 400)
-        }
-        const envelope = readSlackEnvelope(payload)
-        if (envelope.kind === 'invalid') {
-          return context.json({ error: 'invalid_request' }, 400)
-        }
-        if (envelope.kind === 'url_verification') {
-          return context.json({ challenge: envelope.challenge })
-        }
-        // Answered before any Slack call; a database failure is a 500, so Slack retries.
-        if (envelope.kind === 'message' && config.teamIds.has(envelope.message.teamId)) {
-          await routeSlackMessage(
-            { config, database, installs, posts, queue: deps.queue, now },
-            envelope.message
-          )
-        }
-        return context.body(null, 200)
+        return verified
+          ? await handle(context, rawBody)
+          : context.json({ error: 'invalid_signature' }, 401)
       }
     )
+
+  function registerRoutes(app: Hono<MachineEnv>, limitMachineBody: MiddlewareHandler): void {
+    fromSlack(app, '/slack/events', async (context, rawBody) => {
+      let payload: unknown
+      try {
+        payload = JSON.parse(rawBody)
+      } catch {
+        return context.json({ error: 'invalid_request' }, 400)
+      }
+      const envelope = readSlackEnvelope(payload)
+      if (envelope.kind === 'invalid') {
+        return context.json({ error: 'invalid_request' }, 400)
+      }
+      if (envelope.kind === 'url_verification') {
+        return context.json({ challenge: envelope.challenge })
+      }
+      // Answered before any Slack call; a database failure is a 500, so Slack retries.
+      if (envelope.kind === 'message' && config.teamIds.has(envelope.message.teamId)) {
+        await routeSlackMessage(
+          { config, database, installs, posts, queue: deps.queue, now },
+          envelope.message
+        )
+      }
+      return context.body(null, 200)
+    })
+
+    // Button presses on prompt cards; answered before any Slack call, like events.
+    fromSlack(app, '/slack/interactivity', async (context, rawBody) => {
+      const click = readSlackClick(rawBody)
+      if (click === 'invalid') {
+        return context.json({ error: 'invalid_request' }, 400)
+      }
+      if (click !== 'ignored' && config.teamIds.has(click.teamId)) {
+        await answerFromSlack({ config, database, installs, posts, queue: deps.queue }, click)
+      }
+      return context.body(null, 200)
+    })
 
     app.post(CONNECTOR_PATHS.replies, limitMachineBody, async (context) => {
       const body = ConnectorReplyRequestSchema.safeParse(await context.req.json().catch(() => null))
