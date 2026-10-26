@@ -116,6 +116,13 @@ describe('the line under each of the chat own messages', () => {
         agentJournalSubmissionKey('a')
       )?.detail
     ).toBeUndefined()
+    // A refusal's sentence already quotes the provider's words.
+    const refused = row('b', 'rejected', {
+      rejection: { kind: 'providerRejected', detail: { text: 'Too long', audience: 'person' } }
+    })
+    expect(notices({ submissions: [refused] }).get(agentJournalSubmissionKey('b'))?.detail).toBe(
+      undefined
+    )
   })
 
   it('says nothing for a message a Stop withdrew: it went back to the composer', () => {

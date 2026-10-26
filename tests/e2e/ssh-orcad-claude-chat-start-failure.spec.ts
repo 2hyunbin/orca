@@ -31,9 +31,13 @@ exec /usr/local/bin/node /usr/local/lib/orca-e2e-claude-stub.cjs /tmp/orca-e2e-c
 
 test('a Claude chat that Claude refuses to start as root names the reason', async (// oxlint-disable-next-line no-empty-pattern -- Owns its app launch through a restart session.
 {}, testInfo) => {
+  // Converting the Docker host to a managed server takes minutes before the chat opens.
   test.setTimeout(10 * 60_000)
   await withManagedHost(testInfo, async (fixture) => {
-    const exec = fixture.host.exec!
+    const exec = fixture.host.exec
+    if (!exec) {
+      throw new Error('the Docker host runs commands as its SSH user')
+    }
     exec(
       `echo ${STUB.toString('base64')} | base64 -d > /usr/local/lib/orca-e2e-claude-stub.cjs && ` +
         `echo ${Buffer.from(WRAPPER).toString('base64')} | base64 -d > /usr/local/bin/claude && ` +
@@ -57,7 +61,7 @@ test('a Claude chat that Claude refuses to start as root names the reason', asyn
     await expect(chat).toContainText("Claude won't use Full access while it runs as root.", {
       timeout: 120_000
     })
-    // Claude's own words sit behind Details on the message.
+    // Claude's own words sit behind Details on the start-failure row.
     await chat.getByText('Details', { exact: true }).first().click()
     await expect(chat).toContainText(ROOT_REFUSAL)
     await page.screenshot({ path: testInfo.outputPath('claude-root-start-failure.png') })

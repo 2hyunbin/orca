@@ -81,7 +81,7 @@ export function startupAcquisitionRefusal(
   )
 }
 
-/** A failed start keeps its typed refusal or observed exit and private provider diagnostic. */
+/** A failed start keeps its typed refusal or observed exit, and the provider diagnostic its Details show. */
 export function providerStartupFailureFact(cause?: unknown): SubmissionRejectionFact {
   cause = startupAcquisitionRefusal(cause) ?? cause
   const installation = agentCliInstallationProblemOf(cause)
@@ -149,7 +149,7 @@ function refusedStartFailureFact(
 }
 
 export type StructuredAgentSessionStartFailureCause =
-  /** Provider words stay host-side; newSession distinguishes first launch from restart. */
+  /** Provider words reach Details, never the sentence; newSession distinguishes first launch from restart. */
   | {
       refusal: AgentSessionWireRefusal
       diagnostic?: ProviderDiagnostic
