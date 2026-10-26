@@ -13,6 +13,7 @@ import {
   runtimeTargetForOwnerEnvironment
 } from '../../runtime/runtime-client-target'
 import { translate } from '@/i18n/i18n'
+import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import type { RepoSlice } from '../repos/repo-state'
 import { awaitRepoOwnerHostKnown } from '../repos/repo-owner-host-readiness'
 
@@ -126,7 +127,10 @@ export function createNestedRepositoryActions(
         toast.error(
           translate('auto.store.slices.repos.6d3318e813', 'Failed to import repositories'),
           {
-            description: err instanceof Error ? err.message : String(err)
+            description: extractIpcErrorMessage(
+              err,
+              err instanceof Error ? err.message : String(err)
+            )
           }
         )
         return null
