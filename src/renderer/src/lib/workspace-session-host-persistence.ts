@@ -205,10 +205,12 @@ function splitWorkspaceSessionForWrite(
   const catalogRuntimeHostIds = new Set(state.repos.map((repo) => getRepoExecutionHostId(repo)))
   // A patch replaces fields fieldwise, so a host whose last entry went needs the emptied field. Only a
   // partition this window loaded and still catalogs is one its state speaks for in full.
+  // The contested shadow restores only worktree-keyed rows, so a host holding parked rows keeps today's rule.
   const emptyContainerHostIds =
     mode === 'patch'
-      ? (state.hydratedRuntimeSessionHostIds ?? []).filter((hostId) =>
-          catalogRuntimeHostIds.has(hostId)
+      ? (state.hydratedRuntimeSessionHostIds ?? []).filter(
+          (hostId) =>
+            catalogRuntimeHostIds.has(hostId) && !state.contestedHostWorkspaceSessions?.[hostId]
         )
       : []
   // Use live tab catalogs for layouts-only patches; payload-only routing loses remote park scrollback in local pruning (#21295).

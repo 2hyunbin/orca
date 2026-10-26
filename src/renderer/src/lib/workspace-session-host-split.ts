@@ -173,8 +173,8 @@ export function splitWorkspaceSessionByHost(
     if (ownership !== 'global' && ownership !== 'hostPrivate') {
       localSlice[field] ??= Array.isArray(value) ? [] : {}
       for (const hostId of options.emptyContainerHostIds ?? []) {
-        const slice = ensureSlice(slices, hostId, templates) as WorkspaceSessionRecord
-        slice[field] ??= Array.isArray(value) ? [] : {}
+        const slice = ensureSlice(slices, hostId, templates)
+        Object.assign(slice, { [field]: slice[field] ?? (Array.isArray(value) ? [] : {}) })
       }
     }
     switch (ownership) {
