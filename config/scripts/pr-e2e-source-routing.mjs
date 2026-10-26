@@ -145,6 +145,16 @@ export const PR_E2E_SOURCE_ROUTES = [
         ))
   },
   {
+    id: 'ssh.orcad-move-anyway-inline',
+    specs: ['tests/e2e/ssh-orcad-move-anyway-inline.spec.ts'],
+    matches: (file) =>
+      MANAGED_SSH_HARNESS.test(file) ||
+      (isProductSource(file) &&
+        /^src\/(?:main\/(?:ssh\/(?:orcad-migration-refusal-reason|targets\/ssh-target-orcad-preflight)|managed-server\/lifecycle\/orcad-runtime-conversion|persistence\/migrating-orcad-catalog\/orcad-source-(?:automation-state|leave-behind-view))|renderer\/src\/components\/settings\/(?:SshTargetServerStatus|SshHostMoveAnywayAction|SshTargetCard))/.test(
+          file
+        ))
+  },
+  {
     id: 'ssh.orcad-update-anyway',
     specs: ['tests/e2e/ssh-orcad-update-anyway.spec.ts'],
     matches: (file) =>
