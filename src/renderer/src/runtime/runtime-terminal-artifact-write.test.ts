@@ -99,8 +99,7 @@ describe('saving a granted host file outside every workspace', () => {
     expect(onGrantRenewed).toHaveBeenCalledWith('g-2')
     expect(callsTo('files.resolveTerminalPath')[0]?.params).toEqual({
       worktree: 'id:wt-1',
-      pathText: PATH,
-      crossWorkspace: true
+      pathText: PATH
     })
     expect(callsTo('files.writeTerminalArtifact').map((c) => c.params)).toEqual([
       expect.objectContaining({ grantId: 'g-2', content: '# new' })
@@ -181,5 +180,19 @@ describe('saving a granted host file outside every workspace', () => {
       })
     ).rejects.toThrow("can't recreate it")
     expect(callsTo('files.writeTerminalArtifact')).toHaveLength(0)
+  })
+
+  // Why: a committed write whose reply was lost must still settle the save, or the next one conflicts.
+  it('treats a lost reply as saved when the host already holds the new text', async () => {
+    let written = false
+    runtimeEnvironmentCall.mockImplementation(async ({ method }) => {
+      if (method === 'files.writeTerminalArtifact') {
+        written = true
+        return refused('Request timed out')
+      }
+      return read(written ? '# new' : '# old')
+    })
+
+    await expect(save('# new', '# old')).resolves.toEqual({ ok: true })
   })
 })

@@ -59,8 +59,8 @@ export async function renewTerminalArtifactGrant(
     'files.resolveTerminalPath',
     {
       worktree: toRuntimeWorktreeSelector(args.worktreeId),
-      pathText: args.absolutePath,
-      crossWorkspace: true
+      // Why: no crossWorkspace, so a path another workspace holds still renews as the same grant.
+      pathText: args.absolutePath
     },
     {
       timeoutMs: 15_000,

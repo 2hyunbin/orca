@@ -61,6 +61,17 @@ async function readGrantedText(
   }
 }
 
+async function hostHoldsContent(
+  args: GrantTarget & { content: string },
+  grantId: string
+): Promise<boolean> {
+  try {
+    return (await readGrantedText(args, grantId)) === args.content
+  } catch {
+    return false
+  }
+}
+
 /** Saves a host file outside every workspace through its grant; never touches this computer's files. */
 export async function writeRuntimeTerminalArtifactFile(
   unpinned: GrantTarget & {
@@ -94,6 +105,17 @@ export async function writeRuntimeTerminalArtifactFile(
     return comparison === null ? null : { ok: false, diskConflict: comparison }
   }
   const send = async (grantId: string): Promise<FileWriteResult> => {
+    try {
+      await sendOnce(grantId)
+    } catch (error) {
+      // Why: a lost reply may follow a committed write; read back so the baseline isn't left stale.
+      if (isRenewableGrantError(error) || !(await hostHoldsContent(args, grantId))) {
+        throw error
+      }
+    }
+    return FILE_WRITE_OK
+  }
+  const sendOnce = async (grantId: string): Promise<void> => {
     await callRuntimeRpc(
       args.target,
       'files.writeTerminalArtifact',
@@ -110,7 +132,6 @@ export async function writeRuntimeTerminalArtifactFile(
         expectedEnvironmentPairingRevision: args.expectedEnvironmentPairingRevision
       }
     )
-    return FILE_WRITE_OK
   }
   try {
     return (await refusal(args.grantId)) ?? (await send(args.grantId))
