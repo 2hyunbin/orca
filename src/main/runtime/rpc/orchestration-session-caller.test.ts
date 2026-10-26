@@ -277,9 +277,30 @@ describe('orchestration session callers at the dispatch entry', () => {
       await expectRefusedWithNoEffects(PROVIDER_ID_X, CODES.providerId, /changes on \/clear/)
     })
 
-    it('a released lease', async () => {
+    it('a released lease reading its mail, while its background commands still send as it', async () => {
       h.records.set(SESSION_X, sessionRecord(SESSION_X, { lease: { claimStatus: 'released' } }))
-      await expectRefusedWithNoEffects(SESSION_X, CODES.notLive, /is not running right now/)
+      const { messageId } = seedPendingMail()
+      for (const params of [{}, { wait: true, timeoutMs: 1 }, { peek: true }]) {
+        const response = await h.dispatch(
+          orchestrationRequest('orchestration.check', params, { sessionId: SESSION_X })
+        )
+        expect(response).toMatchObject({
+          ok: false,
+          error: { code: CODES.notLive, message: expect.stringMatching(/is not running right now/) }
+        })
+      }
+      expect(h.db.getMessageById(messageId)).toMatchObject({ read: 0 })
+
+      const sent = await h.dispatch(
+        orchestrationRequest(
+          'orchestration.send',
+          { to: ADDRESS_X, subject: 'wake' },
+          { sessionId: SESSION_X }
+        )
+      )
+      expect(h.db.getMessageById(idOf(resultOf(sent).message))).toMatchObject({
+        from_handle: ADDRESS_X
+      })
     })
 
     it('a lease mid owner change', async () => {
