@@ -312,11 +312,19 @@ describe('slow connection retirement', () => {
     expect(replay('09:38')).toEqual([{ connectionId: 11, windowEnd: '09:38:21' }])
   })
 
-  it('replays the 09:51 stall, where a second connection (c31, 38 ms) also turned slow', () => {
-    expect(replay('09:51')).toEqual([
-      { connectionId: 19, windowEnd: '09:51:51' },
-      { connectionId: 31, windowEnd: '09:52:51' }
+  it('replays the 09:51 stall and retires c19; c31 (38 ms) sits under the floor', () => {
+    expect(replay('09:51')).toEqual([{ connectionId: 19, windowEnd: '09:51:51' }])
+  })
+
+  it('keeps a connection whose median sits between healthy and the floor', async () => {
+    const mild = pool([
+      { name: 'a', statementMs: steady(3) },
+      { name: 'b', statementMs: steady(3) },
+      { name: 'mild', statementMs: steady(30) }
     ])
+    await runStatements(mild.database, SLOW_CONNECTION_WINDOW * 6)
+
+    expect(mild.destroyed).toEqual([])
   })
 })
 

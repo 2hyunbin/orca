@@ -1,7 +1,8 @@
 import type pg from 'pg'
 
-// A floor above healthy US round trips (1.7-4.5 ms medians); the 10-26 director stalls held one connection at 52-59 ms.
-export const SLOW_CONNECTION_MEDIAN_MS = 25
+// Below the 10-26 director stalls (one connection at 52-59 ms) and above the 25-30 ms medians that
+// retired about 20 connections an hour fleet-wide on 10-26 without a 503 behind any of them.
+export const SLOW_CONNECTION_MEDIAN_MS = 40
 // Relative to the pool's other connections, so a far region's round trip, a slow database, event-loop
 // lag or a lock convoy (which slow every connection alike) never retire anything.
 export const SLOW_CONNECTION_PEER_RATIO = 3
