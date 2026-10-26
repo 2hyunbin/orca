@@ -4,6 +4,7 @@ import {
   type RichMarkdownContextMenuCommandPayload,
   type RichMarkdownContextMenuTableTarget
 } from '../../shared/rich-markdown-context-menu'
+import type { ContextMenuSpelling } from '../../shared/browser-guest-events'
 import { translateMain } from '../i18n/main-i18n'
 
 type EditableContextMenuWebContents = Pick<
@@ -39,9 +40,7 @@ function editableContextPasteItem(
   return {
     label,
     click: () => {
-      // Why: context-menu paste must share renderer ownership with keyboard and
-      // app-menu paste so large text controls can chunk and terminals cannot
-      // receive duplicate native paste.
+      // Use renderer paste ownership for chunked text controls and to avoid duplicate native terminal paste.
       webContents.send('ui:editableContextPaste', {
         plainTextOnly: options?.plainTextOnly === true
       })
@@ -187,12 +186,22 @@ function buildNativeEditMenuTemplate(
     { role: 'cut' },
     { role: 'copy' },
     editableContextPasteItem('Paste', webContents),
-    // Why: a plain-text contenteditable (the chat composer) already pastes text literally and takes no text-only mode.
+    // Plain-text contenteditable composers already paste literally; omit redundant text-only mode.
     ...(params.formControlType !== 'none'
       ? [editableContextPasteItem('Paste as plain text', webContents, { plainTextOnly: true })]
       : []),
     { role: 'selectAll' }
   ]
+}
+
+/** The spelling actions an editable context menu offers; Orca's window and browser pages share it. */
+export function readContextMenuSpelling(
+  params: Pick<Electron.ContextMenuParams, 'dictionarySuggestions' | 'misspelledWord'>
+): ContextMenuSpelling {
+  return {
+    suggestions: params.dictionarySuggestions.slice(0, 5),
+    misspelledWord: params.misspelledWord
+  }
 }
 
 export function buildEditableContextMenuTemplate(
@@ -204,21 +213,21 @@ export function buildEditableContextMenuTemplate(
     return []
   }
 
-  const suggestions = params.dictionarySuggestions.slice(0, 5)
+  const { suggestions, misspelledWord } = readContextMenuSpelling(params)
   const isRichMarkdownSurface = params.formControlType === 'none' && options?.plainText !== true
   const template: Electron.MenuItemConstructorOptions[] = suggestions.map((suggestion) => ({
     label: suggestion,
     click: () => webContents.replaceMisspelling(suggestion)
   }))
 
-  if (params.misspelledWord) {
+  if (misspelledWord) {
     if (template.length > 0) {
       template.push({ type: 'separator' })
     }
     template.push({
       label: 'Add to dictionary',
       click: () => {
-        webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+        webContents.session.addWordToSpellCheckerDictionary(misspelledWord)
       }
     })
   }

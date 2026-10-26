@@ -1,5 +1,4 @@
-// Each agent's composed launch resolver over test doubles, built the way its registration builds
-// it, so resolver tests exercise the shared launch path rather than a copy of it.
+// Build agent launch resolvers with production composition over test doubles so tests exercise the shared path.
 
 import type { AgentSessionRecordStore } from './agent-session-record-store'
 import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
@@ -154,9 +153,7 @@ export function createPiRpcLaunchResolver(deps: LaunchTestSources & PiRpcLaunchP
     resolve({ identity, spawnToken })
 }
 
-/** Sealed with `TEST_SPAWN_TOKEN` unless the test passes another: Claude's launch env has always
- *  carried the session's identity. `resolveEnv` is Claude's overlay; `resolveInheritedEnv`, its
- *  base, defaults to this process's env as a launch without one inherits it. */
+/** Seal Claude with TEST_SPAWN_TOKEN unless overridden; resolveEnv overlays resolveInheritedEnv, which defaults to process.env. */
 export function createClaudeStructuredLaunchResolver(
   deps: Omit<LaunchTestSources, 'resolveEnvironment' | 'resolveLaunchEnv'> &
     Pick<ClaudeEnvDeps, 'resolveInheritedEnv'> & {

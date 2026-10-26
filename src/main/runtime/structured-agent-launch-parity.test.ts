@@ -1,7 +1,5 @@
 import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
-// Parity oracle for native-chat launches: the exact child every agent spawns, read at the spawn
-// boundary, with production's own dependency wiring. A refactor of the launch path must leave the
-// snapshot file unchanged.
+// Capture native-chat children at the spawn boundary with production wiring; launch-path refactors must preserve these snapshots.
 
 import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -154,6 +152,7 @@ import {
   structuredWorkerIdentities,
   structuredWorkerProcessIncarnation
 } from './structured-worker-identity'
+import { partialRuntimeStore } from './runtime-store-partial-fixture'
 
 // A new agent goes last: its cases then shift only the configured ones' session ids.
 const AGENTS = [
@@ -596,10 +595,11 @@ beforeAll(async () => {
   process.env = inheritedEnvironment()
   installAppEnvironment()
   settings = defaultSettings()
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the host wiring reads only the store's getSettings method.
-  const runtime = new OrcaRuntimeService({
-    getSettings: () => settings
-  } as never)
+  const runtime = new OrcaRuntimeService(
+    partialRuntimeStore({
+      getSettings: () => settings
+    })
+  )
   await runtime.ensureStructuredAgentSessionHost()
   const production = capture.productionDeps.at(-1)
   if (!production) {
@@ -611,8 +611,7 @@ beforeAll(async () => {
     logger: { warn: () => {}, error: () => {} },
     resolveWorkspacePath: async (workspaceId) =>
       join(root, workspaceId === FLOATING_TERMINAL_WORKTREE_ID ? 'floating' : 'worktree'),
-    // The login shell's variables, read once per host like production's snapshot: its own PATH,
-    // one variable the configured cases name and one they do not.
+    // Model the host-captured shell PATH plus one inherited and one excluded named variable.
     resolveEnvironment: async () => ({
       PATH: `${join(root, 'bin')}:/opt/login-shell/bin:/usr/bin:/bin`,
       HOME: join(root, 'home'),
@@ -630,8 +629,7 @@ beforeAll(async () => {
   }
 })
 
-// Again after the shared setup's own per-test environment, so this app's CLI paths are the run's;
-// and each case inherits the same environment whatever ran before it.
+// Reinstall app CLI paths after shared setup so every launch case inherits the same environment.
 beforeEach(() => {
   installAppEnvironment()
   process.env = inheritedEnvironment()

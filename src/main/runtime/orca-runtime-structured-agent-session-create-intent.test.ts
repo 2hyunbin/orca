@@ -76,8 +76,8 @@ describe('structured Codex folder trust', () => {
     expect(attachFingerprintFields(intent)).not.toHaveProperty('hostLaunchDirectory')
   })
 
-  it('pre-trusts the chat folder before launch preparation, as a Codex terminal launch does', async () => {
-    const { prepareCodexStructuredLaunch, createIntent } = createCodexIntentRuntime({})
+  it('pre-trusts the chat folder in the account home launch preparation selected', async () => {
+    const { createIntent } = createCodexIntentRuntime({})
 
     await createIntent()
 
@@ -85,11 +85,9 @@ describe('structured Codex folder trust', () => {
       env: expect.any(Object),
       claudeAuth: null,
       wslDistro: null,
-      connectionId: null
+      connectionId: null,
+      codexHome: '/accounts/selected/home'
     })
-    expect(applyAgentWorkspaceTrust.mock.invocationCallOrder[0]).toBeLessThan(
-      prepareCodexStructuredLaunch.mock.invocationCallOrder[0]
-    )
   })
 
   it('writes nothing with the setting off, and still prepares the launch', async () => {
@@ -161,7 +159,6 @@ describe('structured agent-session create intent', () => {
     })
     writers.mockRejectedValueOnce(liveWriter)
     await expect(intent()).rejects.toBe(liveWriter)
-    // At rest, the switch opens the owning chat as before.
     writers.mockResolvedValueOnce()
     await expect(intent()).rejects.toMatchObject({
       refusal: { details: { owner: { sessionId: record.sessionId } } }
@@ -252,8 +249,7 @@ describe('structured agent-session create intent', () => {
 
     const accountHome = await runtime.resolveStructuredAgentAccountHome('codex')
 
-    // A read must not run launch preparation: no home sync, no session bridge,
-    // no cleared account selection — the read-only sibling answers instead.
+    // Reads must not sync homes, bridge sessions or clear account selections; use read-only home resolution.
     expect(prepareCodexStructuredLaunch).not.toHaveBeenCalled()
     expect(resolveCodexStructuredLaunchHome).toHaveBeenCalledWith({
       launchEnv: expect.objectContaining({ CODEX_HOME: '/configured/home' })
@@ -311,7 +307,6 @@ describe('structured agent-session create intent', () => {
     })
 
     expect(prepareCodexStructuredLaunch).not.toHaveBeenCalled()
-    // Claude was never pre-trusted for a structured chat.
     expect(applyAgentWorkspaceTrust).not.toHaveBeenCalled()
     expect(intent.accountHome).toEqual({
       variable: 'CLAUDE_CONFIG_DIR',
@@ -323,7 +318,6 @@ describe('structured agent-session create intent', () => {
       fastMode: 'true',
       permissionMode: 'ask'
     })
-    // createSupport reports this same seed, so a paired client's picker shows what create runs.
     expect(runtime.structuredAgentSessionLaunchSeedOptions('claude')).toEqual(intent.options)
   })
 
@@ -471,7 +465,6 @@ describe('adopting a conversation recorded outside Orca', () => {
       runtime.resolveStructuredAgentSessionCreateIntent({
         envelope: { sessionId: 'session-1', clientOperationId: 'operation-1' },
         worktree: 'id:workspace-1',
-        // Every registered agent adopts; an unregistered one has no importer.
         agent: 'hermes',
         resumeFrom: { providerSessionId: 'provider-1' }
       })

@@ -29,8 +29,7 @@ import {
   resolveAgentSessionReplayOutcome
 } from './structured-agent-session-replay-outcome'
 
-/** A plan with a command receipt accepts through it, committed with its effect, never a ledger
- *  reservation. */
+/** Commit command acceptance with its effect, without a separate ledger reservation. */
 export async function admitCommandReceiptMutation<TValue>(
   request: AgentSessionMutationRequest<TValue>,
   hostFingerprint: string,
@@ -80,7 +79,7 @@ export async function admitCommandReceiptMutation<TValue>(
     return refuseAgentSessionMutation(AGENT_SESSION_NOT_ATTACHED)
   }
   const current = store.requireWritableRecord(envelope.sessionId)
-  // A conversation write is fenced by its journal; anything the provider must carry needs the lease.
+  // Journal fences protect conversation writes; provider effects also require the lease.
   const leaseRefusal = plan.conversationWrite ? null : refuseUnlessWriterAdmitted(current.lease)
   if (leaseRefusal) {
     return refuseAgentSessionMutation(leaseRefusal)
@@ -172,7 +171,7 @@ async function answerCommandReceipt<TValue>(
     rerunWhenReplayMissing: plan.rerunWhenReplayMissing?.(context),
     recoverUnknownFromDurableState: plan.recoverUnknownFromDurableState
   })
-  // A missing result cannot undo durable acceptance, even if a later plan allows missing replays.
+  // Missing results must not undo durable acceptance even if later plans permit missing replays.
   if (replay.decision !== 'replay') {
     return replay.decision === 'refuse'
       ? refuseAgentSessionMutation(replay.refusal)

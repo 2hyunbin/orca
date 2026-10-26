@@ -3,15 +3,11 @@ import {
   agentSessionRecordFixture
 } from '../../shared/agent-session-record.test-fixture'
 import { agentSessionConversationView } from '../../shared/agent-session-conversation-view'
-/**
- * A native Claude/Codex chat has no PTY or pane, so the terminal sweep of a project removal never
- * sees it. The host closes those sessions and retires their chat tabs itself.
- */
+/** Project removal must close structured sessions and retire chat tabs itself; PTY sweeps cannot see them. */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
 import type { RepoHostTarget } from '../../shared/repo-host-identity'
-import type { ExecutionHostId } from '../../shared/execution-host'
-import { getRepoExecutionHostId } from '../../shared/execution-host'
+import { getRepoExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 
 const hostRef: { current: unknown } = { current: null }
 

@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { GlobalSettings } from '../../shared/global-settings-types'
-import { OrchestrationDb } from '../runtime/orchestration/db/orchestration-db'
 import { hashCanonical } from '../runtime/rpc/orchestration-mutation-receipt'
-import { ExternalConversationSeam } from './external-conversation-seam'
 import type { ConversationKey } from './external-conversation-types'
 import {
   fakeLauncher,
@@ -13,39 +10,11 @@ import {
   PANE,
   WORKTREE
 } from './external-conversation.test-fixture'
+import { deferred, harness } from './external-conversation-seam.test-fixture'
 
 const KEY: ConversationKey = { source: 'dev', externalId: 'thread-1' }
 const TARGET = { kind: 'existing' as const, worktree: `id:${WORKTREE}` }
 const START = { agent: 'claude', target: TARGET, prompt: 'first' }
-
-function harness(
-  settings: Partial<GlobalSettings> = {},
-  records = fakeLinkStore(),
-  db = new OrchestrationDb(':memory:')
-) {
-  const removed = new Set<(worktreeId: string) => void>()
-  const seam = (): ExternalConversationSeam =>
-    new ExternalConversationSeam({
-      store: records.store,
-      readSettings: () => settings,
-      receiptDb: () => db,
-      onWorkspaceRemoved: (listener) => {
-        removed.add(listener)
-        return () => removed.delete(listener)
-      }
-    })
-  const removeWorkspace = (worktreeId: string): void =>
-    removed.forEach((listener) => listener(worktreeId))
-  return { ...records, seam: seam(), restart: seam, db, removed, removeWorkspace }
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => {
-    resolve = done
-  })
-  return { promise, resolve }
-}
 
 const UNKNOWN = { outcome: 'unknown', reason: 'launch_outcome_unknown' }
 
@@ -249,7 +218,7 @@ describe('ExternalConversationSeam delivery ids', () => {
     ).toEqual({
       outcome: 'accepted'
     })
-    // A start the host died during: its receipt is still pending.
+    // A pending receipt models process loss during the first start.
     db.beginMutationReceipt({
       callerFingerprint: 'connector:dev',
       requestId: JSON.stringify(['thread-9', 'd1']),
@@ -289,7 +258,6 @@ describe('ExternalConversationSeam links', () => {
       externalConversations: row(WORKTREE)?.externalConversations
     })
     remove(WORKTREE)
-    // Started in this period, so a second start goes to the renamed workspace's pane.
     expect(
       (await seam.start({ launcher, terminal: fakeTerminal().terminal }, KEY, 'd2', START)).initial
     ).toEqual({ outcome: 'accepted' })
@@ -300,7 +268,7 @@ describe('ExternalConversationSeam links', () => {
 
   it('finds an SSH twin’s link that only its host’s row holds, after a restart too', async () => {
     const records = fakeLinkStore([LOCAL_REPO, { ...LOCAL_REPO, connectionId: 'box' }])
-    // The local twin wrote this locator first, so the locator-keyed map keeps its row.
+    // The locator projection keeps the local twin; the SSH link exists only in canonical host rows.
     records.put(WORKTREE, 'local', {})
     const { seam, restart, writes } = harness({}, records)
     const { launcher, launch } = fakeLauncher(async () => launchResult('handed-to-terminal'), {
@@ -359,8 +327,8 @@ describe('ExternalConversationSeam disposal', () => {
 })
 
 async function started() {
-  const h = harness()
   const terminal = fakeTerminal()
+  const h = harness({}, undefined, undefined, terminal.terminal)
   const { launcher } = fakeLauncher(async () => launchResult('handed-to-terminal'))
   const host = { launcher, terminal: terminal.terminal }
   await h.seam.start(host, KEY, 'start', START)
@@ -376,7 +344,7 @@ describe('ExternalConversationSeam send', () => {
       'term-1',
       'hello',
       expect.objectContaining({
-        inputKind: 'driving',
+        inputKind: 'orchestration',
         onPermission: 'wait',
         expectedBinding: { ptyId: 'pty-1', processIncarnation: 'inc-pty-1' },
         signal: expect.any(AbortSignal)
@@ -505,7 +473,6 @@ describe('ExternalConversationSeam send', () => {
     expect(await head).toEqual(gone)
     expect(await follower).toEqual(gone)
     expect(terminal.writes).toEqual([])
-    // A later delivery opens a new lane on the process there now.
     expect(await seam.send(host, KEY, 'd3', 'three')).toEqual({ outcome: 'accepted' })
     expect(terminal.writes).toEqual(['three'])
   })
@@ -544,8 +511,8 @@ describe('ExternalConversationSeam twin removal', () => {
     const records = fakeLinkStore([LOCAL_REPO, { ...LOCAL_REPO, connectionId: 'box' }])
     records.put(WORKTREE, 'local', {})
     records.put(WORKTREE, 'ssh:box', {})
-    const h = harness({}, records)
     const terminal = fakeTerminal()
+    const h = harness({}, records, undefined, terminal.terminal)
     const { launcher } = fakeLauncher(async () => launchResult('handed-to-terminal'), {
       worktreeId: WORKTREE,
       sshHostId: linkedHost === 'local' ? null : linkedHost
@@ -580,8 +547,8 @@ describe('ExternalConversationSeam twin removal', () => {
 
 describe('ExternalConversationSeam start-headed lanes', () => {
   async function startHeaded(delayLink: boolean) {
-    const h = harness()
     const terminal = fakeTerminal()
+    const h = harness({}, undefined, undefined, terminal.terminal)
     const launched = deferred<void>()
     const linkResolved = deferred<void>()
     const { launcher, launch } = fakeLauncher(async () => {
@@ -621,7 +588,6 @@ describe('ExternalConversationSeam start-headed lanes', () => {
     expect((await start).initial).toEqual({ outcome: 'accepted' })
     expect(await follower).toEqual(GONE)
     expect(terminal.writes).toEqual([])
-    // A later delivery opens a new lane on the process there now.
     expect(await seam.send(host, KEY, 'd2', 'later')).toEqual({ outcome: 'accepted' })
     expect(terminal.writes).toEqual(['later'])
   })
@@ -636,8 +602,8 @@ describe('ExternalConversationSeam start-headed lanes', () => {
   })
 
   it('lets no follower adopt a process when the launch published none it can prove', async () => {
-    const { seam } = harness()
     const terminal = fakeTerminal()
+    const { seam } = harness({}, undefined, undefined, terminal.terminal)
     terminal.state.ptyId = null
     const launched = deferred<void>()
     const { launcher, launch } = fakeLauncher(async () => {

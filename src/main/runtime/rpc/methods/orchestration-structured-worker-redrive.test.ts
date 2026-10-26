@@ -5,14 +5,7 @@ import {
   agentSessionLeaseFixture,
   agentSessionRecordFixture
 } from '../../../../shared/agent-session-record.test-fixture'
-/**
- * The redrive edge is coalesced, and coalescing is not allowed to change what gets delivered.
- *
- * Every journal batch is a redrive candidate, because a settled turn is tombstoned rather than
- * rewritten. Once mail is parked on a session, each candidate re-resolves the dispatch, queries
- * unread mail and reads the host's gate facts — so a turn that streams tool calls paid the full
- * gate per batch, only to re-park because the turn was still running.
- */
+/** Coalesce parked-mail journal nudges without changing delivery; each gate reads dispatch, unread mail and host facts, so per-batch evaluation is expensive. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
@@ -125,7 +118,6 @@ describe('the structured redrive edge', () => {
       vi.advanceTimersByTime(10)
     }
 
-    // Still inside the quiet window: nothing has fired for 25 batches.
     expect(onJournalActivity).not.toHaveBeenCalled()
     vi.advanceTimersByTime(300)
     expect(onJournalActivity).toHaveBeenCalledTimes(1)
@@ -155,7 +147,6 @@ describe('the structured redrive edge', () => {
     }
 
     expect(onJournalActivity.mock.calls.length).toBeGreaterThan(0)
-    // ...but nowhere near one per batch.
     expect(onJournalActivity.mock.calls.length).toBeLessThan(10)
   })
 

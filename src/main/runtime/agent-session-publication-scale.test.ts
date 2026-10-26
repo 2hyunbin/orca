@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../shared/agent-session-journal-types'
+import * as journalReducer from '../native-chat/agent-session-journal/journal-reducer'
 import type {
   AgentSessionStatusEvent,
   AgentSessionSubscribeEvent
@@ -115,14 +116,6 @@ describe('real-store status and queue publications', () => {
           child: null,
           params: { location: row.location, provider: row.provider }
         })
-        const snapshot = journal.snapshot
-        vi.spyOn(journal, 'snapshot').mockImplementation(() => {
-          const value = snapshot()
-          counts.snapshots++
-          counts.snapshotItems += value.items.length
-          counts.snapshotSubmissions += value.submissions.length
-          return value
-        })
         const submissions = journal.submissions
         vi.spyOn(journal, 'submissions').mockImplementation(() => {
           const value = submissions()
@@ -143,6 +136,14 @@ describe('real-store status and queue publications', () => {
           return value
         })
       }
+      const render = journalReducer.renderJournalState
+      vi.spyOn(journalReducer, 'renderJournalState').mockImplementation((state) => {
+        const value = render(state)
+        counts.snapshots++
+        counts.snapshotItems += value.items.length
+        counts.snapshotSubmissions += value.submissions.length
+        return value
+      })
       const originalStringify = JSON.stringify
       vi.spyOn(JSON, 'stringify').mockImplementation((value, replacer, space) => {
         if (

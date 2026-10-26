@@ -13,15 +13,15 @@ import {
   validateAgentSessionReservationInput,
   type AgentSessionReserveRequest,
   type AgentSessionReserveResult
-} from './agent-session-reservation-admission'
+} from './agent-session/ownership/agent-session-reservation-admission'
 import {
   selectWritableAgentSessionRecord,
   requireWritableAgentSessionRecord,
   type AgentSessionStoreState
 } from './agent-session-store-state'
-import { setAgentSessionTabVisibility } from './agent-session-tab-table'
+import { setAgentSessionTabVisibility } from './agent-session/agent-session-tab-table'
 
-/** The same create admission as a reservation, with no obligation to acquire an owner. */
+/** Use create admission without requiring owner acquisition. */
 export function commitAgentSessionFounding(
   state: AgentSessionStoreState,
   request: AgentSessionReserveRequest

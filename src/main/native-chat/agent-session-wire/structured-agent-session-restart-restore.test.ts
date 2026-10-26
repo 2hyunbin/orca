@@ -24,7 +24,6 @@ vi.mock('./structured-agent-session-read-restore', () => ({
 import { restoreStructuredAgentSessionsOnRestart } from './structured-agent-session-restart-restore'
 import { recordingStructuredAgentSessionLogger } from './structured-agent-session-logger-test-support'
 
-// The restore under test is mocked; the host database only fills the deps' shape.
 const stateDirectory = mkdtempSync(join(tmpdir(), 'orca-restart-restore-'))
 afterAll(() => {
   closeTestJournalHostDatabases()
@@ -90,7 +89,7 @@ describe('restart journal restoration', () => {
   })
 
   it('lets the event loop run between chats', async () => {
-    // Counts turns of the event loop while the restore runs; each open below is synchronous.
+    // Synchronous opens must still yield to event-loop turns.
     let turns = 0
     let ticking = true
     const tick = (): void => {
@@ -120,7 +119,6 @@ describe('restart journal restoration', () => {
     ticking = false
 
     expect(restoreRead).toHaveBeenCalledTimes(records.length)
-    // At most one chat per worker between two turns: never the whole restore in one task.
     expect(turnsSeen.size).toBeGreaterThanOrEqual(records.length / 4)
   })
 
@@ -147,7 +145,7 @@ describe('restart journal restoration', () => {
     const restored = {
       session: { journal: {}, params, child: null }
     }
-    // The open is what settles: it runs after recovery resolution and before the publish.
+    // Opening settles leftovers after recovery and before publication.
     restoreRead.mockImplementation(async () => {
       calls.push('open')
       return restored
@@ -172,7 +170,6 @@ describe('restart journal restoration', () => {
     expect(calls).toEqual(['resolveRecovery', 'open', 'onReadable:restored'])
   })
 
-  // Each failed bookkeeping call stands for one refused store write.
   describe('once lease bookkeeping fails in a pass', () => {
     const records = Array.from({ length: 8 }, (_, index) => ({ sessionId: `session-${index}` }))
     const restore = (
@@ -190,7 +187,7 @@ describe('restart journal restoration', () => {
         onReadable: () => undefined
       })
 
-    /** A failure that takes a while, as a lock wait does, so the chats open at once overlap it. */
+    /** Overlap workers with a slow store failure. */
     const slowFailure = async (): Promise<boolean> => {
       await new Promise((resolve) => setTimeout(resolve, 5))
       return false
@@ -233,7 +230,7 @@ describe('restart journal restoration', () => {
         resolveRecovery
       })
 
-      // Only those already started when the first failed: at most one per chat open at once.
+      // After failure, only already-started bookkeeping calls may finish.
       expect(resolveRecovery.mock.calls.length).toBeLessThanOrEqual(4)
       expect(restoreRead).toHaveBeenCalledTimes(records.length)
     })
@@ -289,7 +286,6 @@ describe('restart journal restoration', () => {
       onReadable: () => undefined
     })
 
-    // The open is where the settlement runs, and a session already open is not opened again.
     expect(restoreRead).not.toHaveBeenCalled()
   })
 })

@@ -52,7 +52,7 @@ import { listStructuredSessionsForWorktree } from './structured-session-worktree
 import * as membership from './agent-session-store-state'
 import { createAgentModelCatalogService } from '../native-chat/agent-model-catalog/agent-model-catalog-service'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
-import type { AgentSessionReserveRequest } from './agent-session-reservation-admission'
+import type { AgentSessionReserveRequest } from './agent-session/ownership/agent-session-reservation-admission'
 
 // Uses the complete host harness; discovery, mail reach and every store read execute unchanged.
 async function inventoryRig(n: number) {
