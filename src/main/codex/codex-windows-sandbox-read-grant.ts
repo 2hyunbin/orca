@@ -1,59 +1,139 @@
-import { existsSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import { getSystem32ExePath } from '../win32-utils'
 
 // Codex's elevated sandbox runs commands as members of this local group (codex-rs windows-sandbox-rs/src/winutil.rs).
 const CODEX_SANDBOX_USERS_GROUP = 'CodexSandboxUsers'
-// icacls propagates the inheritable ACE to every existing file; large homes take a while.
+// Never the home root: the group is machine-wide and the root holds auth.json.
+const SANDBOX_READABLE_ENTRIES = ['generated_images', 'skills', 'plugins'] as const
 const ICACLS_TIMEOUT_MS = 120_000
+const LAUNCH_WAIT_MS = 2_000
+const MARKER_POLL_MS = 5_000
+const MARKER_POLL_LIMIT_MS = 30 * 60_000
 
-// One attempt per home per process, shared by concurrent launches; failures retry after restart.
-const grantAttempts = new Map<string, Promise<void>>()
+// Keyed by path and inode so a recreated directory is granted again.
+const grantedDirs = new Set<string>()
+const pendingGrants = new Map<string, Promise<void>>()
+const markerPolls = new Set<string>()
 
 /**
  * Codex's elevated setup grants its sandbox group read on every USERPROFILE child, so ~/.codex is
  * readable; Orca's managed home sits under a protected userData DACL and never gets that ACE.
  */
-export function grantCodexSandboxReadOnManagedHome(codexHome: string): Promise<void> {
-  // The setup marker exists only after Codex provisioned elevated-sandbox users for this home.
-  if (
-    process.platform !== 'win32' ||
-    !existsSync(join(codexHome, '.sandbox', 'setup_marker.json'))
-  ) {
-    return Promise.resolve()
+export async function grantCodexSandboxReadOnManagedHome(codexHome: string): Promise<void> {
+  if (process.platform !== 'win32') {
+    return
   }
-  let attempt = grantAttempts.get(codexHome)
-  if (!attempt) {
-    attempt = runIcaclsGrant(codexHome)
-    grantAttempts.set(codexHome, attempt)
+  if (!hasSetupMarker(codexHome)) {
+    // Codex provisions its sandbox users mid-session, after this launch.
+    if (requestsElevatedSandbox(codexHome)) {
+      pollForSetupMarker(codexHome)
+    }
+    return
   }
-  return attempt
+  // A large existing tree keeps propagating in the background instead of delaying the terminal.
+  await Promise.race([
+    grantEntries(codexHome),
+    new Promise<void>((resolve) => setTimeout(resolve, LAUNCH_WAIT_MS).unref())
+  ])
 }
 
-async function runIcaclsGrant(codexHome: string): Promise<void> {
+function hasSetupMarker(codexHome: string): boolean {
+  return existsSync(join(codexHome, '.sandbox', 'setup_marker.json'))
+}
+
+function requestsElevatedSandbox(codexHome: string): boolean {
+  try {
+    const config = readFileSync(join(codexHome, 'config.toml'), 'utf8')
+    // `[windows] sandbox = "elevated"` or the legacy `elevated_windows_sandbox` feature flag.
+    return /\bsandbox\s*=\s*["']elevated["']|\belevated_windows_sandbox\s*=\s*true\b/.test(config)
+  } catch {
+    return false
+  }
+}
+
+function pollForSetupMarker(codexHome: string): void {
+  if (markerPolls.has(codexHome)) {
+    return
+  }
+  markerPolls.add(codexHome)
+  const startedAt = Date.now()
+  const timer = setInterval(() => {
+    if (hasSetupMarker(codexHome)) {
+      void grantEntries(codexHome)
+    } else if (Date.now() - startedAt < MARKER_POLL_LIMIT_MS) {
+      return
+    }
+    clearInterval(timer)
+    markerPolls.delete(codexHome)
+  }, MARKER_POLL_MS)
+  timer.unref()
+}
+
+async function grantEntries(codexHome: string): Promise<void> {
+  try {
+    // Created before Codex writes images so they inherit the grant.
+    mkdirSync(join(codexHome, 'generated_images'), { recursive: true })
+  } catch {
+    // Codex creates it itself; the grant then applies on the next launch.
+  }
+  await Promise.all(SANDBOX_READABLE_ENTRIES.map((entry) => grantDir(join(codexHome, entry))))
+}
+
+function grantDir(dir: string): Promise<void> {
+  let ino: number
+  try {
+    const stat = lstatSync(dir)
+    // Links point into the system Codex home, which Codex already opened; icacls would follow them.
+    if (!stat.isDirectory()) {
+      return Promise.resolve()
+    }
+    ino = stat.ino
+  } catch {
+    return Promise.resolve()
+  }
+  const key = `${dir}|${ino}`
+  if (grantedDirs.has(key)) {
+    return Promise.resolve()
+  }
+  let pending = pendingGrants.get(key)
+  if (!pending) {
+    // Failures stay uncached so the next launch retries.
+    pending = runIcaclsGrant(dir)
+      .then((granted) => {
+        if (granted) {
+          grantedDirs.add(key)
+        }
+      })
+      .finally(() => pendingGrants.delete(key))
+    pendingGrants.set(key, pending)
+  }
+  return pending
+}
+
+async function runIcaclsGrant(dir: string): Promise<boolean> {
   const icacls = getSystem32ExePath('icacls.exe')
   try {
     // A repeat grant would re-propagate through the whole tree on every Orca start.
-    const current = await runProcess({ program: icacls, args: [codexHome], timeoutMs: 10_000 })
+    const current = await runProcess({ program: icacls, args: [dir], timeoutMs: 10_000 })
     if (
       current.code === 0 &&
       current.stdout.includes(`\\${CODEX_SANDBOX_USERS_GROUP}:(OI)(CI)(RX)`)
     ) {
-      return
+      return true
     }
     const result = await runProcess({
       program: icacls,
-      args: [codexHome, '/grant', `${CODEX_SANDBOX_USERS_GROUP}:(OI)(CI)RX`, '/Q'],
+      args: [dir, '/grant', `${CODEX_SANDBOX_USERS_GROUP}:(OI)(CI)RX`, '/Q'],
       timeoutMs: ICACLS_TIMEOUT_MS
     })
-    if (result.code !== 0 || result.timedOut) {
-      console.warn(
-        '[codex] sandbox read grant on managed home failed',
-        result.stderr || result.stdout
-      )
+    if (result.code === 0 && !result.timedOut) {
+      return true
     }
+    console.warn('[codex] sandbox read grant failed', dir, result.stderr || result.stdout)
   } catch (error) {
-    console.warn('[codex] sandbox read grant on managed home failed', error)
+    console.warn('[codex] sandbox read grant failed', dir, error)
   }
+  return false
 }

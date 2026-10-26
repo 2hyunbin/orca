@@ -9,7 +9,7 @@ import { reconcileCodexHooksForLaunch } from './codex-hook-reconcile'
 import { grantCodexSandboxReadOnManagedHome } from './codex-windows-sandbox-read-grant'
 
 export function createCodexRuntimeHomeLaunchPreparation(deps: {
-  getRuntimeHome: () => CodexRuntimeHomeService | null
+  getRuntimeHome: () => Pick<CodexRuntimeHomeService, 'prepareForCodexLaunchAsync'> | null
   getSettings: () => GlobalSettings | undefined
 }) {
   return async (
@@ -34,8 +34,7 @@ export function createCodexRuntimeHomeLaunchPreparation(deps: {
       return null
     }
     if (runtimeHomePath !== null && target?.runtime !== 'wsl') {
-      // Off the launch path: a large home's ACL walk must not delay the terminal.
-      void grantCodexSandboxReadOnManagedHome(runtimeHomePath)
+      await grantCodexSandboxReadOnManagedHome(runtimeHomePath)
     }
     const hookTarget =
       target?.runtime === 'wsl'
