@@ -81,11 +81,29 @@ async function fakeDiscord() {
   // Channel objects: https://docs.discord.com/developers/resources/channel
   const channels: Record<string, unknown> = {
     '/api/v10/channels/C1': { id: 'C1', type: 0, guild_id: 'G1' },
-    '/api/v10/channels/T7': { id: 'T7', type: 11, guild_id: 'G1', parent_id: 'C7' }
+    '/api/v10/channels/T7': { id: 'T7', type: 11, guild_id: 'G1', parent_id: 'C7' },
+    '/api/v10/channels/T8': { id: 'T8', type: 11, guild_id: 'G1', parent_id: 'C8' },
+    '/api/v10/channels/T6': { id: 'T6', type: 11, guild_id: 'G1', parent_id: 'C6' }
   }
+  // T8 fails twice before answering, T6 is rate limited once; C9 is out of reach.
+  let t8Failures = 2
+  let t6Limited = true
   const server = createServer((request, response) => {
     const url = request.url ?? ''
     requested.push(url)
+    if (url === '/api/v10/channels/T6' && t6Limited) {
+      t6Limited = false
+      response.writeHead(429, { 'content-type': 'application/json', 'retry-after': '1' })
+      response.end(
+        JSON.stringify({ message: 'You are being rate limited.', retry_after: 0.2, global: false })
+      )
+      return
+    }
+    if ((url === '/api/v10/channels/T8' && t8Failures-- > 0) || url === '/api/v10/channels/C9') {
+      response.statusCode = url.endsWith('T8') ? 500 : 403
+      response.end(JSON.stringify({ code: 50001, message: 'Missing Access' }))
+      return
+    }
     response.setHeader('content-type', 'application/json')
     const gatewayBot = {
       url: origin,
@@ -253,6 +271,25 @@ describe('startDiscordGatewaySession', () => {
       '/api/v10/channels/T7',
       '/api/v10/channels/C1'
     ])
+  })
+
+  it('retries a failing or rate-limited lookup, and drops a mention whose channel stays unreadable', async () => {
+    const { origin, nextConnection, messages, requested } = await start()
+    const connection = await nextConnection()
+    await connection.next()
+    connection.send(ready(origin))
+    const mention = { mentions: [{ id: BOT }] }
+    connection.send(messageCreate(2, { ...mention, channel_id: 'C9' }))
+    connection.send(messageCreate(3, { ...mention, channel_id: 'T8' }))
+    connection.send(messageCreate(4, { ...mention, channel_id: 'T6' }))
+    await until(() => messages.length === 2)
+    expect(messages).toMatchObject([
+      { messageId: 'm3', threadParentId: 'C8' },
+      { messageId: 'm4', threadParentId: 'C6' }
+    ])
+    expect(requested.filter((url) => url.endsWith('/T6'))).toHaveLength(2)
+    expect(requested.filter((url) => url.endsWith('/T8'))).toHaveLength(3)
+    expect(requested.filter((url) => url.endsWith('/C9'))).toHaveLength(1)
   })
 
   it('hands over: closes resumably and saves the session for the next leader', async () => {

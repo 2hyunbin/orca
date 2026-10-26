@@ -10,6 +10,8 @@ export const DISCORD_GATEWAY_INTENTS = (1 << 0) | (1 << 9) | (1 << 15)
 // https://docs.discord.com/developers/topics/opcodes-and-status-codes
 const FATAL_CLOSE_CODES = new Set([4004, 4010, 4011, 4012, 4013, 4014])
 const SESSION_SAVE_MS = 5_000
+// @discordjs/rest retries server errors (3 times) and waits out 429s; this bounds both.
+const CHANNEL_LOOKUP_MS = 10_000
 
 const BotUserSchema = z.looseObject({ id: z.string().min(1) })
 
@@ -20,7 +22,7 @@ export type DiscordGatewaySessionStore = {
 }
 
 // threadParentId: set when the channel is a thread. A mention's channel is looked up once if the
-// gateway hasn't described it; the mention is dropped if that lookup fails.
+// gateway hasn't described it; the mention is dropped (and logged) if that lookup still fails.
 export type DiscordGatewayMessage = DiscordMessage & { threadParentId?: string }
 
 export type DiscordGatewaySession = {
@@ -91,7 +93,11 @@ export async function startDiscordGatewaySession(deps: {
           return
         }
         if (message.mentioned && parents.parentOf(message.channelId) === undefined) {
-          parents.learnChannel(await rest.get(`/channels/${message.channelId}`))
+          parents.learnChannel(
+            await rest.get(`/channels/${message.channelId}`, {
+              signal: AbortSignal.timeout(CHANNEL_LOOKUP_MS)
+            })
+          )
         }
         const threadParentId = parents.parentOf(message.channelId)
         await deps.onMessage(
@@ -99,7 +105,15 @@ export async function startDiscordGatewaySession(deps: {
         )
       })
       .catch(() => {
-        console.warn(JSON.stringify({ event: 'orca_connector_discord_message_dropped' }))
+        const { guildId, channelId, messageId } = message
+        console.warn(
+          JSON.stringify({
+            event: 'orca_connector_discord_message_dropped',
+            guildId,
+            channelId,
+            messageId
+          })
+        )
       })
   })
   manager.on(WebSocketShardEvents.Closed, (code) => {
