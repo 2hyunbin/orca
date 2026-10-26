@@ -117,6 +117,8 @@ export abstract class DaemonPtyRuntimeState {
   protected removeEventListener: (() => void) | null = null
   protected initialCwds = new Map<string, string>()
   protected wslDistrosBySessionId = new Map<string, string>()
+  /** Bridge sessions this adapter turned into host loss; only their later close may find them gone. */
+  protected readonly hostLossSessionIds = new Set<string>()
   /** ORCA_PANE_KEY a WSL session was spawned with; its shell's folder is read by it at Sleep. */
   protected wslPaneKeysBySessionId = new Map<string, string>()
   /** A sleeping WSL pane's shell folder, read before its final checkpoint; the checkpoint keeps it. */

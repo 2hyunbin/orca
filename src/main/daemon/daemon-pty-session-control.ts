@@ -192,8 +192,13 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
         remainingDaemonRequestTimeoutMs(opts.deadlineMs)
       )
     } catch (error) {
-      // Already gone (e.g. a host-loss exit kept its tab): an explicit close still drops its history.
-      if (opts.keepHistory || !(error instanceof SessionNotFoundError)) {
+      // Only a session this adapter turned into host loss is known gone; any other id may still
+      // live in a legacy daemon sharing the history dir, so its history must not be removed.
+      if (
+        opts.keepHistory ||
+        !(error instanceof SessionNotFoundError) ||
+        !this.hostLossSessionIds.has(id)
+      ) {
         throw error
       }
     }
@@ -206,6 +211,7 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
     opts: { keepHistory?: boolean }
   ): Promise<void> {
     this.activeSessionIds.delete(id)
+    this.hostLossSessionIds.delete(id)
     this.clearSessionAwaitingDaemonRecovery(id)
     this.dirtySessionVersions.delete(id)
     if (!opts.keepHistory) {

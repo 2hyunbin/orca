@@ -45,6 +45,7 @@ describe('a WSL bridge pane exit', () => {
     adapter = harness.adapter
   })
   afterEach(async () => {
+    vi.restoreAllMocks()
     adapter?.dispose()
     await server?.shutdown()
     rmSync(dir, { recursive: true, force: true })
@@ -147,5 +148,28 @@ describe('a WSL bridge pane exit', () => {
 
     await expect(adapter.shutdown(id, { immediate: true })).resolves.toBeUndefined()
     expect(removeSession).toHaveBeenCalledWith(id)
+  })
+
+  it('never removes the history of a session it did not lose: another daemon may still run it', async () => {
+    const removeSession = vi.spyOn(HistoryManager.prototype, 'removeSession')
+
+    await expect(adapter.shutdown('legacy-daemon-session', { immediate: true })).rejects.toThrow(
+      'Session not found'
+    )
+    expect(removeSession).not.toHaveBeenCalled()
+  })
+
+  it('forgets a host-loss session once it is spawned again', async () => {
+    running = async () => ({ status: 'confirmed', distros: [] })
+    const exits = collectExits()
+    const id = await spawnBridgePane()
+    subprocesses[0]!._simulateExit(1)
+    await waitFor(() => exits.length > 0)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the adapter's protected host-loss set, read to prove a respawn clears it.
+    const lost = (adapter as unknown as { hostLossSessionIds: Set<string> }).hostLossSessionIds
+    expect(lost.has(id)).toBe(true)
+
+    await adapter.spawn({ cols: 80, rows: 24, sessionId: id })
+    expect(lost.has(id)).toBe(false)
   })
 })
