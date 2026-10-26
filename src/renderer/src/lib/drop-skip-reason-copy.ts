@@ -62,13 +62,21 @@ export function describeSharedDropFailureReason(
   return describeFailureProse(compactIpcErrorMessage(reason))
 }
 
-// Absolute POSIX, drive-letter or UNC paths, at the start or after a space, quote or bracket.
-const ABSOLUTE_PATH = /(?<=^|[\s'"`(])(?:[A-Za-z]:[\\/]|\\\\|\/)[^\s'"`)]*/g
+// Absolute POSIX, drive-letter or UNC paths: whole when quoted (they may hold spaces), else to whitespace.
+const QUOTED_ABSOLUTE_PATH = /(['"`])((?:[A-Za-z]:[\\/]|\\\\|\/)[^'"`]*)\1/g
+const BARE_ABSOLUTE_PATH = /(?<=^|[\s(])(?:[A-Za-z]:[\\/]|\\\\|\/)[^\s'"`)]*/g
 
 // Why: host errors quote absolute paths and toasts are often on shared screens; name only the file.
 function describeFailureProse(prose: string | undefined): string | undefined {
-  if (!prose || prose.replace(ABSOLUTE_PATH, '').trim() === '') {
+  if (!prose) {
     return undefined
   }
-  return prose.replace(ABSOLUTE_PATH, (path) => basename(path))
+  const shortened = prose
+    .replace(QUOTED_ABSOLUTE_PATH, (_match, quote: string, path: string) => {
+      return `${quote}${basename(path)}${quote}`
+    })
+    .replace(BARE_ABSOLUTE_PATH, (path) => basename(path))
+  const pathOnly =
+    prose.replace(QUOTED_ABSOLUTE_PATH, '').replace(BARE_ABSOLUTE_PATH, '').trim() === ''
+  return pathOnly ? undefined : shortened
 }

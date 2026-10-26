@@ -93,13 +93,18 @@ describe('reportTerminalDropUploadSkipsAndFailures', () => {
     )
     reportTerminalDropUploadSkipsAndFailures(
       [],
-      [{ reason: "EACCES: permission denied, open '/home/me/secret/shot.png'" }]
+      [{ reason: "EACCES: permission denied, open '/home/me/Top Secret (old)/shot.png'" }]
+    )
+    reportTerminalDropUploadSkipsAndFailures(
+      [],
+      [{ reason: 'Could not write "C:\\Users\\me\\My Files\\shot.png" on \\\\nas\\share\\x.png' }]
     )
     reportTerminalDropUploadSkipsAndFailures([], [{ reason: 'a' }, { reason: 'b' }])
 
     expect(vi.mocked(toast.error).mock.calls.map((call) => call[1])).toEqual([
       { description: 'No space left on device' },
       { description: "EACCES: permission denied, open 'shot.png'" },
+      { description: 'Could not write "shot.png" on x.png' },
       { description: undefined }
     ])
   })
