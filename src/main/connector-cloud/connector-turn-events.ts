@@ -37,6 +37,8 @@ const StoredTurnEnds = z.array(
 )
 
 const isTurnEnded = (event: ConnectorEvent): event is TurnEnded => event.kind === 'turn-ended'
+const isLive = (event: ConnectorEvent): boolean =>
+  event.kind !== 'turn-ended' && event.kind !== 'snapshot'
 
 function slackConversation(key: ConversationKey): ConnectorConversation | null {
   return key.source === 'slack' ? { source: 'slack', externalId: key.externalId } : null
@@ -105,15 +107,23 @@ export function toConnectorEvent(
   }
 }
 
-/** The newest turn ends and live events within their caps, so memory and disk hold the same set. */
-function boundEvents(events: ConnectorEvent[]): ConnectorEvent[] {
-  const turnEnds = events.filter(isTurnEnded).length
-  let turnEndsOver = turnEnds - MAX_TURN_ENDS
-  let liveOver = events.length - turnEnds - MAX_LIVE_EVENTS
+/**
+ * Keeps the newest turn ends and live events within their caps, counting the frozen batch, so memory and
+ * disk hold the same set. A snapshot is never dropped: it opens its session.
+ */
+function boundEvents(
+  events: ConnectorEvent[],
+  frozen: readonly ConnectorEvent[]
+): ConnectorEvent[] {
+  const owed = [...frozen, ...events]
+  let turnEndsOver = owed.filter(isTurnEnded).length - MAX_TURN_ENDS
+  let liveOver = owed.filter(isLive).length - MAX_LIVE_EVENTS
   if (turnEndsOver <= 0 && liveOver <= 0) {
     return events
   }
-  return events.filter((event) => (isTurnEnded(event) ? turnEndsOver-- <= 0 : liveOver-- <= 0))
+  return events.filter((event) =>
+    isTurnEnded(event) ? turnEndsOver-- <= 0 : !isLive(event) || liveOver-- <= 0
+  )
 }
 
 /**

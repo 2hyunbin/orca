@@ -35,8 +35,8 @@ export class ConnectorSendQueue<T> {
       maxBatch: number
       /** Restored items, sent once a sender is attached. */
       initial?: T[]
-      /** Applied to the unsent items, so the queue itself never exceeds its bounds. */
-      bound?: (items: T[]) => T[]
+      /** Trims the unsent items, given the frozen batch, so everything owed stays within bounds. */
+      bound?: (items: T[], frozen: readonly T[]) => T[]
       /** Called after every change with everything still owed, e.g. to persist it. */
       onChange?: (items: readonly T[]) => void
       onAccepted?: (batch: readonly T[]) => void
@@ -145,7 +145,7 @@ export class ConnectorSendQueue<T> {
   }
 
   private replace(items: T[]): void {
-    this.items = this.options.bound ? this.options.bound(items) : items
+    this.items = this.options.bound ? this.options.bound(items, this.head?.batch ?? []) : items
     this.notify()
   }
 
