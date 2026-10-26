@@ -97,6 +97,20 @@ describe('ExternalConversationSeam cancel', () => {
       expect(fake.keys).toEqual([])
     })
 
+    it('refuses a turn it cannot prove: relayed from another host, replayed or restored', async () => {
+      const { seam, host, hookRows, fake } = await linked()
+      const stale = { outcome: 'refused', reason: 'turn_not_running' }
+      for (const [id, row] of [
+        ['c-relayed', { ...working(100), connectionId: 'ssh-1' }],
+        ['c-replayed', { ...working(100), isReplay: true }],
+        ['c-restored', { ...working(100), restoredUnconfirmed: true }]
+      ] as const) {
+        hookRows.set(PANE, row)
+        await expect(seam.cancel(host, KEY, id, 100)).resolves.toEqual(stale)
+      }
+      expect(fake.keys).toEqual([])
+    })
+
     it('refuses on a host that stamps no turns; an unbound cancel still stops it', async () => {
       const { seam, host, hookRows, fake } = await linked()
       hookRows.set(PANE, hookRow({ stateStartedAt: 100 }))

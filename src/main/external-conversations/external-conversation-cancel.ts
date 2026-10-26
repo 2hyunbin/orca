@@ -6,7 +6,7 @@ import { interruptWorkingAgent } from '../runtime/terminal-agent-interrupt'
 import type { ConversationPrompts, PromptTerminal } from './external-conversation-prompts'
 import type { ConversationChain } from './external-conversation-chain'
 import type { ConversationEvents } from './external-conversation-events'
-import { openStampedTurn } from './external-conversation-turn-id'
+import { provableOpenTurn } from './external-conversation-turn-id'
 import { findLink } from './external-conversation-links'
 import type { ExternalConversationSeamDeps } from './external-conversation-seam'
 import { bindPane } from './external-conversation-send'
@@ -70,13 +70,13 @@ export async function cancelConversation(
   return stopLinkedAgent(terminal, seam, linked.link, signal, turnId)
 }
 
-/** Bound cancels name the host-stamped turn; an unstamped or resting pane has none to match. */
+/** Bound cancels name this host's stamped turn; an unstamped, relayed or resting pane has none to match. */
 function isTurn(
   seam: Pick<CancelSeam, 'readHookRow'>,
   paneKey: string | undefined,
   turnId: number
 ): boolean {
-  return paneKey !== undefined && openStampedTurn(seam.readHookRow(paneKey)) === turnId
+  return paneKey !== undefined && provableOpenTurn(seam.readHookRow(paneKey)) === turnId
 }
 
 /** Reject approval or send one Escape to a working agent; idle cancellation records a receipt without proving turn end. */

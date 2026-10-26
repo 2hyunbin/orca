@@ -1,14 +1,19 @@
 // A conversation's turn is named by the host's stamp on its agent's hook row, wherever that stamp exists.
-import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
 import { hookRowAgentPhase } from '../../shared/agent-transitions'
 
 /**
- * The host-stamped turn a row is in while its agent works or waits on the user; null when it rests or
- * the host stamps no turns. Only a stamped turn can be named by a cancel.
+ * The turn a cancel may name: this host's own stamp while its agent works or waits on the user. A row
+ * relayed from another host, replayed or restored can carry an earlier turn's stamp, so it proves none.
  */
-export function openStampedTurn(row: AgentStatusIpcPayload | null): number | null {
-  if (!row || row.turnStartedAt === undefined) {
+export function provableOpenTurn(row: AgentStatusIpcPayload | null): number | null {
+  if (
+    !row ||
+    row.turnStartedAt === undefined ||
+    row.connectionId !== null ||
+    row.isReplay ||
+    row.restoredUnconfirmed
+  ) {
     return null
   }
   const phase = hookRowAgentPhase(row)
@@ -16,19 +21,12 @@ export function openStampedTurn(row: AgentStatusIpcPayload | null): number | nul
 }
 
 /**
- * The stamped turn a move into working shows when no prompt-submitted news announced it, e.g. a new
- * prompt after a dismissed approval; null otherwise.
+ * The stamped turn a working row shows, however it got there: prompt news, a new prompt after a dismissed
+ * approval, or a stamp landing on a row already working. Null for other rows.
  */
-export function unannouncedStampedStart(
-  change: AgentPaneChange,
-  row: AgentStatusIpcPayload | null
-): number | null {
-  if (
-    change.kind !== 'moved' ||
-    change.to !== 'working' ||
-    change.transition === 'prompt-submitted'
-  ) {
+export function workingStampedTurn(row: AgentStatusIpcPayload | null): number | null {
+  if (!row || row.structuredHost || hookRowAgentPhase(row) !== 'working') {
     return null
   }
-  return row && !row.structuredHost ? (row.turnStartedAt ?? null) : null
+  return row.turnStartedAt ?? null
 }

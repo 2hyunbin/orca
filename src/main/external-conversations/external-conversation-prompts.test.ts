@@ -304,6 +304,34 @@ describe('ExternalConversationSeam watch', () => {
     expect(seen.at(-1)).toMatchObject({ kind: 'turn-ended', turnId: 300 })
   })
 
+  it('tells a stamp that lands on a row already working, once, and retires the fallback', async () => {
+    const { seam, host, hookRows, paneChange } = await linked()
+    const seen: ConversationEvent[] = []
+    seam.watch(host, (event) => {
+      if (event.kind !== 'snapshot') {
+        seen.push(event)
+      }
+    })
+    hookRows.set(PANE, hookRow({ state: 'working', stateStartedAt: 100 }))
+    paneChange(moved('rest', 'working', 'prompt-submitted'))
+    const observed: AgentPaneChange = {
+      kind: 'observed',
+      paneKey: PANE,
+      workspace: { worktreeId: WORKTREE, sshHostId: null },
+      phase: 'working',
+      at: 2
+    }
+    hookRows.set(PANE, hookRow({ state: 'working', stateStartedAt: 100, turnStartedAt: 200 }))
+    paneChange(observed)
+    paneChange(observed)
+    expect(seen.map((event) => event.kind === 'turn-started' && event.at)).toEqual([100, 200])
+    expect(seam.replyTarget(PANE)).toEqual({ key: KEY, turnId: 200 })
+    // A session boundary drops the stamp; the retired fallback must not come back.
+    hookRows.set(PANE, hookRow({ state: 'done', stateStartedAt: 300, sessionBoundary: true }))
+    paneChange(moved('working', 'done', 'turn-finished'))
+    expect(seam.replyTarget(PANE)).toEqual({ key: KEY, turnId: null })
+  })
+
   it('tells a watcher of a conversation linked while it watches', async () => {
     const h = harness()
     const host = {
