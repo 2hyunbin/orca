@@ -1,6 +1,7 @@
 // Share recorded-session ownership checks and in-flight claims between pane reopen and targeted resume.
 
 import { findPaneSleepingRecord } from './pane-sleeping-record'
+import { hookRowPaneResumeRecord } from './hook-row-pane-resume-record'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { OrcaRuntimeWithApplyMobileSessionTabNavigation } from './apply-mobile-session-tab-navigation'
 import type { RuntimeMobileSessionTerminalTab } from '../../../../shared/runtime-types'
@@ -70,7 +71,20 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
     tab: RuntimeMobileSessionTerminalTab
   ): Promise<PaneResumeStartup | Record<string, never> | undefined> {
     const stored = this.getPaneSleepingAgentRecord(worktreeId, tab)
-    const record = stored && this.isPaneOwnedResumeRecord(stored) ? stored : null
+    const record = stored
+      ? this.isPaneOwnedResumeRecord(stored)
+        ? stored
+        : null
+      : // Resume the hook store's conversation, never replay the pane's original launch.
+        hookRowPaneResumeRecord({
+          rows:
+            this.getAgentProviderSessionRowsForPaneFn?.(makePaneKey(tab.parentTabId, tab.leafId)) ??
+            [],
+          worktreeId,
+          tab: this.getWorkspaceSessionForWorktree(worktreeId)?.tabsByWorktree?.[worktreeId]?.find(
+            (candidate) => candidate.id === tab.parentTabId
+          )
+        })
     if (!record) {
       return undefined
     }
