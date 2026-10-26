@@ -15,6 +15,7 @@ import { applyPostgresSchema } from './postgres-schema-startup.js'
 import { POSTGRES_STATEMENT_STATS_MIGRATION } from './postgres-statement-stats.js'
 import { reportPostgresQueryFailure } from './postgres-query-failure.js'
 import { noteStickySlotPoolWait, noteStickySlotStatement } from './sticky-slot-statements.js'
+import { noteConnectionStatement, SlowConnectionRetirement } from './postgres-connection-latency.js'
 import {
   isPostgresReadTimeout,
   isRelayDatabaseLayerError,
@@ -910,7 +911,9 @@ async function timedQuery(
     }
     return await client.query(config)
   } finally {
-    noteStickySlotStatement(performance.now() - startedAt, connectionId)
+    const durationMs = performance.now() - startedAt
+    noteStickySlotStatement(durationMs, connectionId)
+    noteConnectionStatement(client, durationMs)
   }
 }
 
@@ -1169,6 +1172,7 @@ export class PostgresDatabase implements RelayDatabase {
   // pg-pool hands the same client object back for the same connection.
   private readonly connectionIds = new WeakMap<pg.PoolClient, number>()
   private nextConnectionId = 1
+  private readonly slowConnections = new SlowConnectionRetirement()
 
   consumeHoldCounts(): CellInventoryHoldCounts {
     return this.holds.consumeCounts()
@@ -1226,7 +1230,9 @@ export class PostgresDatabase implements RelayDatabase {
       throw error
     } finally {
       // An error destroys the client rather than handing the next caller a dead connection.
-      client?.release(lostReply)
+      if (client) {
+        this.release(client, lostReply)
+      }
     }
   }
 
@@ -1316,7 +1322,7 @@ export class PostgresDatabase implements RelayDatabase {
           )
         }
       } finally {
-        client.release(lostReply ?? sessionEnded)
+        this.release(client, lostReply ?? sessionEnded)
       }
       // A PostgreSQL transaction is unusable after an abort, so retry all work
       // on a fresh pooled client with a small full-jitter delay.
@@ -1336,6 +1342,16 @@ export class PostgresDatabase implements RelayDatabase {
     } finally {
       noteStickySlotPoolWait(performance.now() - startedAt)
     }
+  }
+
+  // Destroys the client on an error, or when it has turned slow, so the pool dials a fresh one.
+  private release(client: pg.PoolClient, error: Error | undefined): void {
+    if (error) {
+      client.release(error)
+      return
+    }
+    const slow = this.slowConnections.shouldRetire(client, this.idOfConnection(client))
+    client.release(slow || undefined)
   }
 
   private idOfConnection(client: pg.PoolClient): number {
