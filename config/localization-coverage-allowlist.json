@@ -96,5 +96,13 @@
     "text": "fixtures · files named *.fixture.tsx under src/renderer/src",
     "dynamic": false,
     "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/settings/ChatFontFamilySetting.tsx",
+    "kind": "jsx-text",
+    "text": "fontFamily",
+    "dynamic": false,
+    "count": 1,
+    "reason": "Literal CSS property token in the font preview code sample; translating it would make the code identifier incorrect."
   }
 ]
