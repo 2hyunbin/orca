@@ -82,6 +82,7 @@ export function BrowserChromeToolbar({
   reloadControl,
   reloadLabel,
   importControl,
+  passwordControl,
   elementTools,
   markup,
   shareControl,
@@ -97,6 +98,8 @@ export function BrowserChromeToolbar({
   reloadLabel?: string
   /** Cookie import — a browsing session concept; null where there is no session to import into. */
   importControl?: ((compact: boolean) => React.ReactNode) | null
+  /** Saved-password offer beside the address bar; never folded, it only shows after a login. */
+  passwordControl?: React.ReactNode
   elementTools: BrowserChromeElementTools | null
   markup: BrowserChromeMarkupTool
   shareControl?: (control: BrowserChromeShareControl) => React.ReactNode
@@ -207,6 +210,7 @@ export function BrowserChromeToolbar({
       reloadLabel={reloadLabel}
       showTourAnchors={showTourAnchors}
     >
+      {passwordControl}
       {folded.has('import') ? null : importControl?.(folded.has('import-label'))}
 
       {elementTools ? (

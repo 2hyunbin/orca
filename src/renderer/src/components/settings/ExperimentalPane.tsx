@@ -8,10 +8,13 @@ import { getExperimentalPaneSearchEntries, getExperimentalSearchEntry } from './
 import { HiddenExperimentalGroup } from './HiddenExperimentalGroup'
 import { NumberField, SettingsSwitch } from './SettingsFormControls'
 import { translate } from '@/i18n/i18n'
+import { isWebClientLocation } from '@/lib/web-client-location'
 import { NativeChatExperimentalSetting } from './NativeChatExperimentalSetting'
 import { AgentDashboardExperimentalSetting } from './AgentDashboardExperimentalSetting'
 import { EphemeralVmsExperimentalSetting } from './EphemeralVmsExperimentalSetting'
 import { WslHostsExperimentalSetting } from './WslHostsExperimentalSetting'
+import { BrowserPasswordsExperimentalSetting } from './BrowserPasswordsExperimentalSetting'
+import { getBrowserPasswordsExperimentalSearchEntry } from './browser-passwords-experimental-search'
 import { wslHostsAvailable } from '../sidebar/use-wsl-hosts-enabled'
 import {
   MAX_AGENT_HIBERNATION_IDLE_MS,
@@ -52,6 +55,10 @@ export function ExperimentalPane({
   const showNewWorktreeCardStyle = matchesSettingsSearch(searchQuery, [
     getExperimentalSearchEntry().newWorktreeCardStyle
   ])
+  // Why desktop only: the vault and its Browser settings exist only where Orca hosts pages.
+  const showBrowserPasswords =
+    !isWebClientLocation() &&
+    matchesSettingsSearch(searchQuery, [getBrowserPasswordsExperimentalSearchEntry()])
   const agentHibernationEnabled = settings.experimentalAgentHibernation === true
   const newWorktreeCardStyleEnabled = settings.experimentalNewWorktreeCardStyle === true
   // Use the planner’s clamped millisecond value/default while editing minutes.
@@ -266,6 +273,10 @@ export function ExperimentalPane({
       ) : null}
 
       <EphemeralVmsExperimentalSetting settings={settings} updateSettings={updateSettings} />
+
+      {showBrowserPasswords ? (
+        <BrowserPasswordsExperimentalSetting settings={settings} updateSettings={updateSettings} />
+      ) : null}
 
       {wslHostsAvailable() ? (
         <WslHostsExperimentalSetting settings={settings} updateSettings={updateSettings} />

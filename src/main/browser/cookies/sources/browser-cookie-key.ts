@@ -1,7 +1,7 @@
 import { pbkdf2Sync } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcess } from '@orca/process-host'
 import { windowsPowerShellPath } from '@orca/process-host/windows-system-binary'
 import { diag } from '../browser-cookie-import-diagnostics'
 import {
@@ -15,19 +15,24 @@ const PBKDF2_ITERATIONS = 1003
 const PBKDF2_KEY_LENGTH = 16
 const PBKDF2_SALT = 'saltysalt'
 
-function runKeychainCommand(program: string, args: readonly string[], timeoutMs: number): string {
-  const result = runProcessSync({ program, args, timeoutMs })
+// Why async: macOS can hold `security` open on a keychain prompt; main must stay responsive meanwhile.
+async function runKeychainCommand(
+  program: string,
+  args: readonly string[],
+  timeoutMs: number
+): Promise<string> {
+  const result = await runProcess({ program, args, timeoutMs })
   if (result.code !== 0 || result.timedOut) {
     throw new Error(`${program} exited with code ${result.code ?? 'unknown'}`)
   }
   return result.stdout.trim()
 }
 
-export function getEncryptionKey(
+export async function getEncryptionKey(
   keychainService: string,
   keychainAccount: string,
-  browser?: DetectedBrowser
-): EncryptionKeyResult | null {
+  browser?: Pick<DetectedBrowser, 'family'>
+): Promise<EncryptionKeyResult | null> {
   if (process.platform === 'darwin') {
     return getMacEncryptionKey(keychainService, keychainAccount)
   }
@@ -40,12 +45,12 @@ export function getEncryptionKey(
   return null
 }
 
-export function getMacEncryptionKey(
+export async function getMacEncryptionKey(
   keychainService: string,
   keychainAccount: string
-): EncryptionKeyResult | null {
+): Promise<EncryptionKeyResult | null> {
   try {
-    const raw = runKeychainCommand(
+    const raw = await runKeychainCommand(
       'security',
       ['find-generic-password', '-s', keychainService, '-a', keychainAccount, '-w'],
       30_000
@@ -61,16 +66,16 @@ export function getMacEncryptionKey(
   }
 }
 
-export function getLinuxEncryptionKey(
+export async function getLinuxEncryptionKey(
   keychainService: string,
   keychainAccount: string
-): EncryptionKeyResult | null {
+): Promise<EncryptionKeyResult | null> {
   // Linux v10 uses "peanuts"; v11 requires OS key storage, and CBC cannot authenticate a wrong key.
   const v10Key = pbkdf2Sync('peanuts', PBKDF2_SALT, 1, PBKDF2_KEY_LENGTH, 'sha1')
 
   let keyringPassword = ''
   try {
-    keyringPassword = runKeychainCommand(
+    keyringPassword = await runKeychainCommand(
       'secret-tool',
       ['lookup', 'service', keychainService, 'account', keychainAccount],
       5_000
@@ -79,7 +84,11 @@ export function getLinuxEncryptionKey(
     // Newer Chromium installs may key the secret by application.
     try {
       const app = keychainAccount.toLowerCase().replaceAll(' ', '')
-      keyringPassword = runKeychainCommand('secret-tool', ['lookup', 'application', app], 5_000)
+      keyringPassword = await runKeychainCommand(
+        'secret-tool',
+        ['lookup', 'application', app],
+        5_000
+      )
     } catch {
       diag('  Linux keyring unavailable — v11 cookies cannot be decrypted')
     }
@@ -97,7 +106,9 @@ export function getLinuxEncryptionKey(
   return { mode: 'aes-128-cbc', keysByVersion: { v10: v10Key, v11: v11Key } }
 }
 
-export function getWindowsEncryptionKey(browser: DetectedBrowser): EncryptionKeyResult | null {
+export async function getWindowsEncryptionKey(
+  browser: Pick<DetectedBrowser, 'family'>
+): Promise<EncryptionKeyResult | null> {
   const browserDef = CHROMIUM_BROWSERS.find((b) => b.family === browser.family)
   if (!browserDef) {
     return null
@@ -138,7 +149,7 @@ export function getWindowsEncryptionKey(browser: DetectedBrowser): EncryptionKey
     ].join('')
 
     // Hide the console and use the system PowerShell path; Electron’s PATH may differ.
-    const result = runProcessSync({
+    const result = await runProcess({
       program: windowsPowerShellPath(),
       args: ['-NoProfile', '-NonInteractive', '-Command', script],
       timeoutMs: 10_000,

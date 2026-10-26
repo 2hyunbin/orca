@@ -386,6 +386,9 @@ vi.mock('../browser', () => ({
   registerBrowserHandlers: registerBrowserHandlersMock,
   setAgentBrowserBridgeRef: setAgentBrowserBridgeRefMock
 }))
+vi.mock('../browser-passwords-ipc', () => ({
+  registerBrowserPasswordsHandlers: vi.fn()
+}))
 
 vi.mock('../browser-renderer-trust', () => ({
   setTrustedBrowserRendererWebContentsId: setTrustedBrowserRendererWebContentsIdMock

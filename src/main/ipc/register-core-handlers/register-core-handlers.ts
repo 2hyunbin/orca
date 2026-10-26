@@ -43,6 +43,7 @@ import { registerTerminalPreviewHandlers } from '../terminal-preview'
 import { registerDeveloperPermissionHandlers } from '../developer-permissions'
 import { registerComputerUsePermissionHandlers } from '../computer-use-permissions'
 import { setAgentBrowserBridgeRef, registerBrowserHandlers } from '../browser'
+import { registerBrowserPasswordsHandlers } from '../browser-passwords-ipc'
 import { setTrustedBrowserRendererWebContentsId } from '../browser-renderer-trust'
 import { registerSessionHandlers } from '../session'
 import { registerSettingsHandlers } from '../settings'
@@ -238,6 +239,7 @@ export function registerCoreHandlers(
     onBeforeSignOut: lifecycleOptions.onBeforeOrcaProfileSignOut
   })
   registerBrowserHandlers()
+  registerBrowserPasswordsHandlers(store)
   registerShellHandlers(store)
   registerPetHandlers()
   registerSessionHandlers(store, runtime)
