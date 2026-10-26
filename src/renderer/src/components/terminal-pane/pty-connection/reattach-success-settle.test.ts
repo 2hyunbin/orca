@@ -39,6 +39,7 @@ function buildSession(overrides: Record<string, unknown> = {}): {
   const session = {
     settlePaneAttachAttempt,
     transport,
+    cacheKey: 'tab-1:leaf-1',
     disposed: false,
     transportStreamGeneration: 0,
     authoritativeReattachGeneration: 0,

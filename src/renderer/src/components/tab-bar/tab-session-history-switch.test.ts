@@ -206,10 +206,11 @@ describe('resolveTabSessionHistorySubject', () => {
   it.each(['local', 'runtime:server-1', 'ssh:dev-box', null] as const)(
     'keeps lightweight native eligibility and the public request on workspace host %s',
     (executionHostId) => {
-      const state = makeState({}, executionHostId ? { executionHostId } : {})
+      makeState({}, executionHostId ? { executionHostId } : {})
       if (!executionHostId) {
-        state.repos = []
+        useAppStore.setState({ repos: [] })
       }
+      const state = getAgentStatusOwner(useAppStore).getState()
       const args = {
         tab: { id: 'chat-tab', worktreeId: WORKTREE_ID },
         nativeChat: { sessionId: 'chat-1', agent: 'claude' as const }

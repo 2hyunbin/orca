@@ -278,25 +278,37 @@ describe('account restart through renderer connection and host spawn', () => {
     const host = installRestartHarness()
     registerWithFakes(mainWindow, host.runtime, host.store)
     storeFixture = await createInitialStoreState()
-    rendererState().tabsByWorktree[worktreeId][0].ptyId = 'pty-old'
-    rendererState().ptyIdsByTabId = { ...rendererState().ptyIdsByTabId, [tabId]: ['pty-old'] }
-    rendererState().sleepingAgentSessionsByPaneKey[paneKey] = {
-      paneKey,
-      tabId,
-      worktreeId,
-      agent: 'claude',
-      providerSession: { key: 'session_id', id: 'another-agents-session' },
-      state: 'waiting',
-      prompt: '',
-      capturedAt: 1,
-      updatedAt: 1
-    }
+    storeFixture.patch({
+      tabsByWorktree: {
+        ...rendererState().tabsByWorktree,
+        [worktreeId]: rendererState().tabsByWorktree[worktreeId].map((tab, index) =>
+          index === 0 ? { ...tab, ptyId: 'pty-old' } : tab
+        )
+      },
+      ptyIdsByTabId: { ...rendererState().ptyIdsByTabId, [tabId]: ['pty-old'] },
+      sleepingAgentSessionsByPaneKey: {
+        ...rendererState().sleepingAgentSessionsByPaneKey,
+        [paneKey]: {
+          paneKey,
+          tabId,
+          worktreeId,
+          agent: 'claude',
+          providerSession: { key: 'session_id', id: 'another-agents-session' },
+          state: 'waiting',
+          prompt: '',
+          capturedAt: 1,
+          updatedAt: 1
+        }
+      }
+    })
     const layouts = rendererState().terminalLayoutsByTabId ?? {}
     const layout = layouts[tabId]!
-    rendererState().terminalLayoutsByTabId = {
-      ...layouts,
-      [tabId]: { ...layout, ptyIdsByLeafId: { ...layout.ptyIdsByLeafId, [leafId]: 'pty-old' } }
-    }
+    storeFixture.patch({
+      terminalLayoutsByTabId: {
+        ...layouts,
+        [tabId]: { ...layout, ptyIdsByLeafId: { ...layout.ptyIdsByLeafId, [leafId]: 'pty-old' } }
+      }
+    })
     await installTerminalTestGlobals()
     installIpcPtyWindow(window, {})
     window.api.pty.claimViewport = vi.fn()
@@ -329,11 +341,18 @@ describe('account restart through renderer connection and host spawn', () => {
       cwd,
       paneTransportsRef: { current: transports },
       clearTabPtyId: vi.fn(() => {
-        rendererState().tabsByWorktree[worktreeId][0].ptyId = null
-        rendererState().ptyIdsByTabId = { ...rendererState().ptyIdsByTabId, [tabId]: [] }
+        storeFixture.patch({
+          tabsByWorktree: {
+            ...rendererState().tabsByWorktree,
+            [worktreeId]: rendererState().tabsByWorktree[worktreeId].map((tab, index) =>
+              index === 0 ? { ...tab, ptyId: null } : tab
+            )
+          },
+          ptyIdsByTabId: { ...rendererState().ptyIdsByTabId, [tabId]: [] }
+        })
       })
     })
-    rendererState().pendingPaneAccountRestarts = { 'pty-old': 'codex' }
+    storeFixture.patch({ pendingPaneAccountRestarts: { 'pty-old': 'codex' } })
     const controller = {
       ...deps,
       managerRef: { current: manager },
