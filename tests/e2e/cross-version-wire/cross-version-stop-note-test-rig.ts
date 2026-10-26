@@ -2,13 +2,19 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeAll, beforeEach, expect } from 'vitest'
-import { StructuredAgentSessionHost } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-host'
+import {
+  StructuredAgentSessionHost,
+  type StructuredAgentSessionHostDeps
+} from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-host'
 import { NO_STRUCTURED_AGENTS } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-adapter-router-test-support'
 import { startsWhenPublished } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-instant-start.test-support'
 import { setStructuredAgentSessionHost } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-registry'
 import { createStructuredAgentSessionLogger } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-logger'
 import { openTestAgentSessionRecordStore } from '../../../src/main/runtime/agent-session-record-store-test-harness'
-import { openTestJournalHostDatabase } from '../../../src/main/native-chat/agent-session-journal/journal-host-database-test-support'
+import {
+  closeTestJournalHostDatabase,
+  openTestJournalHostDatabase
+} from '../../../src/main/native-chat/agent-session-journal/journal-host-database-test-support'
 import type { AgentSessionJournal } from '../../../src/main/native-chat/agent-session-journal/journal-store'
 import { agentJournalItemKey } from '../../../src/shared/agent-session-journal-item-key'
 import { agentSessionFailureFact } from '../../../src/shared/agent-session-failure'
@@ -73,6 +79,23 @@ export const unconfirmed: AgentJournalItemBody = {
   })
 }
 
+export function createCrossVersionSessionHost(
+  root: string,
+  deps: Omit<
+    StructuredAgentSessionHostDeps,
+    'agents' | 'logger' | 'journalDatabase' | 'claimKeyId' | 'now'
+  >
+): StructuredAgentSessionHost {
+  return new StructuredAgentSessionHost({
+    agents: NO_STRUCTURED_AGENTS,
+    logger: createStructuredAgentSessionLogger(),
+    journalDatabase: openTestJournalHostDatabase(root),
+    claimKeyId: 'key-1',
+    now: () => NOW,
+    ...deps
+  })
+}
+
 export function createReleasedStopNoteRig(port: ScenarioPort, ref: string) {
   let released: AgentSessionWireBuild
   let client: AgentSessionClientProjection
@@ -87,13 +110,8 @@ export function createReleasedStopNoteRig(port: ScenarioPort, ref: string) {
     resetOperationIds()
     root = await mkdtemp(join(tmpdir(), 'orca-released-stop-note-'))
     const store = await openTestAgentSessionRecordStore(root)
-    host = new StructuredAgentSessionHost({
-      agents: NO_STRUCTURED_AGENTS,
+    host = createCrossVersionSessionHost(root, {
       store,
-      journalDatabase: openTestJournalHostDatabase(root),
-      claimKeyId: 'key-1',
-      logger: createStructuredAgentSessionLogger(),
-      now: () => NOW,
       // A ready provider proves its start as soon as it is published.
       adapter: startsWhenPublished(
         {
@@ -132,6 +150,7 @@ export function createReleasedStopNoteRig(port: ScenarioPort, ref: string) {
     setStructuredAgentSessionHost(null)
     await host.flushAllStreamedEvents()
     await journal.close()
+    closeTestJournalHostDatabase(root)
     await rm(root, { recursive: true, force: true })
   })
   function call(method: string, params: unknown) {

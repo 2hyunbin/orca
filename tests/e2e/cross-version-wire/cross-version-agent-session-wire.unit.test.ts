@@ -6,10 +6,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StructuredAgentSessionAdapter } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-adapter'
-import { StructuredAgentSessionHost } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-host'
+import type { StructuredAgentSessionHost } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-host'
 import { emptyAgentSessionBatch } from '../../../src/main/native-chat/agent-session-wire/agent-session-empty-batch'
 import { startsWhenPublished } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-instant-start.test-support'
-import { setStructuredAgentSessionHost } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-registry'
+import {
+  getStructuredAgentSessionHost,
+  setStructuredAgentSessionHost
+} from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-registry'
 import type { AgentSessionRecordStore } from '../../../src/main/runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../../src/main/runtime/agent-session-record-store-test-harness'
 import type { AgentSessionSubscribeEvent } from '../../../src/shared/agent-session-wire'
@@ -61,11 +64,10 @@ import {
   type RpcClientIdentity,
   type RpcReply
 } from './versioned-agent-session-wire'
-import { openTestJournalHostDatabase } from '../../../src/main/native-chat/agent-session-journal/journal-host-database-test-support'
-import { createStructuredAgentSessionLogger } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-logger'
+import { closeTestJournalHostDatabase } from '../../../src/main/native-chat/agent-session-journal/journal-host-database-test-support'
 import { codexProviderHandle } from '../../../src/shared/agent-session-provider-handle-encoding'
-import { NO_STRUCTURED_AGENTS } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-adapter-router-test-support'
 import { describeReleasedStopNoteProjection } from './cross-version-stop-note-scenarios'
+import { createCrossVersionSessionHost } from './cross-version-stop-note-test-rig'
 
 const SUITE_TIMEOUT_MS = 180_000
 
@@ -473,9 +475,7 @@ describe('cross-version structured agent sessions', () => {
     beforeEach(async () => {
       root = await mkdtemp(join(tmpdir(), 'orca-cross-version-ai-vault-'))
       store = await openTestAgentSessionRecordStore(root)
-      const host: StructuredAgentSessionHost = new StructuredAgentSessionHost({
-        agents: NO_STRUCTURED_AGENTS,
-        logger: createStructuredAgentSessionLogger(),
+      const host: StructuredAgentSessionHost = createCrossVersionSessionHost(root, {
         store,
         adapter: readyCodexProviderAdapter({
           store,
@@ -485,10 +485,7 @@ describe('cross-version structured agent sessions', () => {
           spawnToken: 'spawn-vault',
           host: () => host
         }),
-        journalDatabase: openTestJournalHostDatabase(root),
-        claimKeyId: 'key-1',
-        mintSpawnToken: () => 'spawn-vault',
-        now: () => NOW
+        mintSpawnToken: () => 'spawn-vault'
       })
       setStructuredAgentSessionHost(host)
       const attached = await host.attach({ callerKey: 'test' }, attachParams(null) as never)
@@ -530,7 +527,9 @@ describe('cross-version structured agent sessions', () => {
     })
 
     afterEach(async () => {
+      await getStructuredAgentSessionHost()?.flushAllStreamedEvents()
       setStructuredAgentSessionHost(null)
+      closeTestJournalHostDatabase(root)
       await rm(root, { recursive: true, force: true })
     })
 
@@ -647,6 +646,7 @@ describe('cross-version structured agent sessions', () => {
   })
 
   describe('a cursor across a host restart', () => {
+    let hosts: StructuredAgentSessionHost[]
     let root: string
     let store: AgentSessionRecordStore
     let runtime: unknown
@@ -711,20 +711,16 @@ describe('cross-version structured agent sessions', () => {
     // Reopen disk state under a fresh host, preserving the journal root as a real process restart does.
     async function bootHost(generation: string, startupLimits?: { ceilingMs: number }) {
       store = await openTestAgentSessionRecordStore(root)
-      const host: StructuredAgentSessionHost = new StructuredAgentSessionHost({
-        agents: NO_STRUCTURED_AGENTS,
-        logger: createStructuredAgentSessionLogger(),
+      const host: StructuredAgentSessionHost = createCrossVersionSessionHost(root, {
         store,
         adapter: adapter(() => host),
-        journalDatabase: openTestJournalHostDatabase(root),
-        claimKeyId: 'key-1',
         mintSpawnToken: () => `spawn-${generation}`,
         // The provider died with the host that spawned it, which is what makes
         // the restarted host the legitimate next writer.
         probeOwner: async () => ({ outcome: 'pid-absent' }),
-        now: () => NOW,
         ...(startupLimits ? { startupLimits } : {})
       })
+      hosts.push(host)
       setStructuredAgentSessionHost(host)
       return host
     }
@@ -780,6 +776,7 @@ describe('cross-version structured agent sessions', () => {
 
     beforeEach(async () => {
       resetOperationIds()
+      hosts = []
       startGate = Promise.resolve()
       handshake = Promise.resolve()
       root = await mkdtemp(join(tmpdir(), 'orca-cross-version-agent-session-'))
@@ -789,6 +786,10 @@ describe('cross-version structured agent sessions', () => {
 
     afterEach(async () => {
       setStructuredAgentSessionHost(null)
+      for (const host of hosts) {
+        await host.flushAllStreamedEvents()
+      }
+      closeTestJournalHostDatabase(root)
       await rm(root, { recursive: true, force: true })
     })
 
