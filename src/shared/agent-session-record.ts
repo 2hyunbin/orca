@@ -131,8 +131,13 @@ export type AgentSessionRecord = {
   permissionMode?: string
   rewind?: AgentSessionRewindRecord
   conversationCommand?: AgentSessionConversationCommandRecord
-  /** The name Orca gave this conversation, so a later acquisition need not name it again. */
+  /** The conversation's one name: Orca's automatic name or the user's rename. Session History,
+   *  tabs, sidebars and phones all read this field. */
   conversationName?: string
+  /** `'user'` once the user renamed the conversation; absent means Orca named it. Automatic naming
+   *  never replaces a user's name, and a window's pre-upgrade tab rename only fills a name Orca
+   *  chose. */
+  conversationNameSource?: 'user'
   /** When the user's Sleep stopped this chat; the next admitted send clears it. */
   sleptAt?: number
   launchArgs?: AgentSessionLaunchArgs
@@ -157,13 +162,10 @@ export function isAgentSessionId(value: unknown): value is string {
 }
 
 /** NUL cannot occur in a host id, distro name, or workspace id, so no component can forge a join. */
-const SCOPE_KEY_SEPARATOR = '\u0000'
 
 /** Separate native/WSL/SSH workspace copies so one host cannot adjudicate another's lease. */
 export function agentSessionScopeKey(location: AgentSessionExecutionLocation): string {
-  return [location.executionHostId, location.wslDistro ?? '', location.workspaceId].join(
-    SCOPE_KEY_SEPARATOR
-  )
+  return [location.executionHostId, location.wslDistro ?? '', location.workspaceId].join('\u0000')
 }
 
 export function agentSessionExecutionLocationsEqual(
@@ -326,6 +328,7 @@ export function isPersistedAgentSessionObservationRecord(
         isAgentSessionConversationCommandRecord(record.conversationCommand)) &&
       (record.conversationName === undefined ||
         isAgentSessionConversationName(record.conversationName)) &&
+      (record.conversationNameSource === undefined || record.conversationNameSource === 'user') &&
       (record.launchArgs === undefined || isAgentSessionLaunchArgs(record.launchArgs)) &&
       !Object.hasOwn(record, 'launchEnv') &&
       isPersistedAgentSessionObservationLease(record.lease) &&

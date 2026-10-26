@@ -81,8 +81,10 @@ import { AgentSessionStoreTransactions } from './agent-session-store-transaction
 import { createAgentSessionFoundingStore } from './agent-session-founding-store'
 import {
   compareAndSetAgentSessionRecordName,
+  type AgentSessionUserNameWrite,
   type CompareAndSetConversationName,
-  setAgentSessionRecordConversationName
+  setAgentSessionRecordConversationName,
+  setAgentSessionRecordUserNameThrough
 } from './agent-session-record-conversation-name'
 
 export const AGENT_SESSION_LEASE_TTL_MS = 30_000,
@@ -173,6 +175,10 @@ export class AgentSessionRecordStore {
       setAgentSessionRecordConversationName(record, name, Date.now())
     )
 
+  /** The user's name for the conversation; see `AgentSessionUserNameWrite`. */
+  setUserConversationName = (sessionId: string, name: string, write: AgentSessionUserNameWrite) =>
+    setAgentSessionRecordUserNameThrough((apply) => this.mutate(sessionId, apply), name, write)
+
   compareAndSetConversationName: CompareAndSetConversationName = (sessionId, name, expected) =>
     compareAndSetAgentSessionRecordName((apply) => this.mutate(sessionId, apply), name, expected)
 
@@ -252,9 +258,7 @@ export class AgentSessionRecordStore {
   ): Promise<AgentSessionRecord> => this.mutate(sessionId, transition)
 
   /** Reconcile loaded leases before writer admission. Newer databases keep verdicts in memory only and cannot grant writers. */
-  async reconcileOnRestart(
-    args: AgentSessionRestartProbeArgs
-  ): Promise<Map<string, AgentSessionRecord>> {
+  async reconcileOnRestart(args: AgentSessionRestartProbeArgs) {
     const probes = await collectAgentSessionRestartProbes(this, args)
     return this.transact((draft) => applyAgentSessionRestartProbes(draft, probes, args.now), {
       inMemoryWhenReadOnly: true

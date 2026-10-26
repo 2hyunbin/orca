@@ -162,11 +162,38 @@ describe('damaged saved conversation observations', () => {
     const first = await open()
     await first.founding.commit(reserveRequest())
     expect(first.getConversation('session-alpha')?.neverStarted).toBe(true)
+    const healthyOwner = first.getConversation('session-alpha')?.ownerObservation
+    expect(Object.keys(healthyOwner ?? {}).sort()).toEqual(
+      [
+        'claimStatus',
+        'handoffStage',
+        'handoffOperationId',
+        'ownerProcess',
+        'reservedSpawnToken',
+        'provenHandleLinkId',
+        'leaseDeadlineAt',
+        'lastRenewedAt',
+        'deathEvidence',
+        'unreconciled'
+      ].sort()
+    )
     await editPersistedTestAgentSessionStore(directory, (persisted) => {
-      Object.assign(persisted.records['session-alpha'].lease, { minimumNextFence: null })
+      Object.assign(persisted.records['session-alpha'], { futureConversationField: 'retained' })
+      Object.assign(persisted.records['session-alpha'].lease, {
+        minimumNextFence: null,
+        futureAuthorityField: 'private'
+      })
     })
     const store = await open()
     expect(store.getConversation('session-alpha')?.neverStarted).toBe(false)
+    expect(store.getConversation('session-alpha')).toHaveProperty(
+      'futureConversationField',
+      'retained'
+    )
+    expect(store.getConversation('session-alpha')?.ownerObservation).toEqual({
+      ...healthyOwner,
+      unreconciled: true
+    })
     expectTypeOf<AgentSessionConversationView>().not.toExtend<AgentSessionRecord>()
     expectTypeOf<AgentSessionConversationView['ownerObservation']>().not.toExtend<
       Parameters<typeof nextAgentSessionFence>[0]

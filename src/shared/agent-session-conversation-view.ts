@@ -1,32 +1,7 @@
-import type {
-  AgentSessionLease,
-  AgentSessionRecord,
-  AgentSessionClaimStatus,
-  AgentSessionHandoffStage,
-  AgentSessionProcessIdentity,
-  AgentSessionDeathEvidence
-} from './agent-session-record'
+import type { AgentSessionLease, AgentSessionRecord } from './agent-session-record'
 
-export type AgentSessionOwnerObservation = Readonly<{
-  claimStatus: AgentSessionClaimStatus
-  handoffStage: AgentSessionHandoffStage | null
-  handoffOperationId: string | null
-  ownerProcess: AgentSessionProcessIdentity | null
-  reservedSpawnToken: string | null
-  provenHandleLinkId: string | null
-  leaseDeadlineAt: number
-  lastRenewedAt: number
-  deathEvidence: AgentSessionDeathEvidence | null
-  unreconciled: boolean
-}>
-
-export type AgentSessionConversationView = Readonly<
-  Omit<AgentSessionRecord, 'lease'> & {
-    currentFence: number
-    ownerObservation: AgentSessionOwnerObservation
-    neverStarted: boolean
-  }
->
+export type AgentSessionConversationView = Readonly<ReturnType<typeof agentSessionConversationView>>
+export type AgentSessionOwnerObservation = AgentSessionConversationView['ownerObservation']
 
 type ConversationFacts = Omit<AgentSessionRecord, 'lease'> & {
   lease: Omit<AgentSessionLease, 'minimumNextFence'> & { minimumNextFence?: unknown }
@@ -49,9 +24,7 @@ export function agentSessionNeverStarted({
   )
 }
 
-export function agentSessionConversationView(
-  record: ConversationFacts
-): AgentSessionConversationView {
+export function agentSessionConversationView(record: ConversationFacts) {
   const { lease, ...conversation } = record
   const {
     claimStatus,
@@ -81,5 +54,5 @@ export function agentSessionConversationView(
       deathEvidence,
       unreconciled
     }
-  }
+  } as const
 }
