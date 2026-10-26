@@ -2,7 +2,6 @@ import type { OrcaMobileWebShellSparesModule } from '../../modules/orca-mobile-w
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MobileWebShellSessionEvent } from './mobile-web-shell-session-contract'
 
-/** Each place a read of the host's generation can fail, and the cause it reports. */
 const doubles = vi.hoisted(() => ({
   manifest: (): Promise<unknown> => Promise.reject(new Error('no manifest staged')),
   fetch: (): Promise<unknown> => Promise.reject(new Error('no fetch staged'))
@@ -27,7 +26,6 @@ import { createFakeGenerationFileSystem } from './generation-file-system-fake'
 import { deriveHostCacheKey } from './host-cache-key'
 import { download, openCache, readManifest } from './mobile-web-shell-session-effects'
 
-// The mocked operations never touch the client; they only need one to exist.
 const CLIENT: RpcClient = {
   sendRequest: async () => {
     throw new Error('unused')
@@ -63,7 +61,7 @@ function storeThat(fail: 'stage' | 'commit' | null): GenerationStore {
     commitGeneration:
       fail === 'commit'
         ? reject
-        : async () => ({ buildId: 'c', directory: 'd', manifest: MANIFEST }),
+        : async () => ({ buildId: MANIFEST.buildId, directory: 'd', manifest: MANIFEST }),
     abortStagedGeneration: async () => undefined,
     openReusableAssets: async () => ({ has: () => false, check: async () => false }),
     sweepStagedGenerations: async () => undefined,
@@ -82,9 +80,10 @@ function collect(): {
   return { events, send: (event) => events.push(event) }
 }
 
-async function runDownload(
+async function downloadEvents(
   client: RpcClient | null,
   store: GenerationStore,
+  downloads = new Set<AbortController>(),
   spares?: OrcaMobileWebShellSparesModule
 ) {
   const { events, send } = collect()
@@ -101,10 +100,20 @@ async function runDownload(
       setTimer: () => () => {}
     },
     startedAt: 0,
-    downloads: new Set(),
+    downloads,
     send
   })
-  return events.filter((event) => event.type === 'download-failed')
+  return events
+}
+
+async function runDownload(
+  client: RpcClient | null,
+  store: GenerationStore,
+  spares?: OrcaMobileWebShellSparesModule
+) {
+  return (await downloadEvents(client, store, new Set(), spares)).filter(
+    (event) => event.type === 'download-failed'
+  )
 }
 
 describe('the manifest read', () => {
@@ -197,7 +206,25 @@ describe('the download', () => {
   })
 
   it('that lands whole reports no failure', async () => {
-    expect(await runDownload(CLIENT, storeThat(null))).toEqual([])
+    const downloads = new Set<AbortController>()
+    const fetch = doubles.fetch
+    doubles.fetch = () => {
+      expect(downloads.size).toBe(1)
+      return fetch()
+    }
+    expect(await downloadEvents(CLIENT, storeThat(null), downloads)).toEqual([
+      { type: 'download-staged', flow: 3 },
+      {
+        type: 'activated',
+        flow: 3,
+        generationDirectory: 'd',
+        sessionId: 's',
+        buildId: MANIFEST.buildId,
+        totalBytes: 1,
+        elapsedMs: 0
+      }
+    ])
+    expect(downloads.size).toBe(0)
   })
 
   it('that commits drops a spare booted from the generation it replaced', async () => {
@@ -216,10 +243,7 @@ describe('the download', () => {
   })
 })
 
-/**
- * Against the real store: the copies a reused asset needs are made by the stage, on the store's
- * queue, so what other mounts do to the staging tree mid-download cannot take them away.
- */
+// Use the real store queue: reused-asset copies must survive concurrent mounts sweeping staging during download.
 describe('a download that reuses the cached generation', () => {
   const HOST = deriveHostCacheKey('host-a')
 
@@ -242,7 +266,6 @@ describe('a download that reuses the cached generation', () => {
     }
   }
   const CACHED = bundle(4)
-  // The page changed; the script is left to the stage to copy.
   const UPDATE = {
     ...bundle(8),
     assets: new Map([['index.html', new Uint8Array(8)]]),
@@ -298,12 +321,46 @@ describe('a download that reuses the cached generation', () => {
   })
 
   it('commits once when two downloads of the same build finish together', async () => {
-    const { store } = await cachedStore()
+    const { fileSystem, store } = await cachedStore()
     doubles.fetch = async () => UPDATE
-
-    const [first, second] = await Promise.all([runFor(store), runFor(store)])
-
-    expect([...first, ...second].filter((event) => event.type === 'download-failed')).toEqual([])
-    expect((await store.readActiveGeneration(HOST))?.buildId).toBe(UPDATE.manifest.buildId)
+    const moveDirectory = fileSystem.moveDirectory.bind(fileSystem)
+    const moves: [string, string][] = []
+    fileSystem.moveDirectory = async (from, to) => {
+      moves.push([from, to])
+      await moveDirectory(from, to)
+    }
+    try {
+      const [first, second] = await Promise.all([runFor(store), runFor(store)])
+      const expected = [
+        { type: 'download-staged', flow: 3 },
+        {
+          type: 'activated',
+          flow: 3,
+          generationDirectory: `/cache/mobile-web/${HOST}/generations/${UPDATE.manifest.buildId}`,
+          sessionId: 's',
+          buildId: UPDATE.manifest.buildId,
+          totalBytes: UPDATE.manifest.totalBytes,
+          elapsedMs: 0
+        }
+      ]
+      expect(first).toEqual(expected)
+      expect(second).toEqual(expected)
+      expect(moves).toEqual([
+        [
+          `${fileSystem.rootUri}/${HOST}/tmp/${UPDATE.manifest.buildId}`,
+          `${fileSystem.rootUri}/${HOST}/generations/${UPDATE.manifest.buildId}`
+        ]
+      ])
+      expect(await store.readActiveGeneration(HOST)).toEqual({
+        buildId: UPDATE.manifest.buildId,
+        directory: `${fileSystem.rootUri}/${HOST}/generations/${UPDATE.manifest.buildId}`,
+        manifest: UPDATE.manifest
+      })
+      expect(fileSystem.bytes(`${HOST}/generations/${UPDATE.manifest.buildId}/app.js`)).toEqual(
+        new Uint8Array(2)
+      )
+    } finally {
+      fileSystem.moveDirectory = moveDirectory
+    }
   })
 })
