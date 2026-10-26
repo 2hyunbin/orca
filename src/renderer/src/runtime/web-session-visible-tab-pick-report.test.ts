@@ -162,6 +162,21 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
     expect(mocks.call).toHaveBeenCalledTimes(1)
   })
 
+  it('checks again when the user moved on before a report finished', async () => {
+    let finish: (value: unknown) => void = () => {}
+    mocks.call.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+    deliver(frame('host-tab-2'))
+    expect(mocks.call).toHaveBeenCalledTimes(1)
+    groups[WT]![0]!.activeTabId = 'u2'
+    deliver(frame('host-tab-2'))
+    finish({ ok: true, result: {} })
+    await vi.advanceTimersByTimeAsync(0)
+    // The host may have taken the late report last; the latest frame now says tab 1.
+    deliver(frame('host-tab-1'))
+    expect(mocks.call).toHaveBeenCalledTimes(2)
+    expect(mocks.call.mock.calls[1]?.[0]).toMatchObject({ params: { tabId: 'host-tab-2' } })
+  })
+
   it('drops a frame whose connection was replaced before the check', () => {
     reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
     setRuntimeEnvironmentConnectionGenerationForTests(ENV, 9)

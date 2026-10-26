@@ -125,14 +125,12 @@ function reportIfStale(environmentId: string, snapshot: RuntimeMobileSessionTabs
   ) {
     return
   }
-  const visibleId = resolveWebSessionVisibleTabId(state, worktreeId)
-  const visible = state.unifiedTabsByWorktree[worktreeId]?.find((tab) => tab.id === visibleId)
-  if (visible?.contentType !== 'terminal' || !isWebTerminalSurfaceTabId(visible.entityId)) {
+  const visible = visibleTerminalPane(worktreeId)
+  if (!visible) {
     return
   }
-  const hostTabId = toHostSessionTabId(visible.entityId)
+  const { hostTabId, leafId: localLeafId } = visible
   // Name the exact pane: the server remembers a pane, not just a tab.
-  const localLeafId = state.terminalLayoutsByTabId[visible.entityId]?.activeLeafId
   const target = snapshot.tabs.find(
     (tab) =>
       tab.type === 'terminal' &&
@@ -179,10 +177,33 @@ function reportIfStale(environmentId: string, snapshot: RuntimeMobileSessionTabs
     (response) => {
       if (!response.ok) {
         retryLater()
+        return
+      }
+      // The host does not order activations; one the user made meanwhile may have landed first.
+      const now = visibleTerminalPane(worktreeId)
+      if (now?.hostTabId !== hostTabId || (now.leafId && now.leafId !== target.leafId)) {
+        reportedPaneByWorkspace.delete(key)
+        scheduleCheck(key)
       }
     },
     retryLater
   )
+}
+
+/** The terminal pane the desktop shows in a workspace, by the host's tab id. */
+function visibleTerminalPane(
+  worktreeId: string
+): { hostTabId: string; leafId: string | undefined } | null {
+  const state = useAppStore.getState()
+  const visibleId = resolveWebSessionVisibleTabId(state, worktreeId)
+  const visible = state.unifiedTabsByWorktree[worktreeId]?.find((tab) => tab.id === visibleId)
+  if (visible?.contentType !== 'terminal' || !isWebTerminalSurfaceTabId(visible.entityId)) {
+    return null
+  }
+  return {
+    hostTabId: toHostSessionTabId(visible.entityId),
+    leafId: state.terminalLayoutsByTabId[visible.entityId]?.activeLeafId
+  }
 }
 
 /** Mirror teardown for an environment drops everything recorded for it. */
