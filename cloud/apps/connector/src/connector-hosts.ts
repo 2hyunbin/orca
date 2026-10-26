@@ -59,22 +59,17 @@ export class ConnectorHosts {
     return helloRev
   }
 
-  // Under the host lock: a request's hello is the machine's current one, an older one, or one the
-  // cloud has no record of (the machine must send it).
-  async helloStatus(
+  // Under the host lock: whether a request names the machine's current hello.
+  async isCurrentHello(
     transaction: CloudDatabase,
     hostId: string,
     helloRev: number
-  ): Promise<'current' | 'older' | 'unknown'> {
+  ): Promise<boolean> {
     const [row] = await transaction.query(
       'SELECT hello_rev FROM connector_hosts WHERE host_id = ?',
       [hostId]
     )
-    const current = row ? Number(row.hello_rev) : null
-    if (current === helloRev) {
-      return 'current'
-    }
-    return current !== null && helloRev < current ? 'older' : 'unknown'
+    return row !== undefined && Number(row.hello_rev) === helloRev
   }
 
   // Under the host lock: true once per hello, for the poll that lists unsettled deliveries.

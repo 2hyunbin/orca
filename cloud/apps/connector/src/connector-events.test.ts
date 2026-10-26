@@ -294,7 +294,7 @@ describe('connector turn events', () => {
     expect((await machine.hello()).helloRev).toBe(2)
     // The new hello's batch 0 applies; a late batch from the old hello changes nothing.
     expect((await events(linked('pane-2'), 0, 2)).status).toBe(204)
-    expect((await events(linked('pane-old'), 6, 1)).status).toBe(204)
+    expect((await events(linked('pane-old'), 6, 1)).status).toBe(409)
     expect(await thread()).toMatchObject({ pane_key: 'pane-2' })
     const [host] = await harness.database.query('SELECT hello_rev, events_seq FROM connector_hosts')
     expect({ helloRev: Number(host?.hello_rev), eventsSeq: Number(host?.events_seq) }).toEqual({
@@ -305,7 +305,7 @@ describe('connector turn events', () => {
 
   // SQLite runs one transaction at a time, so only Postgres can race a batch with a hello.
   it.skipIf(!process.env.ORCA_CONNECTOR_TEST_DATABASE_URL)(
-    'ignores a batch from the old hello that waited on a newer hello',
+    'refuses a batch from the old hello that waited on a newer hello',
     async () => {
       let gate!: ReturnType<typeof pauseBefore>
       const { machine, enqueue, events, thread } = await setup({
@@ -321,7 +321,7 @@ describe('connector turn events', () => {
       await new Promise((resolve) => setTimeout(resolve, 200))
       gate.release()
       expect((await hello).status).toBe(200)
-      expect((await late).status).toBe(204)
+      expect((await late).status).toBe(409)
       expect(await thread()).toMatchObject({ pane_key: null })
     }
   )

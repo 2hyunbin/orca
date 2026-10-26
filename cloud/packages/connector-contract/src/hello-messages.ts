@@ -36,7 +36,7 @@ export const ConnectorHelloRequestSchema = z.object({
 })
 
 // Every hello gets a revision above every earlier one for this machine, assigned by the cloud. Polls, acks
-// and events carry it; an older one changes nothing.
+// and events carry it; under an older one they get 409 hello_required.
 export const ConnectorHelloResponseSchema = z.object({ helloRev: SequenceSchema })
 
 export type ConnectorProject = z.infer<typeof ConnectorProjectSchema>

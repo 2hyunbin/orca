@@ -76,8 +76,8 @@ const fitsOneEvent = (event: unknown) =>
 
 // The machine sends all its event batches through one FIFO queue and starts the next only once the cloud
 // took the head. It fills each batch by bytes, under maxRequestBytes. seq counts batches from 0 after each hello; a retry resends the same body, helloRev and
-// seq. The cloud applies a batch only for the current helloRev and above that hello's high-water mark,
-// so a late original, or one from before a reconnect or restart, never undoes newer state.
+// seq. The cloud applies a batch only for the current helloRev (refusing any other with 409) and above
+// that hello's high-water mark, so a late original never undoes newer state.
 export const ConnectorEventsRequestSchema = z.object({
   v: z.literal(1),
   helloRev: SequenceSchema,
