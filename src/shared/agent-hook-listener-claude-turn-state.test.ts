@@ -157,15 +157,22 @@ describe('shared agent-hook-listener', () => {
       session_id: sessionId,
       prompt: 'again'
     })
+    // /clear starts a new session id in the same process, which keeps its effort.
+    const cleared = normalizeAndAccept(state, 'claude', {
+      hook_event_name: 'SessionStart',
+      source: 'clear',
+      session_id: '99999999-9999-4999-8999-999999999999'
+    })
     const otherSession = normalizeAndAccept(state, 'claude', {
       hook_event_name: 'SessionStart',
       source: 'startup',
-      session_id: '99999999-9999-4999-8999-999999999999'
+      session_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
     })
 
     expect(prompt?.providerSession?.effort).toBeUndefined()
     expect(subagent?.providerSession?.effort).toBe('max')
     expect(nextPrompt?.providerSession?.effort).toBe('max')
+    expect(cleared?.providerSession?.effort).toBe('max')
     expect(otherSession?.providerSession?.effort).toBeUndefined()
   })
 

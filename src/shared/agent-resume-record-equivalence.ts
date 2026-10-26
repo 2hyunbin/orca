@@ -34,7 +34,6 @@ export function sleepingRecordsEquivalentIgnoringCaptureTime(
     existing.worktreeId === next.worktreeId &&
     existing.agent === next.agent &&
     agentProviderSessionsEqual(existing.agent, existing.providerSession, next.providerSession) &&
-    existing.providerSession.effort === next.providerSession.effort &&
     existing.prompt === next.prompt &&
     existing.state === next.state &&
     existing.updatedAt === next.updatedAt &&

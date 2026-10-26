@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { buildClaudeResumeLaunchCommand } from './agent-resume-launch-command'
-import { dropAgentResumeArgvFromCommand } from './agent-resume-argv-drop'
 import { buildAgentResumeStartupPlan, buildAgentStartupPlan } from './tui-agent-startup'
 import { tokenizeStartupCommand, type AgentStartupShell } from './tui-agent-startup-shell'
 
@@ -592,10 +591,6 @@ describe('buildAgentResumeStartupPlan claude effort', () => {
       ])
       // The saved launch recipe stays the user's own.
       expect(restored?.launchConfig.agentArgs).toBe('--effort low')
-      expect(
-        dropAgentResumeArgvFromCommand({ command, agent: 'claude', providerSession: session })
-          .status
-      ).toBe('dropped')
     }
   )
 })

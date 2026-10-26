@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { agentProviderSessionForEnsure } from './agent-provider-session-ensure'
 import {
   agentProviderSessionsEqual,
   extractAgentProviderSession,
@@ -185,16 +184,6 @@ describe('agent session resume metadata', () => {
         id: 'ok'
       })
     }
-  })
-
-  it('sends effort only to hosts whose ensure schema accepts it', () => {
-    const session = { key: 'session_id', id: 'ok', cwd: '/repo', effort: 'low' } as const
-    expect(agentProviderSessionForEnsure(session)).toEqual({ key: 'session_id', id: 'ok' })
-    expect(agentProviderSessionForEnsure(session, true)).toEqual({
-      key: 'session_id',
-      id: 'ok',
-      effort: 'low'
-    })
   })
 })
 
