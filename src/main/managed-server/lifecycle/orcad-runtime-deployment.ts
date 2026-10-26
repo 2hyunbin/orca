@@ -1,3 +1,4 @@
+import { ensureSshConnectionManager } from '../../ssh/targets/ssh-target-registry'
 // Target claims preserve environment identity so interrupted deploys resume the same registration.
 import { getAppEnvironment } from '../../../shared/app-environment'
 import { randomUUID } from 'node:crypto'
@@ -57,6 +58,7 @@ export async function createManagedOrcadEnvironment(
     migration?: boolean
   }
 ): Promise<OrcadManagedDeployResult> {
+  await ensureSshConnectionManager()
   return runTargetLifecycle(args.sshTargetId, async () => {
     const { connectionManager, targetStore, claims } = requireManagedOrcadInfrastructure()
     const environmentId =

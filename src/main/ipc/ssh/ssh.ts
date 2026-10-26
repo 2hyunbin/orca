@@ -1,220 +1,231 @@
-import { registerQuitTask } from '../../quit-task-registry'
 import { ipcMain, type BrowserWindow } from 'electron'
 import type { Store } from '../../persistence'
+import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { SshConnectionStore } from '../../ssh/connection/ssh-connection-store'
-import { awaitSignInForCredentialHosts } from './ssh-sign-in-requirement'
+import { holdLaunchReconnectOptOuts, resetLaunchReconnectOptOutsForTests } from './ssh-host-user-disconnect'
 import {
-  holdLaunchReconnectOptOuts,
-  resetLaunchReconnectOptOutsForTests
-} from './ssh-host-user-disconnect'
-import { SshConnectionManager } from '../../ssh/connection/ssh-connection-manager'
-import { SshPortForwardManager } from '../../ssh/port-forwarding/ssh-port-forward'
-import { quitTeardownStartGate } from '../../quit-teardown-start-gate'
-import {
+  connectRegisteredSshTarget,
   getSshTargetRegistryStore,
+  setSshConnectionManagerInitializer,
   setSshConnectionManagerResolver,
   setSshTargetMutations,
   setSshTargetRegistryHandlers,
   setSshTargetRegistryStore
 } from '../../ssh/targets/ssh-target-registry'
-
-import { registerSshBrowseHandler } from './ssh-browse'
+import { initializeSshConnectionGenerationSession } from '../../ssh/connection/ssh-connection-generation'
+import { isSshCredentialDeclined } from '../../ssh/ssh-credential-decline'
+import { awaitSignInForCredentialHosts } from './ssh-sign-in-requirement'
+import { registerSshTargetCrudHandlers } from './ssh-target-crud-handlers'
 import { registerCredentialHandler } from './ssh-passphrase'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
-import {
-  initializeSshConnectionGenerationSession,
-  resetSshConnectionGenerations
-} from '../../ssh/connection/ssh-connection-generation'
-import { resetSshProviderAuthorities } from '../../ssh/ssh-provider-authority'
-import { installManagedOrcadStartStatus } from '../runtime-environments/runtime-environment-managed-tunnel'
-import {
-  connectInFlight,
-  credentialRequestedForTarget,
-  testConnectionProbes,
-  testingTargets
-} from './ssh-connect-attempt-registry'
-import { createSshConnectionCallbacks } from './ssh-connection-state-callbacks'
-import { resetSshCredentialDeclinesForTests } from '../../ssh/ssh-credential-decline'
-import { resetSshUserDisconnectsForTests } from '../../ssh/ssh-user-disconnect'
-import { registerSshConnectionHandlers } from './ssh-connection-handlers'
-import { registerPlainSshTerminalHandlers } from './plain-ssh-terminal-handlers'
-import {
-  registerPowerMonitorReconnect,
-  unregisterPowerMonitorReconnect
-} from './ssh-host-sleep-reconnect'
+import { getPublicSshState } from './ssh-renderer-broadcast'
+import { listUnrestoredPortForwards } from './ssh-port-forward-unrestored'
+import { LEGACY_RELAY_BRIDGE_CHANNELS } from '../../../shared/legacy-relay-bridge-contract'
+import { PLAIN_SSH_TERMINAL_CHANNELS } from '../../../shared/plain-ssh-terminal'
+import { quitTeardownStartGate } from '../../quit-teardown-start-gate'
+import { createSshSubsystemLoader } from './ssh-subsystem-loader'
+import type * as SshImplementation from './ssh-implementation'
 import {
   connectionManager,
+  currentRuntime,
   getCurrentMainWindow,
-  portForwardManager,
-  setConnectionManager,
   setCurrentGetMainWindow,
   setCurrentRuntime,
-  setPersistedStore,
-  setPortForwardManager
+  setPersistedStore
 } from './ssh-ipc-context'
-import { registerSshPortForwardHandlers } from './ssh-port-forward-handlers'
-import { persistPortForwards } from './ssh-port-forward-persistence'
-import { recordForwardFailure } from './ssh-port-forward-unrestored'
-import { restoreManagedHostPortForwards } from './ssh-managed-port-forward-restore'
-import { setSshHostServedListener } from '../../ssh/ssh-host-server-status'
-import { broadcastPortForwards } from './ssh-renderer-broadcast'
-import { beginSshShutdown, resetSshShutdownDrain } from './ssh-shutdown-drain'
-import { registerSshTargetCrudHandlers } from './ssh-target-crud-handlers'
-import { targetLifecycleInFlight } from './ssh-target-lifecycle-queue'
-import { disposeOrcadManagedTunnels } from '../../managed-server/lifecycle/orcad-managed-tunnel'
-import { retainUnretainedOrcadMigrationSources } from '../../ssh/orcad-migration-source-retention'
-import { reconcileManagedOrcadSshTargets } from '../../ssh/orcad-retained-source'
-import { installOrcadMigrationScrollbackRetention } from '../../ssh/orcad-migration-scrollback-retention-wiring'
-import { getAppEnvironment } from '../../../shared/app-environment'
-import { registerLegacyRelayBridgeIpc } from '../../ssh/legacy-relay/legacy-relay-bridge-ipc'
-import {
-  disposeDesktopBrowserBridge,
-  installDesktopBrowserBridge
-} from '../desktop-browser-bridge-wiring'
 
-const SSH_IPC_CHANNELS = [
-  'ssh:listTargets',
-  'ssh:listRemovedTargetLabels',
-  'ssh:addTarget',
-  'ssh:updateTarget',
-  'ssh:removeTarget',
-  'ssh:importConfig',
-  'ssh:listConfigHosts',
-  'ssh:resolveConfigHost',
+const SSH_LAZY_CHANNELS = [
   'ssh:connect',
   'ssh:disconnect',
   'ssh:getState',
   'ssh:needsPassphrasePrompt',
   'ssh:testConnection',
+  'ssh:browseDir',
   'ssh:addPortForward',
   'ssh:updatePortForward',
   'ssh:removePortForward',
   'ssh:listPortForwards',
   'ssh:listUnrestoredPortForwards',
   'ssh:removeSavedPortForward',
-  'ssh:listDetectedPorts'
+  'ssh:listDetectedPorts',
+  PLAIN_SSH_TERMINAL_CHANNELS.open,
+  LEGACY_RELAY_BRIDGE_CHANNELS.listPanes,
+  LEGACY_RELAY_BRIDGE_CHANNELS.attach,
+  LEGACY_RELAY_BRIDGE_CHANNELS.close
 ] as const
+const SSH_EVENT_CHANNELS = [
+  PLAIN_SSH_TERMINAL_CHANNELS.write,
+  PLAIN_SSH_TERMINAL_CHANNELS.resize,
+  PLAIN_SSH_TERMINAL_CHANNELS.close,
+  PLAIN_SSH_TERMINAL_CHANNELS.ack,
+  LEGACY_RELAY_BRIDGE_CHANNELS.write,
+  LEGACY_RELAY_BRIDGE_CHANNELS.resize,
+  LEGACY_RELAY_BRIDGE_CHANNELS.detach,
+  LEGACY_RELAY_BRIDGE_CHANNELS.setOutputPaused
+] as const
+
+let registration: { store: Store; runtime?: OrcaRuntimeService } | undefined
+let subsystem = createSubsystem()
+let startupReady: Promise<void> | undefined
+let initializedModule: typeof SshImplementation | undefined
+
+function createSubsystem() {
+  const loader = createSshSubsystemLoader(
+    // COMPAT(legacy-relay-bridge): install the existing compatibility handlers only on first use.
+    () =>
+      Promise.all([
+        import('./ssh-implementation'),
+        import('../../ssh/legacy-relay/legacy-relay-bridge-ipc')
+      ]),
+    ([implementation, compatibility]) => {
+      if (!registration || subsystem !== loader) {
+        throw new Error('SSH registration was replaced')
+      }
+      initializedModule = implementation
+      implementation.initializeSshMigrationState(registration.store)
+      return implementation.initializeSshSubsystem(
+        getCurrentMainWindow,
+        registration.runtime,
+        (ipc) =>
+          compatibility.registerLegacyRelayBridgeIpc(
+            {
+              store: registration!.store,
+              getMainWindow: getCurrentMainWindow,
+              connection: (targetId) => connectionManager?.getConnection(targetId) ?? null,
+              runtime: () => currentRuntime ?? null
+            },
+            ipc
+          )
+      )
+    }
+  )
+  return loader
+}
+
+export function ensureSshHandlersLoaded(): Promise<void> {
+  return subsystem.load().then(() => undefined)
+}
+
+export function whenSshStartupReady(): Promise<void> | undefined {
+  return startupReady
+}
 
 export function registerSshHandlers(
   store: Store,
   getMainWindow: () => BrowserWindow | null,
   runtime?: OrcaRuntimeService
-): { connectionManager: SshConnectionManager; sshStore: SshConnectionStore } {
-  registerQuitTask('ssh', 'ssh', beginSshShutdown)
-
+) {
   initializeSshConnectionGenerationSession()
-  // macOS window recreation re-registers handlers; remove old channels to avoid duplicate registration.
-  for (const ch of SSH_IPC_CHANNELS) {
-    ipcMain.removeHandler(ch)
-  }
-
+  registration = { store, runtime }
   setCurrentGetMainWindow(getMainWindow)
   setCurrentRuntime(runtime)
-  setSshTargetRegistryStore(new SshConnectionStore(store))
   setPersistedStore(store)
-  reconcileManagedOrcadSshTargets(getAppEnvironment().getPath('userData'), store)
-  void retainUnretainedOrcadMigrationSources(getAppEnvironment().getPath('userData'), store)
-  installOrcadMigrationScrollbackRetention(getAppEnvironment().getPath('userData'), store)
-  installManagedOrcadStartStatus()
-
-  registerCredentialHandler()
-
-  const callbacks = createSshConnectionCallbacks()
-  if (connectionManager) {
-    connectionManager.setCallbacks(callbacks)
-  } else {
-    setConnectionManager(new SshConnectionManager(callbacks))
-    // Window re-registration must not re-gate hosts already signed in during this process.
-    awaitSignInForCredentialHosts(getSshTargetRegistryStore()!)
-    holdLaunchReconnectOptOuts(getSshTargetRegistryStore()!.listTargets())
+  const sshStore = new SshConnectionStore(store)
+  setSshTargetRegistryStore(sshStore)
+  if (!connectionManager) {
+    awaitSignInForCredentialHosts(sshStore)
+    holdLaunchReconnectOptOuts(sshStore.listTargets())
   }
-  setPortForwardManager(portForwardManager ?? new SshPortForwardManager())
-  portForwardManager!.setCallbacks({
-    onForwardClosed: (entry, reason) => {
-      if (reason.kind === 'unexpected-exit') {
-        console.warn(
-          `[ssh] Port forward ${entry.localPort} → ${entry.remoteHost}:${entry.remotePort} closed unexpectedly${
-            reason.detail ? `: ${reason.detail}` : ''
-          }`
-        )
-        // An ssh that starts and later dies backs off like one that never started.
-        recordForwardFailure(
-          entry.connectionId,
-          entry,
-          reason.detail ?? 'exited unexpectedly',
-          'exit'
-        )
-      }
-      persistPortForwards(entry.connectionId)
-      broadcastPortForwards(getCurrentMainWindow, entry.connectionId)
-    }
-  })
-  // Every served status restores saved forwards, whichever path brought the host up.
-  setSshHostServedListener((targetId) => void restoreManagedHostPortForwards(targetId))
-  registerPowerMonitorReconnect(() => getAppEnvironment().getPath('userData'))
-  registerSshBrowseHandler(() => connectionManager)
   setSshConnectionManagerResolver(() => connectionManager)
-
-  registerSshTargetCrudHandlers()
-  registerSshConnectionHandlers()
-  registerSshPortForwardHandlers()
-  registerPlainSshTerminalHandlers()
-  // COMPAT(legacy-relay-bridge): terminals an older Orca's relay still runs.
-  registerLegacyRelayBridgeIpc({
-    store,
-    getMainWindow: getCurrentMainWindow,
-    connection: (targetId) => connectionManager?.getConnection(targetId) ?? null,
-    runtime: () => runtime ?? null
-  })
-
-  if (runtime) {
-    installDesktopBrowserBridge({
-      userDataPath: getAppEnvironment().getPath('userData'),
-      runtime,
-      getMainWindow: getCurrentMainWindow,
-      getConnectionManager: () => connectionManager
+  setSshConnectionManagerInitializer(ensureSshHandlersLoaded)
+  if (!subsystem.loaded) {
+    setSshTargetRegistryHandlers({
+      connect: async (targetId, options) => {
+        await ensureSshHandlersLoaded()
+        return connectRegisteredSshTarget(targetId, options)
+      },
+      getState: (targetId) => (connectionManager ? getPublicSshState(targetId) : undefined)
     })
   }
-
+  subsystem.loaded?.refresh(getCurrentMainWindow, runtime)
+  registerCredentialHandler()
+  for (const channel of [
+    'ssh:listTargets',
+    'ssh:listRemovedTargetLabels',
+    'ssh:addTarget',
+    'ssh:updateTarget',
+    'ssh:removeTarget',
+    'ssh:importConfig',
+    'ssh:listConfigHosts',
+    'ssh:resolveConfigHost'
+  ]) {
+    ipcMain.removeHandler(channel)
+  }
+  registerSshTargetCrudHandlers()
+  for (const channel of SSH_LAZY_CHANNELS) {
+    ipcMain.removeHandler(channel)
+    ipcMain.handle(channel, (event, ...args: unknown[]) => {
+      if (!subsystem.loaded) {
+        if (channel === 'ssh:getState') {
+          return undefined
+        }
+        if (
+          channel === 'ssh:listPortForwards' ||
+          channel === 'ssh:listDetectedPorts' ||
+          channel === LEGACY_RELAY_BRIDGE_CHANNELS.listPanes
+        ) {
+          return []
+        }
+        if (channel === 'ssh:listUnrestoredPortForwards') {
+          const input = args[0]
+          return typeof input === 'object' &&
+            input !== null &&
+            'targetId' in input &&
+            typeof input.targetId === 'string'
+            ? listUnrestoredPortForwards(input.targetId)
+            : []
+        }
+        if (channel === 'ssh:needsPassphrasePrompt') {
+          const input = args[0]
+          return (
+            typeof input === 'object' &&
+            input !== null &&
+            'targetId' in input &&
+            typeof input.targetId === 'string' &&
+            (isSshCredentialDeclined(input.targetId) ||
+              sshStore.getTarget(input.targetId)?.lastRequiredPassphrase === true)
+          )
+        }
+      }
+      const loaded = subsystem.loaded
+      if (loaded) {
+        return loaded.handlers.get(channel)!(event, ...args)
+      }
+      return subsystem.load().then(({ handlers }) => handlers.get(channel)!(event, ...args))
+    })
+  }
+  for (const channel of SSH_EVENT_CHANNELS) {
+    ipcMain.removeAllListeners(channel)
+    ipcMain.on(channel, (event, ...args: unknown[]) => {
+      // Sessions can only emit input after their open/attach invocation loaded the subsystem.
+      subsystem.loaded?.listeners.get(channel)?.(event, ...args)
+    })
+  }
+  if (sshStore.listTargets().some((target) => target.orcadFence || target.orcadProvisioning)) {
+    startupReady ??= ensureSshHandlersLoaded().catch((error: unknown) =>
+      console.warn('[ssh] Could not restore saved managed hosts:', error)
+    )
+  }
   return {
-    connectionManager: connectionManager!,
-    sshStore: getSshTargetRegistryStore() as SshConnectionStore
+    get connectionManager() {
+      return connectionManager
+    },
+    sshStore
   }
 }
 
 export async function resetSshHandlerStateForTests(): Promise<void> {
-  unregisterPowerMonitorReconnect()
-  for (const ch of SSH_IPC_CHANNELS) {
-    ipcMain.removeHandler(ch)
-  }
-  ipcMain.removeHandler('ssh:submitCredential')
-
-  connectInFlight.clear()
-  targetLifecycleInFlight.clear()
-  resetSshConnectionGenerations()
-  resetSshProviderAuthorities()
-  testingTargets.clear()
-  testConnectionProbes.clear()
-  credentialRequestedForTarget.clear()
-  resetSshCredentialDeclinesForTests()
-  resetSshUserDisconnectsForTests()
   resetLaunchReconnectOptOutsForTests()
-  quitTeardownStartGate.resetForTests()
-  resetSshShutdownDrain()
-
-  disposeDesktopBrowserBridge()
-  await connectionManager?.disconnectAll()
-  disposeOrcadManagedTunnels()
-  portForwardManager?.dispose()
-  setConnectionManager(null)
-  setSshConnectionManagerResolver(null)
-  setPortForwardManager(null)
-  setSshTargetRegistryStore(null)
-  setPersistedStore(null)
-  setSshTargetRegistryHandlers({ connect: null, getState: null })
+  await initializedModule?.resetSshHandlerStateForTests()
+  initializedModule = undefined
+  registration = undefined
+  startupReady = undefined
+  subsystem = createSubsystem()
   setSshTargetMutations(null)
-  setCurrentGetMainWindow(() => null)
-  setCurrentRuntime(undefined)
+  setSshConnectionManagerInitializer(null)
+  setSshConnectionManagerResolver(null)
+  setSshTargetRegistryStore(null)
+  setSshTargetRegistryHandlers({ connect: null, getState: null })
+  quitTeardownStartGate.resetForTests()
 }
 
 export function getSshConnectionStore(): SshConnectionStore | null {

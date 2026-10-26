@@ -30,7 +30,7 @@ import { connectionManager, getCurrentMainWindow } from '../ssh/ssh-ipc-context'
 import { getWslHostService } from '../../wsl/wsl-host-service-instance'
 import { assertWslHostReachable } from '../../wsl/wsl-host-gate'
 import { broadcastSshState } from '../ssh/ssh-renderer-broadcast'
-import { restoreManagedHostPortForwards } from '../ssh/ssh-managed-port-forward-restore'
+import { restoreSavedSshPortForwards } from '../ssh/ssh-port-forward-startup'
 
 export async function resolveManagedRuntimeEnvironment(
   userDataPath: string,
@@ -98,7 +98,7 @@ async function prepareNetworkServerForCall(
 function restoreForwardsOverTunnel(environment: KnownRuntimeEnvironment): void {
   const targetId = getOrcadSshDeployment(environment)?.sshTargetId
   if (targetId) {
-    void restoreManagedHostPortForwards(targetId, { tunnelUp: true })
+    void restoreSavedSshPortForwards(targetId, { tunnelUp: true })
   }
 }
 

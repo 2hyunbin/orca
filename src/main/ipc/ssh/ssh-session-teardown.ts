@@ -9,7 +9,6 @@ import {
 } from './ssh-connect-attempt-registry'
 import { connectionManager, persistedStore, portForwardManager } from './ssh-ipc-context'
 import { runTargetLifecycle } from './ssh-target-lifecycle-queue'
-import { forgetPortForwardRestoreState } from './ssh-managed-port-forward-restore'
 import { errorMessage } from '../../../shared/error-message'
 import {
   forgetLegacyRelayTarget,
@@ -62,6 +61,7 @@ export async function removeRegisteredSshTarget(targetId: string): Promise<void>
 export async function teardownSshTargetTransport(targetId: string): Promise<void> {
   // COMPAT(legacy-relay-bridge): hangs up only this client; the relays keep their terminals.
   stopLegacyRelayBridge(targetId)
+  const { forgetPortForwardRestoreState } = await import('./ssh-managed-port-forward-restore')
   forgetPortForwardRestoreState(targetId)
   // Release listeners before reconnect; independent system-SSH tunnels also retain ports after session disconnect.
   const [forwards, managedTunnels, disconnect] = await Promise.allSettled([

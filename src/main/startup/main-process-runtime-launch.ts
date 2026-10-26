@@ -183,7 +183,7 @@ async function launchServeMode(
   }
   publishHeadlessRuntimeGraph(runtime)
   // Register SSH before binding RPC so the first paired client sees targets.
-  registerHeadlessServeSshHandlers(state.store!, runtime)
+  await registerHeadlessServeSshHandlers(state.store!, runtime)
   await runtimeRpc.start().catch((error) => {
     console.error('[runtime] Failed to start headless RPC transport:', error)
     throw error

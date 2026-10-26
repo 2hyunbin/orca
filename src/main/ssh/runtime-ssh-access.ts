@@ -28,6 +28,7 @@ import { fingerprintRuntimeSshTarget } from './runtime-ssh-target-fingerprint'
 import { orcadTargetBlockerMessage } from './targets/ssh-target-orcad-claims'
 import { dependentStateSummary } from './targets/ssh-target-orcad-dependents'
 import type { OrcadMigrationBlocker } from '../../shared/orcad-migration/orcad-migration-preflight'
+import { ensureSshConnectionManager } from './targets/ssh-target-registry'
 
 type TargetClaims = ReturnType<typeof requireManagedOrcadInfrastructure>['claims']
 
@@ -118,6 +119,7 @@ export function linkRuntimeSshAccess(
   const environmentId = resolveEnvironment(userDataPath, args.selector).id
   return runTargetLifecycle(`runtime-ssh-access:${userDataPath}:${environmentId}`, () =>
     runTargetLifecycle(args.sshTargetId, async () => {
+      await ensureSshConnectionManager()
       const { claims, connectionManager } = requireManagedOrcadInfrastructure()
       const environment = resolveEnvironment(userDataPath, environmentId)
       assertRuntimeEnvironmentNotReconciling(environment)
@@ -227,6 +229,7 @@ export function unlinkRuntimeSshAccess(
       return redactRuntimeEnvironment(environment)
     }
     return runTargetLifecycle(access.sshTargetId, async () => {
+      await ensureSshConnectionManager()
       const { claims } = requireManagedOrcadInfrastructure()
       requireFence(claims, environmentId, access, !!environment.pendingSshAccessOperation)
       const prepared =

@@ -12,7 +12,6 @@ import {
   resolveUserSshConfigHost
 } from '../../ssh/config/ssh-config-host-picker'
 import { getManagedOrcadFenceEnvironmentId } from '../../../shared/managed-orcad-ssh-owner'
-import { closeOrcadManagedTunnel } from '../../managed-server/lifecycle/orcad-managed-tunnel'
 import { rotateSshProviderAuthority } from '../../ssh/ssh-provider-authority'
 import {
   getSshTargetRegistryStore,
@@ -26,7 +25,6 @@ import {
 import { connectionManager, getCurrentMainWindow } from './ssh-ipc-context'
 import { runTargetLifecycle } from './ssh-target-lifecycle-queue'
 import { fingerprintRuntimeSshTarget } from '../../ssh/runtime-ssh-target-fingerprint'
-import { removeRegisteredSshTarget } from './ssh-session-teardown'
 import { notifyReposChanged } from '../repos/repos-changed-notification'
 import { requestDesktopBrowserBridgeReconcile } from '../desktop-browser-bridge-reconcile'
 
@@ -130,6 +128,8 @@ function updateSshTarget(id: string, updates: SshTargetUpdateInput): SshTarget |
       !allowsDirectSshRelay(updated) &&
       (!before || fingerprintRuntimeSshTarget(before) !== fingerprintRuntimeSshTarget(updated))
     void runTargetLifecycle(id, async () => {
+      const { closeOrcadManagedTunnel } =
+        await import('../../managed-server/lifecycle/orcad-managed-tunnel')
       await closeOrcadManagedTunnel(environmentId)
       if (redial) {
         await connectionManager?.disconnect(id)
@@ -142,6 +142,7 @@ function updateSshTarget(id: string, updates: SshTargetUpdateInput): SshTarget |
 async function removeSshTarget(id: string): Promise<void> {
   assertNotRuntimeOwned(id, 'removed')
   assertNotManagedServerHost(id)
+  const { removeRegisteredSshTarget } = await import('./ssh-session-teardown')
   await removeRegisteredSshTarget(id)
   requestDesktopBrowserBridgeReconcile()
 }

@@ -36,6 +36,7 @@ vi.mock('./runtime-ssh-access-verification', () => ({
 }))
 import { linkRuntimeSshAccess, unlinkRuntimeSshAccess } from './runtime-ssh-access'
 import { fingerprintRuntimeSshTarget } from './runtime-ssh-target-fingerprint'
+import { setSshConnectionManagerInitializer } from './targets/ssh-target-registry'
 
 const pairing = {
   v: 2 as const,
@@ -133,7 +134,23 @@ describe('independent runtime SSH access coordinator', () => {
       }
     })
   })
-  afterEach(() => rmSync(userDataPath, { recursive: true, force: true }))
+  afterEach(() => {
+    setSshConnectionManagerInitializer(null)
+    rmSync(userDataPath, { recursive: true, force: true })
+  })
+
+  it('waits for first-use SSH initialization before claiming and connecting a new link', async () => {
+    const loading = Promise.withResolvers<void>()
+    const initialize = vi.fn(() => loading.promise)
+    setSshConnectionManagerInitializer(initialize)
+    const pending = linkRuntimeSshAccess(userDataPath, request())
+    await vi.waitFor(() => expect(initialize).toHaveBeenCalledOnce())
+    expect(mocks.infrastructure).not.toHaveBeenCalled()
+    expect(mocks.connect).not.toHaveBeenCalled()
+    loading.resolve()
+    await pending
+    expect(mocks.connect).toHaveBeenCalledOnce()
+  })
 
   it.each(['link', 'unlink'])(
     'refuses %s before side effects during host reconciliation',

@@ -103,3 +103,13 @@ export function setSshConnectionManagerResolver(
 export function getSshConnectionManager(): SshConnectionManager | null {
   return registeredGetSshConnectionManager?.() ?? null
 }
+
+let initializeSshConnectionManager: (() => Promise<void>) | null = null
+
+export function setSshConnectionManagerInitializer(initialize: (() => Promise<void>) | null): void {
+  initializeSshConnectionManager = initialize
+}
+
+export async function ensureSshConnectionManager(): Promise<void> {
+  await initializeSshConnectionManager?.()
+}

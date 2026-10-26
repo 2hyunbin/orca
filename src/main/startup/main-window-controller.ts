@@ -1,3 +1,4 @@
+import { whenSshStartupReady } from '../ipc/ssh/ssh'
 import { app, type BrowserWindow } from 'electron'
 import { createMainWindow, loadMainWindow } from '../window/createMainWindow'
 import {
@@ -235,7 +236,18 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
     state.automations?.setWebContents(null)
     clearMainWindowAgentStatusListeners()
   })
-  logStartupMilestone('load-start')
-  loadMainWindow(window)
+  const load = (): void => {
+    if (window.isDestroyed()) {
+      return
+    }
+    logStartupMilestone('load-start')
+    loadMainWindow(window)
+  }
+  const sshStartup = whenSshStartupReady()
+  if (sshStartup) {
+    void sshStartup.then(load)
+  } else {
+    load()
+  }
   return window
 }

@@ -7,12 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runAutomationPrecheck } from './precheck-runner'
 
 const sshManagerState = vi.hoisted(() => ({
+  initialize: vi.fn(async () => {}),
   manager: null as null | {
     getConnection: ReturnType<typeof vi.fn>
   }
 }))
 
 vi.mock('../ssh/targets/ssh-target-registry', () => ({
+  ensureSshConnectionManager: sshManagerState.initialize,
   getSshConnectionManager: () => sshManagerState.manager
 }))
 
@@ -28,6 +30,7 @@ describe('runAutomationPrecheck', () => {
   beforeEach(() => {
     cwd = mkdtempSync(join(tmpdir(), 'orca-precheck-test-'))
     sshManagerState.manager = null
+    sshManagerState.initialize.mockReset().mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -66,17 +69,20 @@ describe('runAutomationPrecheck', () => {
     expect(result.error).toBe('Precheck timed out after 1s.')
   })
 
-  it('uses the SSH channel exit event as the precheck exit code', async () => {
+  it('initializes SSH before executing and uses the channel exit event as the exit code', async () => {
     const channel = Object.assign(new EventEmitter(), {
       stderr: new PassThrough(),
       close: vi.fn()
     })
-    sshManagerState.manager = {
+    const manager = {
       getConnection: vi.fn(() => ({
         getState: () => ({ status: 'connected' }),
         exec: vi.fn(async () => channel)
       }))
     }
+    sshManagerState.initialize.mockImplementationOnce(async () => {
+      sshManagerState.manager = manager
+    })
 
     const resultPromise = runAutomationPrecheck({
       precheck: {
@@ -89,7 +95,7 @@ describe('runAutomationPrecheck', () => {
         connectionId: 'ssh-1'
       }
     })
-    await Promise.resolve()
+    await vi.waitFor(() => expect(channel.listenerCount('close')).toBe(1))
     channel.emit('data', Buffer.from('ready\n'))
     channel.emit('exit', 0)
     channel.emit('close')

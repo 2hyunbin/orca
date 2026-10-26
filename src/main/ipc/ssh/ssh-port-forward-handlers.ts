@@ -1,3 +1,4 @@
+import type { SshIpcRegistrar } from './ssh-ipc-registration'
 import { ipcMain } from 'electron'
 import {
   enrichSshForwardEntries,
@@ -15,8 +16,8 @@ import { clearForwardFailure, listUnrestoredPortForwards } from './ssh-port-forw
 import { PortForwardTornDownError } from '../../ssh/port-forwarding/ssh-port-forward'
 import { broadcastPortForwards, enrichDetected } from './ssh-renderer-broadcast'
 
-export function registerSshPortForwardHandlers(): void {
-  ipcMain.handle(
+export function registerSshPortForwardHandlers(ipc: SshIpcRegistrar = ipcMain): void {
+  ipc.handle(
     'ssh:addPortForward',
     async (
       _event,
@@ -49,7 +50,7 @@ export function registerSshPortForwardHandlers(): void {
       })
   )
 
-  ipcMain.handle(
+  ipc.handle(
     'ssh:updatePortForward',
     async (
       _event,
@@ -98,7 +99,7 @@ export function registerSshPortForwardHandlers(): void {
       })
   )
 
-  ipcMain.handle('ssh:removePortForward', async (_event, args: { id: string }) => {
+  ipc.handle('ssh:removePortForward', async (_event, args: { id: string }) => {
     const targetId = portForwardManager!
       .listForwards()
       .find((forward) => forward.id === args.id)?.connectionId
@@ -123,12 +124,12 @@ export function registerSshPortForwardHandlers(): void {
     })
   })
 
-  ipcMain.handle('ssh:listUnrestoredPortForwards', (_event, args: { targetId: string }) =>
+  ipc.handle('ssh:listUnrestoredPortForwards', (_event, args: { targetId: string }) =>
     listUnrestoredPortForwards(args.targetId)
   )
 
   // A saved forward that never started has no live id, so it is removed by its mapping.
-  ipcMain.handle(
+  ipc.handle(
     'ssh:removeSavedPortForward',
     (
       _event,
@@ -154,7 +155,7 @@ export function registerSshPortForwardHandlers(): void {
       })
   )
 
-  ipcMain.handle('ssh:listPortForwards', (_event, args?: { targetId?: string }) => {
+  ipc.handle('ssh:listPortForwards', (_event, args?: { targetId?: string }) => {
     const all = portForwardManager!.listForwards(args?.targetId)
     if (!persistedStore || !args?.targetId) {
       // Cross-target rows cannot be attributed to worktrees in one enrichment call.
@@ -163,7 +164,7 @@ export function registerSshPortForwardHandlers(): void {
     return enrichSshForwardEntries(all, getWorktreeIdsForConnection(persistedStore, args.targetId))
   })
 
-  ipcMain.handle('ssh:listDetectedPorts', (_event, args: { targetId: string }) => {
+  ipc.handle('ssh:listDetectedPorts', (_event, args: { targetId: string }) => {
     // Detected ports came from the relay's port scanner; a managed host reports them through its runtime.
     return enrichDetected(args.targetId, [])
   })

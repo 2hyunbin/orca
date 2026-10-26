@@ -1,166 +1,157 @@
-import { registerQuitTask } from '../../quit-task-registry'
 import type { KnownRuntimeEnvironment } from '../../../shared/runtime-environments'
+import { getRuntimeSshAccess } from '../../../shared/runtime-environments'
 import { resolveEnvironment } from '../../../shared/runtime-environment-store'
 import type { SshTarget } from '../../../shared/ssh-types'
 import type { SshConnection } from '../../ssh/connection/ssh-connection'
-import { probeManagedOrcadTunnel } from './orcad-managed-tunnel-resume'
-import { ensureManagedOrcadServing } from './orcad-managed-serving'
-import { OrcadManagedTunnelManager } from './orcad-managed-tunnel-manager'
-import { buildOnBindableLocalPort } from './orcad-managed-tunnel-local-port'
-import { getRemoteRuntimeSharedControlAnsweredAt } from '../../ipc/runtime-environments/runtime-environment-shared-control-answers'
-import {
-  getSshConnectionManager,
-  getSshTargetRegistryStore
-} from '../../ssh/targets/ssh-target-registry'
-import {
-  MANAGED_ORCAD_TUNNEL_TARGETING,
-  type OrcadTunnelStartChecks
-} from './orcad-managed-tunnel-target'
-import {
-  liveManagedOrcadPairingRepairDeps,
-  ManagedOrcadPairingRepairs,
-  pairingRevisionOf
-} from './orcad-managed-pairing-repair'
-import {
-  buildWithPairingRepair,
-  type ManagedOrcadPairingRecovery
-} from './orcad-managed-tunnel-pairing-recovery'
+import type { OrcadTunnelStartChecks } from './orcad-managed-tunnel-target'
+import { ensureSshConnectionManager } from '../../ssh/targets/ssh-target-registry'
+import { supersededTunnelError } from './orcad-managed-tunnel-active'
+import { createSshSubsystemLoader } from '../../ipc/ssh/ssh-subsystem-loader'
+import type * as ManagedTunnelImplementation from './orcad-managed-tunnel-implementation'
 
-const managedTunnels = new OrcadManagedTunnelManager({
-  getConnectionManager: getSshConnectionManager,
-  getTargetStore: getSshTargetRegistryStore,
-  targeting: MANAGED_ORCAD_TUNNEL_TARGETING,
-  ensureServing: (input) =>
-    ensureManagedOrcadServing({
-      ...input,
-      probe: probeManagedOrcadTunnel,
-      answeredAt: getRemoteRuntimeSharedControlAnsweredAt
-    })
-})
-
-const pairingRepairs = new Map<string, ManagedOrcadPairingRepairs>()
-
-function pairingRecovery(userDataPath: string): ManagedOrcadPairingRecovery {
-  let repairs = pairingRepairs.get(userDataPath)
-  if (!repairs) {
-    repairs = new ManagedOrcadPairingRepairs(liveManagedOrcadPairingRepairDeps(userDataPath))
-    pairingRepairs.set(userDataPath, repairs)
+const subsystem = createSshSubsystemLoader(
+  () => import('./orcad-managed-tunnel-implementation'),
+  (implementation) => {
+    implementation.initializeManagedOrcadTunnels()
+    return implementation
   }
-  return {
-    resolve: (environmentId) => resolveEnvironment(userDataPath, environmentId),
-    repairs,
-    ensure: (environment) =>
-      managedTunnels.ensure(environment, () =>
-        resolveEnvironmentOrNull(userDataPath, environment.id)
-      )
+)
+
+type PendingTunnelStart = { environmentId: string; targetId?: string; cancelled: boolean }
+const pendingStarts = new Set<PendingTunnelStart>()
+
+async function startTunnelRequest<Result>(
+  environmentId: string,
+  targetId: string | undefined,
+  prepare: (() => Promise<void>) | undefined,
+  start: (implementation: typeof ManagedTunnelImplementation) => Promise<Result>
+): Promise<Result> {
+  const request = { environmentId, targetId, cancelled: false }
+  pendingStarts.add(request)
+  try {
+    await prepare?.()
+    if (request.cancelled) {
+      throw supersededTunnelError()
+    }
+    const implementation = await subsystem.load()
+    if (request.cancelled) {
+      throw supersededTunnelError()
+    }
+    return start(implementation)
+  } finally {
+    pendingStarts.delete(request)
   }
 }
 
-/** Return stored credentials: tunnel repair may have replaced the pairing. */
 export async function ensureOrcadManagedTunnel(
   userDataPath: string,
   selector: string
 ): Promise<KnownRuntimeEnvironment> {
-  registerQuitTask('ssh', 'managed-orcad-tunnels', shutdownOrcadManagedTunnels)
-  const { id } = resolveEnvironment(userDataPath, selector)
-  await buildOnBindableLocalPort(userDataPath, id, () =>
-    buildWithPairingRepair(pairingRecovery(userDataPath), id, (environment) =>
-      managedTunnels.ensure(environment, () => resolveEnvironmentOrNull(userDataPath, id))
-    )
+  const environment = resolveEnvironment(userDataPath, selector)
+  if (!getRuntimeSshAccess(environment)) {
+    return environment
+  }
+  return startTunnelRequest(
+    environment.id,
+    getRuntimeSshAccess(environment)?.sshTargetId,
+    ensureSshConnectionManager,
+    (implementation) => implementation.ensureOrcadManagedTunnel(userDataPath, selector)
   )
-  return resolveEnvironment(userDataPath, id)
 }
 
 export async function rebuildOrcadManagedTunnel(
   userDataPath: string,
   selector: string
 ): Promise<'built' | 'repaired'> {
-  registerQuitTask('ssh', 'managed-orcad-tunnels', shutdownOrcadManagedTunnels)
-  const { id } = resolveEnvironment(userDataPath, selector)
-  return buildOnBindableLocalPort(userDataPath, id, () =>
-    buildWithPairingRepair(pairingRecovery(userDataPath), id, (environment) =>
-      managedTunnels.rebuild(environment, () => resolveEnvironmentOrNull(userDataPath, id))
-    )
+  const environment = resolveEnvironment(userDataPath, selector)
+  if (!getRuntimeSshAccess(environment)) {
+    return 'built'
+  }
+  return startTunnelRequest(
+    environment.id,
+    getRuntimeSshAccess(environment)?.sshTargetId,
+    ensureSshConnectionManager,
+    (implementation) => implementation.rebuildOrcadManagedTunnel(userDataPath, selector)
   )
 }
 
-/** Reprove pinned-server refusal before repair; foreign servers must fail identity validation. */
-export function recoverRefusedManagedOrcadPairing(
-  userDataPath: string,
-  environmentId: string
-): Promise<'built' | 'repaired'> {
+export function recoverRefusedManagedOrcadPairing(userDataPath: string, environmentId: string) {
   return rebuildOrcadManagedTunnel(userDataPath, environmentId)
 }
 
-/** Ignore failures belonging to older pairing revisions. */
 export function managedOrcadPairingFailureStands(
   userDataPath: string,
   environmentId: string
 ): boolean {
-  const environment = resolveEnvironmentOrNull(userDataPath, environmentId)
-  return (
-    environment !== null &&
-    (pairingRepairs
-      .get(userDataPath)
-      ?.standingFailure(environmentId, pairingRevisionOf(environment)) ?? null) !== null
-  )
+  return subsystem.loaded?.managedOrcadPairingFailureStands(userDataPath, environmentId) ?? false
 }
 
-/** Explicit connect clears recent repair failures. */
 export function forgetFailedManagedOrcadPairingRepair(
   userDataPath: string,
   environmentId: string
 ): void {
-  pairingRepairs.get(userDataPath)?.forgetFailures(environmentId)
+  subsystem.loaded?.forgetFailedManagedOrcadPairingRepair(userDataPath, environmentId)
 }
 
-function resolveEnvironmentOrNull(userDataPath: string, id: string) {
-  try {
-    return resolveEnvironment(userDataPath, id)
-  } catch {
-    return null
-  }
-}
-
-export function verifyManagedTunnelServing(environment: KnownRuntimeEnvironment) {
-  return managedTunnels.verifyServing(environment)
+export async function verifyManagedTunnelServing(environment: KnownRuntimeEnvironment) {
+  return startTunnelRequest(
+    environment.id,
+    getRuntimeSshAccess(environment)?.sshTargetId,
+    ensureSshConnectionManager,
+    (implementation) => implementation.verifyManagedTunnelServing(environment)
+  )
 }
 
 export function disposeOrcadManagedTunnels(): void {
-  managedTunnels.dispose()
+  for (const request of pendingStarts) {
+    request.cancelled = true
+  }
+  subsystem.loaded?.disposeOrcadManagedTunnels()
 }
 
-// System SSH forwards have independent processes and can outlive Orca.
 export function shutdownOrcadManagedTunnels(): Promise<void> {
-  return managedTunnels.shutdown()
+  for (const request of pendingStarts) {
+    request.cancelled = true
+  }
+  return subsystem.loaded?.shutdownOrcadManagedTunnels() ?? Promise.resolve()
 }
 
 export function recoverOrcadManagedTunnelsAfterHostResume(
   userDataPath: string,
   options: { attempts: number; timeoutMs: number }
 ): Promise<void> {
-  registerQuitTask('ssh', 'managed-orcad-tunnels', shutdownOrcadManagedTunnels)
-  return managedTunnels.recoverAfterHostResume({
-    ...options,
-    resolveEnvironment: (environmentId) => resolveEnvironmentOrNull(userDataPath, environmentId)
-  })
+  return (
+    subsystem.loaded?.recoverOrcadManagedTunnelsAfterHostResume(userDataPath, options) ??
+    Promise.resolve()
+  )
 }
 
-export function startOrcadManagedTunnel(
+export async function startOrcadManagedTunnel(
   environmentId: string,
   target: SshTarget,
   connection: SshConnection,
   remotePort: number,
   checks?: OrcadTunnelStartChecks
 ): Promise<number> {
-  registerQuitTask('ssh', 'managed-orcad-tunnels', shutdownOrcadManagedTunnels)
-  return managedTunnels.start(environmentId, target, connection, remotePort, checks)
+  return startTunnelRequest(environmentId, target.id, undefined, (implementation) =>
+    implementation.startOrcadManagedTunnel(environmentId, target, connection, remotePort, checks)
+  )
 }
 
 export function closeOrcadManagedTunnel(environmentId: string): Promise<void> {
-  return managedTunnels.close(environmentId)
+  for (const request of pendingStarts) {
+    if (request.environmentId === environmentId) {
+      request.cancelled = true
+    }
+  }
+  return subsystem.loaded?.closeOrcadManagedTunnel(environmentId) ?? Promise.resolve()
 }
 
 export function closeOrcadManagedTunnelsForTarget(targetId: string): Promise<void> {
-  return managedTunnels.closeTarget(targetId)
+  for (const request of pendingStarts) {
+    if (request.targetId === targetId) {
+      request.cancelled = true
+    }
+  }
+  return subsystem.loaded?.closeOrcadManagedTunnelsForTarget(targetId) ?? Promise.resolve()
 }
