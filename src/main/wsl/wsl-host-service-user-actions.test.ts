@@ -6,7 +6,7 @@ import { listEnvironments } from '../../shared/runtime-environment-store'
 import { removeThroughOwningService } from '../ipc/runtime-environments/runtime-environment-host-service-ops'
 import { WslHostService, type WslHostConnector } from './wsl-host-service'
 import { setWslHostService } from './wsl-host-service-instance'
-import { UBUNTU, makeConnector } from './wsl-host-service.test-support'
+import { UBUNTU, makeConnector } from './wsl-host-service-test-connector'
 import { onWslHostUserAction, type WslHostUserAction } from './wsl-host-user-actions'
 
 describe('WslHostService Remove as a user action', () => {

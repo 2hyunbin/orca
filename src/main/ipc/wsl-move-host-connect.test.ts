@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as WslHostStore from '../../shared/runtime-environment-wsl-host-store'
 import { WslHostService } from '../wsl/wsl-host-service'
-import { UBUNTU, makeConnector } from '../wsl/wsl-host-service.test-support'
+import { UBUNTU, makeConnector } from '../wsl/wsl-host-service-test-connector'
 import { connectWslMoveHostService } from './wsl-move-host-connect'
 
 const removal = vi.hoisted(() => ({ pending: false }))

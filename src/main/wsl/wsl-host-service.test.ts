@@ -13,18 +13,18 @@ import { getPreferredPairingOffer } from '../../shared/runtime-environments'
 import type { WslHostStatus } from '../../shared/wsl-host-types'
 import { OrcadHostUnsupportedError } from '../orcad/orcad-host-unavailable'
 import { WslHostService, type WslHostConnector } from './wsl-host-service'
-import {
-  KEY,
-  UBUNTU,
-  UBUNTU_ID,
-  connection,
-  makeConnector,
-  pairing
-} from './wsl-host-service.test-support'
 import { wakeRememberedWslHosts } from './wsl-host-early-wake'
 import { WslOrcadLaunchDeferredError } from './wsl-orcad-connection-errors'
 import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
 import { isRecoverableRemoteRuntimeConnectionError } from '../../shared/remote-runtime/remote-runtime-client-error-classification'
+import {
+  KEY,
+  UBUNTU_ID,
+  UBUNTU,
+  pairing,
+  connection,
+  makeConnector
+} from './wsl-host-service-test-connector'
 
 describe('WslHostService', () => {
   let userDataPath: string
