@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { DragReorderList } from './DragReorderList'
 import { GripVertical } from 'lucide-react-native'
 import { TerminalShortcutSettings } from './TerminalShortcutSettings'
-import { queuedMessageStyles } from '../session/mobile-native-chat-queued-message-styles'
+import { queuedMessageStyles } from '../session/native-chat/input/mobile-native-chat-queued-message-styles'
 import { spacing } from '../theme/mobile-theme'
 
 describe('drag completion and cancellation', () => {
