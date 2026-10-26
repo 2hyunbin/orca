@@ -11,6 +11,7 @@ import {
   SlowConnectionRetirement
 } from './postgres-connection-latency.js'
 import { DIRECTOR_SLOW_CONNECTION_STALLS } from './test-fixtures/director-slow-connection-stalls.js'
+import { DIRECTOR_TAIL_CONNECTION_STALLS } from './test-fixtures/director-tail-connection-stalls.js'
 
 let clock = 0
 
@@ -88,8 +89,11 @@ describe('slow connection retirement', () => {
       {
         event: 'orca_relay_postgres_slow_connection_retired',
         connectionId: 3,
+        shape: 'median',
         medianMs: 55,
         peerMedianMs: 3,
+        tailMs: 55,
+        peerTailMs: 0,
         statements: SLOW_CONNECTION_WINDOW
       }
     ])
@@ -218,6 +222,45 @@ describe('slow connection retirement', () => {
     expect(Math.max(...retiredAt)).toBeLessThan(SLOW_CONNECTION_PEER_SLACK_MS + SLOW_CONNECTION_RETIRE_INTERVAL_MS)
   })
 
+  // Every 50th statement takes `outlierMs`: a 2% tail, like the ~200/400/800 ms retransmit stalls.
+  const withTail = (baseMs: number, outlierMs: number) => {
+    let calls = 0
+    return () => (++calls % 50 === 0 ? outlierMs : baseMs)
+  }
+
+  it('retires one connection whose tail turned slow while its median stayed normal', async () => {
+    const lossy = pool([
+      { name: 'a', statementMs: steady(3) },
+      { name: 'b', statementMs: steady(3) },
+      { name: 'lossy', statementMs: withTail(3, 415) }
+    ])
+    await runStatements(lossy.database, 600)
+
+    expect(lossy.destroyed).toEqual(['lossy'])
+    expect(JSON.parse(warnings[0] ?? '{}')).toMatchObject({ shape: 'tail', tailMs: 415, peerTailMs: 3 })
+  })
+
+  it('retires nothing when every connection has the same tail, as a whole-database spike does', async () => {
+    const spiky = pool(['a', 'b', 'c'].map((name) => ({ name, statementMs: withTail(3, 400) })))
+    await runStatements(spiky.database, 900)
+
+    expect(spiky.destroyed).toEqual([])
+  })
+
+  it('retires nothing on a far region whose healthy tail sits above 200 ms', async () => {
+    const far = pool(['a', 'b', 'c'].map((name) => ({ name, statementMs: withTail(180, 260) })))
+    await runStatements(far.database, 900)
+
+    expect(far.destroyed).toEqual([])
+  })
+
+  it.each([
+    ['14:58', 320, '14:58:22'],
+    ['15:24', 367, '15:24:22']
+  ] as const)('replays the %s tail stall of 2026-10-26 and retires c%i in the window ending %s', (stall, id, windowEnd) => {
+    expect(replayTail(stall)).toEqual([{ connectionId: id, windowEnd }])
+  })
+
   it('drops clients the pool closed on idle, even when nothing else is judged', () => {
     const retirement = new SlowConnectionRetirement(() => clock)
     for (let id = 1; id <= 50; id++) {
@@ -276,6 +319,40 @@ function replay(stall: '09:38' | '09:51'): { connectionId: number; windowEnd: st
     const client = clients.get(sample.connectionId) ?? fakeClient()
     clients.set(sample.connectionId, client)
     noteConnectionStatement(client, sample.medianMs)
+    if (retirement.shouldRetire(client, sample.connectionId)) {
+      retired.push({ connectionId: sample.connectionId, windowEnd: sample.windowEnd })
+    }
+  }
+  return retired
+}
+
+// Spreads each window's statements evenly at its median, with ceil(1%) of them at its p99 and one at
+// its max, and releases after every statement. Stops judging a connection once it is retired.
+function replayTail(stall: '14:58' | '15:24'): { connectionId: number; windowEnd: string }[] {
+  const at = (time: string) => Date.parse(`2026-10-26T${time}Z`)
+  const samples = DIRECTOR_TAIL_CONNECTION_STALLS.filter(([name]) => name === stall).flatMap(
+    ([, windowEnd, connectionId, statements, medianMs, p99Ms, maxMs]) => {
+      const tailEvery = Math.floor(statements / Math.ceil(statements * 0.01))
+      return Array.from({ length: statements }, (_, index) => ({
+        at: at(windowEnd) - 30_000 + ((index + 0.5) * 30_000) / statements,
+        windowEnd,
+        connectionId,
+        ms: index === statements - 1 ? maxMs : (index + 1) % tailEvery === 0 ? p99Ms : medianMs
+      }))
+    }
+  )
+  samples.sort((a, b) => a.at - b.at)
+  const clients = new Map<number, pg.PoolClient>()
+  const retired: { connectionId: number; windowEnd: string }[] = []
+  const retirement = new SlowConnectionRetirement(() => clock)
+  for (const sample of samples) {
+    if (retired.some((entry) => entry.connectionId === sample.connectionId)) {
+      continue
+    }
+    clock = sample.at
+    const client = clients.get(sample.connectionId) ?? fakeClient()
+    clients.set(sample.connectionId, client)
+    noteConnectionStatement(client, sample.ms)
     if (retirement.shouldRetire(client, sample.connectionId)) {
       retired.push({ connectionId: sample.connectionId, windowEnd: sample.windowEnd })
     }
