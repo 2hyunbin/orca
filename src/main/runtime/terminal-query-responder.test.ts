@@ -294,7 +294,7 @@ describe('reply ownership matrix', () => {
     releaseB()
     releaseA()
 
-    runtime.onPtyData('pty-yield', 'prompt', Date.now())
+    runtime.onPtyData('pty-yield', 'prompt', 0)
     runtime.answerYieldedTerminalQueries('pty-yield', '\x1b[c')
     await settle(runtime, 'pty-yield')
     expect(replies.map((reply) => reply.data)).toEqual(['\x1b[?1;2c'])
