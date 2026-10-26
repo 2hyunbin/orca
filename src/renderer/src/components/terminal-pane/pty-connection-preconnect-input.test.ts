@@ -257,10 +257,29 @@ describe('connectPanePty pre-connect input', () => {
       restoredPtyIdByLeafId: { [leafIdForPane(1)]: 'remote:env-1@@terminal-1' }
     })
 
-    expect(createdTransportOptions[0]?.keepTypeAheadForNewTerminal).toBe(true)
-    expect(createdTransportOptions[1]?.keepTypeAheadForNewTerminal).toBeUndefined()
+    const keepFresh = createdTransportOptions[0]?.keepTypeAheadForNewTerminal
+    const keepRestored = createdTransportOptions[1]?.keepTypeAheadForNewTerminal
+    expect(typeof keepFresh === 'function' && keepFresh()).toBe(true)
+    expect(typeof keepRestored === 'function' && keepRestored()).toBe(false)
     fresh.dispose()
     restored.dispose()
+  })
+
+  // Why: a cleared binding can still replay saved history into the pane.
+  it('stops keeping a new pane’s typing once replayed history shows in it', async () => {
+    transportFactoryQueue.push(createMockTransport())
+    mockStoreState.terminalLayoutsByTabId = {}
+    const pane = createPane(1)
+    const connectArgs = [pane, createManager(1), buildPaneConnectionDeps(() => mockStoreState)]
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures implement the members connectPanePty touches.
+    const binding = connectPanePty(...(connectArgs as unknown as Parameters<typeof connectPanePty>))
+    const keep = createdTransportOptions[0]?.keepTypeAheadForNewTerminal
+    expect(typeof keep === 'function' && keep()).toBe(true)
+
+    pane.terminal.buffer.active.baseY = 12
+
+    expect(typeof keep === 'function' && keep()).toBe(false)
+    binding.dispose()
   })
 
   it('drops keys typed into a deliberately slept pane instead of replaying them on wake', async () => {

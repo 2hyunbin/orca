@@ -1,4 +1,5 @@
 import { useAppStore } from '@/store'
+import { isWebTerminalSurfaceTabId } from '../../../../../shared/terminal-surface-id'
 import { shouldRetainDisposedPaneSpawn } from './disposed-spawn-retention'
 import { findColdRestoreResumeSource } from './cold-restore-resume-startup'
 import { mainStartsPane } from './main-starts-pane'
@@ -35,13 +36,34 @@ function holdsInputUntilConnect(session: ConnectPanePtySession): boolean {
   return !paneHasStartupWork(session)
 }
 
-/** Whether this pane's leaf already names a terminal, so its screen may show an old one. */
-function paneHasBoundTerminal(session: ConnectPanePtySession): boolean {
+/**
+ * Whether the pane may show an old terminal: its leaf names one, it mirrors a host's tab, or saved
+ * scrollback was replayed into it (a cleared binding can still replay history).
+ */
+function paneMayShowOldTerminal(session: ConnectPanePtySession): boolean {
   const state = useAppStore.getState()
   return Boolean(
     session.restoredPtyIdForTransport ||
-    state.terminalLayoutsByTabId[session.deps.tabId]?.ptyIdsByLeafId?.[session.pane.leafId]
+    isWebTerminalSurfaceTabId(session.deps.tabId) ||
+    state.terminalLayoutsByTabId[session.deps.tabId]?.ptyIdsByLeafId?.[session.pane.leafId] ||
+    terminalShowsOutput(session.pane.terminal)
   )
+}
+
+function terminalShowsOutput(terminal: ConnectPanePtySession['pane']['terminal']): boolean {
+  const buffer = terminal.buffer?.active
+  if (!buffer) {
+    return false
+  }
+  if (buffer.baseY > 0) {
+    return true
+  }
+  for (let row = 0; row < buffer.length; row += 1) {
+    if (buffer.getLine(row)?.translateToString(true)) {
+      return true
+    }
+  }
+  return false
 }
 
 export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPtyTransportOptions {
@@ -57,8 +79,8 @@ export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPt
           releasePreconnectInput: () => holdsInputUntilConnect(session)
         }
       : {}),
-    // Why only with no restored terminal: typing on old pixels must never reach a fresh shell (#10065).
-    ...(holdsInput && !paneHasBoundTerminal(session) ? { keepTypeAheadForNewTerminal: true } : {}),
+    // Why re-read at bind: typing on old pixels must never reach a fresh shell (#10065).
+    ...(holdsInput ? { keepTypeAheadForNewTerminal: () => !paneMayShowOldTerminal(session) } : {}),
     // Why gated: a seed alone arms the transport hold, which would flush ahead of startup work.
     ...(holdsInput && session.deps.preconnectInput?.length
       ? { preconnectInput: session.deps.preconnectInput }

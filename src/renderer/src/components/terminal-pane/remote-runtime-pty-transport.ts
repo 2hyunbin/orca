@@ -3371,7 +3371,7 @@ export function createRemoteRuntimePtyTransport(
     }
     // Why: a brand-new pane shows no old screen, so its typing belongs to the terminal it creates.
     const newTerminal =
-      !options.sessionId && isFirstConnect && opts.keepTypeAheadForNewTerminal === true
+      !options.sessionId && isFirstConnect && opts.keepTypeAheadForNewTerminal?.() === true
     isFirstConnect = false
     const expected = newTerminal
       ? recoveryInputHold.expectNewTerminal()
@@ -3381,11 +3381,16 @@ export function createRemoteRuntimePtyTransport(
       result = await connectPane(options)
     } finally {
       const boundHandle = handle !== null && !destroyed ? handle : null
+      // Why a genuine create only: an adopted or cold-restored terminal is not the one typed into.
+      const createdFresh = Boolean(result && !result.isReattach && !result.coldRestore)
       recoveryInputHold.settleExpectation(
         expected,
         boundHandle !== null,
-        // Startup work that appeared since mount must not run behind typing.
-        boundHandle && opts.releasePreconnectInput?.() !== false
+        // Startup work, or replayed history, that appeared since mount must not run behind typing.
+        boundHandle &&
+          createdFresh &&
+          opts.releasePreconnectInput?.() !== false &&
+          opts.keepTypeAheadForNewTerminal?.() === true
           ? heldInputEndpoint(boundHandle)
           : null
       )
