@@ -153,7 +153,8 @@ it('delivers current-choice mail during a recorded Codex turn while changed-choi
     dispatchId: 'recorded-contract',
     operationId: mailId,
     expectedRuntimeFence: fence,
-    body: mail
+    body: mail,
+    holdWhileWorking: false
   })
   await vi.waitFor(() => expect(requests()).toHaveLength(2))
   expect(requests()[1]).toMatchObject({
