@@ -10,6 +10,7 @@ import { chooseMachine, knownHost } from './slack-machine-choice.js'
 import type { SlackPlace, SlackPosts } from './slack-posts.js'
 import { keepTeammateContext, withTeammateContext } from './slack-teammate-context.js'
 import { slackText } from './slack-text.js'
+import { reactSeen, replyToWriter } from './slack-writer-replies.js'
 import { refreshSlackStatus } from './slack-thread-posts.js'
 
 // queueDelivery inside the routing transaction.
@@ -86,8 +87,8 @@ export async function routeSlackMessage(
     // Paused input is neither delivered nor kept for later.
     if (deps.config.paused || install.paused) {
       if (addressed) {
-        await reply(
-          deps,
+        await replyToWriter(
+          deps.posts,
           transaction,
           message,
           `paused:${teamId}:${channelId}:${threadTs}:${userId}`,
@@ -138,7 +139,13 @@ async function startConversation(route: Route): Promise<void> {
   const { deps, transaction, message, messageKey } = route
   const identity = await findSlackIdentity(transaction, message.teamId, message.userId)
   if (!identity) {
-    await reply(deps, transaction, message, `unlinked:${messageKey}`, slackText.unlinked)
+    await replyToWriter(
+      deps.posts,
+      transaction,
+      message,
+      `unlinked:${messageKey}`,
+      slackText.unlinked
+    )
     return
   }
   const rows = await transaction.query(
@@ -152,11 +159,23 @@ async function startConversation(route: Route): Promise<void> {
     text: route.text
   })
   if (choice.kind === 'no_machine') {
-    await reply(deps, transaction, message, `update:${messageKey}`, slackText.updateOrca)
+    await replyToWriter(
+      deps.posts,
+      transaction,
+      message,
+      `update:${messageKey}`,
+      slackText.updateOrca
+    )
     return
   }
   if (choice.kind === 'ask') {
-    await reply(deps, transaction, message, `ask:${messageKey}`, slackText.askPlace(choice.options))
+    await replyToWriter(
+      deps.posts,
+      transaction,
+      message,
+      `ask:${messageKey}`,
+      slackText.askPlace(choice.options)
+    )
     return
   }
   // Partway through a thread, the start carries the thread so far; the start worker reads it.
@@ -199,7 +218,7 @@ async function holdForThreadStart(
       deps.now()
     ]
   )
-  await reactSeen(deps, transaction, place, messageKey, message.ts)
+  await reactSeen(deps.posts, transaction, place, messageKey, message.ts)
 }
 
 // The owner's next message is a follow-up, or a fresh start on the same machine and project when
@@ -220,7 +239,13 @@ async function continueConversation(route: Route, thread: ThreadRow): Promise<vo
     CONNECTOR_AGENTS.some((known) => known === name)
   )
   if (!agent) {
-    await reply(deps, transaction, message, `update:${messageKey}`, slackText.updateOrca)
+    await replyToWriter(
+      deps.posts,
+      transaction,
+      message,
+      `update:${messageKey}`,
+      slackText.updateOrca
+    )
     return
   }
   await deliver(route, {
@@ -248,52 +273,8 @@ async function deliver(
   if (queued !== 'queued') {
     return
   }
-  await reactSeen(deps, transaction, place, messageKey, message.ts)
+  await reactSeen(deps.posts, transaction, place, messageKey, message.ts)
   await refreshSlackStatus(transaction, deps.posts, target.hostId, target.externalId)
-}
-
-// 👀 on a message handed toward a machine.
-async function reactSeen(
-  deps: SlackRoutingDeps,
-  transaction: CloudDatabase,
-  place: SlackPlace,
-  messageKey: string,
-  ts: string
-): Promise<void> {
-  await deps.posts.queue(transaction, {
-    ...place,
-    postId: `eyes:${messageKey}`,
-    kind: 'reaction',
-    body: { name: 'eyes', timestamp: ts }
-  })
-}
-
-// Meant only for the person who wrote: ephemeral in a channel; in a DM it is theirs anyway. Slack
-// shows a threaded ephemeral only in a thread that already exists, so a top-level mention's goes to
-// the channel.
-async function reply(
-  deps: SlackRoutingDeps,
-  transaction: CloudDatabase,
-  message: SlackMessage,
-  postId: string,
-  text: string
-): Promise<void> {
-  const place = { teamId: message.teamId, channelId: message.channelId, threadTs: message.threadTs }
-  await deps.posts.queue(
-    transaction,
-    message.direct
-      ? { ...place, postId, kind: 'message', body: { text } }
-      : {
-          ...place,
-          postId,
-          kind: 'ephemeral',
-          body: {
-            text,
-            user: message.userId,
-            ...(message.ts === message.threadTs ? {} : { threadTs: message.threadTs })
-          }
-        }
-  )
 }
 
 async function threadsIn(transaction: CloudDatabase, place: SlackPlace): Promise<ThreadRow[]> {
