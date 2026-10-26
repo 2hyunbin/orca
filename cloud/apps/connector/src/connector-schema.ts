@@ -1,4 +1,5 @@
 // Applied at startup for both dialects, so every column type reads the same in SQLite and PostgreSQL.
+// Shipped statements are frozen; see connectorBootStatements for how to change the schema.
 const CONNECTOR_SCHEMA = `
 CREATE TABLE IF NOT EXISTS connector_hosts (
   host_id TEXT PRIMARY KEY,
@@ -87,6 +88,7 @@ CREATE TABLE IF NOT EXISTS connector_thread_context (
   message_id TEXT NOT NULL,
   workspace_id TEXT NOT NULL,
   author_id TEXT NOT NULL,
+  author_name TEXT,
   text TEXT NOT NULL,
   created_at BIGINT NOT NULL,
   PRIMARY KEY (source, external_id, message_id)
