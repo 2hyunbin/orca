@@ -1,7 +1,8 @@
 import type * as React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { connectPanePty } from './pty-connection'
-import { flushAsyncTicks, createDeferred } from './pty-connection-test-async'
+import { restoreScrollbackBuffers } from './layout-serialization'
+import { createDeferred } from './pty-connection-test-async'
 import { createManager, createPane, leafIdForPane } from './pty-connection-test-pane-fixtures'
 import { buildPaneConnectionDeps } from './pty-connection-test-deps'
 import {
@@ -135,6 +136,7 @@ async function connectNewRemotePane() {
     expect(runtimeCall).toHaveBeenCalledWith(expect.objectContaining({ method: 'terminal.create' }))
   )
   return {
+    pane,
     created,
     binding,
     type: (data: string) => {
@@ -205,9 +207,32 @@ describe('a brand-new remote pane through connectPanePty', () => {
     pane.type('rm -rf build\r')
     pane.created.resolve(terminal)
     await completeAttach()
-    await flushAsyncTicks(20)
+    pane.type('live')
+    await vi.waitFor(() => expect(inputFrameTexts().join('')).toMatch(/live$/))
 
-    expect(inputFrameTexts().join('')).toBe('')
+    expect(inputFrameTexts().join('')).toBe('live')
+    pane.binding.dispose()
+  })
+
+  it('drops the typing when saved history is replayed into the pane before it binds', async () => {
+    const pane = await connectNewRemotePane()
+    pane.type('typed on old history\r')
+    // The real restore path: saved scrollback for this leaf lands in the new pane.
+    const manager = { getPanes: () => [pane.pane], hasWebglRenderer: () => false }
+    restoreScrollbackBuffers(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: restoreScrollbackBuffers reads only getPanes and hasWebglRenderer.
+      manager as unknown as Parameters<typeof restoreScrollbackBuffers>[0],
+      { [leafIdForPane(1)]: 'old$ make\r\n' },
+      new Map([[leafIdForPane(1), pane.pane.id]]),
+      { current: new Map<number, number>() }
+    )
+    pane.created.resolve({ handle: 'terminal-new' })
+    await completeAttach()
+    // A key typed after the bind proves anything held ahead of it has settled.
+    pane.type('live')
+    await vi.waitFor(() => expect(inputFrameTexts().join('')).toMatch(/live$/))
+
+    expect(inputFrameTexts().join('')).toBe('live')
     pane.binding.dispose()
   })
 })
