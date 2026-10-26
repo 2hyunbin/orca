@@ -13,6 +13,7 @@ import {
 } from './orcad-instance-lock'
 import { readBoundedLockFile } from './orcad-instance-lock-reclaim'
 import { orcadLockHolderLocality } from './orcad-lock-holder-locality'
+import { orcadLockPeer, orcadLockSelf } from './orcad-lock-clone-machine'
 import { orcadDataRootIsOnLocalDisk } from './orcad-data-root-locality'
 import { readOrcadProcessIncarnation } from './orcad-process-start-time'
 import { hasErrorCode } from '../daemon/daemon-process-inspection'
@@ -41,6 +42,7 @@ export type OrcadStaleLockReclaimHooks = {
   now?: () => number
   hostname?: () => string
   bootId?: () => string | null
+  bootStartedAtMs?: () => number | null
   machineIdentity?: () => string | null
   dataRootIsOnLocalDisk?: (dataRoot: string) => boolean
   probeEndpoint?: (endpoint: string) => Promise<OrcadEndpointProbe>
@@ -139,13 +141,13 @@ async function checkStaleLock(
   hooks: OrcadStaleLockReclaimHooks
 ): Promise<{ refusal: string } | { evidence: OrcadStaleLockEvidence }> {
   const machineIdentity = (hooks.machineIdentity ?? profileStateAccessMachineIdentity)()
-  const host = (hooks.hostname ?? hostname)()
-  const self = {
-    ...(machineIdentity ? { machineIdentity } : {}),
-    ...(bootId ? { bootId } : {}),
-    host
-  }
-  const locality = orcadLockHolderLocality(holder, self, () =>
+  // Judge as a normal start does, so "a normal start reclaims it" stays true.
+  const self = orcadLockSelf(
+    { ...(machineIdentity ? { machineIdentity } : {}), ...(bootId ? { bootId } : {}) },
+    (hooks.now ?? Date.now)(),
+    hooks.bootStartedAtMs?.()
+  )
+  const locality = orcadLockHolderLocality(orcadLockPeer(holder, lockPath), self, () =>
     (hooks.dataRootIsOnLocalDisk ?? orcadDataRootIsOnLocalDisk)(dataRoot)
   )
   if (locality === 'local') {
@@ -157,6 +159,7 @@ async function checkStaleLock(
   if (locality === 'foreign') {
     return { refusal: 'The lock was written by another machine (a different machine id).' }
   }
+  const host = (hooks.hostname ?? hostname)()
   if (!holder.host) {
     return {
       refusal: 'The lock does not record which host wrote it (an older orcad wrote it).'

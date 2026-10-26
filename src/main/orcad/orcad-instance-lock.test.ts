@@ -10,7 +10,7 @@ import {
   utimesSync,
   writeFileSync
 } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type * as NodeFs from 'node:fs'
@@ -498,60 +498,76 @@ describe('acquireOrcadInstanceLock', () => {
     })
   })
 
-  it('never reclaims the lock of a host cloned with this machine-id (#32918)', () => {
-    const root = makeRoot()
-    const lockPath = join(root, ORCAD_LOCK_FILE_NAME)
-    const nfs = hooks({
-      platform: 'linux',
-      dataRootIsOnLocalDisk: () => false,
-      incarnation: () => ({ linuxStartTicks: '1', bootId: 'boot-self' })
-    })
-    const clone = { machineIdentity: 'machine-a', host: 'dev-clone', bootId: 'boot-clone' }
-    writeFileSync(lockPath, JSON.stringify(persistedRecord(clone)))
-    expect(() => acquireOrcadInstanceLock(root, nfs)).toThrow(
-      expect.objectContaining({
-        code: 'orcad_instance_lock_holder_unverifiable',
-        message: expect.stringContaining('same /etc/machine-id')
-      })
-    )
-    expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
+  describe.skipIf(process.platform === 'win32')(
+    'a machine cloned with this machine-id (#32918)',
+    () => {
+      const HOUR = 3_600_000
+      const sharedLinux = (overrides: OrcadInstanceLockHooks = {}) =>
+        hooks({
+          platform: 'linux',
+          dataRootIsOnLocalDisk: () => false,
+          incarnation: () => ({ linuxStartTicks: '1', bootId: 'boot-self' }),
+          now: () => new Date(),
+          bootStartedAtMs: () => Date.now() - HOUR,
+          ...overrides
+        })
+      const writeLock = (root: string, writtenAtMs: number, host: string): string => {
+        const lockPath = join(root, ORCAD_LOCK_FILE_NAME)
+        const acquiredAt = new Date(writtenAtMs).toISOString()
+        const clone = { machineIdentity: 'machine-a', bootId: 'boot-clone', host, acquiredAt }
+        writeFileSync(lockPath, JSON.stringify(persistedRecord(clone)))
+        utimesSync(lockPath, writtenAtMs / 1000, writtenAtMs / 1000)
+        return lockPath
+      }
 
-    // An older clone's lock names no host; its profile-state owner record still does.
-    writeFileSync(lockPath, JSON.stringify(persistedRecord({ machineIdentity: 'machine-a' })))
-    const owner = join(root, '.profile-state-access', 'participants', 'token', 'token.owner')
-    mkdirSync(join(owner, '..'), { recursive: true })
-    const ownerRecord = { pid: 4242, host: 'dev-clone', machineIdentity: 'machine-a' }
-    writeFileSync(owner, JSON.stringify({ ...ownerRecord, bootIdentity: 'boot-clone' }))
-    expect(() => acquireOrcadInstanceLock(root, nfs)).toThrow(
-      expect.objectContaining({
-        code: 'orcad_instance_lock_holder_unverifiable',
-        message: expect.stringContaining(`delete ${owner}`)
-      })
-    )
-    expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
-  })
+      it.each(['dev-clone', hostname()])(
+        'refuses its live lock, written since this boot, whatever its hostname (%s)',
+        (host) => {
+          const root = makeRoot()
+          const lockPath = writeLock(root, Date.now(), host)
+          expect(() => acquireOrcadInstanceLock(root, sharedLinux())).toThrow(
+            expect.objectContaining({
+              code: 'orcad_instance_lock_holder_unverifiable',
+              message: expect.stringContaining('systemd-machine-id-setup')
+            })
+          )
+          expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
+        }
+      )
 
-  it('reclaims a dead holder renamed within its boot, or on a local disk', () => {
-    const root = makeRoot()
-    const lockPath = join(root, ORCAD_LOCK_FILE_NAME)
-    const linux = {
-      platform: 'linux' as const,
-      incarnation: () => ({ linuxStartTicks: '1', bootId: 'boot-self' })
+      it('reclaims a lock this machine wrote before its boot, though since renamed', () => {
+        const root = makeRoot()
+        writeLock(root, Date.now() - 2 * HOUR, 'old-name')
+        acquireOrcadInstanceLock(root, sharedLinux()).release()
+      })
+
+      it('reclaims a crashed clone’s lock once its heartbeat is stale', () => {
+        const root = makeRoot()
+        writeLock(root, Date.now() - 10 * 60_000, 'dev-clone')
+        acquireOrcadInstanceLock(root, sharedLinux()).release()
+      })
+
+      it('reclaims on a local disk, which only one machine can use', () => {
+        const root = makeRoot()
+        writeLock(root, Date.now(), 'dev-clone')
+        acquireOrcadInstanceLock(root, sharedLinux({ dataRootIsOnLocalDisk: () => true })).release()
+      })
+
+      it('keeps the lock’s mtime fresh while held', () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+        try {
+          const root = makeRoot()
+          const lock = acquireOrcadInstanceLock(root, hooks())
+          const before = statSync(lock.path).mtimeMs
+          vi.advanceTimersByTime(2 * 60_000)
+          expect(statSync(lock.path).mtimeMs).toBeGreaterThan(before)
+          lock.release()
+        } finally {
+          vi.useRealTimers()
+        }
+      })
     }
-    const renamed = { machineIdentity: 'machine-a', host: 'old-name', bootId: 'boot-self' }
-    writeFileSync(lockPath, JSON.stringify(persistedRecord(renamed)))
-    acquireOrcadInstanceLock(
-      root,
-      hooks({ ...linux, dataRootIsOnLocalDisk: () => false })
-    ).release()
-
-    const rebooted = { ...renamed, bootId: 'boot-earlier' }
-    writeFileSync(lockPath, JSON.stringify(persistedRecord(rebooted)))
-    const owner = join(root, '.profile-state-access', 'participants', 'token', 'token.owner')
-    mkdirSync(join(owner, '..'), { recursive: true })
-    writeFileSync(owner, JSON.stringify({ pid: 4242, ...rebooted, bootIdentity: 'boot-earlier' }))
-    acquireOrcadInstanceLock(root, hooks({ ...linux, dataRootIsOnLocalDisk: () => true })).release()
-  })
+  )
 
   it('never lets a confirmed reclaim take a lock another machine id holds', () => {
     const root = makeRoot()

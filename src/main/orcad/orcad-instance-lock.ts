@@ -22,16 +22,17 @@ import {
 import { hasErrorCode, isProcessAlive } from '../daemon/daemon-process-inspection'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import { orcadDataRootIsOnLocalDisk } from './orcad-data-root-locality'
-import {
-  findSharedMachineIdProfileOwner,
-  sharedMachineIdOwnerError
-} from './orcad-shared-machine-id-owner'
 import type { OrcadReclaimHintRuntime } from '../../shared/orcad-stale-lock-reclaim'
 import {
   orcadLockHolderLocality,
-  orcadLockHolderUnverifiableError,
-  orcadPeerSharesMachineIdOnly
+  orcadLockHolderUnverifiableError
 } from './orcad-lock-holder-locality'
+import {
+  orcadLockPeer,
+  orcadLockSelf,
+  orcadPeerIsLiveCloneMachine,
+  startOrcadLockHeartbeat
+} from './orcad-lock-clone-machine'
 import {
   MAX_ORCAD_LOCK_BYTES,
   readBoundedLockFile,
@@ -96,6 +97,7 @@ export type OrcadInstanceLockHooks = OrcadDataRootPrivacyHooks & {
   /** Explicit stale-reclaim confirmation permits judging otherwise unverifiable PIDs locally. */
   reclaimConfirmed?: (record: OrcadLockRecord, role: 'holder' | 'recovery-owner') => boolean
   reclaimHintRuntime?: OrcadReclaimHintRuntime | null
+  bootStartedAtMs?: () => number | null
 }
 
 function defaultIdentity(): string {
@@ -161,19 +163,8 @@ export function acquireOrcadInstanceLock(
     host: hostname()
   }
   const serialized = JSON.stringify(record)
-  // Before publishing: reclaiming the lock of a clone's older server would leave it running unlocked.
   const platform = hooks.platform ?? process.platform
-  const dataRootIsLocal = (): boolean =>
-    (hooks.dataRootIsOnLocalDisk ?? orcadDataRootIsOnLocalDisk)(dataRoot)
-  const sharedMachineIdOwner = findSharedMachineIdProfileOwner(
-    dataRoot,
-    record,
-    dataRootIsLocal,
-    platform
-  )
-  if (sharedMachineIdOwner) {
-    throw sharedMachineIdOwnerError(dataRoot, sharedMachineIdOwner)
-  }
+  const self = orcadLockSelf(record, Date.parse(record.acquiredAt), hooks.bootStartedAtMs?.())
 
   // Stage then hard-link so canonical records are always complete.
   const publish = (): boolean => {
@@ -199,8 +190,11 @@ export function acquireOrcadInstanceLock(
     return makeLock(lockPath, record)
   }
 
+  const dataRootIsLocal = (): boolean =>
+    (hooks.dataRootIsOnLocalDisk ?? orcadDataRootIsOnLocalDisk)(dataRoot)
   const judgedHere = (holder: OrcadLockRecord, role: 'holder' | 'recovery-owner'): boolean => {
-    const locality = orcadLockHolderLocality(holder, record, dataRootIsLocal, platform)
+    const peer = orcadLockPeer(holder, role === 'holder' ? lockPath : null)
+    const locality = orcadLockHolderLocality(peer, self, dataRootIsLocal, platform)
     return (
       locality === 'local' || (locality === 'unknown' && !!hooks.reclaimConfirmed?.(holder, role))
     )
@@ -248,12 +242,15 @@ export function acquireOrcadInstanceLock(
         'root corrupts it. Give each its own ORCA_USER_DATA.'
     )
   }
+  const holder = orcadLockPeer(existing, lockPath)
   if (!judgedHere(existing, 'holder')) {
     // Foreign/unverifiable PIDs prove neither absence nor reuse here.
     throw orcadLockHolderUnverifiableError({
       holder: `${describeLockHolder(existing)} (pid ${existing.pid}, started ${existing.acquiredAt})`,
-      foreign: orcadLockHolderLocality(existing, record, dataRootIsLocal, platform) === 'foreign',
-      sharedMachineId: orcadPeerSharesMachineIdOnly(existing, record, dataRootIsLocal, platform),
+      foreign: orcadLockHolderLocality(holder, self, dataRootIsLocal, platform) === 'foreign',
+      ...(orcadPeerIsLiveCloneMachine(holder, self, dataRootIsLocal, platform)
+        ? { cloneMachine: { role: hooks.role ?? 'orcad' } }
+        : {}),
       dataRoot,
       lockPath,
       hintRuntime:
@@ -314,6 +311,7 @@ function describeLockHolder(record: OrcadLockRecord): string {
 
 function makeLock(lockPath: string, record: OrcadLockRecord): OrcadInstanceLock {
   let released = false
+  const stopHeartbeat = startOrcadLockHeartbeat(lockPath)
   return {
     path: lockPath,
     record,
@@ -322,6 +320,7 @@ function makeLock(lockPath: string, record: OrcadLockRecord): OrcadInstanceLock 
         return
       }
       released = true
+      stopHeartbeat()
       // Re-read ownership before unlinking so a successor’s live runtime cannot be unlocked.
       const current = parseOrcadInstanceLockRecord(readBoundedLockFile(lockPath) ?? '')
       if (!current || current.nonce !== record.nonce) {

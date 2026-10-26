@@ -1,8 +1,12 @@
 // Shared-home hosts need per-machine state and runtime GC: a PID can prove ownership only on the machine that issued it (#29059).
-import { createHash } from 'node:crypto'
 import { quotePosixShell } from '../../../shared/shell-argument-quoting'
 import { RELAY_REMOTE_DIR } from '../../ssh/remote-exec/remote-frame-protocol'
-import { ORCA_MACHINE_NAME_ENV } from '../../../shared/orcad-managed-launch-env'
+import {
+  machineKeyOf,
+  namedMachineHome,
+  ORCAD_MACHINE_NAME_PROBE,
+  parseOrcadMachineNameProbe
+} from './orcad-machine-name-home'
 import { ORCAD_ACTIVATION_FILENAME } from '../activation/orcad-activation-record'
 import { parseDarwinPlatformUuid } from '../../persistence/profile-state/profile-state-access-identity'
 import {
@@ -15,7 +19,6 @@ import {
 export const ORCAD_MACHINE_CLAIM_FILENAME = 'orcad-machine.json'
 export const ORCAD_MACHINE_HOMES_DIRNAME = 'hosts'
 export const ORCAD_MACHINE_CLAIM_SCHEMA_VERSION = 1
-const MACHINE_NAME_PREFIX = `${ORCA_MACHINE_NAME_ENV}=`
 
 const SECTION = '__ORCA_MACHINE_HOME_SECTION__'
 const CLAIM_ABSENT = 'ABSENT'
@@ -66,15 +69,18 @@ export type OrcadMachineHomeProbe = {
   dataRootOwners: readonly {
     host: string | null
     machineIdentity: string | null
+    bootIdentity?: string | null
   }[]
   machineHomeKeys: readonly string[]
   loginHomeInstalled: boolean
   /** Local disks cannot belong to another machine's live server. */
   homeOnLocalDisk: boolean
+  /** Raw ORCA_MACHINE_NAME; invalid names refuse rather than fall back silently. */
   machineName: string | null
+  bootId: string | null
 }
 
-type OrcadMachineHomeDecision =
+export type OrcadMachineHomeDecision =
   | { kind: 'login-home' }
   | { kind: 'claim'; machineKey: string }
   | { kind: 'machine-home'; machineKey: string }
@@ -97,7 +103,7 @@ export function orcadMachineHomeProbeCommand(host: RemoteHostPlatform): string {
         ' /usr/sbin/ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null; } | grep IOPlatformUUID;'
       : 'cat /etc/machine-id 2>/dev/null;',
     `echo; echo ${SECTION}; uname -n 2>/dev/null; echo;`,
-    `printf '${MACHINE_NAME_PREFIX}%s\\n' "\${${ORCA_MACHINE_NAME_ENV}-}"; echo ${SECTION};`,
+    `${ORCAD_MACHINE_NAME_PROBE} echo ${SECTION};`,
     // Full disks can leave an empty claim; publication can replace it.
     `if { [ ! -e ${claim} ] && [ ! -L ${claim} ]; } || { [ -f ${claim} ] && [ ! -s ${claim} ]; };`,
     `then echo ${CLAIM_ABSENT};`,
@@ -125,9 +131,6 @@ export function parseOrcadMachineHomeProbe(
   const filesystemType = host.os === 'darwin' ? '' : sections[7].trim()
   const dfSource = sections.at(-1)?.trim().split(/\s+/u)[0] ?? ''
   const hostnameLines = hostnameRaw.split('\n').map((line) => line.trim())
-  const machineName = hostnameLines
-    .find((line) => line.startsWith(MACHINE_NAME_PREFIX))
-    ?.slice(MACHINE_NAME_PREFIX.length)
   const loginHome = normalizeRemoteHome(homeRaw, host)
   if (!validateRemoteHome(loginHome, host)) {
     throw new Error(`Remote home is not a valid path: ${loginHome.slice(0, 100)}`)
@@ -137,7 +140,7 @@ export function parseOrcadMachineHomeProbe(
     identity: orcadMachineIdentity(
       host,
       machineRaw.trim(),
-      hostnameLines.find((line) => line && !line.startsWith(MACHINE_NAME_PREFIX)) ?? ''
+      hostnameLines.find((line) => line && !line.startsWith('ORCA_')) ?? ''
     ),
     claim: parseClaimSection(claimRaw.trim()),
     dataRootOwners: ownersRaw
@@ -153,8 +156,7 @@ export function parseOrcadMachineHomeProbe(
     homeOnLocalDisk: filesystemType
       ? LOCAL_FILESYSTEM_TYPES.has(filesystemType)
       : dfSource.startsWith('/dev/'),
-    machineName:
-      machineName && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(machineName) ? machineName : null
+    ...parseOrcadMachineNameProbe(hostnameLines)
   }
 }
 
@@ -176,10 +178,6 @@ export function orcadMachineIdentity(
   const key = machineKeyOf(`${host.os}:${machineIdentity}`)
   const hostname = /^[\x21-\x7e]{1,255}$/u.test(hostnameRaw) ? hostnameRaw : null
   return { key, machineIdentity, hostname }
-}
-
-function machineKeyOf(input: string): string {
-  return createHash('sha256').update(input).digest('hex').slice(0, 16)
 }
 
 function parseClaimSection(raw: string): OrcadMachineClaimRead {
@@ -227,6 +225,10 @@ function parseOwnerLine(line: string): OrcadMachineHomeProbe['dataRootOwners'][n
       machineIdentity:
         'machineIdentity' in owner && typeof owner.machineIdentity === 'string'
           ? owner.machineIdentity
+          : null,
+      bootIdentity:
+        'bootIdentity' in owner && typeof owner.bootIdentity === 'string'
+          ? owner.bootIdentity
           : null
     }
   } catch {
@@ -262,10 +264,7 @@ export function decideOrcadMachineHome(
   const { identity, claim } = probe
   // An explicit name never shares state by machine identity, which clones copy.
   if (probe.machineName) {
-    return {
-      kind: 'machine-home',
-      machineKey: machineKeyOf(`${host.os}:name:${probe.machineName}`)
-    }
+    return namedMachineHome(probe, host, probe.machineName)
   }
   if (!identity) {
     return { kind: 'login-home' }
