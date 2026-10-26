@@ -13,6 +13,7 @@ import { writeRuntimeTerminalArtifactFile } from '@/runtime/runtime-terminal-art
 import { getRelativePathInsideWorktree } from '@/runtime/runtime-file-routing'
 import { chatScratchFileAddress } from '@/runtime/runtime-chat-scratch-file-address'
 import { grantRestoredHostFile } from './restored-host-file-grant'
+import { captureRuntimeEnvironmentRequestRevision } from '@/runtime/runtime-environment-revision'
 
 /** Only overwrite grants disk-conflict consent; convert grants non-UTF-8 conversion consent. Other explicit saves remain guarded. */
 export type EditorSaveTrigger = 'autosave' | 'user' | 'convert' | 'restart' | 'overwrite'
@@ -112,15 +113,26 @@ export function editorSavePrecondition(
 }
 
 /** The tab's host grant for a file outside every workspace; a renewed grant is kept on the tab. */
+export type EditorSaveGrant = {
+  grantId: string
+  onRenewed: (grantId: string) => void
+  /** Captured before any await so a same-id re-pair cannot retarget the save. */
+  expectedEnvironmentPairingRevision?: number
+}
+
 export async function editorSaveGrant(
   file: OpenFile,
   context: RuntimeFileOperationArgs,
   getState: () => Pick<AppState, 'setTerminalArtifactGrant'>
-): Promise<{ grantId: string; onRenewed: (grantId: string) => void } | undefined> {
+): Promise<EditorSaveGrant | undefined> {
   const onRenewed = (renewed: string, readOnly?: boolean): void =>
     getState().setTerminalArtifactGrant(file.id, renewed, readOnly)
+  const expectedEnvironmentPairingRevision =
+    context.target.kind === 'environment'
+      ? captureRuntimeEnvironmentRequestRevision(context.target.environmentId)
+      : undefined
   if (file.terminalArtifactGrantId) {
-    return { grantId: file.terminalArtifactGrantId, onRenewed }
+    return { grantId: file.terminalArtifactGrantId, onRenewed, expectedEnvironmentPairingRevision }
   }
   // Why: grants are never persisted, so a restored tab that never loaded asks its host before saving.
   if (
@@ -131,12 +143,17 @@ export async function editorSaveGrant(
   ) {
     return undefined
   }
-  const restored = await grantRestoredHostFile(context.target, context.worktreeId, file.filePath)
+  const restored = await grantRestoredHostFile(
+    context.target,
+    context.worktreeId,
+    file.filePath,
+    expectedEnvironmentPairingRevision
+  )
   onRenewed(restored.grantId, restored.readOnly)
   if (restored.readOnly) {
     throw new Error('This host opens the file read-only.')
   }
-  return { grantId: restored.grantId, onRenewed }
+  return { grantId: restored.grantId, onRenewed, expectedEnvironmentPairingRevision }
 }
 
 export function writeEditorSave(
@@ -146,7 +163,7 @@ export function writeEditorSave(
   access: LocalFileAccess | undefined,
   write: EditorSaveWrite,
   beforeSend?: () => void,
-  grant?: { grantId: string; onRenewed: (grantId: string) => void }
+  grant?: EditorSaveGrant
 ): Promise<FileWriteResult> {
   const precondition =
     write.kind === 'guarded'
@@ -169,7 +186,8 @@ export function writeEditorSave(
       content,
       precondition,
       beforeSend,
-      onGrantRenewed: grant.onRenewed
+      onGrantRenewed: grant.onRenewed,
+      expectedEnvironmentPairingRevision: grant.expectedEnvironmentPairingRevision
     })
   }
   return writeRuntimeFile(context, filePath, content, access, precondition, beforeSend)

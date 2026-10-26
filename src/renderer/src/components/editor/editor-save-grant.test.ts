@@ -36,7 +36,7 @@ describe('the grant an editor save writes through', () => {
     const grant = await editorSaveGrant(tab(), hostContext, () => ({ setTerminalArtifactGrant }))
 
     expect(grant?.grantId).toBe('g-2')
-    expect(grantRestoredHostFile).toHaveBeenCalledWith(hostContext.target, 'wt-1', PATH)
+    expect(grantRestoredHostFile).toHaveBeenCalledWith(hostContext.target, 'wt-1', PATH, undefined)
     expect(setTerminalArtifactGrant).toHaveBeenCalledWith(PATH, 'g-2', false)
   })
 

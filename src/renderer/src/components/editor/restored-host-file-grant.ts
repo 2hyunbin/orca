@@ -9,12 +9,18 @@ export const REMOTE_EXTERNAL_FILE_UNAVAILABLE_MESSAGE =
 export async function grantRestoredHostFile(
   target: RuntimeClientTarget,
   worktreeId: string | null | undefined,
-  filePath: string
+  filePath: string,
+  expectedEnvironmentPairingRevision?: number
 ): Promise<{ grantId: string; readOnly: boolean }> {
   if (target.kind !== 'environment' || !worktreeId) {
     throw new Error(REMOTE_EXTERNAL_FILE_UNAVAILABLE_MESSAGE)
   }
-  const renewed = await renewTerminalArtifactGrant({ target, worktreeId, absolutePath: filePath })
+  const renewed = await renewTerminalArtifactGrant({
+    target,
+    worktreeId,
+    absolutePath: filePath,
+    expectedEnvironmentPairingRevision
+  })
   if (!renewed) {
     throw new Error(REMOTE_EXTERNAL_FILE_UNAVAILABLE_MESSAGE)
   }
