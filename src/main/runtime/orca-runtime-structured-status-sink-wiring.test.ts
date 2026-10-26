@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { AgentSessionRecord } from '../../shared/agent-session-record'
+import type { MailLineageScope } from '../native-chat/agent-session-journal/journal-mail-holds'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 
 const installed = vi.hoisted(() => {
@@ -8,6 +10,12 @@ const installed = vi.hoisted(() => {
   } = { deps: null, logger: null }
   return state
 })
+
+vi.mock('../node-runtime/pinned-zip-members', () => ({
+  extractPinnedZipMembers: () => {
+    throw new Error('Mail fixtures must not install a runtime')
+  }
+}))
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => null) },
@@ -45,6 +53,27 @@ describe('structured status sink wiring', () => {
     await runtime.ensureStructuredAgentSessionHost()
 
     expect(installed.deps?.['statusSink']).toBe(sink)
+    const records: AgentSessionRecord[] = []
+    const scope: MailLineageScope = { root: 'session', aliases: ['session'] }
+    const capture = vi.spyOn(runtime, 'captureSessionMail').mockImplementation(function (
+      this: OrcaRuntimeService,
+      sessionId,
+      actualRecords,
+      actualScope
+    ) {
+      expect(this).toBe(runtime)
+      expect(sessionId).toBe('session')
+      expect(actualRecords).toBe(records)
+      expect(actualScope).toBe(capture.mock.calls.length === 1 ? scope : null)
+      return {}
+    })
+    const installedCapture = installed.deps?.['captureSessionMail']
+    if (typeof installedCapture !== 'function') {
+      throw new Error('missing Stop capture installer')
+    }
+    installedCapture('session', records, scope)
+    installedCapture('session', records, null)
+    expect(capture).toHaveBeenCalledTimes(2)
   })
 
   it('hands the host the trace-file logger', async () => {

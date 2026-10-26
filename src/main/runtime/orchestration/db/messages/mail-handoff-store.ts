@@ -166,21 +166,33 @@ const mailHandoffStoreMethods = {
   getAutomaticMailCandidates(
     this: OrchestrationDb,
     mailbox: string,
-    options: { afterSequence: number; excludeTypes: readonly string[]; limit: number }
+    options: {
+      afterSequence: number
+      excludeTypes: readonly string[]
+      limit: number
+      members?: readonly string[]
+    }
   ): MessageRow[] {
     const exclusions = options.excludeTypes.length
       ? `AND type NOT IN (${options.excludeTypes.map(() => '?').join(',')})`
       : ''
+    const members = options.members ? `AND id IN (${options.members.map(() => '?').join(',')})` : ''
     // Filter parked/settled owners in SQL so an old prefix cannot hide fresh successor mail.
     const rows = this.db
-      .prepare(`SELECT * FROM messages
+      .prepare(`SELECT * FROM messages ${options.members ? 'INDEXED BY idx_messages_id' : ''}
     WHERE to_handle = ? AND read = 0 AND delivery_contract = 'current_delivery'
-      AND pointer_enter_pending = 0 AND sequence > ? ${exclusions}
+      AND pointer_enter_pending = 0 AND sequence > ? ${exclusions} ${members}
       AND (handoff IS NULL OR CASE WHEN json_valid(handoff) THEN
         json_extract(handoff, '$.kind') IN ('structured', 'terminal') AND
         (recovery_used = 0 OR json_extract(handoff, '$.phase') = 'reserved') ELSE 0 END)
     ORDER BY sequence LIMIT ?`)
-      .all(mailbox, options.afterSequence, ...options.excludeTypes, options.limit)
+      .all(
+        mailbox,
+        options.afterSequence,
+        ...options.excludeTypes,
+        ...(options.members ?? []),
+        options.limit
+      )
     return exposeMessageListTimestamps(readMessages(rows))
   },
 

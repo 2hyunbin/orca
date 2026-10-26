@@ -1,3 +1,4 @@
+import { readMailHandoffCohort } from './mailbox-handoff-cohort'
 import {
   mailAdmissionPermission,
   type MailHoldFacts
@@ -54,6 +55,7 @@ export function selectStructuredMailHandoff(input: {
   readEvidence: (reference: StructuredMailHandoff) => StructuredMailEvidence | null
   limit?: number
   skipOperations?: ReadonlySet<string>
+  accept?: (batch: { messages: MessageRow[]; reference: StructuredMailHandoff }) => boolean
   ownWrite?: <T>(write: () => T) => T
   candidates?: readonly MessageRow[]
   settlementOnly?: boolean
@@ -74,6 +76,7 @@ export function selectStructuredMailHandoff(input: {
     return null
   }
   const selected: SelectedHandoff[] = []
+  const rejected = new Set(input.skipOperations)
   const evidenceBySource = new Map<string, StructuredMailEvidence | null>()
   const read = (reference: StructuredMailHandoff) => {
     const key = JSON.stringify([reference.sessionId, reference.epoch, reference.clientMessageId])
@@ -83,7 +86,7 @@ export function selectStructuredMailHandoff(input: {
     }
     return evidenceBySource.get(key) ?? null
   }
-  let limit = Math.min(
+  const limit = Math.min(
     input.limit ?? ORCHESTRATION_DELIVERY_BATCH_LIMIT,
     ORCHESTRATION_DELIVERY_BATCH_LIMIT
   )
@@ -125,7 +128,7 @@ export function selectStructuredMailHandoff(input: {
         }
         selected.push({ message, reference: fresh, recovery: false })
       } else if (prior.kind === 'structured') {
-        if (input.skipOperations?.has(prior.operationId)) {
+        if (rejected.has(prior.operationId)) {
           continue
         }
         const original = structuredRecoverySource(prior)
@@ -192,7 +195,23 @@ export function selectStructuredMailHandoff(input: {
             })
           } else if (evidence.epoch === prior.epoch && !evidence.submission) {
             // An uncertain operation retains its exact original input, never a survivor subset.
-            limit = prior.manifest?.members.length ?? limit
+            if (prior.manifest || input.accept) {
+              if (selected.length) {
+                continue
+              }
+              const batch = readMailHandoffCohort(
+                input.db,
+                input.mailbox,
+                prior,
+                [...excluded],
+                input.accept
+              )
+              if (batch) {
+                return batch
+              }
+              rejected.add(prior.operationId)
+              continue
+            }
             if (!selected.length || selected[0].reference.operationId === prior.operationId) {
               selected.push({ message, reference: prior, recovery: false })
             }
@@ -280,5 +299,6 @@ export function selectStructuredMailHandoff(input: {
     return reserved ? [reserved] : []
   })
   const reference = readMailHandoff(messages[0]?.handoff)
-  return messages.length && reference?.kind === 'structured' ? { messages, reference } : null
+  const batch = messages.length && reference?.kind === 'structured' ? { messages, reference } : null
+  return batch && (!input.accept || input.accept(batch)) ? batch : null
 }

@@ -1,4 +1,6 @@
-import { structuredSessionDebtAddresses } from './structured-session-mail-target'
+import type { MailLineageScope } from '../../native-chat/agent-session-journal/journal-mail-holds'
+import { sessionMailRecipient } from './session-mail-recipient'
+import { isOrcaSessionId, ORCA_SESSION_ADDRESS_PREFIX } from '../../../shared/orca-session-address'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import type { CommandReceiptRead } from '../../native-chat/agent-session-journal/command-receipt-table'
 import type { OrchestrationDb } from './db'
@@ -13,6 +15,51 @@ import { readMailHandoff, type StructuredMailHandoff } from './mail-handoff'
 import { selectStructuredMailHandoff } from './mailbox-settlement'
 import { reconcileStructuredMailInput } from './structured-mailbox-pointer-receipt'
 import type { StructuredMailEvidence } from './mailbox-settlement'
+
+export function structuredSessionDebtAddresses(
+  sessionId: string,
+  db: OrchestrationDb,
+  scope?: MailLineageScope
+): string[] {
+  const aliases = scope?.aliases ?? [sessionId]
+  const addresses = new Set(
+    aliases.filter(isOrcaSessionId).map((id) => `${ORCA_SESSION_ADDRESS_PREFIX}${id}`)
+  )
+  try {
+    const recipient = sessionMailRecipient(
+      db,
+      sessionId,
+      [],
+      scope ?? { aliases: [sessionId], root: sessionId }
+    )
+    for (const address of recipient.direct) {
+      addresses.add(address)
+    }
+    for (const run of recipient.runs) {
+      addresses.add(`run:${run}`)
+    }
+  } catch {
+    /* Exact recorded-session debt is independent of lineage permission. */
+  }
+  for (const alias of aliases.filter(isOrcaSessionId)) {
+    for (const run of db.runsBoundToCoordinator({
+      orcaSessionId: alias,
+      terminalHandle: null,
+      paneKey: null
+    })) {
+      addresses.add(`run:${run.id}`)
+    }
+  }
+  const directAddresses = [...addresses]
+  for (const address of directAddresses) {
+    for (const row of db.db
+      .prepare('SELECT id FROM dispatch_contexts WHERE assignee_handle = ?')
+      .all(address)) {
+      addresses.add(`dispatch:${String(row.id)}`)
+    }
+  }
+  return [...addresses]
+}
 
 export type StructuredPointerTarget = { sessionId: string; dispatchId: string | null }
 export type StructuredPointerSendOutcome =

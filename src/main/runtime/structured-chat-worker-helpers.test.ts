@@ -13,7 +13,7 @@ import { formatOrcaSessionAddress } from '../../shared/orca-session-address'
 import { testOrcaSessionId } from '../../shared/orca-session-address-test-fixture'
 import { idOf, resultOf } from './rpc/orchestration-session-caller-test-fixture'
 import type { DispatchCreator } from './orchestration/db/dispatch-depth'
-import { structuredSessionDebtAddresses } from './orchestration/structured-session-mail-target'
+import { structuredSessionDebtAddresses } from './orchestration/structured-mailbox-pointer-admission'
 import { readMailHandoff } from './orchestration/mail-handoff'
 import {
   COORDINATOR,

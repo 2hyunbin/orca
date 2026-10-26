@@ -293,7 +293,8 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
       onRequestFailure: (failure) => this.onStructuredRequestFailureForErrorMail(failure),
       // Structured chat has no agent CLI hooks, so this projection is what the first-work
       // workspace rename listens to instead of `agentStatus:set`.
-      captureSessionMail: (sessionId, records) => this.captureSessionMail(sessionId, records),
+      captureSessionMail: (sessionId, records, scope) =>
+        this.captureSessionMail(sessionId, records, scope),
       onSessionMailActivity: (sessionId) => this.notifyStructuredSessionJournalActivity(sessionId),
       onSessionStatusChanged: (summary, options) => {
         this.onStructuredSessionStatusForMail(summary)
