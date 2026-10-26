@@ -1,5 +1,5 @@
 import { createHmac, randomUUID } from 'node:crypto'
-import type { CloudDatabase } from '@orca-cloud/cloud-database'
+import { openCloudNotifications, type CloudDatabase } from '@orca-cloud/cloud-database'
 import {
   CONNECTOR_PATHS,
   ConnectorHostChallengeResponseSchema,
@@ -39,11 +39,11 @@ export async function cleanupConnectorHarnesses(): Promise<void> {
   await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()))
 }
 
-async function openTestDatabase(): Promise<CloudDatabase> {
+async function openTestDatabase(): Promise<{ database: CloudDatabase; databaseUrl?: string }> {
   if (!testDatabaseUrl) {
     const database = await openInMemoryConnectorDatabase()
     cleanups.push(() => database.close())
-    return database
+    return { database }
   }
   const admin = new pg.Client({ connectionString: testDatabaseUrl })
   await admin.connect()
@@ -57,7 +57,7 @@ async function openTestDatabase(): Promise<CloudDatabase> {
     await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`)
     await admin.end()
   })
-  return database
+  return { database, databaseUrl: url.toString() }
 }
 
 // Stands in for the auth service: each code it hands out signs in as the queued account.
@@ -157,14 +157,22 @@ export function hiddenField(html: string, name: string): string {
   return match[1]
 }
 
-export async function createConnectorHarness(config: Partial<ConnectorConfig> = {}) {
+export async function createConnectorHarness(
+  config: Partial<ConnectorConfig> = {},
+  options: { pollHoldMs?: number } = {}
+) {
   let now = 1_800_000_000_000
   const issuer = fakeIssuer()
-  const database = await openTestDatabase()
-  const runtime = createConnectorServer({ ...testConnectorConfig(), ...config }, database, {
-    now: () => now,
-    fetch: issuer.fetch
-  })
+  const { database, databaseUrl } = await openTestDatabase()
+  const notifications = openCloudNotifications(databaseUrl ? { databaseUrl } : {})
+  const runtime = createConnectorServer(
+    { ...testConnectorConfig(), ...config },
+    database,
+    notifications,
+    { now: () => now, fetch: issuer.fetch, pollHoldMs: options.pollHoldMs ?? 0 }
+  )
+  await runtime.waker.start()
+  cleanups.push(() => runtime.waker.close())
   const request = (path: string, init?: RequestInit): Promise<Response> =>
     Promise.resolve(runtime.app.request(path, init))
   const json = (path: string, body: unknown, headers: Record<string, string> = {}) =>

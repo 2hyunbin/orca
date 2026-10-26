@@ -1,5 +1,5 @@
 import { createAdaptorServer } from '@hono/node-server'
-import type { CloudDatabase } from '@orca-cloud/cloud-database'
+import type { CloudDatabase, CloudNotifications } from '@orca-cloud/cloud-database'
 import {
   CONNECTOR_LIMITS,
   CONNECTOR_PATHS,
@@ -14,7 +14,12 @@ import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { ConnectorConfig } from './config.js'
 import { createConnectorHandshake } from './connector-host-handshake.js'
+import { ConnectorInbox } from './connector-inbox.js'
+import { ConnectorThreads } from './connector-threads.js'
+import { registerDevEnqueueRoute } from './dev-enqueue-route.js'
 import { ConnectorHostLinks } from './host-links.js'
+import { InboxWaker } from './inbox-waker.js'
+import { registerMachineRoutes, type MachineEnv } from './machine-routes.js'
 import { limitByClientIp, RateLimiter, readClientIp } from './rate-limiter.js'
 import { RequestDrain } from './request-drain.js'
 import { ConnectorSignInRequests, formatUserCode } from './sign-in-requests.js'
@@ -33,9 +38,12 @@ export type ConnectorServerOptions = {
   now?: () => number
   // The auth service is reached through this; tests pass a fake issuer.
   fetch?: typeof fetch
+  pollHoldMs?: number
 }
 
-type MachineVariables = { hostId: string }
+function isLoopbackOrigin(origin: string): boolean {
+  return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(origin).hostname)
+}
 
 function readBearer(header: string | undefined): string | null {
   const [scheme, token] = header?.split(' ') ?? []
@@ -49,12 +57,16 @@ async function readJson(context: Context): Promise<unknown> {
 export function createConnectorServer(
   config: ConnectorConfig,
   database: CloudDatabase,
+  notifications: CloudNotifications,
   options: ConnectorServerOptions = {}
 ) {
   const now = options.now ?? Date.now
   const { challenges, sessions } = createConnectorHandshake(database, config.publicUrl, now)
-  const hostLinks = new ConnectorHostLinks(database, now)
+  const inbox = new ConnectorInbox(database, notifications, now)
+  const hostLinks = new ConnectorHostLinks(database, inbox, now)
   const signIns = new ConnectorSignInRequests(database, now)
+  const threads = new ConnectorThreads(database, now)
+  const waker = new InboxWaker(notifications)
   const web = new ConnectorWebSignIn(
     config,
     new SignedCookies(config.cookieSecret, now),
@@ -74,7 +86,7 @@ export function createConnectorServer(
     onError: (context) => context.json({ error: 'request_too_large' }, 413)
   })
 
-  const app = new Hono<{ Variables: MachineVariables }>()
+  const app = new Hono<MachineEnv>()
   const requestDrain = new RequestDrain()
   app.use('*', requestDrain.middleware)
   // Default logging can carry row detail; log only the error's name.
@@ -103,10 +115,7 @@ export function createConnectorServer(
   }
 
   // The session lookup joins the host link, so a revoked machine is refused on every call.
-  const machineSession: MiddlewareHandler<{ Variables: MachineVariables }> = async (
-    context,
-    next
-  ) => {
+  const authorize = async (context: Context<MachineEnv>): Promise<Response | null> => {
     const bearer = readBearer(context.req.header('authorization'))
     const session = bearer ? await sessions.resolve(bearer) : null
     if (!session?.ok) {
@@ -116,14 +125,35 @@ export function createConnectorServer(
       const error = session?.reason === 'session_expired' ? 'session_expired' : 'invalid_token'
       return context.json({ error }, 401)
     }
-    if (!hostRequests.allow(session.hostFingerprint)) {
+    context.set('hostId', session.hostFingerprint)
+    context.set('sessionExpiresAt', session.expiresAt)
+    return null
+  }
+  const machineSession: MiddlewareHandler<MachineEnv> = async (context, next) => {
+    const refused = await authorize(context)
+    if (refused) return refused
+    if (!hostRequests.allow(context.get('hostId'))) {
       return context.json({ error: 'rate_limited' }, 429)
     }
-    context.set('hostId', session.hostFingerprint)
     await next()
     return
   }
   app.use(CONNECTOR_PATHS.signOut, limitAuthenticated, machineSession)
+  app.use('/v1/connector/*', limitAuthenticated, machineSession)
+  registerMachineRoutes(app, {
+    inbox,
+    threads,
+    hostLinks,
+    waker,
+    now,
+    holdMs: options.pollHoldMs ?? CONNECTOR_LIMITS.initialPollHoldMs,
+    authorize,
+    limitBody
+  })
+  // Local development only: a stand-in for Slack ingress until it exists.
+  if (isLoopbackOrigin(config.publicUrl)) {
+    registerDevEnqueueRoute(app, { inbox, threads, hostLinks, limitBody })
+  }
 
   app.post(CONNECTOR_PATHS.signInStart, limitUnauthenticated, limitBody, async (context) => {
     const body = ConnectorSignInStartRequestSchema.safeParse(await readJson(context))
@@ -206,6 +236,8 @@ export function createConnectorServer(
     server: createAdaptorServer(app),
     challenges,
     sessions,
-    signIns
+    signIns,
+    inbox,
+    waker
   }
 }
