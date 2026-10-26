@@ -188,6 +188,43 @@ export function registerReposAllHostsFolderWorkspacesTests(): void {
       }
     })
 
+    it('ignores a superseded load whose environment list no longer names the owner', async () => {
+      const { promise: staleList, resolve: resolveStaleList } =
+        Promise.withResolvers<{ id: string; name: string }[]>()
+      runtimeEnvironmentsList
+        .mockImplementationOnce(() => staleList)
+        .mockResolvedValueOnce([
+          { id: 'env-1', name: 'lobster' },
+          { id: 'env-2', name: 'shrimp' }
+        ])
+      runtimeEnvironmentCall.mockImplementation(
+        (args: RuntimeEnvironmentCallRequest & { selector: string }) => {
+          if (args.selector === 'env-1') {
+            throw new Error('runtime_unreachable')
+          }
+          return {
+            id: 'rpc-env-2',
+            ok: true,
+            result: { groups: [], folderWorkspaces: [] },
+            _meta: { runtimeId: 'runtime-env-2' }
+          }
+        }
+      )
+      const key = folderWorkspaceKey('missing-runtime-folder-env-1')
+      const store = createTestStore()
+      store.setState({ restoredRuntimeHostIdByWorkspaceSessionKey: { [key]: 'runtime:env-1' } })
+
+      const stale = store.getState().fetchFolderWorkspacesForAllHosts()
+      await vi.waitFor(() => expect(runtimeEnvironmentsList).toHaveBeenCalledTimes(1))
+      await store.getState().fetchFolderWorkspacesForAllHosts()
+      resolveStaleList([{ id: 'env-2', name: 'shrimp' }])
+      await stale
+
+      expect(store.getState().restoredRuntimeHostIdByWorkspaceSessionKey).toEqual({
+        [key]: 'runtime:env-1'
+      })
+    })
+
     it('clears missing restored owners only for hydrated folder catalog hosts', async () => {
       runtimeEnvironmentsList.mockResolvedValue([
         { id: 'env-1', name: 'lobster' },

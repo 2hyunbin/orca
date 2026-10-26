@@ -78,6 +78,8 @@ export function createFolderWorkspaceCatalogActions(
     fetchFolderWorkspacesForAllHosts: async (options) => {
       const hydratedFolderWorkspaceFences = new Map<ExecutionHostId, HostCatalogFence>()
       let listedRuntimeHostIds: ReadonlySet<ExecutionHostId> | null = null
+      const localTarget = { kind: 'local' as const }
+      const localFence = claimHostCatalogFence(get, 'folder-workspaces', localTarget)
       const clearRestoredOwnersForHydratedHosts = (): void => {
         const hydratedFolderWorkspaceHostIds = new Set(
           [...hydratedFolderWorkspaceFences]
@@ -90,7 +92,13 @@ export function createFolderWorkspaceCatalogActions(
             clearRestoredFolderWorkspaceSessionOwners(
               s.restoredRuntimeHostIdByWorkspaceSessionKey,
               s,
-              { hydratedHostIds: hydratedFolderWorkspaceHostIds, listedRuntimeHostIds }
+              {
+                hydratedHostIds: hydratedFolderWorkspaceHostIds,
+                // A newer load re-claims the local fence; this load's env list is stale then.
+                listedRuntimeHostIds: isHostCatalogFenceCurrent(get, localFence)
+                  ? listedRuntimeHostIds
+                  : null
+              }
             )
           )
           return restoredRuntimeHostIdByWorkspaceSessionKey ===
@@ -100,11 +108,9 @@ export function createFolderWorkspaceCatalogActions(
         })
       }
       try {
-        const target = { kind: 'local' as const }
-        const fence = claimHostCatalogFence(get, 'folder-workspaces', target)
-        const catalog = await fetchFolderWorkspaceCatalogForTarget(target, get().projectGroups)
-        if (applyCatalog(catalog, fence)) {
-          hydratedFolderWorkspaceFences.set(catalog.hostId, fence)
+        const catalog = await fetchFolderWorkspaceCatalogForTarget(localTarget, get().projectGroups)
+        if (applyCatalog(catalog, localFence)) {
+          hydratedFolderWorkspaceFences.set(catalog.hostId, localFence)
         }
       } catch (err) {
         console.error('Failed to fetch local folder workspaces for all-host load:', err)
