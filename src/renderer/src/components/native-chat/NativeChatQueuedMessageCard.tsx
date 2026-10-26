@@ -1,9 +1,13 @@
+import {
+  QueuedMessageImageCount,
+  queuedMessageImageCount
+} from './NativeChatQueuedMessageImageCount'
+import type { QueuedMessageDragPresentation } from './NativeChatQueuedMessageRows'
 import { useId, useState } from 'react'
 import {
   AlertCircle,
   ChevronDown,
   CornerDownRight,
-  Image as ImageIcon,
   ListEnd,
   MoreHorizontal,
   Pencil,
@@ -104,12 +108,6 @@ export function queuedMessageCardCaption(
   }
 }
 
-function queuedMessageImageCount(count: number): string {
-  return translate('components.native-chat.queuedMessages.imageCount', '{{count}} images', {
-    count
-  })
-}
-
 /** The card's line: its text, or for a card of images alone, the image's name or their count. */
 function queuedMessageCardLine(card: QueuedMessageCard): string {
   const images = card.images ?? []
@@ -159,6 +157,7 @@ export function NativeChatQueuedMessageCard({
   editor,
   editAttachTo,
   editDisabled = false,
+  drag,
   onTurnOffQueueing
 }: {
   card: QueuedMessageCard
@@ -182,6 +181,7 @@ export function NativeChatQueuedMessageCard({
   editAttachTo?: QueuedEditAttachTarget
   /** Another card in this pane is being edited. */
   editDisabled?: boolean
+  drag?: QueuedMessageDragPresentation
   /** Absent when the host does not queue sends, so there is nothing to turn off. */
   onTurnOffQueueing?: () => void
 }): React.JSX.Element {
@@ -213,11 +213,23 @@ export function NativeChatQueuedMessageCard({
   }
   return (
     <li
+      ref={drag?.rowRef}
+      style={drag?.rowStyle}
       data-queued-message-id={card.messageId}
       data-queued-message-state={card.state}
-      className="px-2.5 py-1.5"
+      className="group/queued relative px-2.5 py-1.5"
     >
-      <div className="flex items-center gap-2">
+      {drag?.insertion ? (
+        <span
+          aria-hidden
+          className={cn(
+            'pointer-events-none absolute inset-x-0 h-0.5 bg-primary',
+            drag.insertion === 'before' ? 'top-0' : 'bottom-0'
+          )}
+        />
+      ) : null}
+      <div className="flex items-center gap-1">
+        {drag?.grip}
         {returned || card.pausedReason === QUEUED_MESSAGE_PAUSED_SEND_FAILED ? (
           <AlertCircle className="size-3.5 shrink-0 text-destructive" aria-hidden />
         ) : (
@@ -353,32 +365,6 @@ export function NativeChatQueuedMessageCard({
         </p>
       ) : null}
     </li>
-  )
-}
-
-/** Images are named in the tooltip, not drawn: the row stays one line. */
-function QueuedMessageImageCount({
-  images
-}: {
-  images: NonNullable<QueuedMessageCard['images']>
-}): React.JSX.Element {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          role="img"
-          tabIndex={0}
-          aria-label={queuedMessageImageCount(images.length)}
-          className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ImageIcon className="size-3.5" aria-hidden />
-          <span aria-hidden>{images.length}</span>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={4}>
-        {images.map(nativeChatImageLabel).join(', ')}
-      </TooltipContent>
-    </Tooltip>
   )
 }
 

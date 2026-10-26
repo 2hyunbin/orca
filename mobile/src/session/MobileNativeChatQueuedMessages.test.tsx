@@ -6,6 +6,16 @@ import { MobileNativeChatQueuedMessages } from './MobileNativeChatQueuedMessages
 import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
 
 let fontScale = 1
+vi.mock('../components/DragReorderList', () => ({ DragReorderList: 'DragReorderList' }))
+vi.mock('react-native-reanimated', async () => {
+  const { useRef } = await import('react')
+  return {
+    default: { ScrollView: 'ScrollView' },
+    useAnimatedRef: () => useRef(null),
+    useSharedValue: (value: unknown) => useRef({ value }).current
+  }
+})
+
 vi.mock('react-native', () => ({
   useWindowDimensions: () => ({ fontScale }),
   ActivityIndicator: 'ActivityIndicator',

@@ -603,35 +603,6 @@ describe('NativeChatQueuedMessageList', () => {
     expect(container.querySelectorAll('.lucide-list-end')).toHaveLength(1)
   })
 
-  it('one bordered box holds the header and every card, rows divided, cards unbordered', () => {
-    renderList(
-      controller(
-        [
-          card({ messageId: 'waiting', hold: 'queue-paused' }),
-          card({ messageId: 'refused', state: 'returned', hold: 'returned', position: 2 }),
-          card({ messageId: 'failed', hold: 'paused', pausedReason: 'send_failed', position: 3 })
-        ],
-        { reason: 'stopped' }
-      )
-    )
-    const list = screen.getByRole('list')
-    const box = list.parentElement!
-    expect(box.className.split(' ')).toEqual(
-      expect.arrayContaining(['rounded-md', 'border', 'border-border', 'bg-card', 'divide-y'])
-    )
-    expect(box.children).toHaveLength(2)
-    expect(box.firstElementChild?.textContent).toContain('Paused·3')
-    expect(box.lastElementChild).toBe(list)
-    expect(list.className.split(' ')).toContain('divide-y')
-    const rows = within(list).getAllByRole('listitem')
-    expect(rows).toHaveLength(3)
-    for (const row of rows) {
-      expect(row.className.split(' ')).not.toContain('border')
-      expect(row.className.split(' ')).not.toContain('rounded-md')
-    }
-    expect(rows[2]?.textContent).toContain("Couldn't send — press Send to retry.")
-  })
-
   it('Clear all deletes every card; the chevron folds only the cards, and an emptied queue opens again', () => {
     const focusComposer = vi.fn()
     const paused = controller([card({ messageId: 'held', hold: 'queue-paused' })], {

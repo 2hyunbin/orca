@@ -144,6 +144,35 @@ describe('mobile structured queued messages', () => {
     unmountSession()
   })
 
+  it('reverts an optimistic relative move when the host reports a changed queue', async () => {
+    const messages = [queuedDraft({ messageId: 'a' }), queuedDraft({ messageId: 'b', position: 2 })]
+    await mountSession(
+      { ...CAPABLE, queuedMessageReorder: true },
+      snapshotEvent({ queuedMessages: messages })
+    )
+    let finish: (response: RpcResponse) => void = () => {}
+    sendRequest.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    let moving!: Promise<boolean>
+    await act(async () => {
+      moving = hook!.queued.move!({ movedId: 'a', afterId: 'b' })
+    })
+    expect(hook!.queued.cards.map((card) => card.messageId)).toEqual(['b', 'a'])
+    expect(requestOf('agentSession.queuedMessageMove').params).toMatchObject({
+      messageId: 'a',
+      afterMessageId: 'b'
+    })
+    await act(async () => {
+      finish(mutationOk({ messageId: 'a', status: 'stale' }))
+      expect(await moving).toBe(false)
+    })
+    expect(hook!.queued.cards.map((card) => card.messageId)).toEqual(['a', 'b'])
+  })
+
   describe('capability-gated delivery', () => {
     it('scans failure facts only when a returned card needs them', async () => {
       await mountSession(CAPABLE)
