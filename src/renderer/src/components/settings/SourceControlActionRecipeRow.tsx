@@ -154,9 +154,9 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
           ) : null}
         </div>
       </div>
-      <div className="mt-3 grid items-start gap-3 sm:grid-cols-[220px_1fr]">
+      <div className="mt-3 grid min-w-0 grid-cols-1 items-start gap-3 sm:grid-cols-[220px_minmax(0,1fr)]">
         {isLaunchAction ? (
-          <div className="grid min-w-0 gap-2">
+          <div className="grid min-w-0 grid-cols-1 gap-2">
             {onLaunchPreferencesChange ? (
               <SourceControlActionModelPicker
                 agent={pickerAgent}
@@ -183,12 +183,12 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
               spellCheck={false}
               placeholder={agentArgsPlaceholder}
               onChange={(event) => onAgentArgsChange(actionId, event.target.value)}
-              className="h-8 font-mono text-xs"
+              className="h-8 font-mono text-xs md:text-xs"
             />
           </SourceControlActionOptionField>
         )}
-        <div className="space-y-2">
-          <Label className="text-[11px] text-muted-foreground">
+        <div className="min-w-0 space-y-2">
+          <Label className="text-xs text-muted-foreground">
             {translate(
               'auto.components.settings.SourceControlAiActionRecipeDefaults.fb09da4345',
               'Command template'
