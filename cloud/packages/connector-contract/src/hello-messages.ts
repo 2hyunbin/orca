@@ -5,8 +5,7 @@ import { ConnectorHostDescription, PlaceIdSchema } from './connector-wire-scalar
 
 export const CONNECTOR_AGENTS = ['claude', 'codex'] as const
 export const CONNECTOR_PROMPT_KINDS = ['approval', 'question'] as const
-// turnCancel: the machine honours cancel.turnId and refuses a cancel for any other turn.
-export const CONNECTOR_FEATURES = ['answer', 'cancel', 'reply', 'turnCancel'] as const
+export const CONNECTOR_FEATURES = ['answer', 'cancel', 'reply'] as const
 
 // The cloud uses only what a machine lists; an entry it does not know is ignored, not refused.
 const CapabilityList = z.array(z.string().min(1))
@@ -33,6 +32,8 @@ export const ConnectorHelloRequestSchema = z.object({
   agents: CapabilityList,
   promptKinds: CapabilityList,
   features: CapabilityList,
+  // The cloud sends a conversation only to a machine that lists its source.
+  sources: CapabilityList,
   projects: z.array(ConnectorProjectSchema).max(CONNECTOR_LIMITS.maxHelloProjects)
 })
 

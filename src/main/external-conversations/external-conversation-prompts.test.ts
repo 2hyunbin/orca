@@ -270,7 +270,7 @@ describe('ExternalConversationSeam watch', () => {
   })
 
   it('names a turn a new prompt opened after an approval by the host’s stamp everywhere', async () => {
-    const { seam, host, hookRows, paneChange, fake } = await linked()
+    const { seam, host, hookRows, paneChange } = await linked()
     const seen: (ConversationSnapshot | ConversationEvent)[] = []
     seam.watch(host, (event) => seen.push(event))
     hookRows.set(PANE, hookRow({ state: 'working', turnStartedAt: 100 }))
@@ -284,13 +284,8 @@ describe('ExternalConversationSeam watch', () => {
     expect(seam.replyTarget(PANE)).toEqual({ key: KEY, turnId: 300 })
     seam.watch(host, (event) => seen.push(event))
     expect(seen.at(-1)).toMatchObject({ kind: 'snapshot', conversations: [{ turnId: 300 }] })
-    // A Stop pressed for the earlier turn leaves the new turn's own approval alone.
     hookRows.set(PANE, { ...APPROVAL, stateStartedAt: 400, turnStartedAt: 300 })
     paneChange(moved('working', 'needs-you', 'needs-input'))
-    await expect(seam.cancel(host, KEY, 'c-old', 100)).resolves.toMatchObject({
-      reason: 'turn_not_running'
-    })
-    expect(fake.keys).toEqual([])
     hookRows.set(
       PANE,
       hookRow({

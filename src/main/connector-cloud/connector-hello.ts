@@ -2,21 +2,15 @@
 import {
   CONNECTOR_CLIENT_LIMITS,
   CONNECTOR_CONTRACT_VERSION,
-  type CONNECTOR_FEATURES,
   type ConnectorProject
 } from '../../shared/connector-cloud-contract'
 import type { ConnectorMachine } from './connector-machine'
 import { jsonBytes } from './connector-snapshot'
 
-// What this build implements, listed by hand so a new contract feature is never advertised early.
-// Not turnCancel: an approval rejection can still outlive the turn a bound cancel names, so the cloud
-// offers no Stop; bound cancels stay supported for whoever sends one.
-export const CONNECTOR_DESKTOP_FEATURES: readonly (typeof CONNECTOR_FEATURES)[number][] = [
-  'answer',
-  'cancel',
-  'reply'
-]
+const FEATURES = ['answer', 'cancel', 'reply']
 const PROMPT_KINDS = ['approval', 'question']
+// Only Slack conversations reach this machine's seam so far.
+const SOURCES = ['slack']
 
 export type ConnectorHelloSaid = { agents: string[]; projects: ConnectorProject[] }
 
@@ -34,7 +28,8 @@ export function connectorHello(
     hostName: machine.hostName,
     agents: said.agents,
     promptKinds: PROMPT_KINDS,
-    features: CONNECTOR_DESKTOP_FEATURES
+    features: FEATURES,
+    sources: SOURCES
   }
   let bytes = jsonBytes({ ...envelope, projects: [] })
   let count = 0
