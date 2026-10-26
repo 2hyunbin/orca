@@ -269,6 +269,7 @@ test('@headful floating header keeps a drag and maximize target with expanded an
     await expect(
       panel.getByRole('button', { name: 'Maximize floating workspace' })
     ).toHaveAttribute('aria-pressed', 'false')
+    expect(await orcaPage.evaluate(() => window.getSelection()?.isCollapsed ?? true)).toBe(true)
     await expect
       .poll(() => panel.evaluate((element) => element.getBoundingClientRect().x))
       .toBeCloseTo(before!.x - 40, 0)
