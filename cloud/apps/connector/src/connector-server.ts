@@ -5,6 +5,7 @@ import type { JWTVerifyGetKey } from 'jose'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { ConnectorConfig } from './config.js'
+import { createConnectorCore } from './connector-core.js'
 import { ConnectorHosts } from './connector-hosts.js'
 import { ConnectorInbox } from './connector-inbox.js'
 import { ConnectorThreads } from './connector-threads.js'
@@ -16,8 +17,9 @@ import { registerMachineRoutes } from './machine-routes.js'
 import { queueDelivery } from './queue-delivery.js'
 import { limitByClientIp, RateLimiter } from './rate-limiter.js'
 import { RequestDrain } from './request-drain.js'
+import { createSlackEdge } from './slack-edge.js'
+import type { QueueInTransaction } from './queue-delivery.js'
 
-const MAX_BODY_BYTES = 64 * 1024
 const UNAUTHENTICATED_PER_MINUTE_PER_IP = 30
 const AUTHENTICATED_PER_MINUTE_PER_IP = 6_000
 const AUTHENTICATED_PER_MINUTE_PER_HOST = 600
@@ -36,7 +38,9 @@ function isLoopbackOrigin(origin: string): boolean {
 // Local development listens on its loopback origin only, so the unauthenticated dev route can't be
 // reached from another machine; anything else listens on every interface, as Cloud Run needs.
 export function listenHostname(publicUrl: string): string | undefined {
-  return isLoopbackOrigin(publicUrl) ? new URL(publicUrl).hostname.replace(/^\[|\]$/g, '') : undefined
+  return isLoopbackOrigin(publicUrl)
+    ? new URL(publicUrl).hostname.replace(/^\[|\]$/g, '')
+    : undefined
 }
 
 export function createConnectorServer(
@@ -52,6 +56,16 @@ export function createConnectorServer(
   const waker = new InboxWaker(notifications)
   const queue = (input: Parameters<typeof queueDelivery>[1]) =>
     queueDelivery({ database, inbox, threads, hosts }, input)
+  const queueInTransaction: QueueInTransaction = (transaction, input) =>
+    queueDelivery({ database: transaction, inbox, threads, hosts }, input)
+  const slack = config.slack ? createSlackEdge({ config: config.slack, database, now }) : undefined
+  const core = createConnectorCore({
+    database,
+    inbox,
+    queue: queueInTransaction,
+    now,
+    adapters: slack ? [slack.adapter] : []
+  })
   const limitUnauthenticated = limitByClientIp(
     new RateLimiter(UNAUTHENTICATED_PER_MINUTE_PER_IP, now),
     config.trustedProxyHops
@@ -61,7 +75,7 @@ export function createConnectorServer(
     config.trustedProxyHops
   )
   const limitBody = bodyLimit({
-    maxSize: MAX_BODY_BYTES,
+    maxSize: CONNECTOR_LIMITS.maxRequestBytes,
     onError: (context) => context.json({ error: 'request_too_large' }, 413)
   })
 
@@ -109,8 +123,10 @@ export function createConnectorServer(
     waker,
     now,
     holdMs: options.pollHoldMs ?? CONNECTOR_LIMITS.initialPollHoldMs,
-    limitBody
+    limitBody,
+    core
   })
+  slack?.registerRoutes(app, core)
   // Local development only: a stand-in for Slack ingress until it exists.
   if (isLoopbackOrigin(config.publicUrl)) {
     registerDevEnqueueRoute(app, { queue, limitBody })
@@ -122,6 +138,8 @@ export function createConnectorServer(
     server: createAdaptorServer(app),
     inbox,
     waker,
-    queueDelivery: queue
+    queueDelivery: queue,
+    core,
+    slack
   }
 }

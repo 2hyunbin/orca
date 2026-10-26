@@ -1,4 +1,11 @@
 {
+  "agentLaunch": {
+    "opencode": {
+      "invalidConfig": "OpenCode could not apply this model choice to the launch configuration. Check the OpenCode launch configuration and try again, or omit the model choice.",
+      "unsupportedLaunch": "OpenCode cannot apply this model choice to this launch. Start a fresh local terminal with supported launch arguments, or omit the model choice.",
+      "updateRequired": "OpenCode cannot safely start with a chosen model on this version. Update OpenCode to a supported release, or omit the model choice."
+    }
+  },
   "agentsSidebarIntro": {
     "migrated": {
       "action": "Open Agents"
@@ -2949,6 +2956,13 @@
       "claudeAgentRowView": {
         "restartRequired": "Restart Claude in this pane to enable subagent navigation. Recent Claude versions with Orca hooks are required."
       },
+      "dropFailureReason": {
+        "changed": "The file changed while it was uploading. Try again.",
+        "disconnected": "The host is disconnected.",
+        "hostUnreachable": "The connection to the host changed or dropped. Try again.",
+        "noSpace": "The host is out of disk space.",
+        "tooLarge": "Too large to upload to this host."
+      },
       "dropSkipReason": {
         "missing": "No longer at its original path.",
         "permissionDenied": "Permission denied.",
@@ -3181,6 +3195,7 @@
         "runCommandAgain": "Run /{{command}} again.",
         "runCommandWhenDone": "Run /{{command}} when it's done.",
         "runtimeNotInstalled": "{{agent}} isn't installed on the computer running this chat. Install it from the chat in a current version of Orca.",
+        "fullAccessAsRoot": "{{agent}} won't use Full access while it runs as root. Choose another permission for {{agent}} in Settings → Agents for the computer running this chat, then start a new chat.",
         "conversationOpenElsewhere": "Codex is still holding this conversation open. Try again in a moment, or close other Codex terminals.",
         "conversationOpenInTerminal": "{{agent}} is already running this conversation in another terminal. Quit {{agent}} there or close that terminal to continue here.",
         "sendAgainToTryOnceMore": "Send your message again to try once more.",
@@ -3390,6 +3405,18 @@
           "managePullRequests": "Read, comment on, and merge pull requests without leaving Orca",
           "reviewStatus": "See issue state, review status, and CI checks on every worktree",
           "startWorkspaceFromIssue": "Start a workspace from any GitHub issue or pull request, prefilled with its title and context"
+        }
+      }
+    },
+    "tab": {
+      "bar": {
+        "bulkClose": {
+          "confirm": "Close tabs",
+          "description": "The selected tabs will be closed. Pinned tabs will stay open.",
+          "editors": "Close all editor tabs?",
+          "left": "Close tabs to the left?",
+          "others": "Close other tabs?",
+          "right": "Close tabs to the right?"
         }
       }
     },
