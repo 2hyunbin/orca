@@ -449,4 +449,35 @@ describe('Slack thread status and posts', () => {
     ])
     expect((await harness.posts()).map((post) => post.state)).toEqual(['posted', 'failed'])
   })
+
+  it('edits a working or waiting status to offline when the next message expires undelivered', async () => {
+    const harness = await startedThread()
+    await harness.machine.ack([
+      { deliveryId: harness.start?.deliveryId, step: 'done', result: { outcome: 'accepted' } }
+    ])
+    await harness.events(turnStarted, {
+      kind: 'prompt',
+      conversation,
+      paneKey: 'pane-1',
+      prompt: { kind: 'approval', promptId: 'p1', tool: 'Bash', options: [] }
+    })
+    await harness.pass()
+    await harness.pass()
+    harness.fake.take()
+    await harness.message({ text: 'still there?', ts: '1800000000.000200', thread_ts: THREAD })
+    harness.advance(5 * 60_000 + 1)
+    await harness.runtime.inbox.expireDue(harness.edge.onExpired)
+    await harness.pass()
+    await harness.pass()
+    expect(harness.fake.take().filter((call) => call.method === 'chat.update')).toEqual([
+      {
+        method: 'chat.update',
+        args: {
+          channel: CHANNEL,
+          ts: expect.any(String),
+          text: `Couldn’t reach <@${OWNER}>’s Orca on build-box. Send again when it’s back.`
+        }
+      }
+    ])
+  })
 })

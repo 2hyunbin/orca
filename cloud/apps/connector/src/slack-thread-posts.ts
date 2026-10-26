@@ -115,30 +115,28 @@ export async function queueAgentReply(
 }
 
 function statusText(thread: SqlRow, latest: SqlRow | undefined, hostName: string): string {
+  const result =
+    latest?.state === 'done'
+      ? ConnectorDeliveryResultSchema.safeParse(JSON.parse(String(latest.result))).data
+      : undefined
+  // The newest message never arriving outranks whatever the last turn left showing.
+  if (latest?.state === 'expired' || result?.outcome === 'expired') {
+    return slackText.status.offline(String(thread.owner_user_id), hostName)
+  }
   if (thread.pending_prompt !== null) {
     return slackText.status.needsAnswer(hostName)
   }
   if (thread.turn_state === 'working') {
     return slackText.status.working(hostName)
   }
-  switch (latest?.state) {
-    case 'pending':
-    case 'leased':
-      return slackText.status.waiting(hostName)
-    case 'expired':
-      return slackText.status.offline(String(thread.owner_user_id), hostName)
+  if (latest?.state === 'pending' || latest?.state === 'leased') {
+    return slackText.status.waiting(hostName)
   }
-  const result =
-    latest?.state === 'done'
-      ? ConnectorDeliveryResultSchema.safeParse(JSON.parse(String(latest.result))).data
-      : undefined
   switch (result?.outcome) {
     case 'refused':
       return slackText.status.refused(hostName, result.reason)
     case 'unsupported':
       return slackText.status.refused(hostName, 'unsupported')
-    case 'expired':
-      return slackText.status.offline(String(thread.owner_user_id), hostName)
     case 'unknown':
       return slackText.status.unknown
   }
