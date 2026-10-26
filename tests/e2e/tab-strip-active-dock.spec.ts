@@ -94,7 +94,7 @@ test.describe('Tab strip active-tab dock', () => {
     await expect(short).toContainText('Terminal 1')
     await expect(long).toContainText('Investigate the conversation title and tab layout')
     expect(await width(short)).toBeLessThan(140)
-    expect(await width(long)).toBeGreaterThan((await width(short)) + 100)
+    expect(await width(long)).toBeGreaterThan(await width(short))
 
     await orcaPage.evaluate(
       ({ id }) => {
@@ -103,7 +103,7 @@ test.describe('Tab strip active-tab dock', () => {
       { id: tabIds.long }
     )
     await expect(long).toContainText('Chat')
-    await expect.poll(() => width(long)).toBeLessThan(100)
+    await expect.poll(() => width(long)).toBeLessThanOrEqual(100)
 
     await orcaPage.evaluate(
       ({ id }) => {
@@ -137,7 +137,7 @@ test.describe('Tab strip active-tab dock', () => {
         .getState()
         .createTab(worktreeId, undefined, undefined, { activate: false })
       const next = store.getState().createTab(worktreeId, undefined, undefined, { activate: false })
-      store.getState().setTabCustomTitle(agent.id, 'Agent')
+      store.getState().setTabCustomTitle(agent.id, 'Agent conversation')
       store.getState().setTabCustomTitle(next.id, 'Neighbor')
       store.setState((state) => ({
         tabsByWorktree: {

@@ -148,6 +148,83 @@ test('floating panel group bodies and panes own real pixels, single group and sp
   await expect(openPanel.locator(`[data-tab-id="${first.id}"]`)).toBeVisible()
 })
 
+test('tabs cap long titles to a fair share, keep short titles compact, and scroll at the minimum', async ({
+  orcaPage
+}) => {
+  const titles = [
+    'A very long conversation title '.repeat(12),
+    'Go',
+    'Another long conversation title '.repeat(3)
+  ]
+  const seedFloatingTerminalTabs = (count: number): Promise<string[]> =>
+    orcaPage.evaluate(
+      ({ count, titles, worktreeId }) => {
+        const store = window.__store!
+        store.setState((state) => ({
+          settings: { ...state.settings!, floatingTerminalEnabled: true }
+        }))
+        const tabs = [...(store.getState().tabsByWorktree[worktreeId] ?? [])]
+        while (tabs.length < count) {
+          const tab = store
+            .getState()
+            .createTab(worktreeId, undefined, undefined, { activate: false })
+          store
+            .getState()
+            .setTabCustomTitle(tab.id, titles[tabs.length] ?? `Tab ${tabs.length + 1}`)
+          tabs.push(tab)
+        }
+        store.getState().setActiveTabForWorktree(worktreeId, tabs[0].id)
+        store.getState().activateTab(tabs[0].id)
+        return tabs.map((tab) => tab.id)
+      },
+      { count, titles, worktreeId: FLOATING_WORKTREE_ID }
+    )
+  const [first] = await seedFloatingTerminalTabs(1)
+  await openFloatingPanel(orcaPage)
+  const panel = orcaPage.locator(OPEN_PANEL_SELECTOR).first()
+  await panel.evaluate((element) => {
+    element.style.maxWidth = '720px'
+  })
+  const firstSlot = panel.locator(`[data-tab-strip-slot="${first}"]`)
+  const width = (): Promise<number> =>
+    firstSlot.evaluate((element) => element.getBoundingClientRect().width)
+  await expect.poll(width).toBeCloseTo(384, 0)
+  const strip = panel.locator('.terminal-tab-strip').first()
+  const fairShare = (count: number): Promise<number> =>
+    strip.evaluate(
+      (element, count) => element.parentElement!.parentElement!.clientWidth / count,
+      count
+    )
+
+  const [, second] = await seedFloatingTerminalTabs(2)
+  await expect(panel.locator(`[data-tab-strip-slot="${second}"]`)).toContainText('Go')
+  await expect.poll(width).toBeLessThanOrEqual((await fairShare(2)) + 1)
+
+  const [, , third] = await seedFloatingTerminalTabs(3)
+  await expect(panel.locator(`[data-tab-strip-slot="${third}"]`)).toContainText(
+    'Another long conversation title'
+  )
+  await expect.poll(width).toBeLessThanOrEqual((await fairShare(3)) + 1)
+  await expect
+    .poll(() => strip.evaluate((element) => element.scrollWidth > element.clientWidth))
+    .toBe(false)
+  const widths = (): Promise<number[]> =>
+    panel
+      .locator('[data-tab-strip-slot]')
+      .evaluateAll((slots) => slots.map((element) => element.getBoundingClientRect().width))
+  const crowdedWidths = await widths()
+  expect(crowdedWidths.every((value) => value >= 100)).toBe(true)
+  expect(crowdedWidths[0]).toBeCloseTo(crowdedWidths[2], 0)
+  expect(crowdedWidths[1]).toBe(100)
+
+  await seedFloatingTerminalTabs(6)
+  await expect(panel.locator('[data-tab-strip-slot]')).toHaveCount(6)
+  await expect
+    .poll(() => strip.evaluate((element) => element.scrollWidth > element.clientWidth))
+    .toBe(true)
+  expect(await widths()).toEqual([100, 100, 100, 100, 100, 100])
+})
+
 test('floating header keeps a drag and maximize target with expanded and overflowing tabs', async ({
   orcaPage
 }) => {
