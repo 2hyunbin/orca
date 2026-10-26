@@ -219,11 +219,7 @@ export async function fetchAntigravityRateLimits(
   if (!reading) {
     const agyError = formatAgyErrorForDisplay(readAntigravityErrorEnvelope(result.stdout) ?? '')
     if (agyError) {
-      return unavailable(
-        `Antigravity usage is not available. agy reported: ${agyError}`,
-        'usage-unavailable',
-        now()
-      )
+      return failed(`Antigravity usage is not available. agy reported: ${agyError}`, 'parse', now())
     }
     // runProcess returns nonzero exit as data; classify signed-out first and add exit detail only when payload is missing.
     const exitDetail = result.code === 0 || result.code === null ? '' : ` (exit ${result.code})`

@@ -481,7 +481,7 @@ describe("agy's own error envelope", () => {
   const LOCATION_ERROR =
     'Eligibility check failed: Your current account is not eligible for Antigravity, because it is not currently available in your location.'
 
-  it('shows agy’s text as unavailable usage instead of a parse failure', async () => {
+  it('shows agy’s text instead of the generic parse failure', async () => {
     const result = await harness({
       result: processResult({
         code: 1,
@@ -490,8 +490,8 @@ describe("agy's own error envelope", () => {
       })
     }).fetch()
 
-    expect(result.status).toBe('unavailable')
-    expect(result.usageMetadata?.failureKind).toBe('usage-unavailable')
+    expect(result.status).toBe('error')
+    expect(result.usageMetadata?.failureKind).toBe('parse')
     expect(result.error).toBe(`Antigravity usage is not available. agy reported: ${LOCATION_ERROR}`)
   })
 
@@ -530,7 +530,7 @@ describe("agy's own error envelope", () => {
       .mockResolvedValueOnce(processResult({ stdout: USAGE_ENVELOPE }))
     const h = harness({ runCommand })
 
-    expect((await h.fetch()).status).toBe('unavailable')
+    expect((await h.fetch()).status).toBe('error')
     expect(await h.fetch()).toMatchObject({ status: 'ok', error: null })
   })
 })
