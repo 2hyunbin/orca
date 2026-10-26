@@ -42,3 +42,10 @@ export function installConnectorCloud(
     })
   )
 }
+
+/** Called once startup is done (proxy applied, runtime ready), so the first poll never races it. */
+export function connectConnectorCloud(
+  runtime: Pick<OrcaRuntimeService, 'getConnectorCloud'>
+): void {
+  runtime.getConnectorCloud()?.connect()
+}

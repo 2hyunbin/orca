@@ -88,7 +88,10 @@ vi.mock('../ipc/startup-notification-registration', () => ({
   triggerStartupNotificationRegistration: vi.fn()
 }))
 vi.mock('./main-process-push-startup', () => ({ startDesktopPushService: vi.fn() }))
-vi.mock('../connector-cloud/connector-cloud-install', () => ({ installConnectorCloud: vi.fn() }))
+vi.mock('../connector-cloud/connector-cloud-install', () => ({
+  installConnectorCloud: vi.fn(),
+  connectConnectorCloud: vi.fn()
+}))
 vi.mock('./startup-diagnostics', () => ({ logStartupMilestone: vi.fn() }))
 const setupHeadlessServeAutoUpdater = vi.hoisted(() => vi.fn())
 vi.mock('../window/main-window-updater', () => ({ setupHeadlessServeAutoUpdater }))

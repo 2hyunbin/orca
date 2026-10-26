@@ -261,7 +261,7 @@ describe('ConnectorPollClient', () => {
       paneKey: 'tab:1',
       turnId: 100,
       stopReason: 'success',
-      lastAssistantMessage: 'é'.repeat(5_000),
+      lastAssistantMessage: `x${'é'.repeat(5_000)}`,
       at: 300
     })
     first.emit({
@@ -274,7 +274,8 @@ describe('ConnectorPollClient', () => {
     await settle()
     const stored = JSON.parse(readFileSync(outboxFile, 'utf8'))
     expect(stored).toHaveLength(1)
-    expect(Buffer.byteLength(stored[0].lastAssistantMessage)).toBeLessThanOrEqual(8 * 1024)
+    // 8 KB would split a two-byte character after the leading 'x', so the cut steps back one byte.
+    expect(stored[0].lastAssistantMessage).toBe(`x${'é'.repeat(4_095)}`)
     first.client.stop()
 
     fake.forced.delete(CONNECTOR_PATHS.events)

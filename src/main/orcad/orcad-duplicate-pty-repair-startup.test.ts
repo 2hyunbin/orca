@@ -144,6 +144,9 @@ vi.mock('../runtime/orca-runtime', () => ({
     rehydrateClientHostedBrowserPages() {}
     restoreHostAccountLaunchEnv() {}
     setConnectorCloud() {}
+    getConnectorCloud() {
+      return null
+    }
     async refreshRestoredOrchestrationAuthority() {}
     async reconcileLegacyWorkerTerminals() {
       state.onStartupStep?.('reconcile')

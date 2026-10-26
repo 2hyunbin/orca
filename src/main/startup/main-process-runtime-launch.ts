@@ -40,7 +40,10 @@ import { startAppImageCopyPreExtraction } from '../cli/appimage-copy-pre-extract
 import { scheduleAllPendingHistoryTreeRemovals } from '../terminal-history-deletion'
 import { triggerStartupNotificationRegistration } from '../ipc/startup-notification-registration'
 import { startDesktopPushService } from './main-process-push-startup'
-import { installConnectorCloud } from '../connector-cloud/connector-cloud-install'
+import {
+  connectConnectorCloud,
+  installConnectorCloud
+} from '../connector-cloud/connector-cloud-install'
 import { mainProcessState as state } from './main-process-state'
 import { logStartupMilestone } from './startup-diagnostics'
 import { setupHeadlessServeAutoUpdater } from '../window/main-window-updater'
@@ -186,7 +189,7 @@ async function launchServeMode(
   scheduleAgentLaunchRecordWarmup(null)
   // Headless phones still register/unregister tokens, though this host dispatches no push notifications.
   startDesktopPushService(runtimeRpc)
-  runtime.getConnectorCloud()?.connect()
+  connectConnectorCloud(runtime)
   settleDesktopActivation()
   installServeQuitHandling()
   await registerCliForHeadlessServe()
@@ -241,7 +244,9 @@ async function launchDesktopMode(
   await state.initialProxyApplicationReady
   // Apply persisted proxy before the push gateway's or the connector's first request.
   startDesktopPushService(runtimeRpc)
-  state.runtime?.getConnectorCloud()?.connect()
+  if (state.runtime) {
+    connectConnectorCloud(state.runtime)
+  }
   // Request macOS notification permission after reveal or the maximized window can hide it.
   win.once('show', () => {
     // Initialization failure can leave no Store; do not throw inside Electron listeners.

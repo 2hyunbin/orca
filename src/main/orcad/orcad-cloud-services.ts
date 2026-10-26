@@ -1,5 +1,6 @@
 import { getAppEnvironment } from '../../shared/app-environment'
 import {
+  connectConnectorCloud,
   installConnectorCloud,
   type ConnectorCloudStore
 } from '../connector-cloud/connector-cloud-install'
@@ -16,7 +17,7 @@ export function startOrcadCloudServices(
   userDataPath: string
 ): void {
   installConnectorCloud(runtime, store, userDataPath, 'serve')
-  runtime.getConnectorCloud()?.connect()
+  connectConnectorCloud(runtime)
   const pushService = DesktopPushService.create({
     runtime,
     runtimeRpc: rpc,

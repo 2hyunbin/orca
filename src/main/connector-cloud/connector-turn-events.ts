@@ -45,9 +45,15 @@ function slackConversation(key: ConversationKey): ConnectorConversation | null {
 /** Cut on a character boundary so the cloud's byte limit always holds. */
 function capUtf8(text: string, maxBytes: number): string {
   const bytes = Buffer.from(text)
-  return bytes.byteLength <= maxBytes
-    ? text
-    : bytes.subarray(0, maxBytes).toString('utf8').replace(/�+$/, '')
+  if (bytes.byteLength <= maxBytes) {
+    return text
+  }
+  let end = maxBytes
+  // Step back over continuation bytes (10xxxxxx) to the start of the cut character.
+  while (end > 0 && ((bytes[end] ?? 0) & 0xc0) === 0x80) {
+    end--
+  }
+  return bytes.subarray(0, end).toString('utf8')
 }
 
 export function toConnectorEvent(
