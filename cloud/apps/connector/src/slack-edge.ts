@@ -14,7 +14,8 @@ import { slackNotice } from './slack-notices.js'
 import { SlackPostSender } from './slack-post-sender.js'
 import { isOpenSlackCard, settledSlackCard, slackCard } from './slack-prompt-cards.js'
 import { verifySlackSignature } from './slack-signature.js'
-import { escapeSlackText, slackStatusText, slackText } from './slack-text.js'
+import { statusText } from './connector-copy.js'
+import { escapeSlackText, slackText } from './slack-text.js'
 import { SlackThreadHistory } from './slack-thread-history.js'
 import { createSlackWebApi, type SlackWebApi } from './slack-web-api.js'
 
@@ -43,8 +44,8 @@ export function createSlackEdge(deps: {
     source: 'slack',
     agentText: (text) => ({ text: escapeSlackText(text) }),
     notice: slackNotice,
-    seen: (messageId) => ({ name: 'eyes', timestamp: messageId }),
-    status: (view) => ({ text: slackStatusText(view) }),
+    seen: (_place, messageId) => ({ name: 'eyes', timestamp: messageId }),
+    status: (view) => ({ text: statusText(slackText, view) }),
     card: slackCard,
     isOpenCard: isOpenSlackCard,
     settledCard: settledSlackCard,
@@ -84,7 +85,7 @@ export function createSlackEdge(deps: {
 
   function registerRoutes(
     app: Hono<MachineEnv>,
-    core: Pick<ConnectorCore, 'route' | 'answerCard'>
+    core: Pick<ConnectorCore, 'route' | 'answerCard' | 'notify'>
   ) {
     fromSlack(app, '/slack/events', async (context, rawBody) => {
       let payload: unknown
@@ -119,14 +120,17 @@ export function createSlackEdge(deps: {
       if (click !== 'ignored' && config.teamIds.has(click.teamId)) {
         const install = await installs.find(database, click.teamId)
         if (install) {
-          await core.answerCard('slack', {
+          const reply = await core.answerCard('slack', {
             workspaceId: click.teamId,
-            containerId: click.channelId,
+            channelId: click.channelId,
             messageRef: click.messageTs,
             userId: click.userId,
             optionId: click.optionId,
             paused: config.paused || install.paused
           })
+          if (reply) {
+            await core.notify('slack', reply)
+          }
         }
       }
       return context.body(null, 200)

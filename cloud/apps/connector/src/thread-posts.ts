@@ -180,7 +180,7 @@ export class ThreadPosts {
       ...place,
       postId: `eyes:${messageKey}`,
       kind: 'reaction',
-      body: this.adapter.seen(messageId)
+      body: this.adapter.seen(place, messageId)
     })
   }
 }
