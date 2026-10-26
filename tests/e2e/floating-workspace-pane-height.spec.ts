@@ -148,7 +148,7 @@ test('floating panel group bodies and panes own real pixels, single group and sp
   await expect(openPanel.locator(`[data-tab-id="${first.id}"]`)).toBeVisible()
 })
 
-test('tabs cap long titles to a fair share, keep short titles compact, and scroll at the minimum', async ({
+test('tabs use spare room for titles, share crowded space, and scroll at the minimum', async ({
   orcaPage
 }) => {
   const titles = [
@@ -188,23 +188,18 @@ test('tabs cap long titles to a fair share, keep short titles compact, and scrol
   const firstSlot = panel.locator(`[data-tab-strip-slot="${first}"]`)
   const width = (): Promise<number> =>
     firstSlot.evaluate((element) => element.getBoundingClientRect().width)
-  await expect.poll(width).toBeCloseTo(384, 0)
+  await expect.poll(width).toBeGreaterThan(384)
+  const singleWidth = await width()
   const strip = panel.locator('.terminal-tab-strip').first()
-  const fairShare = (count: number): Promise<number> =>
-    strip.evaluate(
-      (element, count) => element.parentElement!.parentElement!.clientWidth / count,
-      count
-    )
 
   const [, second] = await seedFloatingTerminalTabs(2)
   await expect(panel.locator(`[data-tab-strip-slot="${second}"]`)).toContainText('Go')
-  await expect.poll(width).toBeLessThanOrEqual((await fairShare(2)) + 1)
+  await expect.poll(width).toBeCloseTo(singleWidth - 100, 0)
 
   const [, , third] = await seedFloatingTerminalTabs(3)
   await expect(panel.locator(`[data-tab-strip-slot="${third}"]`)).toContainText(
     'Another long conversation title'
   )
-  await expect.poll(width).toBeLessThanOrEqual((await fairShare(3)) + 1)
   await expect
     .poll(() => strip.evaluate((element) => element.scrollWidth > element.clientWidth))
     .toBe(false)

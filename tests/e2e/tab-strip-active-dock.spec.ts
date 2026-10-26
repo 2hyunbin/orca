@@ -74,7 +74,7 @@ test.describe('Tab strip active-tab dock', () => {
     await ensureTerminalVisible(orcaPage)
   })
 
-  test('sizes tabs to their titles and keeps the new-tab button beside them', async ({
+  test('fits titles without resizing neighbors when tabs open and close in spare space', async ({
     orcaPage
   }) => {
     const worktreeId = await waitForActiveWorktree(orcaPage)
@@ -83,7 +83,10 @@ test.describe('Tab strip active-tab dock', () => {
       const short = state.createTab(worktreeId, undefined, undefined, { activate: false })
       const long = state.createTab(worktreeId, undefined, undefined, { activate: false })
       state.setTabCustomTitle(short.id, 'Terminal 1')
-      state.setTabCustomTitle(long.id, 'Investigate the conversation title and tab layout')
+      state.setTabCustomTitle(
+        long.id,
+        'Measure the effect of the new tab layout on conversation navigation'
+      )
       return { short: short.id, long: long.id }
     }, worktreeId)
     const short = orcaPage.locator(slotSelector(tabIds.short))
@@ -92,9 +95,45 @@ test.describe('Tab strip active-tab dock', () => {
       tab.evaluate((element) => element.getBoundingClientRect().width)
 
     await expect(short).toContainText('Terminal 1')
-    await expect(long).toContainText('Investigate the conversation title and tab layout')
+    await expect(long).toContainText(
+      'Measure the effect of the new tab layout on conversation navigation'
+    )
     expect(await width(short)).toBeLessThan(140)
-    expect(await width(long)).toBeGreaterThan(await width(short))
+    expect(await width(long)).toBeGreaterThan(384)
+    const label = long.locator('span.truncate')
+    expect(await label.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    const geometry = (): Promise<number[][]> =>
+      orcaPage.evaluate(
+        (ids) =>
+          ids.map((id) => {
+            const slot = document.querySelector(`[data-tab-strip-slot="${id}"]`)!
+            const tab = slot.getBoundingClientRect()
+            const close = slot.querySelector('[data-tab-close-button]')!.getBoundingClientRect()
+            return [tab.x, close.x]
+          }),
+        [tabIds.short, tabIds.long]
+      )
+    const before = await geometry()
+    const added = await orcaPage.evaluate((worktreeId) => {
+      const state = window.__store!.getState()
+      const tab = state.createTab(worktreeId, undefined, undefined, { activate: false })
+      state.setTabCustomTitle(tab.id, 'Go')
+      return tab.id
+    }, worktreeId)
+    await expect(orcaPage.locator(slotSelector(added))).toContainText('Go')
+    for (let frame = 0; frame < 4; frame++) {
+      await nextFrames(orcaPage, 1)
+      expect(await geometry()).toEqual(before)
+    }
+    await long.locator('[data-testid="sortable-tab"]').click()
+    await expect(long.locator('[data-active="true"]')).toHaveCount(1)
+    expect(await geometry()).toEqual(before)
+    await orcaPage.locator(`${slotSelector(added)} [data-tab-close-button]`).click()
+    await expect(orcaPage.locator(slotSelector(added))).toHaveCount(0)
+    for (let frame = 0; frame < 4; frame++) {
+      await nextFrames(orcaPage, 1)
+      expect(await geometry()).toEqual(before)
+    }
 
     await orcaPage.evaluate(
       ({ id }) => {
@@ -114,8 +153,9 @@ test.describe('Tab strip active-tab dock', () => {
       { id: tabIds.long }
     )
     await expect(long).toContainText('A very long conversation title')
-    await expect.poll(() => width(long)).toBeLessThanOrEqual(384)
+    await expect.poll(() => width(long)).toBeGreaterThan(384)
     const strip = orcaPage.locator(STRIP).first()
+    expect(await strip.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
     const stripBox = await strip.boundingBox()
     const buttonBox = await orcaPage
       .getByRole('button', { name: 'New tab', exact: true })

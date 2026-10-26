@@ -82,6 +82,20 @@ export const long = defineFixture({
   render: () => <TabWidthFixture count={1} titles={['A very long conversation title '.repeat(8)]} />
 })
 
+export const contentFit = defineFixture({
+  width: 1280,
+  render: () => (
+    <TabWidthFixture
+      count={3}
+      titles={[
+        'Measure the effect of the new tab layout on conversation navigation',
+        'PR implementation approach',
+        'Review the implementation for layout and interaction regressions'
+      ]}
+    />
+  )
+})
+
 export const narrow = defineFixture({
   width: 420,
   render: () => <TabWidthFixture count={4} />
