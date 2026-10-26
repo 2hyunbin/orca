@@ -24,7 +24,7 @@ import {
   pairing,
   connection,
   makeConnector
-} from './wsl-host-service-connector.test-fixture'
+} from './wsl-host-service-test-connector'
 
 describe('WslHostService', () => {
   let userDataPath: string
