@@ -227,4 +227,45 @@ describe('saving a granted host file outside every workspace', () => {
 
     await expect(save('# new', '# old')).rejects.toThrow('EACCES')
   })
+
+  // Why: desktop delivers a lost reply as a runtime_timeout envelope, not a thrown transport error.
+  it('reads back after a desktop timeout envelope and still rejects when the old text remains', async () => {
+    const timedOut = {
+      id: 'rpc',
+      ok: false,
+      error: { code: 'runtime_timeout', message: 'Timed out waiting for the remote Orca runtime' },
+      _meta: meta
+    }
+    runtimeEnvironmentCall.mockImplementation(async ({ method }) =>
+      method === 'files.writeTerminalArtifact' ? timedOut : read('# old')
+    )
+    await expect(save('# new', '# old')).rejects.toThrow('Timed out')
+
+    let calls = 0
+    runtimeEnvironmentCall.mockImplementation(async ({ method }) => {
+      if (method === 'files.writeTerminalArtifact') {
+        calls += 1
+        return timedOut
+      }
+      return read(calls > 0 ? '# new' : '# old')
+    })
+    await expect(save('# new', '# old')).resolves.toEqual({ ok: true })
+  })
+
+  it('never reports a discarded save as written, even when the host text matches', async () => {
+    runtimeEnvironmentCall.mockImplementation(async () => read('# new'))
+
+    await expect(
+      writeRuntimeTerminalArtifactFile({
+        target: { kind: 'environment', environmentId: 'env-1' },
+        worktreeId: 'wt-1',
+        absolutePath: PATH,
+        grantId: 'g-1',
+        content: '# new',
+        beforeSend: () => {
+          throw new Error('discarded')
+        }
+      })
+    ).rejects.toThrow('discarded')
+  })
 })

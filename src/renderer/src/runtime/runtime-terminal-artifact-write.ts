@@ -12,6 +12,10 @@ import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import { assertRemoteWriteFitsOneRequest } from './runtime-file-mutation-client'
 import {
+  isRecoverableRemoteRuntimeConnectionError,
+  toRemoteRuntimeClientErrorLike
+} from '../../../shared/remote-runtime/remote-runtime-client-error-classification'
+import {
   isRenewableGrantError,
   pinTerminalArtifactGrantTarget,
   renewTerminalArtifactGrant,
@@ -59,6 +63,13 @@ async function readGrantedText(
     }
     throw error
   }
+}
+
+function isLostReply(error: unknown): boolean {
+  return (
+    !(error instanceof RuntimeRpcCallError) ||
+    isRecoverableRemoteRuntimeConnectionError(toRemoteRuntimeClientErrorLike(error))
+  )
 }
 
 async function hostHoldsContent(
@@ -117,17 +128,21 @@ export async function writeRuntimeTerminalArtifactFile(
     return comparison === null ? null : { ok: false, diskConflict: comparison }
   }
   const send = async (grantId: string): Promise<FileWriteResult> => {
+    let sent = false
     try {
-      await sendOnce(grantId)
+      await sendOnce(grantId, () => {
+        args.beforeSend?.()
+        sent = true
+      })
     } catch (error) {
-      // Why: only an unanswered write may have committed; a host refusal means nothing was written.
-      if (error instanceof RuntimeRpcCallError || !(await hostHoldsContent(args, grantId))) {
+      // Why: only a sent write that lost its connection may have committed; a host refusal wrote nothing.
+      if (!sent || !isLostReply(error) || !(await hostHoldsContent(args, grantId))) {
         throw error
       }
     }
     return FILE_WRITE_OK
   }
-  const sendOnce = async (grantId: string): Promise<void> => {
+  const sendOnce = async (grantId: string, beforeSend: () => void): Promise<void> => {
     await callRuntimeRpc(
       args.target,
       'files.writeTerminalArtifact',
@@ -140,7 +155,7 @@ export async function writeRuntimeTerminalArtifactFile(
       // Why: runs after connection setup, so a discard during it still stops the write.
       {
         timeoutMs: 15_000,
-        beforeSend: args.beforeSend,
+        beforeSend,
         expectedEnvironmentPairingRevision: args.expectedEnvironmentPairingRevision
       }
     )
