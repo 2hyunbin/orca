@@ -98,7 +98,6 @@ type MachineOptions = {
   /** Simulate stderr merged into stdout by an SSH gateway. */
   catStderrNoise?: string
   machineName?: string
-  bootId?: string
 }
 
 /** Model macOS machines sharing one NFS home. */
@@ -148,12 +147,6 @@ function machine(name: string, hostname = name, options: MachineOptions = {}) {
       ].join('\n')
     )
   }
-  if (options.bootId !== undefined) {
-    tool(
-      'cat',
-      `[ "$1" = /proc/sys/kernel/random/boot_id ] && { echo ${options.bootId}; exit 0; }; exec /bin/cat "$@"`
-    )
-  }
   if (options.catStderrNoise !== undefined) {
     // Inject noise around the claim, which ends without a newline.
     tool(
@@ -183,11 +176,7 @@ function claimPath(): string {
   return join(home, '.orca-remote', ORCAD_MACHINE_CLAIM_FILENAME)
 }
 
-function legacyOwner(
-  name: string,
-  machineIdentity: string | null = uuidOf(name),
-  bootIdentity?: string
-): void {
+function legacyOwner(name: string, machineIdentity: string | null = uuidOf(name)): void {
   const dir = join(home, '.orca', '.profile-state-access', 'participants', 'token')
   mkdirSync(dir, { recursive: true })
   writeFileSync(
@@ -197,8 +186,7 @@ function legacyOwner(
       pid: 4242,
       host: name,
       platform: 'darwin',
-      ...(machineIdentity === null ? {} : { machineIdentity }),
-      ...(bootIdentity ? { bootIdentity } : {})
+      ...(machineIdentity === null ? {} : { machineIdentity })
     })
   )
 }
@@ -377,24 +365,13 @@ describe.runIf(POSIX)('resolveOrcadMachineHome on a home several machines share'
     expect((await resolveOrcadMachineHome(other, true)).userDataDir).not.toBe(namedHome.userDataDir)
   })
 
-  it('keeps a named machine on the home its running server already uses', async () => {
-    const a = machine('node-a', 'dev-a', { machineName: 'dev-a', bootId: 'boot-a' })
-    mkdirSync(join(home, '.orca-remote'), { recursive: true })
-    await resolveOrcadMachineHome(machine('node-a', 'dev-a'), true)
-    legacyOwner('dev-a', uuidOf('node-a'), 'boot-a')
-    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
-
-    const distinct = machine('node-b', 'dev-b')
-    const distinctHome = await resolveOrcadMachineHome(distinct, true)
-    expect(
-      await resolveOrcadMachineHome(machine('node-b', 'dev-b', { machineName: 'dev-b' }), true)
-    ).toEqual(distinctHome)
-  })
-
   it('refuses a machine name it cannot use instead of ignoring it', async () => {
     await expect(
       resolveOrcadMachineHome(machine('node-a', 'dev-a', { machineName: 'dev a!' }), true)
     ).rejects.toThrow(/ORCA_MACHINE_NAME is set to "dev a!"/)
+    await expect(
+      resolveOrcadMachineHome(machine('node-a', 'dev-a', { machineName: 'dev\nb' }), true)
+    ).rejects.toThrow(/ORCA_MACHINE_NAME is set to "dev b"/)
   })
 
   it('keeps a renamed machine on its own install', async () => {
@@ -523,7 +500,6 @@ function probe(host: Host, overrides: Partial<Probe> = {}): Probe {
     loginHomeInstalled: false,
     homeOnLocalDisk: false,
     machineName: null,
-    bootId: null,
     ...overrides
   }
 }

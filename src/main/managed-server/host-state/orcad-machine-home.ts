@@ -69,7 +69,6 @@ export type OrcadMachineHomeProbe = {
   dataRootOwners: readonly {
     host: string | null
     machineIdentity: string | null
-    bootIdentity?: string | null
   }[]
   machineHomeKeys: readonly string[]
   loginHomeInstalled: boolean
@@ -77,7 +76,6 @@ export type OrcadMachineHomeProbe = {
   homeOnLocalDisk: boolean
   /** Raw ORCA_MACHINE_NAME; invalid names refuse rather than fall back silently. */
   machineName: string | null
-  bootId: string | null
 }
 
 export type OrcadMachineHomeDecision =
@@ -225,10 +223,6 @@ function parseOwnerLine(line: string): OrcadMachineHomeProbe['dataRootOwners'][n
       machineIdentity:
         'machineIdentity' in owner && typeof owner.machineIdentity === 'string'
           ? owner.machineIdentity
-          : null,
-      bootIdentity:
-        'bootIdentity' in owner && typeof owner.bootIdentity === 'string'
-          ? owner.bootIdentity
           : null
     }
   } catch {
@@ -264,7 +258,7 @@ export function decideOrcadMachineHome(
   const { identity, claim } = probe
   // An explicit name never shares state by machine identity, which clones copy.
   if (probe.machineName) {
-    return namedMachineHome(probe, host, probe.machineName)
+    return namedMachineHome(host, probe.machineName)
   }
   if (!identity) {
     return { kind: 'login-home' }
