@@ -2,7 +2,7 @@ import { openCloudNotifications } from '@orca-cloud/cloud-database'
 import { loadConnectorConfig } from './config.js'
 import { startConnectorBackground } from './connector-background.js'
 import { openConnectorDatabase } from './connector-database.js'
-import { createConnectorServer } from './connector-server.js'
+import { createConnectorServer, listenHostname } from './connector-server.js'
 
 const config = loadConnectorConfig()
 const database = await openConnectorDatabase({
@@ -23,7 +23,7 @@ if (active) {
 }
 const stopBackground = active ? startConnectorBackground(runtime) : () => {}
 
-runtime.server.listen(config.port, () => {
+runtime.server.listen(config.port, listenHostname(config.publicUrl), () => {
   console.log(`[orca-connector] listening on ${config.publicUrl} (port ${config.port})`)
 })
 

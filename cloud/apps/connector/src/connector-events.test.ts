@@ -1,5 +1,6 @@
 import { CONNECTOR_PATHS, ConnectorPollResponseSchema } from '@orca-cloud/connector-contract'
 import { afterEach, describe, expect, it } from 'vitest'
+import { listenHostname } from './connector-server.js'
 import {
   cleanupConnectorHarnesses,
   createConnectorHarness
@@ -42,6 +43,17 @@ describe('connector turn events', () => {
     expect(await queued.json()).toMatchObject({ status: 'queued' })
     const reply = ConnectorPollResponseSchema.parse((await machine.poll()).body)
     expect(reply.deliveries[0]).toMatchObject({ kind: 'start', conversation })
+  })
+
+  it('listens only on loopback when the dev route is on', async () => {
+    expect(listenHostname('http://127.0.0.1:8080')).toBe('127.0.0.1')
+    expect(listenHostname('http://[::1]:8080')).toBe('::1')
+    expect(listenHostname('https://connector.onorca.dev')).toBeUndefined()
+    const { harness } = await setup()
+    const { server } = harness.runtime
+    await new Promise<void>((resolve) => server.listen(0, listenHostname('http://127.0.0.1:8080'), resolve))
+    expect(server.address()).toMatchObject({ address: '127.0.0.1' })
+    await new Promise((resolve) => server.close(resolve))
   })
 
   it('applies turn events once, whatever order and repeats they arrive in', async () => {
@@ -91,6 +103,35 @@ describe('connector turn events', () => {
       turn_state: 'unverifiable',
       pending_prompt: JSON.stringify(prompt)
     })
+  })
+
+  it('keeps a replayed turn end of an old pane off the pane a snapshot rebound', async () => {
+    const { machine, enqueue, events, thread } = await setup()
+    await enqueue(machine.hostId)
+    await events([{ conversation, paneKey: 'old-pane', kind: 'turn-started', at: 100 }])
+    await events([
+      {
+        kind: 'snapshot',
+        conversations: [
+          { conversation, paneKey: 'new-pane', agent: 'claude', working: false, prompt: null }
+        ]
+      }
+    ])
+    const oldEnd = { conversation, paneKey: 'old-pane', kind: 'turn-ended', turnId: 100, at: 160 }
+    expect((await events([{ ...oldEnd, stopReason: 'end_turn' }])).status).toBe(204)
+    expect(await thread()).toMatchObject({ pane_key: 'new-pane', turn_state: 'unverifiable' })
+    // The new pane's own turn applies, whatever its start time against the old pane's.
+    await events([{ conversation, paneKey: 'new-pane', kind: 'turn-started', at: 90 }])
+    expect(await thread()).toMatchObject({ pane_key: 'new-pane', turn_state: 'working' })
+  })
+
+  it('clears the prompt of a conversation the snapshot no longer lists', async () => {
+    const { machine, enqueue, events, thread } = await setup()
+    await enqueue(machine.hostId)
+    const prompt = { kind: 'approval', promptId: 'p1', tool: 'Bash', options: [] }
+    await events([{ conversation, paneKey: 'pane-1', kind: 'prompt', prompt }])
+    await events([{ kind: 'snapshot', conversations: [] }])
+    expect(await thread()).toMatchObject({ pending_prompt: null })
   })
 
   it('reads an open turn missing from the snapshot as unverifiable', async () => {

@@ -16,6 +16,8 @@ import type { ConnectorThreads } from './connector-threads.js'
 import type { InboxWaker } from './inbox-waker.js'
 import type { MachineEnv } from './machine-auth.js'
 
+class TokenExpiredDuringPoll extends Error {}
+
 // The machine API behind a connector token: hello, the held poll, confirmations and turn events.
 export function registerMachineRoutes(
   app: Hono<MachineEnv>,
@@ -64,20 +66,29 @@ export function registerMachineRoutes(
       try {
         // Each pass decides under the host lock, so a newer hello either lands before it (and this
         // refuses) or after it has committed what it hands out.
-        const pass = await database.transaction(async (transaction) => {
-          await lockConnectorHost(transaction, hostId)
-          if ((await hosts.helloRev(transaction, hostId)) !== helloRev) {
-            return null
-          }
-          // Last check before claiming: nothing goes out on a token past its expiry.
-          if (Date.now() >= expiresAt) {
-            return { recovered: [], deliveries: [], nextLeaseDueAt: null }
-          }
-          const recovered = (await hosts.takeUnsettledDue(transaction, hostId))
-            ? await inbox.listUnsettled(transaction, hostId)
-            : []
-          return { recovered, ...(await inbox.claim(transaction, hostId)) }
-        })
+        const pass = await database
+          .transaction(async (transaction) => {
+            await lockConnectorHost(transaction, hostId)
+            if ((await hosts.helloRev(transaction, hostId)) !== helloRev) {
+              return null
+            }
+            const recovered = (await hosts.takeUnsettledDue(transaction, hostId))
+              ? await inbox.listUnsettled(transaction, hostId)
+              : []
+            const claimed = await inbox.claim(transaction, hostId)
+            // Last moment before commit: a token past its expiry rolls the pass back, so nothing
+            // goes out on it and the next token's poll sees the same inbox.
+            if (Date.now() >= expiresAt) {
+              throw new TokenExpiredDuringPoll()
+            }
+            return { recovered, ...claimed }
+          })
+          .catch((error: unknown) => {
+            if (error instanceof TokenExpiredDuringPoll) {
+              return { recovered: [], deliveries: [], nextLeaseDueAt: null }
+            }
+            throw error
+          })
         if (pass === null) {
           return context.json({ error: 'hello_required' }, 409)
         }

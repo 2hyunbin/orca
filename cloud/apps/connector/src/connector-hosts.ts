@@ -18,8 +18,10 @@ export class ConnectorHosts {
     private readonly now: () => number
   ) {}
 
-  // Under the host lock. The latest hello wins; held polls wake to find their revision stale, and
-  // the next poll lists what an earlier process received but never settled.
+  // Under the host lock. The latest hello wins and starts the machine over: held polls wake to find
+  // their revision stale, the next poll lists what was received but never settled, and what was
+  // handed out but not yet received goes out again. So a late ack from an earlier process can't
+  // strand a delivery: it's either listed or redelivered.
   async recordHello(
     transaction: CloudDatabase,
     host: { hostId: string; accountId: string },
@@ -48,7 +50,7 @@ export class ConnectorHosts {
         now
       ]
     )
-    await this.inbox.wake(transaction, host.hostId)
+    await this.inbox.releaseLeases(transaction, host.hostId)
   }
 
   async helloRev(transaction: CloudDatabase, hostId: string): Promise<number | null> {

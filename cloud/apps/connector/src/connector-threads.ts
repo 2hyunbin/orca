@@ -1,6 +1,14 @@
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import type { ConnectorEvent } from '@orca-cloud/connector-contract'
 
+// Linked and snapshot (re)bind a conversation's pane. Moving to another pane forgets the old pane's
+// turn, and a turn it left working becomes unverifiable. Takes the new pane twice.
+const REBIND_PANE = `pane_key = ?,
+  open_turn_id = CASE WHEN pane_key = ? THEN open_turn_id END,
+  turn_state = CASE WHEN turn_state = 'working' AND pane_key <> ? THEN 'unverifiable' ELSE turn_state END`
+// Other events only touch the pane the conversation is bound to.
+const ON_BOUND_PANE = 'host_id = ? AND external_id = ? AND (pane_key IS NULL OR pane_key = ?)'
+
 export type NewThread = {
   externalId: string
   teamId: string
@@ -51,22 +59,29 @@ export class ConnectorThreads {
     for (const event of events) {
       if (event.kind === 'snapshot') {
         // Not working never means done: an open turn the snapshot doesn't show working (or doesn't
-        // list; it lists every linked conversation) is unverifiable.
+        // list; it lists every linked conversation) is unverifiable, and an unlisted one has no prompt.
+        const notIn = (ids: string[]) =>
+          ids.length > 0 ? ` AND external_id NOT IN (${ids.map(() => '?').join(', ')})` : ''
         const working = event.conversations
           .filter((entry) => entry.working)
           .map((entry) => entry.conversation.externalId)
         await transaction.query(
           `UPDATE connector_threads SET turn_state = 'unverifiable'
-           WHERE host_id = ? AND turn_state = 'working'${
-             working.length > 0 ? ` AND external_id NOT IN (${working.map(() => '?').join(', ')})` : ''
-           }`,
+           WHERE host_id = ? AND turn_state = 'working'${notIn(working)}`,
           [hostId, ...working]
+        )
+        const listed = event.conversations.map((entry) => entry.conversation.externalId)
+        await transaction.query(
+          `UPDATE connector_threads SET pending_prompt = NULL WHERE host_id = ?${notIn(listed)}`,
+          [hostId, ...listed]
         )
         for (const entry of event.conversations) {
           await transaction.query(
-            `UPDATE connector_threads SET pane_key = ?, agent = ?, pending_prompt = ?
+            `UPDATE connector_threads SET ${REBIND_PANE}, agent = ?, pending_prompt = ?
              WHERE host_id = ? AND external_id = ?`,
             [
+              entry.paneKey,
+              entry.paneKey,
               entry.paneKey,
               entry.agent,
               entry.prompt ? JSON.stringify(entry.prompt) : null,
@@ -78,40 +93,40 @@ export class ConnectorThreads {
         continue
       }
       const where = [hostId, event.conversation.externalId]
+      const onPane = [...where, event.paneKey]
       switch (event.kind) {
         case 'linked':
           await transaction.query(
-            `UPDATE connector_threads SET pane_key = ?, agent = ?
+            `UPDATE connector_threads SET ${REBIND_PANE}, agent = ?
              WHERE host_id = ? AND external_id = ?`,
-            [event.paneKey, event.agent, ...where]
+            [event.paneKey, event.paneKey, event.paneKey, event.agent, ...where]
           )
           break
         case 'prompt':
           await transaction.query(
-            `UPDATE connector_threads SET pane_key = ?, pending_prompt = ?
-             WHERE host_id = ? AND external_id = ?`,
-            [event.paneKey, JSON.stringify(event.prompt), ...where]
+            `UPDATE connector_threads SET pane_key = ?, pending_prompt = ? WHERE ${ON_BOUND_PANE}`,
+            [event.paneKey, JSON.stringify(event.prompt), ...onPane]
           )
           break
         case 'turn-started':
           await transaction.query(
             `UPDATE connector_threads SET pane_key = ?, open_turn_id = ?, turn_state = 'working',
                turn_stop_reason = NULL, turn_last_message = NULL, pending_prompt = NULL
-             WHERE host_id = ? AND external_id = ? AND (open_turn_id IS NULL OR open_turn_id < ?)`,
-            [event.paneKey, event.at, ...where, event.at]
+             WHERE ${ON_BOUND_PANE} AND (open_turn_id IS NULL OR open_turn_id < ?)`,
+            [event.paneKey, event.at, ...onPane, event.at]
           )
           break
         case 'turn-ended':
           await transaction.query(
             `UPDATE connector_threads SET pane_key = ?, open_turn_id = ?, turn_state = 'ended',
                turn_stop_reason = ?, turn_last_message = ?, pending_prompt = NULL
-             WHERE host_id = ? AND external_id = ? AND (open_turn_id IS NULL OR open_turn_id <= ?)`,
+             WHERE ${ON_BOUND_PANE} AND (open_turn_id IS NULL OR open_turn_id <= ?)`,
             [
               event.paneKey,
               event.turnId,
               event.stopReason,
               event.lastAssistantMessage ?? null,
-              ...where,
+              ...onPane,
               event.turnId
             ]
           )

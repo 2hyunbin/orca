@@ -143,6 +143,15 @@ export class ConnectorInbox {
     }))
   }
 
+  // Under the host lock: handed-out deliveries become claimable now, keeping their ids.
+  async releaseLeases(transaction: CloudDatabase, hostId: string): Promise<void> {
+    await transaction.query(
+      `UPDATE connector_inbox SET lease_until = ? WHERE host_id = ? AND state = 'leased'`,
+      [this.now(), hostId]
+    )
+    await this.wake(transaction, hostId)
+  }
+
   async wake(transaction: CloudDatabase, hostId: string): Promise<void> {
     await this.notifications.notify(transaction, INBOX_CHANNEL, hostId)
   }

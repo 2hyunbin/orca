@@ -322,12 +322,12 @@ describe('connector inbox', () => {
     expect(Date.now() - machine.expiresAt).toBeLessThan(1_000)
   })
 
-  it('hands nothing out on a token that expired while its poll waited', async () => {
+  it('rolls back a poll pass whose token expired while it ran', async () => {
     let gate!: ReturnType<typeof pauseBefore>
     const { harness, machine, enqueue } = await setup(
       {
         wrapDatabase: (database) => {
-          gate = pauseBefore(database, 'SELECT hello_rev')
+          gate = pauseBefore(database, 'SELECT delivery_id, external_id, seq')
           return gate.database
         }
       },
@@ -343,6 +343,25 @@ describe('connector inbox', () => {
       "SELECT state FROM connector_inbox WHERE delivery_id = 'a1'"
     )
     expect(row?.state).toBe('pending')
+    const [host] = await harness.database.query('SELECT unsettled_due FROM connector_hosts')
+    expect(Number(host?.unsettled_due)).toBe(1)
+  })
+
+  it('hands out again after a hello what an earlier process never confirmed', async () => {
+    const { harness, machine, enqueue, ids } = await setup()
+    await enqueue('a', 'a1', START)
+    expect(await ids()).toEqual(['a1'])
+    // A restart: the old process's received may still land, so the new one gets a1 itself.
+    const restarted = await harness.machine('user-1', { machineId: machine.machineId })
+    await restarted.hello(2)
+    const first = ConnectorPollResponseSchema.parse((await restarted.poll(2)).body)
+    expect(first.deliveries.map((delivery) => delivery.deliveryId)).toEqual(['a1'])
+    await machine.ack([{ deliveryId: 'a1', step: 'received' }])
+    await restarted.ack([{ deliveryId: 'a1', step: 'done', result: { outcome: 'accepted' } }])
+    const [row] = await harness.database.query(
+      "SELECT state FROM connector_inbox WHERE delivery_id = 'a1'"
+    )
+    expect(row?.state).toBe('done')
   })
 
   it('wakes a held poll when a lease runs out', async () => {
