@@ -39,9 +39,13 @@ function projectNames(project: Project): string[] {
   ]
 }
 
-// Words of the message, plus owner/name for each repository link (<https://host/owner/name…>).
+// Words of the message (sentence dots trimmed, inner ones kept), plus owner/name for each
+// repository link (<https://host/owner/name…>).
 function messageWords(lower: string): Set<string> {
-  const words = lower.split(/[^a-z0-9._/-]+/).filter((word) => word.length > 0)
+  const words = lower
+    .split(/[^a-z0-9._/-]+/)
+    .map((word) => word.replace(/^\.+|\.+$/g, ''))
+    .filter((word) => word.length > 0)
   const links = [
     ...lower.matchAll(/https?:\/\/[^/\s|>]+\/([\w.-]+\/[\w.-]+?)(?:\.git)?(?=[/|>#?\s]|$)/g)
   ]

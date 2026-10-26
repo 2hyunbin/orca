@@ -113,4 +113,11 @@ describe('chooseMachine', () => {
     )
     expect(choose('compare orca and web', ident)).toMatchObject({ kind: 'ask' })
   })
+
+  it('reads a project name at the end of a sentence', () => {
+    const ident = identity({ defaultProject: 'web' })
+    for (const text of ['Please fix orca.', 'Please fix orca...', 'Please fix orca?']) {
+      expect(choose(text, ident, [laptop])).toMatchObject({ kind: 'chosen', placeId: 'pl_1' })
+    }
+  })
 })

@@ -392,8 +392,7 @@ describe('Slack thread status and posts', () => {
       database: harness.database,
       posts: new SlackPosts(flaky, harness.now),
       installs: new SlackInstalls(harness.tokenKey),
-      api: createSlackWebApi(),
-      now: harness.now
+      api: createSlackWebApi()
     })
     await expect(worker.sendDue()).rejects.toThrow('connection lost')
     expect(

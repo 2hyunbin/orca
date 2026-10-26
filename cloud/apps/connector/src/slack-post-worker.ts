@@ -44,7 +44,6 @@ export class SlackPostWorker {
       posts: SlackPosts
       installs: SlackInstalls
       api: SlackWebApi
-      now: () => number
     }
   ) {}
 

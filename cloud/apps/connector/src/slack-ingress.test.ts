@@ -496,4 +496,41 @@ describe('Slack event ingress', () => {
       { text: 'see the logs' }
     ])
   })
+
+  it('carries a teammate’s broadcast reply, and starts with the note when Slack says there is more but gives no cursor', async () => {
+    const harness = await linkedOwner()
+    await harness.message({
+      text: `<@${BOT}> fix this`,
+      ts: '1800000000.000400',
+      thread_ts: THREAD
+    })
+    harness.fake.respond(
+      'conversations.replies',
+      Response.json({
+        ok: true,
+        messages: [{ ts: THREAD, user: TEAMMATE, subtype: 'thread_broadcast', text: 'root' }]
+      })
+    )
+    await harness.edge.starts.buildDue()
+    const [start] = await harness.poll()
+    expect(start?.kind === 'start' ? start.prompt : '').toContain('[Bob] root')
+
+    await harness.message({
+      text: `<@${BOT}> and this`,
+      ts: '1800000001.000100',
+      thread_ts: '1800000001.000000'
+    })
+    harness.fake.respond(
+      'conversations.replies',
+      Response.json({
+        ok: true,
+        has_more: true,
+        messages: [{ ts: '1800000001.000000', user: TEAMMATE, text: 'old' }]
+      })
+    )
+    await harness.edge.starts.buildDue()
+    await harness.machine.ack([{ deliveryId: start?.deliveryId, step: 'received' }])
+    const second = (await harness.poll()).find((delivery) => delivery.kind === 'start')
+    expect(second?.kind === 'start' ? second.prompt : '').toContain('couldn’t be read')
+  })
 })

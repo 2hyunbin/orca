@@ -26,7 +26,7 @@ const MessageEventSchema = z.object({
 })
 
 // Subtypes that are still a person's new message; edits, deletes and joins are not.
-const PERSON_SUBTYPES = new Set(['thread_broadcast', 'file_share'])
+export const PERSON_SUBTYPES = new Set(['thread_broadcast', 'file_share'])
 
 // One person's post, the same whether Slack sent it as message or app_mention.
 export type SlackMessage = {

@@ -5,7 +5,7 @@ import type { queueDelivery } from './queue-delivery.js'
 import type { SlackConfig } from './slack-config.js'
 import { mentionsBot, promptText, type SlackMessage } from './slack-events.js'
 import { findSlackIdentity } from './slack-identities.js'
-import type { SlackInstall, SlackInstalls } from './slack-installs.js'
+import type { SlackInstalls } from './slack-installs.js'
 import { chooseMachine, knownHost } from './slack-machine-choice.js'
 import type { SlackPlace, SlackPosts } from './slack-posts.js'
 import { keepTeammateContext, withTeammateContext } from './slack-teammate-context.js'
@@ -108,7 +108,7 @@ export async function routeSlackMessage(
     if (!addressed) {
       return
     }
-    const route = { deps, transaction, message, messageKey, place, install, text, externalId }
+    const route = { deps, transaction, message, messageKey, place, text, externalId }
     if (own) {
       await continueConversation(route, own)
     } else if (pending) {
@@ -130,7 +130,6 @@ type Route = {
   message: SlackMessage
   messageKey: string
   place: SlackPlace
-  install: SlackInstall
   text: string
   externalId: string
 }

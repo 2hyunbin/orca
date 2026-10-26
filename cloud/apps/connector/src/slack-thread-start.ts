@@ -1,6 +1,6 @@
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import { z } from 'zod'
-import { promptText } from './slack-events.js'
+import { PERSON_SUBTYPES, promptText } from './slack-events.js'
 import type { SlackInstalls } from './slack-installs.js'
 import type { SlackMembers } from './slack-members.js'
 import type { SlackPosts } from './slack-posts.js'
@@ -28,6 +28,7 @@ const RepliesSchema = z.object({
       text: z.string().default('')
     })
   ),
+  has_more: z.boolean().optional(),
   response_metadata: z.looseObject({ next_cursor: z.string().optional() }).optional()
 })
 type ThreadMessage = z.infer<typeof RepliesSchema>['messages'][number]
@@ -105,13 +106,16 @@ export class SlackThreadStarts {
           message.ts !== start.ts &&
           message.user !== undefined &&
           message.bot_id === undefined &&
-          message.subtype === undefined
+          (message.subtype === undefined || PERSON_SUBTYPES.has(message.subtype))
       )
       first ??= people.shift()
       latest = [...latest, ...people].slice(-(THREAD_MAX_MESSAGES - 1))
+      // next_cursor continues; "more" without one can't be read to the end.
       cursor = replies.data.response_metadata?.next_cursor || undefined
       if (cursor === undefined) {
-        return await this.labelled(start.teamId, install.botUserId, first ? [first, ...latest] : [])
+        return replies.data.has_more
+          ? null
+          : await this.labelled(start.teamId, install.botUserId, first ? [first, ...latest] : [])
       }
     }
     return null

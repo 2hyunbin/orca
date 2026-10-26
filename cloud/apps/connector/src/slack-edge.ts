@@ -49,7 +49,7 @@ export function createSlackEdge(deps: {
   const installs = new SlackInstalls(config.tokenKey)
   const posts = new SlackPosts(database, now)
   const api = deps.api ?? createSlackWebApi()
-  const worker = new SlackPostWorker({ database, posts, installs, api, now })
+  const worker = new SlackPostWorker({ database, posts, installs, api })
   const members = new SlackMembers({ database, installs, api, now })
   const starts = new SlackThreadStarts({
     database,
