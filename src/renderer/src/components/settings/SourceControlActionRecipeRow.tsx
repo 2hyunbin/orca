@@ -1,3 +1,4 @@
+import { SourceControlActionArguments } from './SourceControlActionArguments'
 import { Terminal } from 'lucide-react'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -25,10 +26,7 @@ import {
 } from './source-control-action-recipe-options'
 import { translate } from '@/i18n/i18n'
 import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
-import {
-  SourceControlActionExtraArgsField,
-  SourceControlActionOptionField
-} from './SourceControlActionOptionField'
+import { SourceControlActionOptionField } from './SourceControlActionOptionField'
 import { useSourceControlActionAgent } from './use-source-control-action-agent'
 
 const DEFAULT_AGENT_VALUE = '__default_agent__'
@@ -50,7 +48,7 @@ type SourceControlActionRecipeRowProps<ActionId extends AiActionId> = {
     value: SourceControlActionLaunchPreferences | undefined
   ) => void
   onTemplateChange: (actionId: ActionId, value: string) => void
-  onAgentArgsChange: (actionId: ActionId, value: string) => void
+  onAgentArgsChange: (actionId: ActionId, value: string, commit?: boolean) => void
   onAppendVariable: (actionId: ActionId, variable: string) => void
   onDiscard: (actionId: ActionId) => void
   onSave: (actionId: ActionId) => void
@@ -167,16 +165,20 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
                 onChange={(value) => onLaunchPreferencesChange(actionId, value)}
               />
             ) : null}
-            <SourceControlActionExtraArgsField
+            <SourceControlActionArguments
+              agent={pickerAgent}
               value={draftValue.agentArgs}
-              onChange={(value) => onAgentArgsChange(actionId, value)}
+              preferences={launchPreferences}
+              disabled={actual.status === 'pending' || isSavingTemplate}
+              onArgsChange={(value, commit) => onAgentArgsChange(actionId, value, commit)}
+              onPreferencesChange={(value) => onLaunchPreferencesChange?.(actionId, value)}
             />
           </div>
         ) : (
           <SourceControlActionOptionField
             label={translate(
               'auto.components.settings.SourceControlAiActionRecipeDefaults.2cb4bb7e5d',
-              'CLI arguments'
+              'Arguments'
             )}
           >
             <Input

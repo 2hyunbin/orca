@@ -1,9 +1,10 @@
 import type { AgentLaunchPreferences } from './agent-session-host-authority'
 import type { AgentType } from './agent-status-types'
 import {
-  readLaunchPermissionMode,
-  terminalPermissionModeArgs
-} from './agent-permission-mode-terminal-args'
+  readLaunchPermissionChoice,
+  agentPermissionHasTerminalChoice
+} from './tui-agent-permission-choice'
+import { isTuiAgent } from './tui-agent-config'
 import { composeAgentLaunchModel } from './agent-session-option-launch'
 
 /** Compose model/effort for this terminal; send permission mode only where the agent has a flag. */
@@ -19,11 +20,11 @@ export function toAgentLaunchPreferences(
     typeof sessionOptions.effort === 'string' && sessionOptions.effort.trim()
       ? sessionOptions.effort.trim()
       : undefined
-  const mode = readLaunchPermissionMode(sessionOptions)
+  const mode = readLaunchPermissionChoice(sessionOptions)
   const preferences: AgentLaunchPreferences = {
     ...(model ? { model } : {}),
     ...(effort ? { effort } : {}),
-    ...(mode && terminalPermissionModeArgs(agent, mode) ? { mode } : {})
+    ...(mode && isTuiAgent(agent) && agentPermissionHasTerminalChoice(agent, mode) ? { mode } : {})
   }
   return Object.keys(preferences).length > 0 ? preferences : undefined
 }

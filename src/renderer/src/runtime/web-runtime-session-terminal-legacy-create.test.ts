@@ -124,6 +124,8 @@ describe('createWebRuntimeSessionTerminal', () => {
         allowEmptyPromptLaunch: true,
         cmdOverrides: {},
         agentArgs: '--model "model with spaces"',
+        sessionOptions: { permissionMode: 'full-access' },
+        sessionOptionsOverrideAgentArgs: true,
         agentEnv: { AGENT_PROFILE: 'custom' },
         platform: 'linux',
         isRemote: true
@@ -150,10 +152,19 @@ describe('createWebRuntimeSessionTerminal', () => {
           (request) => request.method !== 'status.get' && request.method !== 'session.tabs.list'
         )
       expect(createRequests).toHaveLength(1)
+      expect(startupPlan.launchCommand.match(/--dangerously-skip-permissions/g)).toHaveLength(1)
+      expect(startupPlan.launchConfig.agentArgs).toContain("'--model' 'model with spaces'")
+      expect(
+        startupPlan.launchConfig.agentArgs.match(/--dangerously-skip-permissions/g)
+      ).toHaveLength(1)
       if (hostAuthority) {
         expect(createRequests[0]).toMatchObject({
           method: 'terminal.createAgentSession',
-          params: { agent: 'claude', agentArgs: '--model "model with spaces"' }
+          params: {
+            agent: 'claude',
+            agentArgs: startupPlan.launchConfig.agentArgs,
+            launchPreferences: { mode: 'full-access' }
+          }
         })
         expect(createRequests[0].params).not.toHaveProperty('command')
       } else {

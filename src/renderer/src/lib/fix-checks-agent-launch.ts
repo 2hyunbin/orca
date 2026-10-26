@@ -35,7 +35,8 @@ import type { LaunchSource } from '../../../shared/telemetry-events'
 import { translate } from '@/i18n/i18n'
 import {
   resolveSourceControlActionSessionOptions,
-  sourceControlActionLaunchOptions
+  sourceControlActionLaunchOptions,
+  sourceControlActionAgentArgs
 } from '../../../shared/source-control-action-launch-preferences'
 
 type StartFixChecksAgentArgs = {
@@ -221,7 +222,7 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
       worktreeId: targetWorktreeId,
       groupId: args.groupId ?? targetWorktreeId,
       prompt,
-      agentArgs: recipe().agentArgs,
+      agentArgs: sourceControlActionAgentArgs(recipe(), agent, useAppStore.getState().settings),
       ...sourceControlActionLaunchOptions(recipe(), agent),
       promptDelivery: 'submit-after-ready',
       launchPlatform,
@@ -278,6 +279,8 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
     telemetrySource: args.telemetrySource,
     promptDelivery: 'submit-after-ready',
     agentArgs: recipe().agentArgs,
+    resolveAgentArgs: (agent) =>
+      sourceControlActionAgentArgs(recipe(), agent, useAppStore.getState().settings),
     resolveSessionOptions: (agent) => resolveSourceControlActionSessionOptions(recipe(), agent),
     sessionOptionsYieldToAgentArgs: recipe().launchPreferencesYieldToAgentArgs,
     ...(agentOverride.kind === 'agent' ? { agentOverride: agentOverride.agent } : {}),

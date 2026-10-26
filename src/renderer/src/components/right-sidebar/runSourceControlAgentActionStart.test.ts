@@ -511,7 +511,7 @@ it.each(['--model gpt-5.6-luna', '--model gpt-5.6-sol'])(
 
     expect(shown.launchPreferencesYieldToAgentArgs).toBe(true)
     expect(mocks.launchAgentInNewTab.mock.lastCall?.[0]).toMatchObject({
-      agentArgs,
+      agentArgs: `--dangerously-bypass-approvals-and-sandbox ${agentArgs}`,
       sessionOptions: { model: 'gpt-5.6-terra' }
     })
     expect(mocks.launchAgentInNewTab.mock.lastCall?.[0]).not.toHaveProperty(

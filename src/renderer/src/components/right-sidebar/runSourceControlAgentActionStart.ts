@@ -19,7 +19,10 @@ import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { sourceControlActionRecipeSaveMatchesTarget } from './source-control-action-recipe-match'
 import { resolveSourceControlAgentSaveTarget } from './source-control-agent-action-dialog-support'
-import { sourceControlActionLaunchOptions } from '../../../../shared/source-control-action-launch-preferences'
+import {
+  sourceControlActionAgentArgs,
+  sourceControlActionLaunchOptions
+} from '../../../../shared/source-control-action-launch-preferences'
 import { admitSourceControlRecovery } from './source-control-recovery-admission'
 
 type RunSourceControlAgentActionStartArgs = {
@@ -102,7 +105,7 @@ export async function runSourceControlAgentActionStart({
   let launchFailureNotified = false
   let launchAcceptedNotified = false
   // Undefined selects global agent arguments; empty string would suppress that fallback.
-  const launchAgentArgs = agentArgsApply ? agentArgs : undefined
+  let launchAgentArgs = agentArgsApply ? agentArgs : undefined
   const saveTarget = resolveSourceControlAgentSaveTarget(saveTargetValue, repoId)
   // The dialog edits agent, arguments and prompt; the model stays the saved one for that agent.
   // Why: a recipe being saved launches as it will resolve once saved, so the next launch matches.
@@ -130,6 +133,11 @@ export async function runSourceControlAgentActionStart({
       actionId
     })
   }
+  launchAgentArgs = sourceControlActionAgentArgs(
+    { ...launchRecipe, agentArgs: launchAgentArgs },
+    selectedAgent,
+    settings
+  )
   const launchOptions = sourceControlActionLaunchOptions(launchRecipe, selectedAgent)
   const notifyLaunchAccepted = (): void => {
     if (launchAcceptedNotified) {

@@ -14,7 +14,6 @@ import {
   SOURCE_CONTROL_ACTION_IDS,
   setSourceControlActionAgentDefault,
   type SourceControlActionId,
-  type SourceControlActionLaunchPreferences,
   type SourceControlAiActionDefaults
 } from '../../../../shared/source-control-ai-actions'
 import { Label } from '../ui/label'
@@ -121,6 +120,7 @@ export function SourceControlAiActionRecipeDefaults({
     savingActionTemplateIds,
     onActionTemplateChange,
     onActionAgentArgsChange,
+    onActionLaunchPreferencesChange,
     saveActionTemplateDraft,
     discardActionTemplateDraft,
     appendVariable
@@ -133,13 +133,14 @@ export function SourceControlAiActionRecipeDefaults({
 
   const writeActionDefault = async (
     update: (actions: SourceControlAiActionDefaults | undefined) => SourceControlAiActionDefaults
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     let previousActions = config.actions
     try {
       await writeConfig((current) => {
         previousActions = current.actions
         return { actions: update(current.actions) }
       })
+      return true
     } catch (error) {
       console.error('Failed to save Source Control AI action agent default', error)
       try {
@@ -154,32 +155,30 @@ export function SourceControlAiActionRecipeDefaults({
           { value0: error instanceof Error ? error.message : 'Unknown error' }
         )
       )
+      return false
     }
   }
 
-  const onActionAgentChange = (actionId: SourceControlActionId, value: string): Promise<void> => {
+  const onActionAgentChange = async (
+    actionId: SourceControlActionId,
+    value: string
+  ): Promise<void> => {
     const agentId =
       value === '__default_agent__'
         ? null
         : value === CUSTOM_AGENT_ID
           ? CUSTOM_AGENT_ID
           : (value as TuiAgent)
-    return writeActionDefault((actions) =>
+    const changed = config.actions?.[actionId]?.agentId !== agentId
+    const saved = await writeActionDefault((actions) =>
       setSourceControlActionAgentDefault(actions, actionId, agentId)
     )
+    if (saved && changed) {
+      onActionLaunchPreferencesChange(actionId, (current) =>
+        current?.agentId === agentId ? current : undefined
+      )
+    }
   }
-
-  const onActionLaunchPreferencesChange = (
-    actionId: SourceControlActionId,
-    launchPreferences: SourceControlActionLaunchPreferences | undefined
-  ): Promise<void> =>
-    writeActionDefault((actions) => {
-      const { launchPreferences: _previous, ...recipe } = actions?.[actionId] ?? {}
-      return {
-        ...actions,
-        [actionId]: { ...recipe, ...(launchPreferences ? { launchPreferences } : {}) }
-      }
-    })
 
   const openRepoSourceControlAiSettings = (
     repoId: string,
@@ -234,7 +233,7 @@ export function SourceControlAiActionRecipeDefaults({
                 />
               }
               onAgentChange={(id, value) => void onActionAgentChange(id, value)}
-              launchPreferences={recipe?.launchPreferences}
+              launchPreferences={actionRecipeDraftState.values[actionId].launchPreferences}
               onLaunchPreferencesChange={(id, value) =>
                 void onActionLaunchPreferencesChange(id, value)
               }

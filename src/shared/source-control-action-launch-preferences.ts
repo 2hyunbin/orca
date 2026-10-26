@@ -1,4 +1,8 @@
 import {
+  resolveTuiAgentLaunchArgs,
+  type AgentLaunchProfileSettings
+} from './tui-agent-launch-defaults'
+import {
   findCatalogModel,
   getAgentSessionOptionCatalog,
   type CatalogOption
@@ -8,13 +12,11 @@ import { isTuiAgent } from './tui-agent-config'
 import type { TuiAgent } from './tui-agent'
 import { isAgentSessionHandleProvider } from './agent-session-provider-handle'
 import { STRUCTURED_LAUNCH_SEED_OPTION_IDS } from './native-chat-session-option-defaults'
-import { terminalPermissionModeArgs } from './agent-permission-mode-terminal-args'
+import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from './agent-chat-permission-mode'
 import {
-  AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
-  agentChatPermissionModes,
-  offeredChatPermissionModes,
-  type AgentChatPermissionMode
-} from './agent-chat-permission-mode'
+  agentPermissionHasTerminalChoice,
+  type AgentPermissionChoice
+} from './tui-agent-permission-choice'
 
 /** Agents whose model an action can pick: the ones whose session catalog lists models. */
 export function sourceControlActionAgentPicksModel(
@@ -23,17 +25,15 @@ export function sourceControlActionAgentPicksModel(
   return isTuiAgent(agent) && Boolean(getAgentSessionOptionCatalog(agent)?.models.length)
 }
 
-/** Modes an action can save; none hides the control. Settings has no live model list to tell which
- *  Claude models run Auto, so it is not offered there; the host stays decisive. */
-export function sourceControlActionPermissionModes(
-  agent: string | null | undefined
-): readonly AgentChatPermissionMode[] {
-  const support = isTuiAgent(agent) ? agentChatPermissionModes(agent) : null
-  return support ? offeredChatPermissionModes(support, false) : []
-}
-
 /** The one route a saved choice reaches, for the hint under its control; null reaches both. */
 export type SourceControlActionChoiceRoute = 'chats' | 'terminals' | null
+
+export function sourceControlActionPermissionModeRoute(
+  agent: TuiAgent,
+  mode: AgentPermissionChoice
+): SourceControlActionChoiceRoute {
+  return agentPermissionHasTerminalChoice(agent, mode) ? null : 'chats'
+}
 
 function optionReachesChats(agent: TuiAgent, option: CatalogOption): boolean {
   return (
@@ -64,13 +64,6 @@ export function sourceControlActionOptions(
     }
     return [{ option, route: !terminals ? 'chats' : !chats ? 'terminals' : null }]
   })
-}
-
-export function sourceControlActionPermissionModeRoute(
-  agent: TuiAgent,
-  mode: AgentChatPermissionMode
-): SourceControlActionChoiceRoute {
-  return terminalPermissionModeArgs(agent, mode) ? null : 'chats'
 }
 
 /** The action's choice as launch inputs, with whether this repository's own CLI arguments outrank
@@ -111,4 +104,22 @@ export function resolveSourceControlActionSessionOptions(
       ? { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: preferences.permissionMode }
       : {})
   }
+}
+
+/** An action without its own permission follows Agents, including when it owns unrelated text. */
+export function sourceControlActionAgentArgs(
+  recipe: Pick<SourceControlActionRecipe, 'agentArgs' | 'launchPreferences'>,
+  agent: TuiAgent,
+  settings: AgentLaunchProfileSettings | null | undefined
+): string | undefined {
+  if (
+    recipe.agentArgs === undefined ||
+    (recipe.launchPreferences?.agentId === agent && recipe.launchPreferences.permissionMode)
+  ) {
+    return recipe.agentArgs
+  }
+  return resolveTuiAgentLaunchArgs(agent, {
+    ...settings,
+    agentDefaultArgs: { ...settings?.agentDefaultArgs, [agent]: recipe.agentArgs }
+  })
 }

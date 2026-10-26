@@ -165,41 +165,73 @@ export function withRepoAiActionRecipeText(
   text: ActionRecipeTextDraft
 ): RepoSourceControlAiOverrides {
   const currentRecipe = readCompleteRecipeForDraft(base, settings, actionId)
+  const preferencesEdited = !sameDraftLaunchPreferences(
+    text,
+    readActionRecipeTextDraft(base, actionId)
+  )
   return normalizeRepoAiDraft(
     setActionOverride(base, actionId, {
       ...currentRecipe,
       ...(typeof text.commandInputTemplate === 'string'
         ? { commandInputTemplate: text.commandInputTemplate }
         : {}),
-      ...(text.agentArgs !== undefined ? { agentArgs: text.agentArgs } : {})
+      ...(text.agentArgs !== undefined ? { agentArgs: text.agentArgs } : {}),
+      ...(preferencesEdited ? { launchPreferences: text.launchPreferences } : {})
     })
   )
 }
 
 /** The action's text as stored: an unset or cleared value stays so until the user types; inputs
  *  show it as empty. */
-export type ActionRecipeTextDraft = Pick<RepoActionRecipe, 'commandInputTemplate' | 'agentArgs'>
+export type ActionRecipeTextDraft = Pick<
+  RepoActionRecipe,
+  'commandInputTemplate' | 'agentArgs' | 'launchPreferences'
+>
+
+// An own undefined is a deliberate clear; an absent preference leaves inheritance untouched.
+function sameDraftLaunchPreferences(a: ActionRecipeTextDraft, b: ActionRecipeTextDraft): boolean {
+  return (
+    Object.hasOwn(a, 'launchPreferences') === Object.hasOwn(b, 'launchPreferences') &&
+    JSON.stringify(a.launchPreferences) === JSON.stringify(b.launchPreferences)
+  )
+}
+
+function sameActionRecipeText(a: ActionRecipeTextDraft, b: ActionRecipeTextDraft): boolean {
+  return (
+    a.commandInputTemplate === b.commandInputTemplate &&
+    a.agentArgs === b.agentArgs &&
+    sameDraftLaunchPreferences(a, b)
+  )
+}
 
 export function readActionRecipeTextDraft(
   value: RepoSourceControlAiOverrides,
   actionId: SourceControlActionId
 ): ActionRecipeTextDraft {
   const recipe = value.actionOverrides?.[actionId]
-  return { commandInputTemplate: recipe?.commandInputTemplate, agentArgs: recipe?.agentArgs }
+  return {
+    commandInputTemplate: recipe?.commandInputTemplate,
+    agentArgs: recipe?.agentArgs,
+    ...(recipe?.launchPreferences ? { launchPreferences: recipe.launchPreferences } : {})
+  }
 }
 
 export function composeDisplayRepoAi(
   immediate: RepoSourceControlAiOverrides,
   customCommandDraft: string | null,
-  actionTextDrafts: Partial<Record<SourceControlActionId, ActionRecipeTextDraft>>
+  actionTextDrafts: Partial<Record<SourceControlActionId, ActionRecipeTextDraft>>,
+  settings: GlobalSettings | null = null
 ): RepoSourceControlAiOverrides {
   let next =
     customCommandDraft === null ? immediate : withRepoAiCustomCommand(immediate, customCommandDraft)
   for (const actionId of SOURCE_CONTROL_ACTION_IDS) {
     const draft = actionTextDrafts[actionId]
-    const currentRecipe = next.actionOverrides?.[actionId]
+    let currentRecipe = next.actionOverrides?.[actionId]
     if (!draft || !hasOwnActionOverride(next.actionOverrides, actionId) || !currentRecipe) {
       continue
+    }
+    if (!sameDraftLaunchPreferences(draft, readActionRecipeTextDraft(next, actionId))) {
+      currentRecipe = readCompleteRecipeForDraft(next, settings, actionId)
     }
     next = {
       ...next,
@@ -208,7 +240,8 @@ export function composeDisplayRepoAi(
         [actionId]: {
           ...currentRecipe,
           commandInputTemplate: draft.commandInputTemplate,
-          agentArgs: draft.agentArgs
+          agentArgs: draft.agentArgs,
+          launchPreferences: draft.launchPreferences
         }
       }
     }
@@ -231,11 +264,7 @@ export function computeActionDirtyById(
       const compareBase = hasOwnActionOverride(persisted.actionOverrides, actionId)
         ? readActionRecipeTextDraft(persisted, actionId)
         : readActionRecipeTextDraft(immediate, actionId)
-      return [
-        actionId,
-        draft.commandInputTemplate !== compareBase.commandInputTemplate ||
-          draft.agentArgs !== compareBase.agentArgs
-      ]
+      return [actionId, !sameActionRecipeText(draft, compareBase)]
     })
   ) as Record<SourceControlActionId, boolean>
 }
@@ -251,10 +280,7 @@ export function retainDivergentActionTextDrafts(
       continue
     }
     const persistedText = readActionRecipeTextDraft(persisted, actionId)
-    if (
-      draft.commandInputTemplate !== persistedText.commandInputTemplate ||
-      draft.agentArgs !== persistedText.agentArgs
-    ) {
+    if (!sameActionRecipeText(draft, persistedText)) {
       next[actionId] = draft
     }
   }
@@ -275,28 +301,9 @@ export function clearActionTextDraftIfUnchanged(
   saved: ActionRecipeTextDraft
 ): Partial<Record<SourceControlActionId, ActionRecipeTextDraft>> {
   const latest = current[actionId]
-  if (
-    latest &&
-    (latest.commandInputTemplate !== saved.commandInputTemplate ||
-      latest.agentArgs !== saved.agentArgs)
-  ) {
+  if (latest && !sameActionRecipeText(latest, saved)) {
     return current
   }
   const { [actionId]: _removed, ...rest } = current
   return rest
-}
-
-export function patchActionTextDraft(
-  current: Partial<Record<SourceControlActionId, ActionRecipeTextDraft>>,
-  immediate: RepoSourceControlAiOverrides,
-  actionId: SourceControlActionId,
-  patch: Partial<ActionRecipeTextDraft>
-): Partial<Record<SourceControlActionId, ActionRecipeTextDraft>> {
-  return {
-    ...current,
-    [actionId]: {
-      ...(current[actionId] ?? readActionRecipeTextDraft(immediate, actionId)),
-      ...patch
-    }
-  }
 }

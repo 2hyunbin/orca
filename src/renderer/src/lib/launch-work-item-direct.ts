@@ -2,7 +2,7 @@ import { planAgentCliArgsSuffix } from '@/lib/tui-agent-startup'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
-import { CLIENT_PLATFORM, getWorkspaceIntentName, getWorkspaceSeedName } from '@/lib/new-workspace'
+import { CLIENT_PLATFORM } from '@/lib/new-workspace'
 import {
   gitLabIssueNumber,
   resolvePrHeadErrorMessage,
@@ -13,11 +13,13 @@ import { ensureHooksConfirmed } from '@/lib/ensure-hooks-confirmed'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { SetupDecision } from '../../../shared/worktree/create-types'
 import type { GitPushTarget } from '../../../shared/worktree/types'
-import { getLinearIssueWorkspaceName } from '../../../shared/workspace-name'
 import { resolveGitHubWorkItemIdentity } from '@/lib/github-work-item-identity'
 import type { buildDirectWorkItemAgentStartupPlan } from '@/lib/launch-work-item-direct-agent'
 import { buildDirectWorkItemStartupOpts } from '@/lib/launch-work-item-direct-agent'
-import { getDirectWorkItemDraftContent } from '@/lib/launch-work-item-direct-draft'
+import {
+  getDirectWorkItemDraftContent,
+  getDirectWorkItemWorkspaceNames
+} from '@/lib/launch-work-item-direct-draft'
 import {
   resolveDirectPrStartPoint,
   resolveDirectLaunchOwnerRow,
@@ -52,9 +54,9 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
     baseBranch,
     telemetrySource,
     launchSource,
-    agentOverride,
-    agentArgs
+    agentOverride
   } = args
+  let agentArgs = args.agentArgs
   const store = useAppStore.getState()
   const owner = resolveDirectLaunchOwnerRow(store.repos, repoId)
   if (!owner) {
@@ -109,21 +111,11 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
   const finalSetupDecision: SetupDecision =
     trustDecision === 'skip' ? 'skip' : setupResolution.decision
 
-  const workspaceIntentName =
-    itemNumber !== null
-      ? getWorkspaceIntentName({
-          sourceText: item.pasteContent,
-          workItem: { ...item, type: itemType, number: itemNumber }
-        })
-      : null
-  const workspaceName = getWorkspaceSeedName({
-    explicitName: item.linearIdentifier
-      ? getLinearIssueWorkspaceName({ identifier: item.linearIdentifier, title: item.title })
-      : (workspaceIntentName?.seedName ?? ''),
-    prompt: '',
-    linkedIssueNumber: itemType === 'issue' ? (itemNumber ?? null) : null,
-    linkedPR: itemType === 'pr' ? (itemNumber ?? null) : null
-  })
+  const { workspaceIntentName, workspaceName } = getDirectWorkItemWorkspaceNames(
+    item,
+    itemType,
+    itemNumber
+  )
   let resolvedBaseBranch = baseBranch
   let resolvedPushTarget: GitPushTarget | undefined
   let resolvedBranchNameOverride: string | undefined
@@ -227,6 +219,7 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
       agentOverride: preflightPlan?.agent ?? agentOverride,
       agentArgs,
       ...(args.sessionOptions ? { sessionOptions: args.sessionOptions } : {}),
+      resolveAgentArgs: args.resolveAgentArgs,
       resolveSessionOptions: args.resolveSessionOptions,
       sessionOptionsYieldToAgentArgs: args.sessionOptionsYieldToAgentArgs,
       repoConnectionId,
@@ -251,6 +244,7 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
       toast.error(unavailableAgentErrorMessage())
       return false
     }
+    agentArgs = launchPreparation.agentArgs
     effectiveAgent = launchPreparation.effectiveAgent
     startupPlan = launchPreparation.startupPlan
     draftLaunchedNatively = launchPreparation.draftLaunchedNatively

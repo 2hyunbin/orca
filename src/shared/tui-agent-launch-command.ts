@@ -60,7 +60,8 @@ export function resolveAgentLaunchCommand(args: {
     args.agent,
     args.sessionOptions,
     args.sessionOptionsOverrideAgentArgs ? [] : trailingTokens.tokens,
-    !args.sessionOptionsOverrideAgentArgs
+    !args.sessionOptionsOverrideAgentArgs,
+    trailingTokens.tokens
   )
   if (override && args.sessionOptionsOverrideAgentArgs) {
     const overrideTokens = tokenizeStartupCommand(override, args.shell)

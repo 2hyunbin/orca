@@ -2,12 +2,14 @@ import type { SourceControlAiSettings } from '../../../../shared/source-control-
 import {
   DEFAULT_SOURCE_CONTROL_ACTION_COMMAND_TEMPLATES,
   SOURCE_CONTROL_ACTION_IDS,
+  type SourceControlActionLaunchPreferences,
   type SourceControlActionId
 } from '../../../../shared/source-control-ai-actions'
 
 export type ActionRecipeDraftValue = {
   commandInputTemplate: string
   agentArgs: string
+  launchPreferences?: SourceControlActionLaunchPreferences
 }
 
 export type ActionRecipeDraftState = {
@@ -25,7 +27,8 @@ function readActionRecipeInputValue(
   return {
     commandInputTemplate:
       typeof value === 'string' ? value : DEFAULT_SOURCE_CONTROL_ACTION_COMMAND_TEMPLATES[actionId],
-    agentArgs: typeof recipe?.agentArgs === 'string' ? recipe.agentArgs : ''
+    agentArgs: typeof recipe?.agentArgs === 'string' ? recipe.agentArgs : '',
+    ...(recipe?.launchPreferences ? { launchPreferences: recipe.launchPreferences } : {})
   }
 }
 

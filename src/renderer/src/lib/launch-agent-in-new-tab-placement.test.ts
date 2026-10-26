@@ -205,11 +205,12 @@ describe('launchAgentInNewTab terminal tab activation', () => {
       return { command: queuedStartups().at(-1)?.command, chat: options.sessionOptions }
     }
 
-    // Saved in the same scope as the raw args: the choice replaces the conflicting flags.
+    // Loose permission text owns terminal policy; the explicit model still replaces its raw flag.
     const global = launch()
     expect(global.command).toContain("'-m' 'gpt-5.6-terra' '-c' 'model_reasoning_effort=high'")
-    expect(global.command).not.toMatch(/old|dangerously/)
-    // A repository's own choice outranks the raw args it inherits.
+    expect(global.command).not.toContain('old')
+    expect(global.command?.match(/dangerously-bypass/g)).toHaveLength(1)
+    // A repository's choice shares the same raw-permission rule.
     const repoChoice = launch({
       agentId: 'codex',
       launchPreferences: { agentId: 'codex', model: 'gpt-5.5', permissionMode: 'full-access' }

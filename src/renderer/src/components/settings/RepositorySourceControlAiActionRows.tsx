@@ -1,3 +1,4 @@
+import { SourceControlActionArguments } from './SourceControlActionArguments'
 import type React from 'react'
 import { Terminal } from 'lucide-react'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -42,10 +43,7 @@ import { hasOwnActionOverride } from './repository-source-control-ai-draft'
 import { getRepositorySourceControlAiActionRecipeSectionId } from './repository-settings-targets'
 import { translate } from '@/i18n/i18n'
 import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
-import {
-  SourceControlActionExtraArgsField,
-  SourceControlActionOptionField
-} from './SourceControlActionOptionField'
+import { SourceControlActionOptionField } from './SourceControlActionOptionField'
 import {
   useSourceControlActionAgentInventory,
   useSourceControlActionAgent
@@ -64,7 +62,11 @@ type RepositorySourceControlAiActionRowsProps = {
     value: SourceControlActionLaunchPreferences | undefined
   ) => void
   onActionTemplateChange: (actionId: SourceControlActionId, value: string) => void
-  onActionAgentArgsChange: (actionId: SourceControlActionId, value: string) => void
+  onActionAgentArgsChange: (
+    actionId: SourceControlActionId,
+    value: string,
+    commit?: boolean
+  ) => void
   onAppendVariable: (actionId: SourceControlActionId, variable: string) => void
   /** Per-action saving state for CLI args + command template (matches global recipes). */
   savingActionIds: Partial<Record<SourceControlActionId, boolean>>
@@ -258,17 +260,23 @@ export function RepositorySourceControlAiActionRows({
                   />
                 ) : null}
                 {isLaunchAction ? (
-                  <SourceControlActionExtraArgsField
+                  <SourceControlActionArguments
+                    agent={pickerAgent}
                     value={agentArgsValue}
-                    disabled={!hasOverride}
-                    placeholder={agentArgsPlaceholder}
-                    onChange={(value) => onActionAgentArgsChange(actionId, value)}
+                    preferences={recipe.launchPreferences}
+                    disabled={!hasOverride || actual.status === 'pending' || isSavingAction}
+                    onArgsChange={(value, commit) =>
+                      onActionAgentArgsChange(actionId, value, commit)
+                    }
+                    onPreferencesChange={(value) =>
+                      onActionLaunchPreferencesChange(actionId, value)
+                    }
                   />
                 ) : (
                   <SourceControlActionOptionField
                     label={translate(
                       'auto.components.settings.RepositorySourceControlAiActionRows.7a3a8e431d',
-                      'CLI arguments'
+                      'Arguments'
                     )}
                   >
                     <Input

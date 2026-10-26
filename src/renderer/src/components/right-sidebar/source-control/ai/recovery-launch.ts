@@ -16,7 +16,10 @@ import {
   readSourceControlLaunchRecipeAgentId
 } from '../../../../../../shared/source-control-launch-agent-selection'
 import { isTuiAgentEnabled } from '../../../../../../shared/tui-agent-selection'
-import { sourceControlActionLaunchOptions } from '../../../../../../shared/source-control-action-launch-preferences'
+import {
+  sourceControlActionAgentArgs,
+  sourceControlActionLaunchOptions
+} from '../../../../../../shared/source-control-action-launch-preferences'
 import type {
   SourceControlActionRecipe,
   SourceControlLaunchActionId
@@ -163,7 +166,7 @@ export async function launchSourceControlRecoveryAgentWithDefault({
     worktreeId: activeWorktreeId,
     groupId: activeGroupId ?? activeWorktreeId,
     prompt,
-    agentArgs: savedRecipe.agentArgs,
+    agentArgs: sourceControlActionAgentArgs(savedRecipe, agent, store.settings),
     ...sourceControlActionLaunchOptions(savedRecipe, agent),
     promptDelivery: 'submit-after-ready',
     launchPlatform: activeSourceControlLaunchPlatform,

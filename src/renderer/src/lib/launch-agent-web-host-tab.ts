@@ -74,7 +74,11 @@ export function launchAgentInWebHostTab(args: {
     ...(hasPrompt && pastePromptAfterReady === null
       ? { promptDelivery: structuredPromptDelivery }
       : {}),
-    ...(agentArgs !== undefined ? { agentArgs } : {}),
+    ...(launchPreferences?.mode
+      ? { agentArgs: startupPlan.launchConfig.agentArgs }
+      : agentArgs !== undefined
+        ? { agentArgs }
+        : {}),
     ...(launchPreferences ? { launchPreferences } : {})
   } as const
 

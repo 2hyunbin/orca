@@ -2,10 +2,7 @@ import { isCustomAgentId, type CustomAgentId } from './commit-message-agent-spec
 import { isTuiAgent } from './tui-agent-config'
 import type { TuiAgent } from './tui-agent'
 import { isAgentSessionOptions } from './agent-session-record'
-import {
-  agentChatPermissionModes,
-  type AgentChatPermissionMode
-} from './agent-chat-permission-mode'
+import { agentPermissionChoices, type AgentPermissionChoice } from './tui-agent-permission-choice'
 
 // Keep the variable registry separate for max-lines headroom; no re-export so consumer searches stay complete.
 
@@ -29,7 +26,7 @@ export type SourceControlActionLaunchPreferences = {
   model?: string
   options?: Record<string, string>
   /** Absent: a chat takes the new-chat default, a terminal Agent Permissions or its own arguments. */
-  permissionMode?: AgentChatPermissionMode
+  permissionMode?: AgentPermissionChoice
 }
 
 export type SourceControlActionRecipe = {
@@ -163,7 +160,7 @@ export function normalizeSourceControlActionLaunchPreferences(
     return undefined
   }
   const model = typeof value.model === 'string' ? value.model.trim() : ''
-  const permissionMode = agentChatPermissionModes(agentId)?.modes.find(
+  const permissionMode = agentPermissionChoices(agentId).find(
     (mode) => mode === value.permissionMode
   )
   // Options belong to a model; the permission mode has its own field.

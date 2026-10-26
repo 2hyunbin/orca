@@ -83,6 +83,90 @@ describe('load-time normalization durability', () => {
     rmSync(testState.dir, { recursive: true, force: true })
   })
 
+  it('lifts owned global/repo action recipes through actual flush, close and reopen on an already typed profile', async () => {
+    const settled = await settledProfile()
+    await closeTestStores()
+    const literal = '  --yolo  --search '
+    const conflict = {
+      agentId: 'claude',
+      agentArgs: ' --dangerously-skip-permissions ',
+      launchPreferences: { agentId: 'claude', permissionMode: 'ask' }
+    } as const
+    settled.settings.agentPermissionDefault = 'own'
+    const source = settled.settings.sourceControlAi
+    if (!source) {
+      throw new Error('Missing settled Source Control settings')
+    }
+    settled.settings.sourceControlAi = {
+      ...source,
+      actions: {
+        fixChecks: {
+          agentId: 'claude',
+          agentArgs: '--dangerously-skip-permissions --verbose',
+          launchPreferences: { agentId: 'claude', model: 'sonnet', options: { effort: 'high' } }
+        },
+        resolveComments: { agentId: 'codex', agentArgs: literal },
+        fixPushFailure: { agentArgs: ' --dangerously-skip-permissions ' },
+        fixCommitFailure: conflict,
+        commitMessage: { agentId: 'claude', agentArgs: '--dangerously-skip-permissions' }
+      }
+    }
+    settled.repos = [
+      {
+        id: 'recipe-repo',
+        name: 'recipe',
+        path: '/tmp/recipe',
+        worktreesPath: '/tmp',
+        sourceControlAi: {
+          actionOverrides: {
+            fixChecks: {
+              agentId: 'codex',
+              agentArgs: '--dangerously-bypass-approvals-and-sandbox'
+            },
+            resolveComments: { agentArgs: ' --dangerously-bypass-approvals-and-sandbox ' },
+            fixPushFailure: { agentId: null, agentArgs: literal }
+          }
+        }
+      }
+    ]
+    writeDataFile(settled)
+    const store = createStore()
+    expect(store.getSettings().sourceControlAi?.actions?.fixChecks).toMatchObject({
+      agentArgs: '--verbose',
+      launchPreferences: {
+        agentId: 'claude',
+        model: 'sonnet',
+        options: { effort: 'high' },
+        permissionMode: 'full-access'
+      }
+    })
+    expect(store.getRepos()[0]?.sourceControlAi?.actionOverrides?.fixChecks).toEqual({
+      agentId: 'codex',
+      agentArgs: '',
+      launchPreferences: { agentId: 'codex', permissionMode: 'full-access' }
+    })
+    store.flush()
+    await closeTestStores()
+    const reopened = createStore()
+    const actions = reopened.getSettings().sourceControlAi?.actions
+    expect(actions?.fixChecks?.launchPreferences?.permissionMode).toBe('full-access')
+    expect(actions?.resolveComments?.agentArgs).toBe(literal)
+    expect(actions?.fixPushFailure?.agentArgs).toBe(' --dangerously-skip-permissions ')
+    expect(actions?.fixCommitFailure).toEqual(conflict)
+    expect(actions?.commitMessage?.agentArgs).toBe('--dangerously-skip-permissions')
+    const rows = reopened.getRepos()[0]?.sourceControlAi?.actionOverrides
+    expect(rows?.fixChecks?.agentArgs).toBe('')
+    expect(rows?.resolveComments).toEqual(
+      settled.repos[0]?.sourceControlAi?.actionOverrides?.resolveComments
+    )
+    expect(rows?.fixPushFailure).toEqual(
+      settled.repos[0]?.sourceControlAi?.actionOverrides?.fixPushFailure
+    )
+    const stable = readDataFile()
+    reopened.flush()
+    expect(readDataFile()).toEqual(stable)
+  })
+
   it('persists the legacy search-tab explorer view repair', async () => {
     const settled = await settledProfile()
     delete (settled.ui as Record<string, unknown>).rightSidebarExplorerView

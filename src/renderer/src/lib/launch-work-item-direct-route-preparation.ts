@@ -27,6 +27,7 @@ export type DirectWorkItemAgentLaunchPreparation = {
   launchConnectionId: string | null
   unavailable: boolean
   effectiveAgent: TuiAgent | null
+  agentArgs?: string | null
   startupPlan: ReturnType<typeof buildDirectWorkItemStartup>['startupPlan']
   draftLaunchedNatively: boolean
   startupPlanFailed: boolean
@@ -84,6 +85,7 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
   agentOverride?: TuiAgent
   agentArgs?: string | null
   sessionOptions?: Readonly<Record<string, string>>
+  resolveAgentArgs?: (agent: TuiAgent) => string | null | undefined
   resolveSessionOptions?: (agent: TuiAgent) => Readonly<Record<string, string>> | undefined
   sessionOptionsYieldToAgentArgs?: true
   repoConnectionId: string | null
@@ -133,6 +135,8 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
         // Non-critical: activation still has the explicit startup below.
       })
   }
+  const agentArgs =
+    effectiveAgent && args.resolveAgentArgs ? args.resolveAgentArgs(effectiveAgent) : args.agentArgs
   const sessionOptions = effectiveAgent
     ? args.resolveSessionOptions
       ? args.resolveSessionOptions(effectiveAgent)
@@ -157,7 +161,7 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
     ? { startupPlan: null, draftLaunchedNatively: false, startupPlanFailed: false }
     : buildDirectWorkItemStartup({
         agent: effectiveAgent,
-        agentArgs: args.agentArgs,
+        agentArgs,
         sessionOptions,
         sessionOptionsYieldToAgentArgs: args.sessionOptionsYieldToAgentArgs,
         draftContent: args.draftContent,
@@ -172,6 +176,7 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
     launchConnectionId,
     unavailable: false,
     effectiveAgent,
+    agentArgs,
     startupPlan,
     draftLaunchedNatively,
     startupPlanFailed,

@@ -613,6 +613,7 @@ describe('launchWorkItemDirect', () => {
       openModalFallback: vi.fn(),
       agentOverride: 'claude',
       agentArgs: '--model opus',
+      resolveAgentArgs: () => '--verbose --model opus',
       launchPlatform: 'linux',
       promptDelivery: 'submit-after-ready',
       item: {
@@ -627,7 +628,7 @@ describe('launchWorkItemDirect', () => {
     expect(beginDirectWorkItemStructuredLaunch).toHaveBeenCalledWith(
       expect.objectContaining({
         declinedTerminal: {
-          agentArgs: '--model opus',
+          agentArgs: '--verbose --model opus',
           launchPlatform: 'linux',
           launchSource: 'task_page'
         }

@@ -180,13 +180,18 @@ export type AgentPermissionChoiceRow = {
 export function AgentPermissionMenu({
   agentId,
   label,
-  permission
+  permission,
+  inheritLabel,
+  disabled
 }: {
   agentId: string
   label: string
   permission: AgentPermissionChoiceRow
+  inheritLabel?: string
+  disabled?: boolean
 }): React.JSX.Element {
-  const followAll = translate('settings.agents.permissionSameAsAll', 'Same as all agents')
+  const followAll =
+    inheritLabel ?? translate('settings.agents.permissionSameAsAll', 'Same as all agents')
   const current = agentPermissionChoiceLabel(permission.choice, label)
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -194,7 +199,7 @@ export function AgentPermissionMenu({
         {translate('settings.agents.rowPermissions', 'Permissions')}
       </span>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        <DropdownMenuTrigger asChild disabled={disabled}>
           <Button
             type="button"
             variant="outline"
@@ -214,7 +219,11 @@ export function AgentPermissionMenu({
           <DropdownMenuRadioGroup
             value={permission.source === 'all' ? 'default' : permission.choice}
           >
-            <DropdownMenuRadioItem value="default" onSelect={() => permission.onSelect('default')}>
+            <DropdownMenuRadioItem
+              value="default"
+              disabled={disabled}
+              onSelect={() => permission.onSelect('default')}
+            >
               <span className="truncate">
                 {followAll} · {agentPermissionChoiceLabel(permission.defaultChoice, label)}
               </span>
@@ -224,6 +233,7 @@ export function AgentPermissionMenu({
               <DropdownMenuRadioItem
                 key={choice}
                 value={choice}
+                disabled={disabled}
                 onSelect={() => permission.onSelect(choice)}
               >
                 <div className="min-w-0 py-0.5">
@@ -285,7 +295,13 @@ export function AgentPermissionArgsChip({
             onKeyDown={(event) => {
               if (event.key === 'Backspace') {
                 event.preventDefault()
-                if (!event.repeat && !event.altKey && !event.ctrlKey && !event.metaKey) {
+                if (
+                  !disabled &&
+                  !event.repeat &&
+                  !event.altKey &&
+                  !event.ctrlKey &&
+                  !event.metaKey
+                ) {
                   onRemove()
                 }
               }

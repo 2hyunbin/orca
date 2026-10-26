@@ -1,3 +1,4 @@
+import { readLaunchPermissionChoice } from '../../../shared/tui-agent-permission-choice'
 import type { LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab-args'
 import { useAppStore } from '@/store'
 import { validateActionTerminalArgs } from './launch-work-item-direct-messages'
@@ -14,6 +15,7 @@ import { runtimeEnvironmentIdOrLocalUnlessTwin } from '@/lib/worktree-runtime-ow
 import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
 import { launchAgentInWebHostTab } from '@/lib/launch-agent-web-host-tab'
 import {
+  agentLaunchPermissionSettings,
   resolveTuiAgentLaunchArgs,
   resolveTuiAgentLaunchEnv
 } from '../../../shared/tui-agent-launch-defaults'
@@ -72,9 +74,20 @@ export function launchAgentInNewTabWithOutcome(
     return null
   }
   const { resolvedLaunchPlatform, isRemote, queuedShell } = executionContext
+  const permissionSettings = agentLaunchPermissionSettings(
+    agent,
+    store.settings ?? {},
+    sessionOptions
+  )
   const effectiveAgentArgs =
-    agentArgs !== undefined ? agentArgs : resolveTuiAgentLaunchArgs(agent, store.settings)
-  const agentEnv = resolveTuiAgentLaunchEnv(agent, store.settings, resolvedLaunchPlatform)
+    agentArgs !== undefined
+      ? agentArgs
+      : resolveTuiAgentLaunchArgs(
+          agent,
+          permissionSettings,
+          readLaunchPermissionChoice(sessionOptions) ? 'own' : undefined
+        )
+  const agentEnv = resolveTuiAgentLaunchEnv(agent, permissionSettings, resolvedLaunchPlatform)
   const trimmedPrompt = prompt?.trim() ?? ''
   const hasPrompt = trimmedPrompt.length > 0
   const isFollowupPath = TUI_AGENT_CONFIG[agent].promptInjectionMode === 'stdin-after-start'
