@@ -103,7 +103,11 @@ export class ConversationEvents {
       const unsubscribe = this.deps.onAgentPaneChange((change) => {
         this.settleRejected(change.paneKey)
         news.observe(change)
-        this.reconcileStamp(change)
+        // A working row's stamp is told once, whether or not news reported its start.
+        const stamp = workingStampedTurn(this.deps.readHookRow(change.paneKey))
+        if (stamp !== null && change.workspace) {
+          this.announceStamp(change.paneKey, change.workspace.worktreeId, stamp)
+        }
       })
       this.release = () => {
         unsubscribe()
@@ -199,7 +203,7 @@ export class ConversationEvents {
     this.emit({
       kind: 'turn-ended',
       ...pane(linked.link, linked.workspace.worktreeId),
-      turnId: this.turnIdOf(paneKey, row),
+      turnId: this.takeTurnId(paneKey, row),
       stopReason: 'cancellation',
       at: activity.observedAt
     })
@@ -216,7 +220,8 @@ export class ConversationEvents {
           agent: link.agent,
           working,
           prompt: this.deps.pendingPrompt(link),
-          turnId: this.turnIdOf(link.paneKey, row),
+          // Unstamped and unseen: the working phase's start, as before stamps.
+          turnId: this.turnIdOf(link.paneKey, row) ?? (row && working ? row.stateStartedAt : null),
           activeAt: Math.max(link.createdAt, row?.receivedAt ?? 0)
         }
       })
@@ -234,18 +239,6 @@ export class ConversationEvents {
     }
     this.unstampedTurn.set(item.paneKey, item.row.stateStartedAt)
     this.emit({ kind: 'turn-started', ...pane(link, item.worktreeId), at: item.row.stateStartedAt })
-  }
-
-  /** A stamp (or session boundary) retires the fallback; a working row's stamp is told, news or not. */
-  private reconcileStamp(change: AgentPaneChange): void {
-    const row = this.deps.readHookRow(change.paneKey)
-    if (row?.turnStartedAt !== undefined || row?.sessionBoundary) {
-      this.unstampedTurn.delete(change.paneKey)
-    }
-    const stamp = workingStampedTurn(row)
-    if (stamp !== null && change.workspace) {
-      this.announceStamp(change.paneKey, change.workspace.worktreeId, stamp)
-    }
   }
 
   /** Told once per stamp; the cloud applies a start only if it is newer than its own anyway. */
@@ -294,7 +287,7 @@ export class ConversationEvents {
     this.emit({
       kind: 'turn-ended',
       ...pane(link, item.worktreeId),
-      turnId: this.turnIdOf(item.paneKey, item.row),
+      turnId: this.takeTurnId(item.paneKey, item.row),
       stopReason,
       ...(message ? { lastAssistantMessage: message } : {}),
       at: item.row.stateStartedAt
@@ -311,9 +304,16 @@ export class ConversationEvents {
     return { key: { source: link.source, externalId: link.externalId }, turnId }
   }
 
-  /** The turn a pane is in or last ended, as stamped rows keep it: the stamp, else the unstamped start. */
+  /** The turn a pane is in: the host's stamp, else the unstamped start news reported. */
   private turnIdOf(paneKey: string, row: AgentStatusIpcPayload | null): number | null {
     return row?.turnStartedAt ?? this.unstampedTurn.get(paneKey) ?? null
+  }
+
+  /** An ending turn's id; an unstamped one's start is forgotten with it, as before. */
+  private takeTurnId(paneKey: string, row: AgentStatusIpcPayload): number | null {
+    const turnId = this.turnIdOf(paneKey, row)
+    this.unstampedTurn.delete(paneKey)
+    return turnId
   }
 
   private linkedFor(paneKey: string): LinkedConversation | null {
