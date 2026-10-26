@@ -29,13 +29,14 @@ async function setup(options: Parameters<typeof createConnectorHarness>[1] = {})
   let nextSeq = 0
   const events = (list: unknown[], seq = nextSeq++, helloRev = 1) =>
     machine.call(CONNECTOR_PATHS.events, { v: 1, helloRev, seq, events: list })
-  const thread = async () =>
-    (
-      await harness.database.query(
-        `SELECT pane_key, agent, open_turn_id, turn_state, turn_stop_reason,
-           pending_prompt FROM connector_threads`
-      )
-    )[0]
+  // Postgres reads BIGINT back as a string; compare turn ids as numbers on both engines.
+  const thread = async () => {
+    const [row] = await harness.database.query(
+      `SELECT pane_key, agent, open_turn_id, turn_state, turn_stop_reason,
+         pending_prompt FROM connector_threads`
+    )
+    return row && { ...row, open_turn_id: row.open_turn_id === null ? null : Number(row.open_turn_id) }
+  }
   return { harness, machine, enqueue, events, thread }
 }
 
