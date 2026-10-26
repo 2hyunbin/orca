@@ -181,12 +181,31 @@ function reportIfStale(environmentId: string, snapshot: RuntimeMobileSessionTabs
       }
       // The host does not order activations; one the user made meanwhile may have landed first.
       const now = visibleTerminalPane(worktreeId)
-      if (now?.hostTabId !== hostTabId || (now.leafId && now.leafId !== target.leafId)) {
+      if (now && (now.hostTabId !== hostTabId || (now.leafId && now.leafId !== target.leafId))) {
+        // Whatever was recorded since may predate the late landing, so check afresh.
         reportedPaneByWorkspace.delete(key)
         scheduleCheck(key)
+      } else if (!now) {
+        reassertVisibleNonTerminalTab(worktreeId)
       }
     },
     retryLater
+  )
+}
+
+/** A browser or chat tab the user picked while a report was in flight: send their pick again, the
+ *  way a click does, so the report cannot have the last word. */
+function reassertVisibleNonTerminalTab(worktreeId: string): void {
+  const state = useAppStore.getState()
+  const visibleId = resolveWebSessionVisibleTabId(state, worktreeId)
+  const visible = state.unifiedTabsByWorktree[worktreeId]?.find((tab) => tab.id === visibleId)
+  if (visible?.contentType !== 'browser' && visible?.contentType !== 'agent-session') {
+    return
+  }
+  const next = { type: visible.contentType, id: visible.entityId, tabId: visible.id }
+  // Loaded lazily: the owner activations reach the session-tab lifecycle, which loads this module.
+  void import('../lib/cycled-tab-owner-activation').then(({ activateCycledTabOnOwner }) =>
+    activateCycledTabOnOwner(worktreeId, next)
   )
 }
 

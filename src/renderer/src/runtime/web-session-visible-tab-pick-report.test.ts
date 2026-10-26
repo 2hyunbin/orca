@@ -29,6 +29,8 @@ vi.mock('../store', () => ({
     }
   }
 }))
+const reassert = vi.hoisted(() => vi.fn())
+vi.mock('../lib/cycled-tab-owner-activation', () => ({ activateCycledTabOnOwner: reassert }))
 vi.mock('../lib/worktree-runtime-owner', () => ({
   runtimeEnvironmentIdOrLocalUnlessTwin: () => mocks.owner
 }))
@@ -97,7 +99,8 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
       unifiedTabsByWorktree: {
         [WT]: [
           { id: 'u1', contentType: 'terminal', entityId: T1, groupId: 'group' },
-          { id: 'u2', contentType: 'terminal', entityId: T2, groupId: 'group' }
+          { id: 'u2', contentType: 'terminal', entityId: T2, groupId: 'group' },
+          { id: 'u3', contentType: 'browser', entityId: 'browser-ws', groupId: 'group' }
         ]
       },
       terminalLayoutsByTabId: { [T1]: { activeLeafId: 'leaf' } }
@@ -175,6 +178,19 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
     deliver(frame('host-tab-1'))
     expect(mocks.call).toHaveBeenCalledTimes(2)
     expect(mocks.call.mock.calls[1]?.[0]).toMatchObject({ params: { tabId: 'host-tab-2' } })
+  })
+
+  it('sends a browser pick again when it was made while a report was in flight', async () => {
+    reassert.mockReset()
+    let finish: (value: unknown) => void = () => {}
+    mocks.call.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+    deliver(frame('host-tab-2'))
+    groups[WT]![0]!.activeTabId = 'u3'
+    finish({ ok: true, result: {} })
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.waitFor(() =>
+      expect(reassert).toHaveBeenCalledWith(WT, { type: 'browser', id: 'browser-ws', tabId: 'u3' })
+    )
   })
 
   it('drops a frame whose connection was replaced before the check', () => {
