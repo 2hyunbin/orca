@@ -11,6 +11,7 @@ const { accessMock, lstatMock, mkdirMock, opendirMock, rmMock, writeFileMock } =
 }))
 
 vi.mock('node:timers/promises', () => ({
+  // ast-grep-ignore: test-no-real-time-wait -- exposes retry backoff to vi.useFakeTimers for deterministic cleanup tests
   setTimeout: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 }))
 
