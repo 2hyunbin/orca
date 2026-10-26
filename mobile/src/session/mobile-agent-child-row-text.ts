@@ -14,7 +14,7 @@ export function mobileAgentChildStateLabel(state: AgentChildDisplayState): strin
 
 const MOBILE_AGENT_CHILD_ROW_COPY = {
   stateLabel: mobileAgentChildStateLabel,
-  ended: 'Ended',
+  ended: () => 'Ended',
   sayBackgroundTask: sayBackgroundTaskEnglish
 }
 

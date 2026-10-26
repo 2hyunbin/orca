@@ -21,12 +21,14 @@ export function agentChildRowNoUpdateLabel(row: AgentChildRowModel, now: number)
   return agentNoUpdateLabel({ updatedAt: row.recencyAt }, now)
 }
 
+const AGENT_CHILD_ROW_COPY = {
+  stateLabel: agentStateLabel,
+  ended: () => translate('components.agentChildRow.ended', 'Ended'),
+  sayBackgroundTask: sayBackgroundTaskTranslated
+}
+
 export function agentChildRowDetailText(row: AgentChildRowModel, now: number): string {
-  return sharedAgentChildRowDetailText(row, now, {
-    stateLabel: agentStateLabel,
-    ended: translate('components.agentChildRow.ended', 'Ended'),
-    sayBackgroundTask: sayBackgroundTaskTranslated
-  })
+  return sharedAgentChildRowDetailText(row, now, AGENT_CHILD_ROW_COPY)
 }
 
 /** The line beneath a full-width row: what the child said, or that it ended; '' otherwise. */

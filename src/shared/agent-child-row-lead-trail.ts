@@ -11,7 +11,7 @@ import { backgroundTaskStateReason, backgroundTaskStateWord } from './background
 /** The words each surface supplies: desktop translates them, mobile reads English. */
 export type AgentChildRowCopy = {
   stateLabel: (state: AgentChildDisplayState) => string
-  ended: string
+  ended: () => string
   sayBackgroundTask: BackgroundTaskSay
 }
 
@@ -56,7 +56,7 @@ export function agentChildRowDetailText(
     case 'message':
       return detail.text
     case 'ended':
-      return copy.ended
+      return copy.ended()
     case 'no-update':
       return agentNoUpdateLabel({ updatedAt: row.recencyAt }, now)
     case 'role':
