@@ -70,6 +70,7 @@ function harness(options: { visible?: boolean } = {}) {
     }
   )
   const readRunning = vi.fn(async () => state.running)
+  const requireRunning = vi.fn(async (_distro: string) => true)
   const readIdentity = vi.fn(async () => state.identity)
   const collectCensus = vi.fn(async () => CENSUS)
   const ensureHolder = vi.fn(async () => {})
@@ -101,6 +102,7 @@ function harness(options: { visible?: boolean } = {}) {
     collectCensus,
     hasUserVisibleWork: () => state.visible,
     deferUntilRunning: (_distro, _key, task) => deferred.push(task),
+    requireRunning,
     ensureHolder,
     subscribePower: (listener) => {
       power = listener
@@ -151,6 +153,7 @@ function harness(options: { visible?: boolean } = {}) {
     deferred,
     ensure,
     readRunning,
+    requireRunning,
     readIdentity,
     collectCensus,
     ensureHolder,
@@ -270,6 +273,19 @@ describe('WslOrcadLivenessSupervisor', () => {
     expect(h.ensure).toHaveBeenLastCalledWith('Ubuntu', { intent: 'force' })
     expect(h.watches).toHaveLength(2)
     expect(h.lastWatch().closed).toBe(false)
+  })
+
+  it('recovery reconnects only into a distro it confirms running right before spawning (E9)', async () => {
+    const h = harness()
+    await h.supervisor.connect('Ubuntu')
+    h.state.identity = { distroInstance: 'boot:1', orcad: null }
+    h.lastWatch().exit(1)
+    await h.advance(60_000)
+    const recoveryCalls = h.ensure.mock.calls.slice(1)
+    expect(recoveryCalls.length).toBeGreaterThan(0)
+    for (const [, opts] of recoveryCalls) {
+      expect(opts).toMatchObject({ requireRunning: h.requireRunning })
+    }
   })
 
   it('reports ready itself when a user connect supersedes a recovery', async () => {

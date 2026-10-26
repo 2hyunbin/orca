@@ -312,6 +312,8 @@ export class WslOrcadLivenessSupervisor {
 
   private async recover(entry: Supervised, reason: WslOrcadRecoveryReason): Promise<void> {
     const generation = entry.generation
+    // Recovery is never a user act: its reconnect re-checks the distro runs right before spawning.
+    const requireRunning = this.deps.requireRunning
     const gated = await recoverWslOrcad(
       {
         distro: entry.distro,
@@ -320,7 +322,7 @@ export class WslOrcadLivenessSupervisor {
         current: () => entry.generation === generation,
         wait: (delayMs) => cancellableWait(entry, this.schedule, delayMs),
         publish: (status) => this.publish(entry, status),
-        ensure: (options) => this.deps.manager.ensure(entry.distro, options),
+        ensure: (options) => this.deps.manager.ensure(entry.distro, { ...options, requireRunning }),
         collectCensus: this.deps.collectCensus,
         arm: (connection) => this.arm(entry, connection),
         readRunning: this.deps.readRunning

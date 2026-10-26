@@ -22,6 +22,8 @@ export type WslOrcadLivenessDependencies = {
   collectCensus: (connection: WslOrcadConnection) => Promise<OrcadTerminalCensus>
   /** A WSL project or terminal the user can see is open on this distro. */
   hasUserVisibleWork: (distro: string) => boolean
+  /** E9: recovery reconnects only into a distro confirmed running right before it spawns. */
+  requireRunning?: (distro: string) => Promise<boolean>
   deferUntilRunning: (distro: string, key: string, task: () => unknown) => void
   /** C3's `ensureHeld`; called only while the distro is confirmed running, so it never boots. */
   ensureHolder?: (distro: string) => Promise<unknown>

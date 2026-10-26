@@ -221,6 +221,12 @@ describe('WslOrcadConnectionManager', () => {
     expect(onChange.mock.calls.map(([, , status]) => status.state)).not.toContain('failed')
   })
 
+  it('a no-boot connect never shows the row as connecting, since it may be refused quietly', async () => {
+    const { manager, onChange } = setup()
+    await manager.ensure('Ubuntu', { requireRunning: async () => false }).catch(() => {})
+    expect(onChange.mock.calls.map(([, , status]) => status.state)).not.toContain('connecting')
+  })
+
   it('a close during the running-list read supersedes the connect before it deploys (E9)', async () => {
     const { manager, deployAndLaunch } = setup()
     let answer: (running: boolean) => void = () => {}
