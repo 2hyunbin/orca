@@ -159,6 +159,85 @@ describe('cookie clear debugger lifecycle', () => {
     await second
   })
 
+  it.each([200, 2000])(
+    'uses one target, N commands and N+1 nonoverlapping deadlines for %i rows',
+    async (count) => {
+      const fakeSetTimeout = globalThis.setTimeout
+      let peakTimers = 0
+      const deadlines = vi.spyOn(globalThis, 'setTimeout').mockImplementation((...args) => {
+        const timer = fakeSetTimeout(...args)
+        peakTimers = Math.max(peakTimers, vi.getTimerCount())
+        return timer
+      })
+      const store = openCookieClearStore(targetSession())
+      try {
+        const rows: SourceCookieToWrite[] = Array.from({ length: count }, (_, index) => ({
+          url: 'https://app.example/',
+          domain: 'app.example',
+          name: `cookie${index}`,
+          value: 'value',
+          path: '/',
+          secure: true,
+          httpOnly: true,
+          sameSite: 'lax',
+          expirationDate: undefined,
+          partition: { status: 'unpartitioned' }
+        }))
+        const write = writeImportedCookies(store, rows, { log: () => {} })
+        const window = electron.windows[0]
+        window.webContents.debugger.sendCommand.mockResolvedValue({ success: true })
+        window.resolveLoad()
+        expect(await write).toMatchObject({ importedCount: count, writeRejected: 0 })
+        expect(electron.windows).toHaveLength(1)
+        expect(window.webContents.debugger.sendCommand).toHaveBeenCalledTimes(count)
+        expect(deadlines).toHaveBeenCalledTimes(count + 1)
+        expect(peakTimers).toBe(1)
+        expect(vi.getTimerCount()).toBe(0)
+        store.dispose()
+        expect(window.destroy).toHaveBeenCalledOnce()
+        expect(vi.getTimerCount()).toBe(0)
+      } finally {
+        store.dispose()
+        deadlines.mockRestore()
+      }
+    }
+  )
+
+  it('dispatches no more commands or deadlines for 2000 rows after the first command times out', async () => {
+    const deadlines = vi.spyOn(globalThis, 'setTimeout')
+    const store = openCookieClearStore(targetSession())
+    try {
+      const rows: SourceCookieToWrite[] = Array.from({ length: 2000 }, (_, index) => ({
+        url: 'https://app.example/',
+        domain: 'app.example',
+        name: `cookie${index}`,
+        value: 'value',
+        path: '/',
+        secure: true,
+        httpOnly: true,
+        sameSite: 'lax',
+        expirationDate: undefined,
+        partition: { status: 'unpartitioned' }
+      }))
+      const write = writeImportedCookies(store, rows, { log: () => {} })
+      const window = electron.windows[0]
+      window.webContents.debugger.sendCommand.mockImplementation(() => new Promise(() => {}))
+      window.resolveLoad()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(vi.getTimerCount()).toBe(1)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(await write).toMatchObject({ importedCount: 0, writeRejected: 2000 })
+      expect(electron.windows).toHaveLength(1)
+      expect(window.webContents.debugger.sendCommand).toHaveBeenCalledOnce()
+      expect(deadlines).toHaveBeenCalledTimes(2)
+      expect(window.destroy).toHaveBeenCalledOnce()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      store.dispose()
+      deadlines.mockRestore()
+    }
+  })
+
   it('preserves FIFO mutation ordering when the first target is retired before its queued write executes', async () => {
     const owner = targetSession()
     const row: SourceCookieToWrite = {

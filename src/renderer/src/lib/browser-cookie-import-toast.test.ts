@@ -43,26 +43,6 @@ describe('emitBrowserCookieImportToast', () => {
     warningToastMock.mockReset()
   })
 
-  it('shows the localized total-failure warning', () => {
-    emitBrowserCookieImportToast(
-      {
-        ...summary,
-        warning: {
-          code: 'restart-fallback-unavailable',
-          loadedCookies: 0,
-          failedCookies: 3
-        }
-      },
-      'Imported 3 cookies.',
-      localExecution
-    )
-
-    expect(warningToastMock).toHaveBeenCalledWith(
-      'None of the 3 cookies could be loaded, and the restart fallback was unavailable. The previous cookies for this profile were replaced. Try the import again.'
-    )
-    expect(successToastMock).not.toHaveBeenCalled()
-  })
-
   it('shows success when the import has no warning', () => {
     emitBrowserCookieImportToast(summary, 'Imported 3 cookies.', localExecution)
 
@@ -169,7 +149,26 @@ describe('emitBrowserCookieImportToast', () => {
       remoteExecution
     )
     expect(warningToastMock).toHaveBeenCalledWith(
-      'Cookies with unreadable site partitions: 1. Related cookies left unimported to protect existing sessions: 1. Existing cookies for these sites were left unchanged. Check these sites in this profile before signing in again.',
+      'Cookies with unreadable site partitions: 1. Related cookies also skipped: 1. Check these sites in this profile before signing in again.',
+      { duration: 12000 }
+    )
+  })
+
+  it('reports a skipped partition beside successfully imported readable siblings without claiming preservation', () => {
+    emitBrowserCookieImportToast(
+      {
+        ...summary,
+        importedCookies: 2,
+        skippedCookies: 1,
+        partitionSkippedCookies: 1,
+        partitionSkipBreakdown: { unreadableCookies: 1, preservedRelatedCookies: 0 }
+      },
+      'Imported 2 cookies.',
+      localExecution
+    )
+    expect(successToastMock).toHaveBeenCalledWith('Imported 2 cookies.')
+    expect(warningToastMock).toHaveBeenCalledWith(
+      'Cookies with unreadable site partitions: 1. Related cookies also skipped: 0. Check these sites in this profile before signing in again.',
       { duration: 12000 }
     )
   })
@@ -189,7 +188,7 @@ describe('emitBrowserCookieImportToast', () => {
         localExecution
       )
       expect(warningToastMock.mock.calls[0]?.[0]).toContain('読み取れない Cookie: 1')
-      expect(warningToastMock.mock.calls[0]?.[0]).toContain('インポートしなかった関連 Cookie: 1')
+      expect(warningToastMock.mock.calls[0]?.[0]).toContain('スキップされた関連 Cookie: 1')
     } finally {
       await i18n.changeLanguage(originalLanguage)
     }
@@ -302,34 +301,5 @@ describe('emitBrowserCookieImportToast', () => {
     const message = warningToastMock.mock.calls[0]?.[0]
     expect(typeof message).toBe('string')
     expect(message).not.toBe('')
-  })
-
-  it('keeps both applicable warnings when restart fallback is unavailable', () => {
-    emitBrowserCookieImportToast(
-      {
-        ...summary,
-        importedCookies: 1,
-        skippedCookies: 2,
-        googleCookiesSkipped: 1,
-        warning: {
-          code: 'restart-fallback-unavailable',
-          loadedCookies: 1,
-          failedCookies: 1
-        }
-      },
-      'Imported 1 cookie.',
-      remoteExecution
-    )
-
-    expect(successToastMock).not.toHaveBeenCalled()
-    expect(warningToastMock.mock.calls).toEqual([
-      [
-        'Imported 1 of 2 cookies. The rest could not be loaded, and the restart fallback was unavailable. Try the import again.'
-      ],
-      [
-        'Google cookies were not imported. Open a browser tab in the Remote Mac workspace with this profile, then sign into Google.',
-        { duration: 12000 }
-      ]
-    ])
   })
 })

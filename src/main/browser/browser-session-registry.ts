@@ -11,11 +11,7 @@ import type {
   BrowserSessionProfile,
   BrowserSessionProfileScope
 } from '../../shared/browser-workspace-types'
-import {
-  applyPendingBrowserCookieImports,
-  clearPendingBrowserCookieImport,
-  setPendingBrowserCookieImport
-} from './browser-session-cookie-staging'
+import { applyPendingBrowserCookieImports } from './browser-session-cookie-staging'
 import {
   BROWSER_SESSION_META_FILE_NAME,
   loadBrowserSessionMeta,
@@ -145,23 +141,6 @@ class BrowserSessionRegistry {
       resolveMetadataPath: () => this.metadataPath,
       defaultPartition: this.defaultPartition,
       activeOrcaProfileId: this.activeOrcaProfileId
-    })
-  }
-
-  setPendingCookieImport(partition: string, stagingDbPath: string): void {
-    setPendingBrowserCookieImport({
-      resolveMetadataPath: () => this.metadataPath,
-      defaultPartition: this.defaultPartition,
-      partition,
-      stagingDbPath
-    })
-  }
-
-  clearPendingCookieImport(partition: string): void {
-    clearPendingBrowserCookieImport({
-      resolveMetadataPath: () => this.metadataPath,
-      defaultPartition: this.defaultPartition,
-      partition
     })
   }
 

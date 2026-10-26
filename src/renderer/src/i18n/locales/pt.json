@@ -1834,8 +1834,6 @@
         "cookie": {
           "import": {
             "toast": {
-              "restartFallbackUnavailableNone": "Nenhum dos {{value0}} cookies pôde ser carregado, e o fallback de reinício não estava disponível. Os cookies anteriores deste perfil foram substituídos. Tente a importação novamente.",
-              "restartFallbackUnavailablePartial": "Importados {{value0}} de {{value1}} cookies. O restante não pôde ser carregado, e o fallback de reinício não estava disponível. Tente a importação novamente.",
               "googleCookiesSkipped": "Os cookies do Google não foram importados. Abra um navegador no Orca em {{value0}} com este perfil e entre no Google.",
               "undecryptableAppBound": "O Orca não consegue descriptografar {{value0}} dos cookies deste navegador porque eles usam criptografia vinculada ao app. Você pode importar cookies de um arquivo usando “De um Arquivo…”.",
               "undecryptableAppBoundMixed": "O Orca não consegue descriptografar {{value0}} dos cookies deste navegador porque eles usam criptografia vinculada ao app; mais {{value1}} não puderam ser descriptografados por outro motivo. Você pode importar cookies de um arquivo usando “De um Arquivo…”.",
@@ -1850,7 +1848,7 @@
               "googleCookiesSkippedLocal": "Os cookies do Google não foram importados. Abra um navegador no Orca com este perfil e entre no Google.",
               "googleCookiesSkippedClientHosted": "Os cookies do Google não foram importados. Abra uma aba do navegador no espaço de trabalho {{value0}} com este perfil — ela abre neste dispositivo — e entre no Google.",
               "googleCookiesSkippedRemoteWorkspace": "Os cookies do Google não foram importados. Abra uma aba do navegador no espaço de trabalho {{value0}} com este perfil e entre no Google.",
-              "partitionSkippedBreakdown": "Cookies com partições de site ilegíveis: {{value0}}. Cookies relacionados não importados para proteger sessões existentes: {{value1}}. Os cookies existentes desses sites foram preservados. Verifique esses sites neste perfil antes de entrar novamente."
+              "partitionSkippedCounts": "Cookies com partições de site ilegíveis: {{value0}}. Cookies relacionados também ignorados: {{value1}}. Verifique esses sites neste perfil antes de entrar novamente."
             }
           }
         }

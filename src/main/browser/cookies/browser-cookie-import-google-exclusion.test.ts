@@ -108,7 +108,6 @@ import { createChromiumCookieTestDatabase } from './browser-cookie-import-test-d
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
 
 function existingCookie(domain: string, name: string) {
   return { domain, name, path: '/', secure: true, sameSite: 'unspecified', value: 'live' }
@@ -269,44 +268,7 @@ describe('native Chromium import excludes the Google cookie family', () => {
     expect(execFileSyncMock).not.toHaveBeenCalled()
     expect(cookiesSetMock.mock.calls.map(([details]) => details.name)).toEqual(['session'])
   })
-
-  it('keeps the live Google rows in the staged restart-fallback database', async () => {
-    const sourceCookiesPath = seedSource([
-      { domain: '.google.com', name: 'SID', value: 'transplanted-sid' },
-      { domain: '.example.com', name: 'session', value: 'new' }
-    ])
-    seedTarget([
-      { domain: '.google.com', name: 'SID', value: 'live-sid' },
-      { domain: '.example.com', name: 'stale', value: 'stale' }
-    ])
-    // Reject the live write so the staged image survives for cold-start replay.
-    cookiesSetMock.mockRejectedValue(new Error('cookie rejected'))
-
-    const result = await importCookiesFromBrowser(chromeBrowser(sourceCookiesPath), 'persist:test')
-
-    expect(result.ok).toBe(true)
-    expect(setPendingCookieImportMock).toHaveBeenCalledTimes(1)
-    const [partition, stagedPath] = setPendingCookieImportMock.mock.calls[0]
-    expect(partition).toBe('persist:test')
-    expect(readStagedRows(stagedPath)).toEqual([
-      { host_key: '.example.com', name: 'session', value: 'new' },
-      { host_key: '.google.com', name: 'SID', value: 'live-sid' }
-    ])
-  })
 })
-
-// SQLite returns imported value BLOBs as bytes.
-function readStagedRows(stagedPath: string): { host_key: string; name: string; value: string }[] {
-  const stagedDb = new DatabaseSync(stagedPath, { readOnly: true })
-  const rows = stagedDb
-    .prepare('SELECT host_key, name, value FROM cookies ORDER BY host_key, name')
-    .all() as { host_key: string; name: string; value: string | Uint8Array }[]
-  stagedDb.close()
-  return rows.map((row) => ({
-    ...row,
-    value: typeof row.value === 'string' ? row.value : Buffer.from(row.value).toString('latin1')
-  }))
-}
 
 function chromeBrowser(cookiesPath: string) {
   return {

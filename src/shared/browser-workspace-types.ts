@@ -173,19 +173,13 @@ export type BrowserCookieImportSummary = {
     preservedRelatedCookies: number
   }
   domains: string[]
-  warning?:
-    | {
-        code: 'restart-fallback-unavailable'
-        loadedCookies: number
-        failedCookies: number
-      }
-    | {
-        // Capture decrypt failure cause before null merges unreadable and corrupt rows, preventing false successful-empty imports.
-        code: 'cookies-undecryptable'
-        failedCookies: number
-        otherFailedCookies?: number
-        reason: 'app-bound-encryption' | 'linux-keyring-unavailable' | 'unknown'
-      }
+  warning?: {
+    // Capture decrypt failure cause before null merges unreadable and corrupt rows, preventing false successful-empty imports.
+    code: 'cookies-undecryptable'
+    failedCookies: number
+    otherFailedCookies?: number
+    reason: 'app-bound-encryption' | 'linux-keyring-unavailable' | 'unknown'
+  }
 }
 
 export type BrowserCookieImportResult =

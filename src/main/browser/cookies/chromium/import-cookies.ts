@@ -27,12 +27,7 @@ export async function importChromiumCookies(
   const targetSession = session.fromPartition(targetPartition)
   let context: ChromiumImportContext | null = null
   try {
-    const preparation = await prepareChromiumCookieImport(
-      browser,
-      targetPartition,
-      options,
-      targetSession
-    )
+    const preparation = await prepareChromiumCookieImport(browser, options, targetSession)
     if ('result' in preparation) {
       return preparation.result
     }
@@ -43,15 +38,6 @@ export async function importChromiumCookies(
     }
     return await finalizeChromiumCookieImport(context)
   } catch (err) {
-    if (context) {
-      try {
-        context.sourceDb?.close()
-      } catch {
-        /* may already be closed */
-      }
-      context.closeStagingDb()
-      context.discardStagingFile()
-    }
     diag(`  SQLite import failed: ${String(err)}`)
     return {
       ok: false,

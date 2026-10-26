@@ -244,7 +244,6 @@ describe('two concurrent NATIVE imports into one partition', () => {
   let clearDataMock: ReturnType<typeof vi.fn>
   let releaseFirstWrite: () => void
   let platformSpy: { mockRestore: () => void }
-  let stagingCopyCount: number
 
   function chromeBrowser(cookiesPath: string) {
     return {
@@ -262,16 +261,7 @@ describe('two concurrent NATIVE imports into one partition', () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'orca-cookie-native-concurrency-'))
     appGetPathMock.mockReturnValue(join(tmpDir, 'userData'))
     events = []
-    stagingCopyCount = 0
-    copyFileWithWindowsRetryMock
-      .mockReset()
-      .mockImplementation((source: string, destination: string) => {
-        if (destination.includes('cookie-import-staging')) {
-          stagingCopyCount += 1
-          events.push(`copy:${stagingCopyCount === 1 ? 'first' : 'second'}`)
-        }
-        copyFileSync(source, destination)
-      })
+    copyFileWithWindowsRetryMock.mockReset().mockImplementation(copyFileSync)
     // Seed in-scope cookies so the second import’s clear would expose a missing lock.
     snapshotClearIdentitiesMock
       .mockReset()
@@ -329,13 +319,13 @@ describe('two concurrent NATIVE imports into one partition', () => {
     createChromiumCookieTestDatabase(sourceB, [
       { domain: '.b.example', name: 'second', value: 'v' }
     ]).close()
-    // Precreate the database to keep initialization probes out of this ordering test.
+    // Existing target databases are never copied by the importer.
     createChromiumCookieTestDatabase(
       join(tmpDir, 'userData', 'Partitions', 'native-conc', 'Network', 'Cookies'),
       []
     ).close()
 
-    // Start both imports early enough to cover staging as well as live writes.
+    // Source preparation may overlap, but live writes share the Session lock.
     const first = importCookiesFromBrowser(chromeBrowser(sourceA), 'persist:native-conc')
     const second = importCookiesFromBrowser(chromeBrowser(sourceB), 'persist:native-conc')
     for (let i = 0; i < 100 && !events.includes('set:first'); i++) {

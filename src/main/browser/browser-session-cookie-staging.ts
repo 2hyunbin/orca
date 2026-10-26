@@ -1,7 +1,6 @@
 import { app } from 'electron'
 import { copyFileSync, existsSync, mkdirSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { isBrowserRoutePartition } from './browser-route-identity'
 import {
   loadBrowserSessionMeta,
   persistBrowserSessionMeta,
@@ -18,11 +17,6 @@ import {
   SCOPED_COOKIE_IMPORT_FORMAT
 } from './cookies/browser-cookie-staged-import'
 import { resolveChromiumCookiesPath } from './chromium-cookie-path'
-
-// Runtime-derived route partitions lack startup replay metadata and would strand plaintext cookie DBs.
-export function supportsPendingBrowserCookieImportReplay(partition: string): boolean {
-  return !isBrowserRoutePartition(partition)
-}
 
 function unlinkStagedCookieDb(stagedPath: string): void {
   for (const suffix of ['', '-wal', '-shm']) {
@@ -173,48 +167,4 @@ export function applyPendingBrowserCookieImports({
       pendingCookieDbPath: legacyPendingPath(remainingEntries[defaultPartition])
     })
   } catch {}
-}
-
-export function setPendingBrowserCookieImport({
-  resolveMetadataPath,
-  defaultPartition,
-  partition,
-  stagingDbPath
-}: PendingCookieImportTarget & { partition: string; stagingDbPath: string }): void {
-  const meta = loadBrowserSessionMeta(resolveMetadataPath, defaultPartition)
-  const pendingCookieImports = {
-    ...meta.pendingCookieImports,
-    [partition]: { format: SCOPED_COOKIE_IMPORT_FORMAT, path: stagingDbPath }
-  }
-  persistBrowserSessionMeta(resolveMetadataPath, defaultPartition, {
-    pendingCookieImports,
-    pendingCookieDbPath: legacyPendingPath(pendingCookieImports[defaultPartition])
-  })
-}
-
-// Even a degraded import must prevent older staged cookies from overwriting it on restart.
-export function clearPendingBrowserCookieImport({
-  resolveMetadataPath,
-  defaultPartition,
-  partition
-}: PendingCookieImportTarget & { partition: string }): void {
-  const meta = loadBrowserSessionMeta(resolveMetadataPath, defaultPartition)
-  if (!(partition in meta.pendingCookieImports)) {
-    return
-  }
-  const pendingCookieImports = { ...meta.pendingCookieImports }
-  const pendingEntry = pendingCookieImports[partition]
-  const stagedPath = typeof pendingEntry === 'string' ? pendingEntry : pendingEntry.path
-  // File consumption and metadata removal each provide a fallback against stale replay.
-  if (existsSync(stagedPath)) {
-    try {
-      consumeStagedCookieImport(stagedPath)
-    } catch {}
-  }
-  delete pendingCookieImports[partition]
-  persistBrowserSessionMeta(resolveMetadataPath, defaultPartition, {
-    pendingCookieImports,
-    pendingCookieDbPath: legacyPendingPath(pendingCookieImports[defaultPartition])
-  })
-  unlinkStagedCookieDb(stagedPath)
 }

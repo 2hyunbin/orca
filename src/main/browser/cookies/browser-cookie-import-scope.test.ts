@@ -49,8 +49,7 @@ vi.mock('./browser-cookie-clear-store', () => ({
   })
 }))
 
-import { DatabaseSync } from 'node:sqlite'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { importCookiesFromBrowser } from './browser-cookie-import'
@@ -215,65 +214,5 @@ describe('native cookie import preserves destination cookies', () => {
 
     expect(result.ok).toBe(true)
     expect(cookiesRemoveMock).not.toHaveBeenCalled()
-  })
-
-  // Verify the on-disk image: in-memory assertions cannot cover cold-start replay.
-  it('keeps out-of-scope rows in the staged cold-start image', async () => {
-    // Omit the invalid coordinate so this case reaches staged replay.
-    sessionFromPartitionMock.mockReturnValue({
-      cookies: {
-        get: vi
-          .fn()
-          .mockResolvedValue(populatedTargetJar().filter((cookie) => cookie.domain !== '')),
-        set: vi.fn(async () => undefined),
-        remove: cookiesRemoveMock,
-        flushStore: vi.fn().mockResolvedValue(undefined)
-      },
-      clearData: vi.fn().mockResolvedValue(undefined),
-      setUserAgent: vi.fn(),
-      getStoragePath: () => join(tmpDir, 'userData', 'Partitions', 'test')
-    })
-    writeCookieIdentityMock.mockRejectedValue(new Error('rejected so the staged image is kept'))
-    createChromiumCookieTestDatabase(sourceCookiesPath, [
-      { domain: '.github.com', name: 'user_session', value: 'imported-github' }
-    ]).close()
-    createChromiumCookieTestDatabase(
-      targetCookiesPath,
-      [
-        { domain: 'the-internet.herokuapp.com', name: 'rack.session', value: 'live-login' },
-        { domain: '.google.com', name: 'SID', value: 'google-live' },
-        { domain: '.github.com', name: 'user_session', value: 'stale-github' }
-      ],
-      { journalMode: 'wal' }
-    ).close()
-
-    const result = await importCookiesFromBrowser(chromeBrowser(sourceCookiesPath), 'persist:test')
-
-    expect(result.ok).toBe(true)
-    expect(setPendingCookieImportMock).toHaveBeenCalledTimes(1)
-    const stagedPath = setPendingCookieImportMock.mock.calls[0][1] as string
-    expect(existsSync(`${stagedPath}-wal`)).toBe(false)
-    const staged = new DatabaseSync(stagedPath, { readOnly: true })
-    try {
-      expect(
-        staged.prepare('SELECT domain, format_version FROM orca_cookie_import_scope').all()
-      ).toEqual([{ domain: 'github.com', format_version: 1 }])
-      const rows = (
-        staged
-          .prepare('SELECT host_key, name, value FROM cookies ORDER BY host_key, name')
-          .all() as { host_key: string; name: string; value: string | Uint8Array }[]
-      ).map((row) => ({
-        ...row,
-        // SQLite returns copied BLOB values as bytes.
-        value: typeof row.value === 'string' ? row.value : Buffer.from(row.value).toString('latin1')
-      }))
-      expect(rows).toEqual([
-        { host_key: '.github.com', name: 'user_session', value: 'imported-github' },
-        { host_key: '.google.com', name: 'SID', value: 'google-live' },
-        { host_key: 'the-internet.herokuapp.com', name: 'rack.session', value: 'live-login' }
-      ])
-    } finally {
-      staged.close()
-    }
   })
 })

@@ -54,7 +54,7 @@ vi.mock('./browser-cookie-clear-store', () => ({
 
 import { importCookiesFromBrowser, importCookiesFromFile } from './browser-cookie-import'
 import { createChromiumCookieTestDatabase } from './browser-cookie-import-test-database'
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, existsSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -249,7 +249,7 @@ describe('native Chromium integrity-cookie accounting', () => {
       expect(cookiesSetMock).not.toHaveBeenCalled()
       expect(setPendingCookieImportMock).not.toHaveBeenCalled()
       expect(clearPendingCookieImportMock).not.toHaveBeenCalled()
-      expect(readdirSync(join(tmpDir, 'userData', 'cookie-import-staging'))).toEqual([])
+      expect(existsSync(join(tmpDir, 'userData', 'cookie-import-staging'))).toBe(false)
     } finally {
       platformSpy.mockRestore()
     }

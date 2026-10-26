@@ -3,7 +3,7 @@ import type * as NodeSqlite from 'node:sqlite'
 import type * as ChromiumCookieSnapshotModule from '../chromium-cookie-snapshot'
 import type { DetectedBrowser } from './sources/browser-cookie-detection-types'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 const {
@@ -70,10 +70,7 @@ vi.mock('../chromium-cookie-snapshot', async (importOriginal) => {
         cleanup: () => {
           cleanupStates.push(
             openedDatabases
-              .filter(
-                ({ path }) =>
-                  path === snapshot.databasePath || path.includes('cookie-import-staging')
-              )
+              .filter(({ path }) => path === snapshot.databasePath)
               .map(({ database }) => database.isOpen)
           )
           snapshot.cleanup()
@@ -97,7 +94,6 @@ vi.mock('./browser-cookie-clear-store', () => ({
 
 import { importChromiumCookies } from './chromium/import-cookies'
 import { createChromiumCookieTestDatabase } from './browser-cookie-import-test-database'
-import { DatabaseSync } from 'node:sqlite'
 
 const PARTITION = 'persist:test'
 
@@ -177,7 +173,7 @@ describe('Chromium import snapshot ownership', () => {
 
   function expectRefusalCleanup() {
     expect(snapshotDirectories()).toEqual([])
-    expect(readdirSync(stagingRoot)).toEqual([])
+    expect(existsSync(stagingRoot)).toBe(false)
     expect(readFileSync(targetPath)).toEqual(targetBefore)
     expect(writeCookieIdentityMock).not.toHaveBeenCalled()
     expect(cookiesRemoveMock).not.toHaveBeenCalled()
@@ -237,7 +233,7 @@ describe('Chromium import snapshot ownership', () => {
       reason: expect.stringContaining('no such table: cookies')
     })
     expect(cleanupStates).toHaveLength(1)
-    expect(cleanupStates[0].length).toBeGreaterThanOrEqual(2)
+    expect(cleanupStates[0].length).toBeGreaterThanOrEqual(1)
     expectRefusalCleanup()
   })
 
@@ -249,32 +245,21 @@ describe('Chromium import snapshot ownership', () => {
       expect.objectContaining({ name: 'sid', value: 'source-value' })
     )
     expect(snapshotDirectories()).toEqual([])
-    expect(readdirSync(stagingRoot)).toEqual([])
-    expect(cleanupStates).toEqual([[false, false]])
+    expect(existsSync(stagingRoot)).toBe(false)
+    expect(cleanupStates).toEqual([[false]])
   })
 
-  it('removes the source snapshot while preserving a usable stage owned by restart replay', async () => {
+  it('removes the source snapshot after a live rejection without creating replay data', async () => {
     insertSourceCookie(false)
     writeCookieIdentityMock.mockRejectedValue(new Error('Cookie rejected'))
     expect(await importChromiumCookies(chromeBrowser(sourcePath), PARTITION)).toMatchObject({
-      ok: true
+      ok: true,
+      summary: { importedCookies: 0, skippedCookies: 1 }
     })
     expect(snapshotDirectories()).toEqual([])
-    expect(cleanupStates).toEqual([[false, false]])
-    expect(setPendingCookieImportMock).toHaveBeenCalledTimes(1)
-    const stagedPath: unknown = setPendingCookieImportMock.mock.calls[0][1]
-    if (typeof stagedPath !== 'string') {
-      throw new Error('No staged replay path')
-    }
-    expect(readdirSync(stagingRoot)).toEqual([basename(stagedPath)])
-    const stage = new DatabaseSync(stagedPath, { readOnly: true })
-    try {
-      const row = stage
-        .prepare("SELECT CAST(value AS TEXT) AS value FROM cookies WHERE name = 'sid'")
-        .get()
-      expect(row).toEqual({ value: 'source-value' })
-    } finally {
-      stage.close()
-    }
+    expect(cleanupStates).toEqual([[false]])
+    expect(setPendingCookieImportMock).not.toHaveBeenCalled()
+    expect(clearPendingCookieImportMock).not.toHaveBeenCalled()
+    expect(existsSync(stagingRoot)).toBe(false)
   })
 })

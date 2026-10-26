@@ -89,37 +89,6 @@ function readImportedScope(
   return importedDomainScope(scopeDomains)
 }
 
-// Record exact import scope so replay preserves unrelated sessions created after staging.
-export function prepareStagedCookiesForImport(
-  stagingDb: DatabaseSync,
-  importScope: ImportedDomainScope
-): void {
-  if (importScope.exact.size === 0) {
-    return
-  }
-  stagingDb.exec(
-    `CREATE TABLE IF NOT EXISTS ${quotedIdentifier(IMPORT_SCOPE_TABLE)} (` +
-      'domain TEXT PRIMARY KEY, format_version INTEGER NOT NULL)'
-  )
-  stagingDb.exec(`DELETE FROM ${quotedIdentifier(IMPORT_SCOPE_TABLE)}`)
-  const insertScope = stagingDb.prepare(
-    `INSERT INTO ${quotedIdentifier(IMPORT_SCOPE_TABLE)} (domain, format_version) VALUES (?, ?)`
-  )
-  for (const domain of importScope.exact) {
-    insertScope.run(domain, IMPORT_SCOPE_FORMAT_VERSION)
-  }
-
-  const hostKeys = (
-    stagingDb.prepare('SELECT DISTINCT host_key FROM cookies').all() as StagedHostKeyRow[]
-  ).map((row) => row.host_key)
-  const deleteByHostKey = stagingDb.prepare('DELETE FROM cookies WHERE host_key = ?')
-  for (const hostKey of hostKeys) {
-    if (isHostKeyInScope(hostKey, importScope)) {
-      deleteByHostKey.run(hostKey)
-    }
-  }
-}
-
 export function isScopedStagedCookieImport(stagedCookiesPath: string): boolean {
   const database = new DatabaseSync(stagedCookiesPath, { readOnly: true })
   try {

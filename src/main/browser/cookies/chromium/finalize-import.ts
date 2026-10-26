@@ -2,7 +2,6 @@ import type {
   BrowserCookieImportResult,
   BrowserCookieImportSummary
 } from '../../../../shared/browser-workspace-types'
-import { browserSessionRegistry } from '../../browser-session-registry'
 import { summarizePartitionSkips } from '../browser-cookie-partition-summary'
 import { withCookieMutationLock } from '../browser-cookie-import-clear'
 import { openCookieClearStore } from '../browser-cookie-clear-store'
@@ -16,8 +15,6 @@ export async function finalizeChromiumCookieImport(
 ): Promise<BrowserCookieImportResult> {
   if (context.decryptedCookies.length === 0) {
     const zeroPathWarning = context.undecryptableWarning
-    context.closeStagingDb()
-    context.discardStagingFile()
     return {
       ok: true,
       profileId: '',
@@ -37,20 +34,6 @@ export async function finalizeChromiumCookieImport(
     }
   }
 
-  if (context.stagingDb) {
-    try {
-      context.stagingDb.exec('COMMIT')
-      context.closeStagingDb()
-      diag(
-        `  SQLite staging complete: ${context.imported} cookies, ${context.domainSet.size} domains`
-      )
-    } catch (err) {
-      context.disableStaging(String(err))
-    }
-  } else {
-    diag(`  staging skipped: ${context.imported} cookies will load in-memory only`)
-  }
-
   await withCookieMutationLock(context.targetSession, async () => {
     const cookieClearStore = openCookieClearStore(context.targetSession)
     try {
@@ -63,7 +46,7 @@ export async function finalizeChromiumCookieImport(
         }
         writable.push({ ...cookie, url })
       }
-      // Continue live writes; rejected cookies may use staged cold-start replay.
+      // Rejections leave other coordinates available for the remaining live writes.
       const phase = await writeImportedCookies(cookieClearStore, writable, {
         log: diag
       })
@@ -87,39 +70,6 @@ export async function finalizeChromiumCookieImport(
     `  memory load: ${context.memoryLoaded} OK, ${context.memoryFailed} failed, ${context.partitionSkipped} partition-unreadable`
   )
 
-  let warning: BrowserCookieImportSummary['warning']
-  if (context.memoryFailed > 0 && context.stagingAvailable) {
-    // Retain the staged file for cold-start replay of cookies rejected by live writes.
-    browserSessionRegistry.setPendingCookieImport(
-      context.targetPartition,
-      context.stagingCookiesPath
-    )
-    diag(
-      `  staged at ${context.stagingCookiesPath} for ${context.memoryFailed} cookies that need restart`
-    )
-  } else if (context.memoryFailed > 0) {
-    // An unavailable staged file cannot safely back cold-start replay.
-    browserSessionRegistry.clearPendingCookieImport(context.targetPartition)
-    context.discardStagingFile()
-    diag(`  ${context.memoryFailed} cookies need a restart but staging is unavailable — skipped`)
-    // Removal already ran, so report cookies that neither live writes nor replay can restore.
-    warning = {
-      code: 'restart-fallback-unavailable',
-      loadedCookies: context.memoryLoaded,
-      failedCookies: context.memoryFailed
-    }
-  } else {
-    // A stale staged image must not overwrite this successful live import.
-    browserSessionRegistry.clearPendingCookieImport(context.targetPartition)
-    context.discardStagingFile()
-    diag('  all cookies loaded in-memory — no restart needed')
-  }
-
-  // Report decryption loss unless the more severe restart-fallback warning already applies.
-  if (!warning && context.undecryptableWarning) {
-    warning = context.undecryptableWarning
-  }
-
   const summary: BrowserCookieImportSummary = {
     totalCookies: context.sourceRows.length,
     importedCookies: context.memoryLoaded,
@@ -133,7 +83,7 @@ export async function finalizeChromiumCookieImport(
       : {}),
     ...summarizePartitionSkips(context.nativePlan.skips),
     domains: [...context.domainSet].sort(),
-    ...(warning ? { warning } : {})
+    ...(context.undecryptableWarning ? { warning: context.undecryptableWarning } : {})
   }
   return { ok: true, profileId: '', summary }
 }

@@ -459,7 +459,7 @@ describe('native Chromium import partition fidelity', () => {
     expect(result.ok && result.summary?.partitionSkippedCookies).toBe(1)
     expect(result.ok && result.summary?.importedCookies).toBe(0)
     expect(result.ok && result.summary?.skippedCookies).toBe(2)
-    // A partition skip disables replay so a staged image cannot erase the preserved family.
+    // New imports never produce replay, including readable siblings.
     expect(setPendingCookieImportMock).not.toHaveBeenCalled()
   })
 
@@ -524,51 +524,6 @@ describe('native Chromium import partition fidelity', () => {
       partitionSkippedCookies: 1
     })
     expect(setPendingCookieImportMock).not.toHaveBeenCalled()
-  })
-
-  it('still stages a cold-restart image when nothing is preserved', async () => {
-    const sourceCookiesPath = join(tmpDir, 'Cookies')
-    const legacyDb = new DatabaseSync(sourceCookiesPath)
-    legacyDb.exec(`
-      CREATE TABLE cookies (
-        creation_utc INTEGER NOT NULL,
-        host_key TEXT NOT NULL,
-        top_frame_site_key TEXT NOT NULL,
-        name TEXT NOT NULL,
-        value TEXT NOT NULL,
-        encrypted_value BLOB NOT NULL,
-        path TEXT NOT NULL,
-        expires_utc INTEGER NOT NULL,
-        is_secure INTEGER NOT NULL,
-        is_httponly INTEGER NOT NULL,
-        last_access_utc INTEGER NOT NULL,
-        has_expires INTEGER NOT NULL,
-        is_persistent INTEGER NOT NULL,
-        priority INTEGER NOT NULL,
-        samesite INTEGER NOT NULL,
-        source_scheme INTEGER NOT NULL,
-        has_cross_site_ancestor INTEGER NOT NULL
-      );
-      INSERT INTO cookies VALUES
-        (133000000000000, '.plain.example', '', 'plain', 'plain-ok', X'', '/', 0, 1, 0, 0, 0, -1, 0, 0, 2, 0)
-    `)
-    legacyDb.close()
-    createChromiumCookieTestDatabase(
-      join(tmpDir, 'userData', 'Partitions', 'test', 'Network', 'Cookies'),
-      []
-    ).close()
-    cookieWriteMock.mockRejectedValueOnce(new Error('plain cookie needs restart'))
-
-    const result = await importCookiesFromBrowser(chromeBrowser(sourceCookiesPath), 'persist:test')
-
-    expect(result.ok).toBe(true)
-    expect(result.ok && result.summary?.partitionSkippedCookies).toBeUndefined()
-    expect(setPendingCookieImportMock).toHaveBeenCalledOnce()
-    const stagedPath = setPendingCookieImportMock.mock.calls[0][1] as string
-    const stagedDb = new DatabaseSync(stagedPath, { readOnly: true })
-    const stagedNames = stagedDb.prepare('SELECT name FROM cookies ORDER BY name').all()
-    stagedDb.close()
-    expect(stagedNames).toEqual([{ name: 'plain' }])
   })
 })
 

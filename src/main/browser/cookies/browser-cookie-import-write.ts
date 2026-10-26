@@ -4,7 +4,6 @@ import type {
   CookieClearPartitionKey,
   CookieImportWriteStore
 } from './browser-cookie-import-clear'
-import { registrableFamily } from './browser-cookie-import-policy'
 import type { SourcePartitionRead } from './sources/browser-cookie-source-partition'
 
 export type ImportedCookieFields = {
@@ -94,7 +93,6 @@ export type ImportWriteSkip<T extends PlannableCookie = SourceCookieToWrite> = {
 export type ImportWritePlanResult<T extends PlannableCookie = SourceCookieToWrite> = {
   writes: T[]
   skips: ImportWriteSkip<T>[]
-  skippedFamilies: Set<string>
 }
 
 export function planImportWrites<T extends PlannableCookie>(
@@ -102,19 +100,14 @@ export function planImportWrites<T extends PlannableCookie>(
 ): ImportWritePlanResult<T> {
   const writes: T[] = []
   const skips: ImportWriteSkip<T>[] = []
-  const skippedFamilies = new Set<string>()
   for (const cookie of cookies) {
     if (cookie.partition.status === 'unreadable') {
       skips.push({ cookie, reason: cookie.partition.reason })
-      const family = registrableFamily(cookie.domain)
-      if (family) {
-        skippedFamilies.add(family)
-      }
     } else {
       writes.push(cookie)
     }
   }
-  return { writes, skips, skippedFamilies }
+  return { writes, skips }
 }
 
 function summaryDomain(domain: string): string {
