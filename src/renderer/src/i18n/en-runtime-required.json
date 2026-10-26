@@ -3240,7 +3240,10 @@
       },
       "queuedMessages": {
         "imageCount_one": "{{count}} image",
-        "imageCount_other": "{{count}} images"
+        "imageCount_other": "{{count}} images",
+        "cancelEditing": "Cancel editing",
+        "pasteOrDropImages": "Paste or drop images",
+        "saveNeedsContent": "Add text or an image to save"
       },
       "receipt": {
         "cancelled": "Cancelled",

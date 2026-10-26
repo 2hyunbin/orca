@@ -19832,7 +19832,9 @@
         "queued": "Queued",
         "clearAll": "Clear all",
         "pasteOrDropImages": "Paste or drop images",
-        "saveNeedsContent": "Add text or an image to save"
+        "saveNeedsContent": "Add text or an image to save",
+        "editReturned": "Your edit is in the chat box.",
+        "commandsUnsupported": "Commands can't be saved in a queued message."
       },
       "thought": "Thought",
       "thoughtForDuration": "Thought for {{duration}}",
