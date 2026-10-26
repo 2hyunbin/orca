@@ -24,7 +24,8 @@ const PROC_LINKS: Record<string, string> = {
   // A sibling launch of the same AppImage runs its own FUSE server and keepalive pipe.
   '/proc/50/exe': APPIMAGE,
   '/proc/50/fd/4': 'pipe:[555]',
-  '/proc/51/exe': APPIMAGE,
+  // Our server outlives an in-place update that replaced the AppImage file.
+  '/proc/51/exe': `${APPIMAGE} (deleted)`,
   '/proc/51/fd/3': APPIMAGE,
   '/proc/51/fd/4': KEEPALIVE,
   '/proc/60/exe': '/usr/bin/bash',

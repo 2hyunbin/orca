@@ -87,7 +87,8 @@ export function installAppImageMountExit(): void {
     const serverPids: number[] = []
     for (const pid of listPids()) {
       const executable = readLink(`/proc/${pid}/exe`)
-      if (executable === appImagePath) {
+      // An in-place update replaces the AppImage file before quit.
+      if (executable === appImagePath || executable === `${appImagePath} (deleted)`) {
         serverPids.push(pid)
       } else if (executable === handlerPath) {
         try {
