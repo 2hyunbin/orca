@@ -77,8 +77,15 @@ export async function captureSourceTerminal(
       ? terminal.handle === owner.terminal &&
         (renderer === null ||
           ((renderer.ptyId === null || renderer.ptyId === source.ptyId) &&
-            renderer.createdAt === original.createdAt &&
-            renderer.generation === original.generation &&
+            isRetainedTerminalSurfaceIdentity(
+              renderer,
+              captureTerminalSurfaceIdentity(
+                useAppStore.getState(),
+                source.workspaceId,
+                source.tabId,
+                leafId
+              )
+            ) &&
             (!renderer.hasLeaf || original.hasLeaf) &&
             (renderer.incarnationId === null || renderer.incarnationId === original.incarnationId)))
       : (source.ptyId === undefined || terminal.ptyId === source.ptyId) &&
