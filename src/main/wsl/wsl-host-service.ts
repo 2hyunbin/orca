@@ -5,6 +5,7 @@
  */
 import { noteWslHostUserAction } from './wsl-host-user-actions'
 import { tearDownRemovedWslHost } from './wsl-host-remove-teardown'
+import { focusReachability } from './wsl-host-focus-reachability'
 import { removeWslHostEnvironment } from '../../shared/runtime-environment-wsl-host-store'
 import {
   readWslHostDeployments,
@@ -198,7 +199,8 @@ export class WslHostService {
     }
     this.statuses.delete(environmentId)
     this.notifyStatusesChanged()
-    // Every Remove is the user's; noted before the cleanup await so a failure cannot drop it.
+    // Every Remove (sidebar or Settings) is the user's: the move orchestrator never removes a host.
+    // Before the cleanup await, so a failed cleanup cannot drop the decline of a host already gone.
     noteWslHostUserAction({ kind: 'removed', distro: record.distro })
     await this.deps.removed(environmentId)
     return serverStop
@@ -291,8 +293,7 @@ export class WslHostService {
       return
     }
     this.parked.delete(record.environmentId)
-    void this.connector
-      .reachability(record.distro, record.environmentId)
+    void focusReachability(this.connector, record)
       .then((reachability) =>
         reachability === 'available' ? undefined : this.connector?.connect(record.distro)
       )
