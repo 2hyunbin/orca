@@ -142,13 +142,9 @@ function reportIfStale(environmentId: string, snapshot: RuntimeMobileSessionTabs
   if (target?.type !== 'terminal') {
     return
   }
-  const key = [
-    environmentId,
-    owner.pairingRevision,
-    getRuntimeEnvironmentConnectionGeneration(environmentId),
-    worktreeId
-  ].join('\0')
-  const pane = `${hostTabId}\0${target.leafId}`
+  const key = `${environmentId}\0${worktreeId}`
+  // The connection is part of the value, so a new pairing or connection reports afresh.
+  const pane = `${connectionGeneration(environmentId)}\0${hostTabId}\0${target.leafId}`
   if (snapshot.activeTabId === target.id) {
     // In agreement: remember it, so a later change of this desktop's pane reports again.
     reportedPaneByWorkspace.set(key, pane)
@@ -187,6 +183,24 @@ function reportIfStale(environmentId: string, snapshot: RuntimeMobileSessionTabs
     },
     retryLater
   )
+}
+
+/** Mirror teardown for an environment drops everything recorded for it. */
+export function forgetVisibleTabPicksForEnvironment(environmentId: string): void {
+  const prefix = `${environmentId}\0`
+  for (const map of [reportedPaneByWorkspace, latestFrameByWorkspace]) {
+    for (const key of map.keys()) {
+      if (key.startsWith(prefix)) {
+        map.delete(key)
+      }
+    }
+  }
+  for (const [key, timer] of pendingCheckByWorkspace) {
+    if (key.startsWith(prefix)) {
+      clearTimeout(timer)
+      pendingCheckByWorkspace.delete(key)
+    }
+  }
 }
 
 export function resetReportedVisibleTabPicksForTests(): void {

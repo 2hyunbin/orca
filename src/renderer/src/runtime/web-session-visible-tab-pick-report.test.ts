@@ -7,12 +7,17 @@ const ENV = 'env-1'
 const T1 = toWebTerminalSurfaceTabId('host-tab-1')
 const T2 = toWebTerminalSurfaceTabId('host-tab-2')
 
-const mocks = vi.hoisted(() => ({
-  state: {} as Record<string, unknown>,
-  call: vi.fn(),
-  owner: 'env-1' as string | null,
-  listener: null as ((state: unknown, previous: unknown) => void) | null
-}))
+type MockStore = {
+  state: Record<string, unknown>
+  call: ReturnType<typeof vi.fn>
+  owner: string | null
+  listener: ((state: unknown, previous: unknown) => void) | null
+}
+const mocks = vi.hoisted(() => {
+  const store: MockStore = { state: {}, call: vi.fn(), owner: 'env-1', listener: null }
+  return store
+})
+let groups: Record<string, { id: string; activeTabId: string; tabOrder: string[] }[]> = {}
 vi.mock('../store', () => ({
   useAppStore: {
     getState: () => mocks.state,
@@ -84,10 +89,11 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
     mocks.call.mockReset().mockResolvedValue({ ok: true, result: {} })
     vi.stubGlobal('window', { api: { runtimeEnvironments: { call: mocks.call } } })
     mocks.owner = ENV
+    groups = { [WT]: [{ id: 'group', activeTabId: 'u1', tabOrder: ['u1', 'u2'] }] }
     mocks.state = {
       activeWorktreeId: WT,
       activeGroupIdByWorktree: { [WT]: 'group' },
-      groupsByWorktree: { [WT]: [{ id: 'group', activeTabId: 'u1', tabOrder: ['u1', 'u2'] }] },
+      groupsByWorktree: groups,
       unifiedTabsByWorktree: {
         [WT]: [
           { id: 'u1', contentType: 'terminal', entityId: T1, groupId: 'group' },
@@ -120,7 +126,6 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
 
   it('reports again after the desktop moved away and back while the server agreed', () => {
     deliver(frame('host-tab-2'))
-    const groups = mocks.state.groupsByWorktree as Record<string, { activeTabId: string }[]>
     groups[WT]![0]!.activeTabId = 'u2'
     deliver(frame('host-tab-2'))
     groups[WT]![0]!.activeTabId = 'u1'
@@ -184,7 +189,6 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
 
   it('leaves a click that lands inside the settle window alone', () => {
     reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
-    const groups = mocks.state.groupsByWorktree as Record<string, { activeTabId: string }[]>
     groups[WT]![0]!.activeTabId = 'u2'
     vi.advanceTimersByTime(VISIBLE_TAB_PICK_SETTLE_MS)
     expect(mocks.call).not.toHaveBeenCalled()

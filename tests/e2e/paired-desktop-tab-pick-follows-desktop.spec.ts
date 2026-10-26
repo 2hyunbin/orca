@@ -7,12 +7,29 @@ import { launchPairedElectronClient } from './helpers/paired-electron-client'
 function serverPickedTab(page: Page, environmentId: string, worktreeId: string) {
   return page.evaluate(
     async ({ environmentId, worktreeId }) => {
-      const response = (await window.api.runtimeEnvironments.call({
+      const response: unknown = await window.api.runtimeEnvironments.call({
         selector: environmentId,
         method: 'session.tabs.list',
         params: { worktree: `id:${worktreeId}` }
-      })) as { ok: boolean; result?: { tabGroups?: { activeTabId: string | null }[] } }
-      return response.ok ? (response.result?.tabGroups?.[0]?.activeTabId ?? null) : null
+      })
+      if (
+        typeof response !== 'object' ||
+        response === null ||
+        !('result' in response) ||
+        typeof response.result !== 'object' ||
+        response.result === null ||
+        !('tabGroups' in response.result) ||
+        !Array.isArray(response.result.tabGroups)
+      ) {
+        return null
+      }
+      const first: unknown = response.result.tabGroups[0]
+      return typeof first === 'object' &&
+        first !== null &&
+        'activeTabId' in first &&
+        typeof first.activeTabId === 'string'
+        ? first.activeTabId
+        : null
     },
     { environmentId, worktreeId }
   )
@@ -35,6 +52,7 @@ function desktopActiveTab(page: Page, worktreeId: string) {
 test('a desktop restart brings a stale server pick back to the tab the desktop shows', async ({
   testRepoPath
 }, testInfo) => {
+  // Two desktop launches against a paired host, with a restart between them.
   test.setTimeout(300_000)
   const host = await launchHeadlessPairedRuntimeHost()
   let client: Awaited<ReturnType<typeof launchPairedElectronClient>> | null = null
@@ -97,6 +115,7 @@ test('a desktop restart brings a stale server pick back to the tab the desktop s
     )
 
     // A pane this desktop already reported is not reported again within its connection.
+    // ast-grep-ignore: test-no-real-time-wait -- proving no report is sent needs the settle delay to pass first
     await page.waitForTimeout(3_000)
     expect(await serverPickedTab(page, environmentId, worktreeId)).toBe(hostTabId(order[1]))
 
