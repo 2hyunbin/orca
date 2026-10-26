@@ -8,11 +8,9 @@ import {
   answerDeliveryId,
   ownerActionState,
   pendingPrompt,
-  stopDeliveryId,
-  stoppableTurn,
   type OwnerActionState
 } from './owner-controls.js'
-import { refreshPromptCards, slackAnswerablePrompt, statusBlocks } from './slack-prompt-cards.js'
+import { refreshPromptCards, slackAnswerablePrompt } from './slack-prompt-cards.js'
 import type { SlackPlace, SlackPosts } from './slack-posts.js'
 import { escapeSlackText, slackText } from './slack-text.js'
 
@@ -68,27 +66,16 @@ export async function refreshSlackStatus(
   )
   const prompt = slackAnswerablePrompt(thread.row, thread.hello)
   const place = { teamId: thread.teamId, channelId: thread.channelId, threadTs: thread.threadTs }
-  // The owner's own stop for the open turn and answer to the shown prompt, matched by their ids.
-  const openTurn = thread.row.turn_state === 'working' ? thread.row.open_turn_id : null
+  // The owner's own answer to the shown prompt, matched by its id.
   const shown = pendingPrompt(thread.row)
-  const owner = {
-    stop:
-      openTurn === null
-        ? null
-        : await ownerActionState(transaction, hostId, stopDeliveryId(externalId, Number(openTurn))),
-    answer: shown
-      ? await ownerActionState(transaction, hostId, answerDeliveryId(externalId, shown.promptId))
-      : null
-  }
+  const answer = shown
+    ? await ownerActionState(transaction, hostId, answerDeliveryId(externalId, shown.promptId))
+    : null
   const offered = await refreshPromptCards(transaction, posts, { ...place, externalId }, prompt)
-  const text = statusText(thread.row, latest, thread.hostName, offered, owner)
-  const stoppable = stoppableTurn(thread.row, thread.hello)
   await posts.setStatus(transaction, {
     ...place,
     postId: statusPostId(externalId),
-    text,
-    // One Stop per turn, and none while the machine can't be reached.
-    blocks: statusBlocks(text, owner.stop || unreached(latest) ? null : stoppable)
+    text: statusText(thread.row, latest, thread.hostName, offered, answer)
   })
 }
 
@@ -160,16 +147,11 @@ function unreached(latest: SqlRow | undefined): boolean {
   return latest?.state === 'expired' || resultOf(latest)?.outcome === 'expired'
 }
 
-// An owner action's outcome; `pending` is what the status shows while it is on its way.
-function ownerActionText(
-  state: OwnerActionState,
-  thread: SqlRow,
-  hostName: string,
-  pending: string
-): string {
+// The owner's answer to the shown prompt: working while it is on its way, else its outcome.
+function answerText(state: OwnerActionState, thread: SqlRow, hostName: string): string {
   switch (state.kind) {
     case 'on_its_way':
-      return pending
+      return slackText.status.working(hostName)
     case 'refused':
       return slackText.status.refused(hostName, state.reason)
     case 'unknown':
@@ -184,19 +166,16 @@ function statusText(
   latest: SqlRow | undefined,
   hostName: string,
   answerableHere: boolean,
-  owner: { stop: OwnerActionState | null; answer: OwnerActionState | null }
+  answer: OwnerActionState | null
 ): string {
   const result = resultOf(latest)
   // The newest message never arriving outranks whatever the last turn left showing.
   if (unreached(latest)) {
     return slackText.status.offline(String(thread.owner_user_id), hostName)
   }
-  if (owner.stop) {
-    return ownerActionText(owner.stop, thread, hostName, slackText.status.stopping(hostName))
-  }
   if (thread.pending_prompt !== null) {
-    if (owner.answer) {
-      return ownerActionText(owner.answer, thread, hostName, slackText.status.working(hostName))
+    if (answer) {
+      return answerText(answer, thread, hostName)
     }
     return answerableHere
       ? slackText.status.needsAnswerHere

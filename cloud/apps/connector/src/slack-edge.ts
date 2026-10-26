@@ -117,7 +117,7 @@ export function createSlackEdge(deps: {
       return context.body(null, 200)
     })
 
-    // Button presses (answers on prompt cards, Stop on the status); answered before any Slack call.
+    // Answer presses on prompt cards; answered before any Slack call, like events.
     fromSlack(app, '/slack/interactivity', async (context, rawBody) => {
       const click = readSlackClick(rawBody)
       if (click === 'invalid') {

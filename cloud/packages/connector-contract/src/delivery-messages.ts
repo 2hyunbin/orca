@@ -30,13 +30,7 @@ export const ConnectorDeliverySchema = z.discriminatedUnion('kind', [
     promptId: OpaqueIdSchema,
     optionId: OpaqueIdSchema
   }),
-  z.object({
-    ...DeliveryBase,
-    kind: z.literal('cancel'),
-    // A Stop names the turn it was pressed for (its turn-started `at`); the machine refuses it once
-    // that turn is no longer current.
-    turnId: EpochMsSchema.optional()
-  })
+  z.object({ ...DeliveryBase, kind: z.literal('cancel') })
 ])
 
 const absent = z.never().optional()
