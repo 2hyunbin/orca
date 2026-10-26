@@ -217,13 +217,14 @@ export class SlackPosts {
   }
 
   // failed: Slack refused it. uncertain: it may have posted and we couldn't check, so no retry.
-  async settle(post: ClaimedPost, state: 'failed' | 'uncertain'): Promise<void> {
-    await this.database.query(
+  async settle(post: ClaimedPost, state: 'failed' | 'uncertain'): Promise<boolean> {
+    const [settled] = await this.database.query(
       `UPDATE connector_slack_posts SET state = ?, updated_at = ?,
          body = CASE WHEN kind = 'status' THEN body ELSE '{}' END
        WHERE post_id = ? AND state = 'sending' AND next_at = ?`,
       [state, this.now(), post.postId, post.leaseUntil]
     )
+    return Number(settled?.changes ?? 0) > 0
   }
 
   // Status rows stay while their thread may still be edited; a finished one-off post's id keeps a

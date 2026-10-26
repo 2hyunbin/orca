@@ -149,5 +149,5 @@ export async function createSlackHarness(slack: Partial<SlackConfig> = {}) {
       'SELECT post_id, kind, body, state, next_at, slack_ts FROM connector_slack_posts ORDER BY post_id'
     )
 
-  return { ...harness, edge, fake, operator, signedPost, message, machineWith, posts }
+  return { ...harness, edge, fake, tokenKey, operator, signedPost, message, machineWith, posts }
 }

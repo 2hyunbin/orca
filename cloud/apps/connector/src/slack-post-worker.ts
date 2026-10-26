@@ -36,11 +36,6 @@ const RECONCILE_MAX_PAGES = 3
 // mid-send is looked for in the thread before it is sent again; if that check can't run, the post
 // is marked uncertain rather than risking a duplicate.
 export class SlackPostWorker {
-  private running: Promise<void> | null = null
-  private again = false
-  // Only a started worker (the background loop) sends on wake.
-  private started = false
-
   constructor(
     private readonly deps: {
       database: CloudDatabase
@@ -51,53 +46,29 @@ export class SlackPostWorker {
     }
   ) {}
 
-  start(): void {
-    this.started = true
-  }
-
-  stop(): void {
-    this.started = false
-  }
-
-  // Runs a pass now, or once more after the current one, so a fresh post doesn't wait a tick.
-  wake(): void {
-    if (!this.started) {
-      return
-    }
-    if (this.running) {
-      this.again = true
-      return
-    }
-    this.running = this.sendDue()
-      .catch(() => {})
-      .finally(() => {
-        this.running = null
-        if (this.again) {
-          this.again = false
-          this.wake()
-        }
-      })
-  }
-
-  // Claimed heads are in different channels and go out in parallel, well inside their lease.
+  // Claimed heads are in different channels and go out in parallel, well inside their lease. A
+  // database error leaves its post sending, so the lease brings it back to the history check.
   async sendDue(): Promise<void> {
     const claimed = await this.deps.posts.claim()
-    await Promise.all(claimed.map((post) => this.sendClaimed(post)))
+    const sent = await Promise.allSettled(claimed.map((post) => this.sendClaimed(post)))
+    const failure = sent.find((result) => result.status === 'rejected')
+    if (failure) {
+      throw failure.reason
+    }
   }
 
-  // A post that can never go (no install, a token sealed under another key, an unreadable body)
-  // fails rather than holding its channel.
+  // A post that can never go (no readable install token, an unreadable body) fails rather than
+  // holding its channel.
   private async sendClaimed(post: ClaimedPost): Promise<void> {
-    try {
-      const token = await this.deps.installs.botToken(this.deps.database, post.teamId)
-      if (token !== null) {
-        await this.send(token, post)
-        return
-      }
-    } catch {
-      // Settled as failed below.
+    const token = await this.deps.installs.botToken(this.deps.database, post.teamId)
+    const body = (post.kind === 'reaction' ? ReactionBodySchema : TextBodySchema).safeParse(
+      post.body
+    )
+    if (token === null || !body.success) {
+      await this.deps.posts.settle(post, 'failed')
+      return
     }
-    await this.deps.posts.settle(post, 'failed')
+    await this.send(token, post)
   }
 
   private async send(token: string, post: ClaimedPost): Promise<void> {
@@ -127,7 +98,9 @@ export class SlackPostWorker {
     if (post.stale) {
       const found = await this.findSent(token, post)
       if (found === undefined) {
-        await posts.settle(post, 'uncertain')
+        if (await posts.settle(post, 'uncertain')) {
+          console.warn(JSON.stringify({ event: 'orca_connector_slack_post_uncertain' }))
+        }
         return
       }
       if (found !== null) {

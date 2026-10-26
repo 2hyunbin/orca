@@ -105,7 +105,6 @@ export function createSlackEdge(deps: {
             { config, database, installs, posts, queue: deps.queue, now },
             envelope.message
           )
-          worker.wake()
         }
         return context.body(null, 200)
       }
@@ -129,7 +128,6 @@ export function createSlackEdge(deps: {
       if (!sent) {
         return context.json({ error: 'not_this_hosts_thread' }, 403)
       }
-      worker.wake()
       const response: ConnectorReplyResponse =
         sent.state === 'posted' && sent.slackTs !== null
           ? { status: 'posted', messageTs: sent.slackTs }
@@ -191,9 +189,7 @@ export function createSlackEdge(deps: {
       }
     },
     startBackground: (): (() => void) => {
-      worker.start()
       const stops = [
-        () => worker.stop(),
         every('slack_posts', POST_INTERVAL_MS, () => worker.sendDue()),
         every('slack_members', MEMBER_CHECK_INTERVAL_MS, () => worker.checkMembers()),
         every('slack_retention', RETENTION_INTERVAL_MS, async () => {

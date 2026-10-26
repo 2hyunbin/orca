@@ -9,7 +9,11 @@ import {
   project,
   TEAM
 } from './slack-harness.test-fixture.js'
+import type { CloudDatabase } from '@orca-cloud/cloud-database'
+import { SlackInstalls } from './slack-installs.js'
+import { SlackPostWorker } from './slack-post-worker.js'
 import { SlackPosts } from './slack-posts.js'
+import { createSlackWebApi } from './slack-web-api.js'
 
 afterEach(async () => {
   await cleanupConnectorHarnesses()
@@ -369,5 +373,37 @@ describe('Slack thread status and posts', () => {
     await harness.pass()
     const reply = (await harness.posts()).find((post) => String(post.post_id).startsWith('reply:'))
     expect(reply).toMatchObject({ state: 'posted', body: '{}' })
+  })
+
+  it('a database error after Slack took the post leaves it to the history check, not failed', async () => {
+    const harness = await startedThread()
+    let failNext = true
+    const inner = harness.database
+    const flaky: CloudDatabase = {
+      dialect: inner.dialect,
+      query: async (sql, params) => {
+        if (failNext && sql.includes("THEN 'posted'")) {
+          failNext = false
+          throw new Error('connection lost')
+        }
+        return await inner.query(sql, params)
+      },
+      transaction: (run) => inner.transaction(run),
+      lockQuotaScope: (key) => inner.lockQuotaScope(key),
+      tryLockScope: (key) => inner.tryLockScope(key),
+      tryLockSharedScope: (key) => inner.tryLockSharedScope(key),
+      close: () => inner.close()
+    }
+    const worker = new SlackPostWorker({
+      database: harness.database,
+      posts: new SlackPosts(flaky, harness.now),
+      installs: new SlackInstalls(harness.tokenKey),
+      api: createSlackWebApi(),
+      now: harness.now
+    })
+    await expect(worker.sendDue()).rejects.toThrow('connection lost')
+    expect(
+      (await harness.posts()).find((post) => String(post.post_id).startsWith('eyes:'))?.state
+    ).toBe('sending')
   })
 })

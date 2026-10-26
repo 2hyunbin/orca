@@ -45,7 +45,15 @@ export class SlackInstalls {
       'SELECT bot_token FROM connector_slack_installs WHERE team_id = ?',
       [teamId]
     )
-    return row ? openBotToken(this.tokenKey, teamId, String(row.bot_token)) : null
+    if (!row) {
+      return null
+    }
+    // Sealed under another key or corrupted: as good as no install.
+    try {
+      return openBotToken(this.tokenKey, teamId, String(row.bot_token))
+    } catch {
+      return null
+    }
   }
 
   async save(
