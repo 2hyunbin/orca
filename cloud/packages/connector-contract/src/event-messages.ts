@@ -56,6 +56,7 @@ export const ConnectorEventSchema = z.discriminatedUnion('kind', [
   // Batch 0 after each hello. Not working never means done: an open turn reads unverifiable.
   z.object({
     kind: z.literal('snapshot'),
+    // Linked conversations active in the last snapshotActiveWindowMs, newest first.
     conversations: z.array(
       z.object({
         ...PaneEvent,
@@ -66,7 +67,7 @@ export const ConnectorEventSchema = z.discriminatedUnion('kind', [
         // changes nothing.
         turnId: EpochMsSchema.optional()
       })
-    )
+    ).max(CONNECTOR_LIMITS.maxSnapshotConversations)
   })
 ])
 

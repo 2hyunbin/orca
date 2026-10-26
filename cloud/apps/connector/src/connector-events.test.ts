@@ -214,6 +214,23 @@ describe('connector turn events', () => {
     })
   })
 
+  it('restores the same turn to working once a snapshot sees it working again, never an ended one', async () => {
+    const { machine, enqueue, events, thread } = await setup()
+    await enqueue(machine.hostId)
+    const prompt = { kind: 'approval', promptId: 'p1', tool: 'Bash', options: [] }
+    const entry = { conversation, paneKey: 'pane-1', agent: 'claude', turnId: 100 }
+    await events([{ conversation, paneKey: 'pane-1', kind: 'turn-started', at: 100 }])
+    await events([{ kind: 'snapshot', conversations: [{ ...entry, working: false, prompt }] }])
+    expect(await thread()).toMatchObject({ open_turn_id: 100, turn_state: 'unverifiable' })
+    await events([{ kind: 'snapshot', conversations: [{ ...entry, working: true, prompt: null }] }])
+    expect(await thread()).toMatchObject({ open_turn_id: 100, turn_state: 'working' })
+    await events([
+      { conversation, paneKey: 'pane-1', kind: 'turn-ended', turnId: 100, at: 150, stopReason: null }
+    ])
+    await events([{ kind: 'snapshot', conversations: [{ ...entry, working: true, prompt: null }] }])
+    expect(await thread()).toMatchObject({ open_turn_id: 100, turn_state: 'ended' })
+  })
+
   it('refuses an event over the per-event cap, and a body over the request cap', async () => {
     const { machine, enqueue, events } = await setup()
     await enqueue(machine.hostId)
