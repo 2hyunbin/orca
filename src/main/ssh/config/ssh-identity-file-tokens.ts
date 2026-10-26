@@ -27,17 +27,29 @@ const TOKEN_SOURCES: Record<string, TokenSource> = {
   r: (resolved) => resolved.get('user')
 }
 
-/** ssh -G prints IdentityFile tokens raw (OpenSSH expands them at connect time), e.g. `%d/key.pem`. */
+/** ssh -G prints IdentityFile `%x` and `${NAME}` raw (OpenSSH expands them at connect time), e.g. `%d/key.pem`. */
 export function expandIdentityFileTokens(
   value: string,
   resolved: ReadonlyMap<string, string>
 ): string {
-  if (!value.includes('%')) {
+  if (!value.includes('%') && !value.includes('${')) {
     return value
   }
+  // One pass, like OpenSSH: a replacement is never scanned for further tokens.
   let expanded = ''
   for (let index = 0; index < value.length; index += 1) {
     const char = value[index]
+    if (char === '$' && value[index + 1] === '{') {
+      const end = value.indexOf('}', index + 2)
+      const envValue = end === -1 ? undefined : process.env[value.slice(index + 2, end)]
+      // OpenSSH refuses the path when NAME is unset; keep it raw so it reads as missing.
+      if (envValue === undefined) {
+        return value
+      }
+      expanded += envValue
+      index = end
+      continue
+    }
     if (char !== '%') {
       expanded += char
       continue

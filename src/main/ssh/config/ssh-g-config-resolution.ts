@@ -215,7 +215,10 @@ export function parseSshGOutput(stdout: string): SshResolvedConfig {
     const key = line.substring(0, spaceIdx).toLowerCase()
     const value = line.substring(spaceIdx + 1).trim()
     if (key === 'identityfile') {
-      rawIdentityFiles.push(value)
+      // `IdentityFile none` loads no key; it is not a path.
+      if (value.toLowerCase() !== 'none') {
+        rawIdentityFiles.push(value)
+      }
     } else {
       map.set(key, value)
     }

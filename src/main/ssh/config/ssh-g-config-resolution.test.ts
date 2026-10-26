@@ -105,6 +105,21 @@ describe('parseSshGOutput IdentityFile tokens', () => {
     ])
   })
 
+  it('expands ${NAME} from the environment, and keeps the path raw when NAME is unset', () => {
+    vi.stubEnv('ORCA_TEST_KEYS', '/srv/keys-%r')
+    try {
+      expect(
+        parseSshGOutput(sshG('${ORCA_TEST_KEYS}/%r', '${ORCA_TEST_UNSET_VAR}/k')).identityFile
+      ).toEqual(['/srv/keys-%r/bob', '${ORCA_TEST_UNSET_VAR}/k'])
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('reads `IdentityFile none` as no key, not a missing file', () => {
+    expect(parseSshGOutput(sshG('none')).identityFile).toEqual([])
+  })
+
   it('keeps a path with a token it cannot resolve unchanged', () => {
     expect(parseSshGOutput(sshG('%d/%C.pem', '/keys/100%')).identityFile).toEqual([
       '%d/%C.pem',
