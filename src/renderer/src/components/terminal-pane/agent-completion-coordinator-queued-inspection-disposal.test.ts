@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createAgentCompletionCoordinator } from './agent-completion-coordinator'
 import {
-  ambiguousLocalProcessResult,
   createDeferred,
   flushAsyncTicks,
   processResult,
@@ -39,7 +38,7 @@ describe('agent completion coordinator queued inspections', () => {
         coordinator.startProcessTracking()
         await vi.advanceTimersByTimeAsync(1_000)
         if (phase === 'confirmation') {
-          read.resolve(ambiguousLocalProcessResult())
+          read.resolve(processResult('zsh', false))
           await flushAsyncTicks()
           await vi.advanceTimersByTimeAsync(3_000)
           expect(inspectProcess).toHaveBeenCalledTimes(1)

@@ -1,18 +1,18 @@
 import type { IPty } from 'node-pty'
-import type * as InterfaceEvidence from '../providers/terminal-interface-process-evidence'
+import type * as InterfaceEvidence from '../../src/main/providers/terminal-interface-process-evidence'
 import type * as FsPromises from 'node:fs/promises'
-import type { Session } from './session'
-import type * as DarwinTerminalNames from '../../shared/darwin-terminal-names'
-import type * as FullReader from '../../shared/process-table-snapshot-reader'
+import type { Session } from '../../src/main/daemon/session'
+import type * as DarwinTerminalNames from '../../src/shared/darwin-terminal-names'
+import type * as FullReader from '../../src/shared/process-table-snapshot-reader'
 import {
   createProcessTablePsFixture,
   type PsFixtureRow
-} from '../../shared/process-table-ps-test-fixture'
-import type * as CheapReader from '../../shared/cheap-process-table-snapshot-reader'
-import type * as TrackerModule from './pty-subprocess/foreground-process-tracker'
-import type * as Inspection from './terminal-host-process-inspection'
-import type { TerminalHostInspectionTier } from './terminal-host-process-inspection'
-import type * as AnchorModule from './terminal-host-steady-state-anchor'
+} from '../../src/shared/process-table-ps-test-fixture'
+import type * as CheapReader from '../../src/shared/cheap-process-table-snapshot-reader'
+import type * as TrackerModule from '../../src/main/daemon/pty-subprocess/foreground-process-tracker'
+import type * as Inspection from '../../src/main/daemon/terminal-host-process-inspection'
+import type { TerminalHostInspectionTier } from '../../src/main/daemon/terminal-host-process-inspection'
+import type * as AnchorModule from '../../src/main/daemon/terminal-host-steady-state-anchor'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Full and cheap readers use different process entry points, so mock both.
@@ -24,7 +24,7 @@ vi.mock('node:child_process', () => ({ execFile: execFileMock }))
 vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
 
 // Inject /dev data without bypassing the production translator.
-vi.mock('../../shared/darwin-terminal-names', async (importOriginal) => {
+vi.mock('../../src/shared/darwin-terminal-names', async (importOriginal) => {
   const original = await importOriginal<typeof DarwinTerminalNames>()
   return {
     nameDarwinTerminals: (stdout: string, _deps: unknown, signal?: AbortSignal) =>
@@ -274,14 +274,14 @@ describe.each(['darwin', 'linux'])('daemon cheap-tier process inspection (%s)', 
     Object.defineProperty(process, 'platform', { configurable: true, value: hostPlatform })
     // Column constants are chosen at import time, so each host needs a fresh module graph.
     vi.resetModules()
-    fullReader = await import('../../shared/process-table-snapshot-reader')
+    fullReader = await import('../../src/shared/process-table-snapshot-reader')
     fullReader.resetProcessTableSnapshotForTests()
-    cheapReader = await import('../../shared/cheap-process-table-snapshot-reader')
+    cheapReader = await import('../../src/shared/cheap-process-table-snapshot-reader')
     cheapReader.resetCheapProcessTableSnapshotForTests()
-    trackerModule = await import('./pty-subprocess/foreground-process-tracker')
-    inspection = await import('./terminal-host-process-inspection')
-    anchorModule = await import('./terminal-host-steady-state-anchor')
-    interfaceEvidence = await import('../providers/terminal-interface-process-evidence')
+    trackerModule = await import('../../src/main/daemon/pty-subprocess/foreground-process-tracker')
+    inspection = await import('../../src/main/daemon/terminal-host-process-inspection')
+    anchorModule = await import('../../src/main/daemon/terminal-host-steady-state-anchor')
+    interfaceEvidence = await import('../../src/main/providers/terminal-interface-process-evidence')
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(1_000_000)
     installPs()
@@ -358,9 +358,9 @@ describe.each(['darwin', 'linux'])('daemon cheap-tier process inspection (%s)', 
 
   it('matches main confirmation demand for N/10N generic-null shell results', async () => {
     const { createAgentCompletionCoordinator, resetAgentCompletionCoordinatorIdentitiesForTest } =
-      await import('../../renderer/src/components/terminal-pane/agent-completion-coordinator')
+      await import('../../src/renderer/src/components/terminal-pane/agent-completion-coordinator')
     const { resetAgentProcessInspectionQueueForTests } =
-      await import('../../renderer/src/components/terminal-pane/agent-process-inspection-queue')
+      await import('../../src/renderer/src/components/terminal-pane/agent-process-inspection-queue')
     vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout'] })
     const jitter = vi.spyOn(Math, 'random').mockReturnValue(0.5)
     try {
