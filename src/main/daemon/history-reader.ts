@@ -302,12 +302,12 @@ export class HistoryReader {
           readFailed: log.truncatedTail,
           ...(cwd === null ? { cwdFromSpawn: true } : {})
         }
-      } catch {
-        // Degrade to checkpoint-only restore instead of failing spawn.
-        return { restoreInfo: null, readFailed: true }
       } finally {
         emulator.dispose()
       }
+    } catch {
+      // Degrade to checkpoint-only restore instead of failing spawn.
+      return { restoreInfo: null, readFailed: true }
     } finally {
       release()
     }
