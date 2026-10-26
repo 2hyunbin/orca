@@ -20151,6 +20151,9 @@
         "copySessionId": "Copy Session ID",
         "copySessionIdSuccess": "Session ID copied",
         "copySessionIdError": "Unable to copy session ID"
+      },
+      "hostFile": {
+        "updateHostForOutsideFiles": "Update Orca on {{value0}} to open files outside its workspaces"
       }
     },
     "settings": {
@@ -20293,11 +20296,6 @@
       "stepDownload": "Download",
       "stepUnpack": "Unpack",
       "stepCheck": "Check"
-    },
-    "terminal-pane": {
-      "hostFile": {
-        "updateHostForOutsideFiles": "Update Orca on {{value0}} to open files outside its workspaces"
-      }
     }
   },
   "dashboardPopout": {

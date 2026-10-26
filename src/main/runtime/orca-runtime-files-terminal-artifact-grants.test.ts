@@ -130,6 +130,24 @@ describe('RuntimeFileCommands', () => {
       expect(result).toMatchObject({ relativePath: null, absolutePath: null, exists: false })
     })
 
+    // Why: procfs reports size 0 for files with content, so the grant digest cannot trust stat size.
+    it.runIf(process.platform === 'linux')('reads a procfs file that reports size 0', async () => {
+      const { commands } = createRuntimeFileCommands({ path: '/repo' })
+
+      const target = absoluteFileTarget(
+        await commands.resolveTerminalPath('id:wt-1', '/proc/version', null, 'client-a')
+      )
+
+      await expect(
+        commands.readTerminalArtifactFile(
+          'id:wt-1',
+          target.grantId,
+          target.absolutePath,
+          'client-a'
+        )
+      ).resolves.toMatchObject({ content: expect.stringContaining('Linux') })
+    })
+
     // Why: opening a FIFO or device blocking would stall a host threadpool thread.
     it.skipIf(process.platform === 'win32')('refuses a device instead of granting it', async () => {
       const { commands } = createRuntimeFileCommands({ path: '/repo' })
