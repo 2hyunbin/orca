@@ -1,5 +1,5 @@
 import { runProcess } from '@orca/process-host'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,16 +7,13 @@ import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-const cliPath = join(process.cwd(), 'out', 'cli', 'index.js')
-const compiledCli = existsSync(cliPath)
-const cliEntryArgs = compiledCli
-  ? [cliPath]
-  : [
-      '--import',
-      pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href,
-      '--conditions=orca-source',
-      join(process.cwd(), 'src', 'cli', 'index.ts')
-    ]
+// Always the source CLI: a leftover local build must not stand in for the code under review.
+const cliEntryArgs = [
+  '--import',
+  pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href,
+  '--conditions=orca-source',
+  join(process.cwd(), 'src', 'cli', 'index.ts')
+]
 const entityResult = z.object({ result: z.record(z.string(), z.unknown()) })
 const entity = z.object({ id: z.string() })
 
@@ -29,7 +26,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe(`Run ownership through the ${compiledCli ? 'compiled' : 'source'} CLI and real host`, () => {
+describe('Run ownership through the source CLI and real host', () => {
   // The cross-process grant and replacement contract requires repeated real CLI startups.
   it('bounds explicit grants and lets a replacement inherit Task-owned Runs', async () => {
     const home = mkdtempSync(join(tmpdir(), 'orca-run-ownership-cli-'))
