@@ -23,6 +23,8 @@ export const ConnectorProjectSchema = z.object({
 
 export const ConnectorHelloRequestSchema = z.object({
   v: z.literal(1),
+  // Rises across restarts on one install (the machine sends max(previous + 1, now in ms)), so the cloud
+  // never keeps an older process's hello over a newer one.
   helloRev: SequenceSchema,
   contract: z.number().int().positive(),
   ...ConnectorHostDescription,

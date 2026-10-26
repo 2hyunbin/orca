@@ -53,7 +53,7 @@ export const ConnectorEventSchema = z.discriminatedUnion('kind', [
       )
       .optional()
   }),
-  // Sent after each new session. Not working never means done: an open turn reads unverifiable.
+  // Batch 0 after each hello. Not working never means done: an open turn reads unverifiable.
   z.object({
     kind: z.literal('snapshot'),
     conversations: z.array(
@@ -67,10 +67,12 @@ export const ConnectorEventSchema = z.discriminatedUnion('kind', [
   })
 ])
 
-// seq counts batches from 0 in each host session; a retry resends the same body and seq. The cloud applies
-// a batch only above the session's high-water mark, so a late original never undoes newer state.
+// seq counts batches from 0 after each hello; a retry resends the same body and seq. The cloud applies a
+// batch only for the current helloRev and above that hello's high-water mark, so a late original, or one
+// from before a reconnect or restart, never undoes newer state.
 export const ConnectorEventsRequestSchema = z.object({
   v: z.literal(1),
+  helloRev: SequenceSchema,
   seq: SequenceSchema,
   events: z.array(ConnectorEventSchema).min(1)
 })
