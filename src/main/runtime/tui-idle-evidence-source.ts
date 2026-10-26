@@ -14,11 +14,10 @@ import {
   type AgentStateVerdict
 } from './agent-state-rules/agent-state-rules-engine'
 import type { TuiIdleHookTurn } from './tui-idle-hook-lane'
-import {
-  outputClockAt,
-  type FirstPartyAgentStatus,
-  type TuiIdleEvaluationInput,
-  type TuiIdleEvidenceRecord
+import type {
+  FirstPartyAgentStatus,
+  TuiIdleEvaluationInput,
+  TuiIdleEvidenceRecord
 } from './tui-idle-evidence'
 
 /** The runtime state every tui-idle site reads its evidence from. */
@@ -36,6 +35,27 @@ export type TuiIdleEvidenceSource = {
   readRuledScreen?(ptyId: string | null | undefined): RuledScreen | null
   /** When the PTY last observed a title of its own. Absent, no title has an age. */
   getTitleObservedAtEpochMs?(ptyId: string | null | undefined): number | null
+  /** The PTY's quiet clock: its last output, else when main began receiving its silent stream. */
+  getOutputClockAt?(ptyId: string | null | undefined): number | null
+}
+
+/** One clock per terminal, read by ptyId, so a pane leaf and its PTY settle alike. */
+export function outputClockOf(
+  source: Pick<TuiIdleEvidenceSource, 'getOutputClockAt'>,
+  record: { ptyId: string | null; lastOutputAt: number | null }
+): number | null {
+  return source.getOutputClockAt?.(record.ptyId) ?? record.lastOutputAt
+}
+
+function evidenceRecord(
+  source: TuiIdleEvidenceSource,
+  record: TuiIdleEvidenceRecord & { ptyId: string | null }
+): TuiIdleEvidenceRecord {
+  return {
+    lastAgentStatus: record.lastAgentStatus,
+    lastOscTitle: record.lastOscTitle,
+    lastOutputAt: outputClockOf(source, record)
+  }
 }
 
 // Why per agent: every other agent keeps the live screen its rules were recorded against.
@@ -62,7 +82,7 @@ function readAgentRuleVerdict(
     readScreenLines,
     readText: () => waitText().toLowerCase(),
     readTitleStatus: () => record.lastAgentStatus,
-    hasOutputClock: outputClockAt(record) !== null
+    hasOutputClock: record.lastOutputAt !== null
   })
 }
 
@@ -106,14 +126,15 @@ export function leafTuiIdleEvidence(
   const waitText = lazyWaitText(readWaitText)
   const agent = source.getPaneAgent(leaf.ptyId)
   const readScreen = screenReader(source, agent, leaf.ptyId)
+  const record = evidenceRecord(source, leaf)
   return {
-    record: leaf,
+    record,
     readTailBlockedReason: () => detectTerminalWaitBlockedReason(waitText()),
     rendererTitle: leaf.paneTitle ?? source.getTabTitle(leaf.tabId),
     readPositiveBodyEvidence: () =>
-      isKnownReadyPromptBody(waitText(), agent, readScreen, leaf.lastOutputAt !== null),
+      isKnownReadyPromptBody(waitText(), agent, readScreen, record.lastOutputAt !== null),
     readQuietReadyBodyEvidence: () => isQuietReadyScreenBody(waitText(), agent, readScreen),
-    readAgentRuleVerdict: () => readAgentRuleVerdict(agent, leaf, readScreen, waitText),
+    readAgentRuleVerdict: () => readAgentRuleVerdict(agent, record, readScreen, waitText),
     readScreenInputVeto: screenInputVetoReader(source, agent, leaf.ptyId),
     titleObservedAtEpochMs: source.getTitleObservedAtEpochMs?.(leaf.ptyId) ?? null,
     agent,
@@ -131,17 +152,18 @@ export function ptyTuiIdleEvidence(
   const waitText = lazyWaitText(readWaitText)
   const agent = source.getPaneAgent(pty.ptyId)
   const readScreen = screenReader(source, agent, pty.ptyId)
+  const record = evidenceRecord(source, pty)
   return {
-    record: pty,
+    record,
     readTailBlockedReason: () => detectTerminalWaitBlockedReason(waitText()),
     readPositiveBodyEvidence: () =>
       (agent !== 'qoder' &&
         agent !== 'qoder-cn' &&
         agent !== 'hermes' &&
         source.getAdoptedPtyIdleStatus(pty) === 'idle') ||
-      isKnownReadyPromptBody(waitText(), agent, readScreen, outputClockAt(pty) !== null),
+      isKnownReadyPromptBody(waitText(), agent, readScreen, record.lastOutputAt !== null),
     readQuietReadyBodyEvidence: () => isQuietReadyScreenBody(waitText(), agent, readScreen),
-    readAgentRuleVerdict: () => readAgentRuleVerdict(agent, pty, readScreen, waitText),
+    readAgentRuleVerdict: () => readAgentRuleVerdict(agent, record, readScreen, waitText),
     readScreenInputVeto: screenInputVetoReader(source, agent, pty.ptyId),
     titleObservedAtEpochMs: pty.lastOscTitleEpochMs,
     agent,

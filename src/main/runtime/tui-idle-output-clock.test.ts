@@ -1,18 +1,37 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { hasQuietReadyScreen } from './tui-idle-evidence'
+import './rpc/unused-default-rpc-methods.test-fixture'
+import { afterEach, expect, it, vi } from 'vitest'
+import { runtimeWithLeaf } from './orca-runtime-pty-leaf.test-fixture'
+import { evaluateTuiIdle } from './tui-idle-evidence'
+import { leafTuiIdleEvidence, ptyTuiIdleEvidence } from './tui-idle-evidence-source'
 
-const QUIESCENCE_MS = 3000
+const PTY_ID = 'repo-1::/tmp/wt@@1a2b3c4d'
+const CODEX_COMPOSER = '› Ask Codex to do anything'
 
 afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('output clock for a stream main attached after the process last printed', () => {
-  it('measures quiet from when main began receiving a stream that has printed nothing since', () => {
-    vi.useFakeTimers({ now: 100_000 })
-    const silent = { lastAgentStatus: null, lastOutputAt: null, outputObservedSince: 100_000 }
-    expect(hasQuietReadyScreen(silent, 'codex', () => true, QUIESCENCE_MS)).toBe(false)
-    vi.advanceTimersByTime(QUIESCENCE_MS)
-    expect(hasQuietReadyScreen(silent, 'codex', () => true, QUIESCENCE_MS)).toBe(true)
-  })
+it('a silent reattached Codex reads quiet on its PTY and its pane leaf alike', () => {
+  vi.useFakeTimers({ now: 100_000 })
+  const { runtime, leaf } = runtimeWithLeaf(PTY_ID)
+  runtime.seedTerminalRestoreTail(PTY_ID, { text: CODEX_COMPOSER })
+  runtime.startReattachedOutputClock(PTY_ID)
+  const pty = runtime['ptysById'].get(PTY_ID)!
+  const source = {
+    ...runtime['tuiIdleEvidenceSource'],
+    getPaneAgent: () => 'codex' as const,
+    readScreenLines: () => [CODEX_COMPOSER],
+    readRuledScreen: () => ({ lines: [CODEX_COMPOSER], alternateScreen: false })
+  }
+  const verdicts = () =>
+    [
+      evaluateTuiIdle(ptyTuiIdleEvidence(source, pty, () => pty.preview)),
+      evaluateTuiIdle(leafTuiIdleEvidence(source, leaf, () => leaf.preview))
+    ].map((verdict) => verdict.kind)
+
+  expect(verdicts()).toEqual(['pending', 'pending'])
+  vi.advanceTimersByTime(source.quiescenceMs)
+  // Neither record ever saw output; the clock is main's observation since the reattach.
+  expect([pty.lastOutputAt, leaf.lastOutputAt]).toEqual([null, null])
+  expect(verdicts()).toEqual(['ready-strong', 'ready-strong'])
 })

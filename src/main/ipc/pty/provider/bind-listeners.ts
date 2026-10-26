@@ -12,11 +12,7 @@ import {
 import { localProvider } from './registry'
 import { clearProviderPtyState } from './state-cleanup'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import {
-  providerSnapshotRequiredPtys,
-  rendererVisibilityKnownPtys,
-  visibleRendererPtys
-} from '../delivery/visibility-state'
+import { providerSnapshotRequiredPtys, visibleRendererPtys } from '../delivery/visibility-state'
 import type { PtyIpcSession } from '../session'
 import { publishPtyEndpointLoss } from '../../../runtime/terminal/pty-endpoint-loss-signal'
 
@@ -31,10 +27,6 @@ export function bindProviderListeners(session: PtyIpcSession): void {
     localProvider.onWriteUnavailable?.((payload) => {
       // Before the window check: a headless host has no window, only remote streams.
       publishPtyEndpointLoss(payload.id)
-      // A pane remounts and re-attaches itself; main restores only streams no pane will.
-      if (!rendererVisibilityKnownPtys.has(payload.id)) {
-        session.runtime?.reattachPtyAfterEndpointLoss(payload.id)
-      }
       if (
         !session.mainWindow ||
         session.mainWindow.isDestroyed() ||

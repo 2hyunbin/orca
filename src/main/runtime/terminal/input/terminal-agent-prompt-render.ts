@@ -138,21 +138,13 @@ export abstract class OrcaRuntimeWithCreateAgentPromptRenderGate extends OrcaRun
       launchReadiness?: boolean
     }
   ): Promise<RuntimeTerminalWait> {
-    const attaching = options?.condition === 'exit' ? null : this.attachTerminalOutputToMain(handle)
-    return attaching
-      ? attaching.then(() => this.waitForReachableTerminal(handle, options))
-      : this.waitForReachableTerminal(handle, options)
-  }
-
-  private waitForReachableTerminal(
-    handle: string,
-    options?: {
-      condition?: RuntimeTerminalWaitCondition
-      timeoutMs?: number
-      signal?: AbortSignal
-      launchReadiness?: boolean
+    if ((options?.condition ?? 'exit') !== 'exit') {
+      try {
+        this.assertTerminalOutputReachesMain(handle)
+      } catch (error) {
+        return Promise.reject(error)
+      }
     }
-  ): Promise<RuntimeTerminalWait> {
     // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
     const starting = ORCA_LAYOUT_OWNER_IS_MAIN
       ? this.startRestoredHandlePane(handle, options ?? {})

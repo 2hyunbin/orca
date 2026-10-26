@@ -229,8 +229,13 @@ export abstract class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRun
   startReattachedOutputClock(ptyId: string): void {
     const pty = this.ptysById.get(ptyId)
     if (pty && pty.lastOutputAt === null) {
-      pty.outputObservedSince ??= Date.now()
+      pty.outputObservedSince = Date.now()
     }
+  }
+
+  protected readOutputClockAt(ptyId: string | null | undefined): number | null {
+    const pty = ptyId ? this.ptysById.get(ptyId) : undefined
+    return pty ? (pty.lastOutputAt ?? pty.outputObservedSince ?? null) : null
   }
 
   // Restore RPC bytes bypass onPtyData; seed read/list state without waiters, orchestration events or fresh-output clocks.

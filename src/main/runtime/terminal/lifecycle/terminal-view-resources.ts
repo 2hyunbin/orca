@@ -160,10 +160,7 @@ export abstract class OrcaRuntimeWithFitOverrideListeners extends OrcaRuntimeWit
       const pty = this.ptysById.get(ptyId)
       return pty !== undefined && pty.connectionId === null && pty.connected
     },
-    attachProvider: (ptyId) => {
-      const attach = this.ptyController?.attach
-      return attach ? (async () => attach(ptyId))() : null
-    }
+    attachProvider: (ptyId) => this.ptyController?.attach?.(ptyId) ?? null
   })
 
   // Remote xterms own query replies; ref-count streams and retain suppression through mobile soft-leave grace (terminal-query-authority.md).

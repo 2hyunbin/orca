@@ -25,10 +25,7 @@ type RuntimeInternals = {
   ) => unknown
   issuePtyHandle: (pty: unknown) => string
   headlessTerminals: Map<string, unknown>
-  mainDaemonAttachments: {
-    hasPendingAttach: (ptyId: string) => boolean
-    inventoryWaiterIds: () => string[]
-  }
+  mainDaemonAttachments: { isUnreachable: (ptyId: string) => boolean }
   refreshPtyWorktreeRecordsWithControllerInventory: (
     worktrees: [],
     targetWorktreeId: string | null
@@ -410,7 +407,6 @@ describe('subscriber-driven daemon attach (never-activated tab)', () => {
     sendSubscribe(harness, 1, handle)
     await waitForSubscribed(harness, 1)
     await vi.waitFor(() => expect(model.attachCalls).toEqual([PTY_ID]))
-    expect(internals(runtime).mainDaemonAttachments.hasPendingAttach(PTY_ID)).toBe(true)
     expect(runtime.hasRemoteTerminalViewSubscriber(PTY_ID)).toBe(true)
     expect(model.emitData(PTY_ID, 'before inventory\r\n')).toBe(false)
 
@@ -418,13 +414,9 @@ describe('subscriber-driven daemon attach (never-activated tab)', () => {
     await internals(runtime).refreshPtyWorktreeRecordsWithControllerInventory([], null)
     await internals(runtime).refreshPtyWorktreeRecordsWithControllerInventory([], null)
     expect(model.attachCalls).toEqual([PTY_ID])
-    expect(internals(runtime).mainDaemonAttachments.inventoryWaiterIds()).toEqual([PTY_ID])
     refuseFirstAttach()
 
     await vi.waitFor(() => expect(model.attachCalls).toEqual([PTY_ID, PTY_ID]))
-    await vi.waitFor(() =>
-      expect(internals(runtime).mainDaemonAttachments.inventoryWaiterIds()).not.toContain(PTY_ID)
-    )
     expect(model.emitData(PTY_ID, 'after inventory\r\n')).toBe(true)
     await vi.waitFor(() => expect(outputText(harness)).toContain('after inventory'))
   })
@@ -440,44 +432,19 @@ describe('subscriber-driven daemon attach (never-activated tab)', () => {
     expect(read.tail.join('\n')).toContain('worker still printing')
   })
 
-  it('re-attaches a session main already holds after the daemon endpoint drops', async () => {
-    const { runtime, model } = setupNeverAttachedDaemonSession({ snapshotCapable: false })
-    await internals(runtime).refreshPtyWorktreeRecordsWithControllerInventory([], null)
-    await vi.waitFor(() => expect(model.attachCalls).toEqual([PTY_ID]))
-    expect(model.emitData(PTY_ID, 'before loss\r\n')).toBe(true)
-    model.sessions.get(PTY_ID)!.attached = false
-
-    runtime.reattachPtyAfterEndpointLoss(PTY_ID)
-
-    await vi.waitFor(() => expect(model.attachCalls).toEqual([PTY_ID, PTY_ID]))
-    expect(model.emitData(PTY_ID, 'after loss\r\n')).toBe(true)
-  })
-
-  it('fails a wait at once when main cannot attach the surviving session', async () => {
-    const { runtime, model, handle } = setupNeverAttachedDaemonSession({ snapshotCapable: false })
-    // The daemon refuses an attach-only request for a session it does not own.
-    model.sessions.delete(PTY_ID)
-
-    await expect(
-      runtime.waitForTerminal(handle, { condition: 'tui-idle', timeoutMs: 60_000 })
-    ).rejects.toThrow('terminal_not_connected_since_restart')
-    expect(model.attachCalls).toEqual([PTY_ID])
-  })
-
-  it('retries a refused attach when a wait arrives, instead of failing the wait', async () => {
+  it('fails a wait at once when main could not attach the surviving session', async () => {
     const { runtime, model, handle } = setupNeverAttachedDaemonSession({ snapshotCapable: false })
     const refuse = model.deferNextAttach(false)
     await internals(runtime).refreshPtyWorktreeRecordsWithControllerInventory([], null)
     refuse()
     await vi.waitFor(() =>
-      expect(internals(runtime).mainDaemonAttachments.hasPendingAttach(PTY_ID)).toBe(false)
+      expect(internals(runtime).mainDaemonAttachments.isUnreachable(PTY_ID)).toBe(true)
     )
 
     await expect(
-      runtime.waitForTerminal(handle, { condition: 'tui-idle', timeoutMs: 50 })
-    ).rejects.toThrow('timeout')
-    expect(model.attachCalls).toEqual([PTY_ID, PTY_ID])
-    expect(model.emitData(PTY_ID, 'attached on retry\r\n')).toBe(true)
+      runtime.waitForTerminal(handle, { condition: 'tui-idle', timeoutMs: 60_000 })
+    ).rejects.toThrow('terminal_not_connected_since_restart')
+    expect(model.attachCalls).toEqual([PTY_ID])
   })
 
   it('does not subscriber-attach or provider-read a session this app already spawned', async () => {

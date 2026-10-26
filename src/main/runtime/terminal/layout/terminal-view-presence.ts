@@ -68,26 +68,16 @@ export abstract class OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged ext
     return this.mainDaemonAttachments.isKnownUnattachedLocal(ptyId)
   }
 
-  /** Null when main already receives the terminal; else attaches it, rejecting if it cannot, since a wait could only time out. */
-  protected attachTerminalOutputToMain(handle: string): Promise<void> | null {
+  /** A survivor main holds no stream for can never satisfy a wait; say so instead of timing out. */
+  protected assertTerminalOutputReachesMain(handle: string): void {
     const ptyId = this.getLivePtyForHandle(handle)?.pty.ptyId
-    const attaching = ptyId ? this.mainDaemonAttachments.ensureAttached(ptyId) : null
-    return (
-      attaching?.then((attached) => {
-        if (!attached) {
-          throw new Error('terminal_not_connected_since_restart')
-        }
-      }) ?? null
-    )
+    if (ptyId && this.mainDaemonAttachments.isUnreachable(ptyId)) {
+      throw new Error('terminal_not_connected_since_restart')
+    }
   }
 
   protected reconcileMainDaemonAttach(ptyId: string): void {
     this.mainDaemonAttachments.reconcile(ptyId)
-  }
-
-  /** The provider endpoint dropped this session's stream; restore main's attachment once it reconnects. */
-  reattachPtyAfterEndpointLoss(ptyId: string): void {
-    this.mainDaemonAttachments.reattachAfterEndpointLoss(ptyId)
   }
 
   /** Mark a raw-output viewer without transferring terminal query authority. */
