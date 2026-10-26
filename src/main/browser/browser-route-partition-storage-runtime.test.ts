@@ -16,7 +16,9 @@ vi.mock('../../shared/runtime-environment-store', () => ({
   listEnvironments: () => mocks.environments
 }))
 vi.mock('./browser-route-partition-binding-runtime', () => ({
-  activeBrowserRoutePartitionOrcaProfileId: () => 'local-default'
+  activeBrowserRoutePartitionOrcaProfileId: () => 'local-default',
+  currentBrowserRoutePartitionBindingFilePath: () =>
+    '/tmp/orca-test-profile/browser-route-partition-bindings.json'
 }))
 vi.mock('./browser-route-partition-storage-dependencies', () => ({
   browserRoutePartitionStorageDependencies: (isPartitionLive: (p: string) => boolean) => ({

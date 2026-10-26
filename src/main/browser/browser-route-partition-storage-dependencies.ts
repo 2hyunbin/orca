@@ -5,6 +5,7 @@ import {
   type BrowserRoutePartitionStorageDependencies
 } from './browser-route-partition-storage-lifecycle'
 import {
+  currentBrowserRoutePartitionBindingFilePath,
   currentBrowserRoutePartitionBindingStore,
   routePartitionDataRoot
 } from './browser-route-partition-binding-runtime'
@@ -39,7 +40,7 @@ export function browserRoutePartitionStorageDependencies(
     removePartitionDirectory: async (directory) => {
       if (mode === 'live') {
         queueBrowserRoutePartitionDirectoryDelete(
-          browserRoutePartitionPendingDeletesPath(partitionDataRoot),
+          browserRoutePartitionPendingDeletesPath(currentBrowserRoutePartitionBindingFilePath()),
           directory
         )
         return

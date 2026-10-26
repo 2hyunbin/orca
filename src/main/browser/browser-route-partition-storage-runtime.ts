@@ -13,10 +13,14 @@ import {
   type BrowserRoutePartitionStorageDependencies
 } from './browser-route-partition-storage-lifecycle'
 import {
+  browserRoutePartitionDirectoryKey,
   browserRoutePartitionPendingDeletesPath,
   deletePendingBrowserRoutePartitionDirectories
 } from './browser-route-partition-pending-deletes'
-import { activeBrowserRoutePartitionOrcaProfileId } from './browser-route-partition-binding-runtime'
+import {
+  activeBrowserRoutePartitionOrcaProfileId,
+  currentBrowserRoutePartitionBindingFilePath
+} from './browser-route-partition-binding-runtime'
 import { browserRoutePartitionStorageDependencies } from './browser-route-partition-storage-dependencies'
 
 export type BrowserRoutePartitionStorageClear = {
@@ -36,14 +40,19 @@ export async function collectOrphanedBrowserRoutePartitionStorage(
     isBrowserRoutePartitionRetainedByAnyOwner,
     'cold'
   )
+  const boundDirectoryKeys = new Set(
+    [...dependencies.bindings.listBindings().keys()].map((partition) =>
+      browserRoutePartitionDirectoryKey(partitionDirectory(dependencies, partition))
+    )
+  )
   reportStorageFailures(
     'deferred folder deletion',
     await deletePendingBrowserRoutePartitionDirectories({
-      filePath: browserRoutePartitionPendingDeletesPath(dependencies.partitionDataRoot),
-      isBound: (directory) =>
-        [...dependencies.bindings.listBindings().keys()].some(
-          (partition) => partitionDirectory(dependencies, partition) === directory
-        ),
+      filePath: browserRoutePartitionPendingDeletesPath(
+        currentBrowserRoutePartitionBindingFilePath()
+      ),
+      partitionDataRoot: dependencies.partitionDataRoot,
+      isBound: (directory) => boundDirectoryKeys.has(browserRoutePartitionDirectoryKey(directory)),
       removeDirectory: dependencies.removePartitionDirectory
     })
   )

@@ -4,12 +4,35 @@
  * any session loads. The session's data is already cleared through Chromium when it is queued.
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import {
+  normalizeRuntimePathForComparison,
+  relativePathInsideRoot
+} from '../../shared/cross-platform-path'
 
 const PENDING_DELETES_FILE_NAME = 'browser-route-partition-pending-deletes.json'
 
-export function browserRoutePartitionPendingDeletesPath(partitionDataRoot: string): string {
-  return join(dirname(partitionDataRoot), PENDING_DELETES_FILE_NAME)
+// Why per profile: Partitions is shared across Orca profiles but bindings are not, so only the
+// profile that queued a folder can tell whether it was bound again.
+export function browserRoutePartitionPendingDeletesPath(bindingFilePath: string): string {
+  return join(dirname(bindingFilePath), PENDING_DELETES_FILE_NAME)
+}
+
+/** Comparison key for a partition folder: resolved, and case-folded for Windows paths. */
+export function browserRoutePartitionDirectoryKey(
+  directory: string,
+  resolvePath: (path: string) => string = resolve
+): string {
+  return normalizeRuntimePathForComparison(resolvePath(directory))
+}
+
+function isStrictlyInside(
+  partitionDataRoot: string,
+  directory: string,
+  resolvePath: (path: string) => string
+): boolean {
+  const relative = relativePathInsideRoot(resolvePath(partitionDataRoot), resolvePath(directory))
+  return relative !== null && relative !== ''
 }
 
 function readPending(filePath: string): string[] {
@@ -41,16 +64,23 @@ export function queueBrowserRoutePartitionDirectoryDelete(
 /** Startup, before sessions load. A folder bound again since it was queued is kept: it is in use. */
 export async function deletePendingBrowserRoutePartitionDirectories(input: {
   filePath: string
+  partitionDataRoot: string
   isBound: (directory: string) => boolean
   removeDirectory: (directory: string) => Promise<void>
+  resolvePath?: (path: string) => string
 }): Promise<unknown[]> {
   const pending = readPending(input.filePath)
   if (pending.length === 0) {
     return []
   }
+  const resolvePath = input.resolvePath ?? resolve
   const failures: unknown[] = []
   const kept: string[] = []
   for (const directory of pending) {
+    // Why: the list is a file on disk; a recursive delete must never reach outside Partitions.
+    if (!isStrictlyInside(input.partitionDataRoot, directory, resolvePath)) {
+      continue
+    }
     if (input.isBound(directory)) {
       continue
     }
