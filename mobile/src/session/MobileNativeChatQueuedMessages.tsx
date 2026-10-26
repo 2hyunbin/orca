@@ -17,6 +17,7 @@ import { queuedMessageStyles as styles } from './mobile-native-chat-queued-messa
 // Use NUL-prefixed header keys because message ids cannot contain NUL.
 const RESUME_KEY = '\u0000resume'
 const CLEAR_KEY = '\u0000clear'
+const MOVE_KEY = '\u0000move'
 
 export type MobileNativeChatQueuedMessagesProps = {
   cards?: MobileQueuedMessageCard[]
@@ -56,18 +57,26 @@ export function MobileNativeChatQueuedMessages({
     }
     return null
   }
-  const run = async (messageId: string, action?: (id: string) => Promise<boolean>) => {
-    if (inFlightRef.current.has(messageId) || !action) {
-      return
+  const run = (
+    messageId: string,
+    action?: (id: string) => Promise<boolean>,
+    resource?: string
+  ): boolean => {
+    const keys = resource ? [messageId, resource] : [messageId]
+    if (keys.some((key) => inFlightRef.current.has(key)) || !action) {
+      return false
     }
-    inFlightRef.current.add(messageId)
+    keys.forEach((key) => inFlightRef.current.add(key))
     setBusyIds(new Set(inFlightRef.current))
-    try {
-      await action(messageId)
-    } finally {
-      inFlightRef.current.delete(messageId)
-      setBusyIds(new Set(inFlightRef.current))
-    }
+    void (async () => {
+      try {
+        await action(messageId)
+      } finally {
+        keys.forEach((key) => inFlightRef.current.delete(key))
+        setBusyIds(new Set(inFlightRef.current))
+      }
+    })()
+    return true
   }
   const resuming = busyIds.has(RESUME_KEY)
   const clearing = busyIds.has(CLEAR_KEY)
@@ -188,10 +197,11 @@ export function MobileNativeChatQueuedMessages({
                 <DragReorderList
                   items={cards}
                   itemKey={(card) => card.messageId}
-                  canMove={(card) => !card.automatic && !busyIds.has(card.messageId)}
+                  canMove={(card) => !card.automatic}
+                  isMoveDisabled={(card) => busyIds.has(MOVE_KEY) || busyIds.has(card.messageId)}
                   rowPresentation="plain"
                   renderRow={renderRow}
-                  onMove={(move) => void run(move.movedId, () => onMove(move))}
+                  onMove={(move) => run(move.movedId, () => onMove(move), MOVE_KEY)}
                   {...drag}
                 />
               ) : (

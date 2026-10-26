@@ -5,6 +5,8 @@ import { GripVertical } from 'lucide-react-native'
 import Animated, {
   runOnJS,
   useAnimatedStyle,
+  useAnimatedReaction,
+  useSharedValue,
   withSpring,
   type DerivedValue,
   type SharedValue
@@ -20,7 +22,7 @@ const ROW_SPRING = { damping: 28, stiffness: 350 }
 const LONG_PRESS_ACTIVATION_MS = 200
 
 export type DragSharedState = {
-  layout: DerivedValue<DragReorderLayout>
+  layout: DerivedValue<DragReorderLayout & { measurementKey: string; ready: boolean }>
   initialPositions: SharedValue<DragReorderPositions>
   positions: SharedValue<DragReorderPositions>
   activeKey: SharedValue<string | null>
@@ -35,7 +37,9 @@ export function DragReorderRow({
   rowKey,
   rowHeight,
   ready,
+  measurementKey,
   movable,
+  disabled,
   presentation,
   onMeasure,
   shared,
@@ -49,14 +53,16 @@ export function DragReorderRow({
   rowKey: string
   rowHeight?: number
   ready: boolean
+  measurementKey: string
   movable: boolean
+  disabled: boolean
   presentation: 'settings' | 'plain'
   onMeasure: (key: string, height: number) => void
   shared: DragSharedState
   scrollOffsetY: SharedValue<number>
   updateDragPosition: (key: string) => void
   onDragActiveChange: (active: boolean) => void
-  onCommit: (orderedKeys: string[], movedId: string) => void
+  onCommit: (orderedKeys: string[], movedId: string, dragged: boolean) => void
   onAccessibilityMove: (key: string, delta: number) => void
   renderContent: (handle: ReactNode) => ReactNode
 }): React.JSX.Element {
@@ -73,7 +79,7 @@ export function DragReorderRow({
   } = shared
 
   const pan = Gesture.Pan()
-    .enabled(ready && movable)
+    .enabled(ready && movable && !disabled)
     .activateAfterLongPress(LONG_PRESS_ACTIVATION_MS)
     .shouldCancelWhenOutside(false)
     .onStart((event) => {
@@ -102,17 +108,39 @@ export function DragReorderRow({
       activeKey.value = null
       if (success) {
         const orderedKeys = orderedKeysFromDragReorderPositions(positions.value)
-        runOnJS(onCommit)(orderedKeys, rowKey)
+        runOnJS(onCommit)(orderedKeys, rowKey, true)
       } else {
         positions.value = initialPositions.value
       }
       runOnJS(onDragActiveChange)(false)
     })
 
+  const rowTop = useSharedValue(0)
+  useAnimatedReaction(
+    () => ({
+      placed: ready && layout.value.ready && layout.value.measurementKey === measurementKey,
+      measurementKey: layout.value.measurementKey,
+      active: activeKey.value === rowKey,
+      top: activeKey.value === rowKey ? activeTop.value : (layout.value.tops[rowKey] ?? 0)
+    }),
+    (current, previous) => {
+      const placement =
+        !current.placed || !previous?.placed || current.measurementKey !== previous.measurementKey
+      if (placement || current.active) {
+        rowTop.value = current.top
+      } else if (previous && (current.top !== previous.top || previous.active)) {
+        rowTop.value = withSpring(current.top, ROW_SPRING)
+      }
+    },
+    [ready, layout, measurementKey, activeKey, rowKey, activeTop, rowTop]
+  )
   const rowStyle = useAnimatedStyle(() => {
+    const placed = ready && layout.value.ready && layout.value.measurementKey === measurementKey
+    const placement = { position: placed ? ('absolute' as const) : ('relative' as const) }
     if (activeKey.value === rowKey) {
       return {
-        top: activeTop.value,
+        ...placement,
+        top: placed ? activeTop.value : 0,
         zIndex: 2,
         elevation: presentation === 'settings' ? 4 : 0,
         shadowOpacity: presentation === 'settings' ? 0.3 : 0,
@@ -121,14 +149,15 @@ export function DragReorderRow({
       }
     }
     return {
-      top: ready ? withSpring(layout.value.tops[rowKey] ?? 0, ROW_SPRING) : 0,
+      ...placement,
+      top: placed ? rowTop.value : 0,
       zIndex: 0,
       elevation: 0,
       shadowOpacity: 0,
       backgroundColor: presentation === 'settings' ? colors.bgPanel : undefined,
       transform: [{ scale: 1 }]
     }
-  }, [layout, activeKey, activeTop, rowKey, ready, presentation])
+  }, [layout, activeKey, activeTop, rowKey, ready, measurementKey, presentation, rowTop])
 
   const handle = movable ? (
     <GestureDetector gesture={pan}>
@@ -136,6 +165,7 @@ export function DragReorderRow({
         style={[styles.handle, presentation === 'plain' && styles.queueHandle]}
         accessible
         accessibilityRole="button"
+        accessibilityState={{ disabled }}
         accessibilityLabel="Drag to reorder"
         accessibilityHint="Use the move up and move down actions to reorder without dragging"
         accessibilityActions={[
@@ -143,6 +173,9 @@ export function DragReorderRow({
           { name: 'moveDown', label: 'Move down' }
         ]}
         onAccessibilityAction={(event) => {
+          if (disabled) {
+            return
+          }
           if (event.nativeEvent.actionName === 'moveUp') {
             onAccessibilityMove(rowKey, -1)
           } else if (event.nativeEvent.actionName === 'moveDown') {
@@ -166,7 +199,7 @@ export function DragReorderRow({
       style={[
         styles.row,
         presentation === 'plain' && { flexDirection: 'column', alignItems: 'stretch' },
-        { height: rowHeight, position: ready ? 'absolute' : 'relative' },
+        { height: rowHeight },
         rowStyle
       ]}
     >

@@ -835,4 +835,31 @@ describe('NativeChatQueuedMessageList', () => {
     )
     expect(screen.getByRole('list', { name: 'Queued messages' }).scrollTop).toBe(0)
   })
+
+  it('preserves scroll through reorder, settlement and placeholder handoff but reveals a real append', () => {
+    const first = ['a', 'b', 'c'].map((messageId, at) => card({ messageId, position: at + 1 }))
+    const view = renderList(controller(first))
+    const list = screen.getByRole('list', { name: 'Queued messages' })
+    Object.defineProperty(list, 'scrollHeight', { configurable: true, value: 800 })
+    list.scrollTop = 30
+    const show = (cards: QueuedMessageCard[]) =>
+      view.rerender(
+        <TooltipProvider delayDuration={0}>
+          <NativeChatQueuedMessageList chatWorktreeId={null} controller={controller(cards)} />
+        </TooltipProvider>
+      )
+    const optimistic = [first[2]!, first[0]!, first[1]!]
+    show(optimistic)
+    expect(list.scrollTop).toBe(30)
+    show(optimistic.map((entry, at) => ({ ...entry, position: at + 1 })))
+    expect(list.scrollTop).toBe(30)
+    show(first)
+    expect(list.scrollTop).toBe(30)
+    const placeholder = card({ messageId: 'd', position: Number.MAX_SAFE_INTEGER, hold: 'sending' })
+    show([first[1]!, first[2]!, placeholder])
+    expect(list.scrollTop).toBe(800)
+    list.scrollTop = 40
+    show([first[1]!, first[2]!, { ...placeholder, position: 4, hold: 'turn' }])
+    expect(list.scrollTop).toBe(40)
+  })
 })

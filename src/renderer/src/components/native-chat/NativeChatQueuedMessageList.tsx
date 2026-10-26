@@ -64,19 +64,18 @@ export function NativeChatQueuedMessageList({
     ? queuedMessageCardCaption(attentionCard, agentName, statedFailures)
     : null
   const listRef = useRef<HTMLUListElement>(null)
-  const newestPosition = newest?.position ?? 0
   const newestIsPersons = newest !== undefined && !newest.from
-  const shownPosition = useRef(newestPosition)
+  const shownIds = useRef<ReadonlySet<string>>(new Set(cards.map((card) => card.messageId)))
   // Before paint, so the new card never shows a frame before the scroll.
   useLayoutEffect(() => {
-    // From 0 the queue is loading or holds one card: nothing to scroll to.
-    const appended = shownPosition.current > 0 && newestPosition > shownPosition.current
-    shownPosition.current = newestPosition
+    const appended =
+      shownIds.current.size > 0 && newest !== undefined && !shownIds.current.has(newest.messageId)
+    shownIds.current = new Set(cards.map((card) => card.messageId))
     // The list opens on the next card to send; a card the person just queued is shown instead.
     if (appended && newestIsPersons && listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight
     }
-  }, [newestPosition, newestIsPersons])
+  }, [cards, newest, newestIsPersons])
   // Only a host that queues sends has queueing to turn off; a kept card shows without it.
   const turnOffQueueing = controller.queueCapable
     ? () => void updateSettings({ nativeChatQueueFollowUps: false })

@@ -72,6 +72,14 @@ function SortableQueuedMessages({
     }
   }, [])
   const sensors = useSensors(useSensor(PointerSensor, pointerOptions))
+  const reorderHint = translate(
+    'components.native-chat.queuedMessages.reorderHint',
+    'Drag to reorder, or use the Up and Down arrow keys.'
+  )
+  const accessibility = useMemo(
+    () => ({ screenReaderInstructions: { draggable: reorderHint } }),
+    [reorderHint]
+  )
   const users = useShallow((input: QueuedMessageCard[]) =>
     input.filter((card) => !card.from && card.hold !== 'sending').map((card) => card.messageId)
   )(cards)
@@ -83,6 +91,7 @@ function SortableQueuedMessages({
     <QueuedMessageRenderer.Provider value={renderer}>
       <DndContext
         sensors={sensors}
+        accessibility={accessibility}
         collisionDetection={closestCenter}
         onDragStart={({ active }) => setDrag({ from: String(active.id), over: String(active.id) })}
         onDragOver={({ active, over }) =>

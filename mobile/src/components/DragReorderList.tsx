@@ -42,13 +42,15 @@ export type DragReorderListProps<ItemT> = {
   items: ItemT[]
   itemKey: (item: ItemT) => string
   canMove?: (item: ItemT) => boolean
+  isMoveDisabled?: (item: ItemT) => boolean
   rowHeight?: number
   scopeKey?: string
   rowPresentation?: 'settings' | 'plain'
   renderRow: (item: ItemT, handle: ReactNode) => ReactNode
   /** Called with every item key in the new order after a drop changes it. */
   onReorder?: (orderedKeys: string[]) => void
-  onMove?: (move: DragReorderMove) => void
+  /** False refuses this proposal synchronously, before local positions are committed. */
+  onMove?: (move: DragReorderMove) => boolean | void
   /** Lets the owning screen disable its ScrollView while a row is held. */
   onDragActiveChange?: (active: boolean) => void
   scrollRef: AnimatedRef<Animated.ScrollView>
@@ -60,6 +62,7 @@ export function DragReorderList<ItemT>({
   items,
   itemKey,
   canMove,
+  isMoveDisabled,
   rowHeight,
   scopeKey = '',
   rowPresentation = 'settings',
@@ -95,7 +98,6 @@ export function DragReorderList<ItemT>({
     },
     []
   )
-  const sizes = useSharedValue<Record<string, number>>({})
   const initialPositions = useSharedValue<DragReorderPositions>({})
   const rowSizes = useMemo(
     () =>
@@ -108,12 +110,22 @@ export function DragReorderList<ItemT>({
     [keySignature, rowHeight, measured]
   )
   const ready = keys.every((key) => rowSizes[key] > 0)
+  // Order changes animate within the same measurement snapshot; measuring places rows directly.
+  const measurementKey = useMemo(() => JSON.stringify([rowHeight, measured]), [rowHeight, measured])
+  const measurement = useSharedValue({ sizes: rowSizes, key: measurementKey })
   const height = Object.values(rowSizes).reduce((sum, size) => sum + size, 0)
   const positions = useSharedValue<DragReorderPositions>(dragReorderPositionsFromKeys(keys))
-  const layout = useDerivedValue(
-    () => dragReorderLayout(positions.value, sizes.value),
-    [positions, sizes]
-  )
+  const layout = useDerivedValue(() => {
+    const { sizes, key } = measurement.value
+    const geometry = dragReorderLayout(positions.value, sizes)
+    return {
+      ...geometry,
+      measurementKey: key,
+      ready:
+        geometry.keys.length === Object.keys(sizes).length &&
+        geometry.keys.every((key) => sizes[key] > 0)
+    }
+  }, [positions, measurement])
   const activeKey = useSharedValue<string | null>(null)
   const activeTop = useSharedValue(0)
   const dragStartTop = useSharedValue(0)
@@ -154,9 +166,9 @@ export function DragReorderList<ItemT>({
     },
     [catalog, rowHeight, publishMeasurements]
   )
-  useEffect(() => {
-    sizes.value = rowSizes
-  }, [rowSizes, sizes])
+  useLayoutEffect(() => {
+    measurement.value = { sizes: rowSizes, key: measurementKey }
+  }, [rowSizes, measurementKey, measurement])
 
   const updateDragPosition = (key: string): void => {
     'worklet'
@@ -165,9 +177,10 @@ export function DragReorderList<ItemT>({
     }
     const rawTop =
       dragStartTop.value + dragTranslationY.value + (scrollOffsetY.value - dragStartScrollY.value)
-    const top = Math.min(Math.max(rawTop, 0), Math.max(0, height - (sizes.value[key] ?? 0)))
+    const sizes = measurement.value.sizes
+    const top = Math.min(Math.max(rawTop, 0), Math.max(0, height - (sizes[key] ?? 0)))
     activeTop.value = top
-    const target = dragReorderTarget(positions.value, sizes.value, layout.value, key, top)
+    const target = dragReorderTarget(positions.value, sizes, layout.value, key, top)
     if (positions.value[key] !== target) {
       positions.value = moveDragReorderKey(positions.value, key, target)
       runOnJS(triggerSelection)()
@@ -224,7 +237,7 @@ export function DragReorderList<ItemT>({
   )
 
   const commitReorder = useCallback(
-    (orderedKeys: string[], movedId: string) => {
+    (orderedKeys: string[], movedId: string, dragged = false) => {
       if (currentCatalog.current !== catalog) {
         return
       }
@@ -232,20 +245,38 @@ export function DragReorderList<ItemT>({
       const nextMovable = orderedKeys.filter((key) => movableKeys.has(key))
       let at = 0
       const next = keys.map((key) => (movableKeys.has(key) ? nextMovable[at++]! : key))
+      const changed = next.join(KEY_SEPARATOR) !== keySignature
+      const move = changed ? dragReorderMove(nextMovable, movedId) : null
+      if (move && onMove?.(move) === false) {
+        if (dragged) {
+          runOnUI(() => {
+            'worklet'
+            positions.value = initialPositions.value
+          })()
+        }
+        return
+      }
       // Protected rows retain their slots even when the drop needs no host move.
       runOnUI((nextPositions: DragReorderPositions) => {
         'worklet'
         positions.value = nextPositions
       })(dragReorderPositionsFromKeys(next))
-      if (next.join(KEY_SEPARATOR) !== keySignature) {
+      if (changed) {
         onReorder?.(next)
-        const move = dragReorderMove(nextMovable, movedId)
-        if (move) {
-          onMove?.(move)
-        }
       }
     },
-    [onReorder, onMove, keySignature, catalog, canMove, items, itemKey, keys, positions]
+    [
+      onReorder,
+      onMove,
+      keySignature,
+      catalog,
+      canMove,
+      items,
+      itemKey,
+      keys,
+      positions,
+      initialPositions
+    ]
   )
 
   // Why: screen-reader users can't long-press-drag; the handle exposes
@@ -310,7 +341,9 @@ export function DragReorderList<ItemT>({
           rowKey={itemKey(item)}
           rowHeight={rowHeight}
           ready={ready}
+          measurementKey={measurementKey}
           movable={!canMove || canMove(item)}
+          disabled={isMoveDisabled?.(item) ?? false}
           presentation={rowPresentation}
           onMeasure={onMeasure}
           shared={shared}

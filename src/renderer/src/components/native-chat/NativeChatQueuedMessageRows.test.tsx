@@ -148,6 +148,10 @@ it('keeps actual sortable metadata stable across unchanged visible and collapsed
       if (!grip) {
         throw new Error('missing reorder grip')
       }
+      const instruction = document.getElementById(grip.getAttribute('aria-describedby')!)
+      expect(instruction?.textContent).toBe('Drag to reorder, or use the Up and Down arrow keys.')
+      fireEvent.keyDown(grip, { key: ' ', code: 'Space' })
+      expect(move).not.toHaveBeenCalled()
       fireEvent.keyDown(grip, { key: 'ArrowDown' })
       expect(move).toHaveBeenLastCalledWith(reversed[0].messageId, {
         afterMessageId: reversed[1].messageId
