@@ -28,7 +28,7 @@ async function setup(options: Parameters<typeof createConnectorHarness>[1] = {})
   const thread = async () =>
     (
       await harness.database.query(
-        `SELECT pane_key, agent, open_turn_id, turn_state, turn_stop_reason, turn_last_message,
+        `SELECT pane_key, agent, open_turn_id, turn_state, turn_stop_reason,
            pending_prompt FROM connector_threads`
       )
     )[0]
@@ -78,7 +78,6 @@ describe('connector turn events', () => {
       open_turn_id: 100,
       turn_state: 'ended',
       turn_stop_reason: 'end_turn',
-      turn_last_message: 'done',
       pending_prompt: null
     }
     const row = await thread()
@@ -86,7 +85,7 @@ describe('connector turn events', () => {
     expect({ ...row, open_turn_id: Number(row?.open_turn_id) }).toEqual(settled)
     // A resent start for the same turn changes nothing.
     await events([started, ended, started])
-    expect(await thread()).toMatchObject({ turn_state: 'ended', turn_last_message: 'done' })
+    expect(await thread()).toMatchObject({ turn_state: 'ended', turn_stop_reason: 'end_turn' })
   })
 
   it('reads an open turn the snapshot no longer shows as unverifiable, never as done', async () => {
@@ -135,6 +134,35 @@ describe('connector turn events', () => {
     expect(await thread()).toMatchObject({ pending_prompt: JSON.stringify(prompt) })
     await events([{ conversation, paneKey: 'new-pane', kind: 'linked', agent: 'claude' }])
     expect(await thread()).toMatchObject({ pane_key: 'new-pane', pending_prompt: null })
+  })
+
+  it("drops the old pane's completed turn when a conversation moves to another pane", async () => {
+    const { machine, enqueue, events, thread } = await setup()
+    await enqueue(machine.hostId)
+    const ended = { conversation, paneKey: 'old-pane', kind: 'turn-ended', turnId: 100, at: 160 }
+    await events([{ conversation, paneKey: 'old-pane', kind: 'turn-started', at: 100 }])
+    await events([{ ...ended, stopReason: 'end_turn' }])
+    await events([{ conversation, paneKey: 'old-pane', kind: 'linked', agent: 'claude' }])
+    expect(await thread()).toMatchObject({ turn_state: 'ended', turn_stop_reason: 'end_turn' })
+    await events([{ conversation, paneKey: 'new-pane', kind: 'linked', agent: 'claude' }])
+    const cleared = { open_turn_id: null, turn_state: null, turn_stop_reason: null }
+    expect(await thread()).toMatchObject({ pane_key: 'new-pane', ...cleared })
+    await events([{ conversation, paneKey: 'new-pane', kind: 'turn-started', at: 200 }])
+    await events([
+      {
+        kind: 'snapshot',
+        conversations: [
+          { conversation, paneKey: 'newer-pane', agent: 'claude', working: true, prompt: null }
+        ]
+      }
+    ])
+    // The snapshot moved it off a working turn: unverifiable, never the old verdict.
+    expect(await thread()).toMatchObject({
+      pane_key: 'newer-pane',
+      open_turn_id: null,
+      turn_state: 'unverifiable',
+      turn_stop_reason: null
+    })
   })
 
   it('clears the prompt of a conversation the snapshot no longer lists', async () => {

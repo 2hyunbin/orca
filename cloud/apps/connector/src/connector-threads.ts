@@ -2,10 +2,13 @@ import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import type { ConnectorEvent } from '@orca-cloud/connector-contract'
 
 // Linked and snapshot (re)bind a conversation's pane. Moving to another pane forgets the old pane's
-// turn, and a turn it left working becomes unverifiable. Takes the new pane three times.
+// turn and its verdict; one it left open (working or unverifiable) stays unverifiable, never done.
 const REBIND_PANE = `pane_key = ?,
   open_turn_id = CASE WHEN pane_key = ? THEN open_turn_id END,
-  turn_state = CASE WHEN turn_state = 'working' AND pane_key <> ? THEN 'unverifiable' ELSE turn_state END`
+  turn_state = CASE WHEN pane_key IS NULL OR pane_key = ? THEN turn_state
+    WHEN turn_state IN ('working', 'unverifiable') THEN 'unverifiable' END,
+  turn_stop_reason = CASE WHEN pane_key IS NULL OR pane_key = ? THEN turn_stop_reason END`
+const rebindParams = (paneKey: string) => [paneKey, paneKey, paneKey, paneKey]
 // Other events only touch the pane the conversation is bound to.
 const ON_BOUND_PANE = 'host_id = ? AND external_id = ? AND (pane_key IS NULL OR pane_key = ?)'
 
@@ -80,9 +83,7 @@ export class ConnectorThreads {
             `UPDATE connector_threads SET ${REBIND_PANE}, agent = ?, pending_prompt = ?
              WHERE host_id = ? AND external_id = ?`,
             [
-              entry.paneKey,
-              entry.paneKey,
-              entry.paneKey,
+              ...rebindParams(entry.paneKey),
               entry.agent,
               entry.prompt ? JSON.stringify(entry.prompt) : null,
               hostId,
@@ -100,7 +101,7 @@ export class ConnectorThreads {
             `UPDATE connector_threads SET ${REBIND_PANE}, agent = ?,
                pending_prompt = CASE WHEN pane_key = ? THEN pending_prompt END
              WHERE host_id = ? AND external_id = ?`,
-            [event.paneKey, event.paneKey, event.paneKey, event.agent, event.paneKey, ...where]
+            [...rebindParams(event.paneKey), event.agent, event.paneKey, ...where]
           )
           break
         case 'prompt':
@@ -112,7 +113,7 @@ export class ConnectorThreads {
         case 'turn-started':
           await transaction.query(
             `UPDATE connector_threads SET pane_key = ?, open_turn_id = ?, turn_state = 'working',
-               turn_stop_reason = NULL, turn_last_message = NULL, pending_prompt = NULL
+               turn_stop_reason = NULL, pending_prompt = NULL
              WHERE ${ON_BOUND_PANE} AND (open_turn_id IS NULL OR open_turn_id < ?)`,
             [event.paneKey, event.at, ...onPane, event.at]
           )
@@ -120,13 +121,12 @@ export class ConnectorThreads {
         case 'turn-ended':
           await transaction.query(
             `UPDATE connector_threads SET pane_key = ?, open_turn_id = ?, turn_state = 'ended',
-               turn_stop_reason = ?, turn_last_message = ?, pending_prompt = NULL
+               turn_stop_reason = ?, pending_prompt = NULL
              WHERE ${ON_BOUND_PANE} AND (open_turn_id IS NULL OR open_turn_id <= ?)`,
             [
               event.paneKey,
               event.turnId,
               event.stopReason,
-              event.lastAssistantMessage ?? null,
               ...onPane,
               event.turnId
             ]

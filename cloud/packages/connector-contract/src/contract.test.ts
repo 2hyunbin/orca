@@ -55,11 +55,11 @@ describe('poll response', () => {
   })
 
   it('carries one control at a time', () => {
-    expect(poll([], { control: { stop: 'host_revoked' } }).data?.control).toEqual({
-      stop: 'host_revoked'
+    expect(poll([], { control: { stop: 'client_too_old' } }).data?.control).toEqual({
+      stop: 'client_too_old'
     })
     expect(poll([], { control: { pausedForMs: 0 } }).success).toBe(false)
-    expect(poll([], { control: { stop: 'host_revoked', reconnect: true } }).success).toBe(false)
+    expect(poll([], { control: { stop: 'client_too_old', reconnect: true } }).success).toBe(false)
     expect(poll([], { control: { reconnect: true, addedLater: 1 } }).data?.control).toEqual({
       reconnect: true
     })

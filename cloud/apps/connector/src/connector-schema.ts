@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS connector_threads (
   open_turn_id BIGINT,
   turn_state TEXT,
   turn_stop_reason TEXT,
-  turn_last_message TEXT,
   pending_prompt TEXT,
   created_at BIGINT NOT NULL
 );
