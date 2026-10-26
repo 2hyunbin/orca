@@ -113,11 +113,14 @@ export class ConnectorInbox {
       )
       const deliveries: ConnectorDelivery[] = []
       for (const row of rows) {
-        await transaction.query(
+        // Acks don't take the inbox lock; the state guard keeps a racing received or done.
+        const [leased] = await transaction.query(
           `UPDATE connector_inbox SET state = 'leased', lease_until = ?
-           WHERE host_id = ? AND delivery_id = ?`,
-          [now + CONNECTOR_LIMITS.leaseMs, hostId, row.delivery_id]
+           WHERE host_id = ? AND delivery_id = ?
+             AND (state = 'pending' OR (state = 'leased' AND lease_until <= ?))`,
+          [now + CONNECTOR_LIMITS.leaseMs, hostId, row.delivery_id, now]
         )
+        if (Number(leased?.changes ?? 0) === 0) continue
         deliveries.push(
           ConnectorDeliverySchema.parse({
             ...JSON.parse(String(row.payload)),

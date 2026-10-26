@@ -158,18 +158,18 @@ export function hiddenField(html: string, name: string): string {
   return match[1]
 }
 
-// Holds the first transaction statement starting with `prefix` until release(), locks still held.
-export function pauseBefore(database: CloudDatabase, prefix: string) {
+// Holds the first statement starting with `prefix` (after `skip` earlier ones) until release(),
+// with its transaction's locks still held.
+export function pauseBefore(database: CloudDatabase, prefix: string, skip = 0) {
   let reached!: () => void
   const atStatement = new Promise<void>((resolve) => (reached = resolve))
   let release!: () => void
   const released = new Promise<void>((resolve) => (release = resolve))
-  let paused = false
+  let seen = 0
   const wrap = (inner: CloudDatabase): CloudDatabase => ({
     dialect: inner.dialect,
     query: async (sql, params) => {
-      if (!paused && sql.trimStart().startsWith(prefix)) {
-        paused = true
+      if (sql.trimStart().startsWith(prefix) && seen++ === skip) {
         reached()
         await released
       }

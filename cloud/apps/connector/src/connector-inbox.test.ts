@@ -8,7 +8,8 @@ import type { DeliveryBody } from './connector-inbox.js'
 import {
   cleanupConnectorHarnesses,
   createConnectorHarness,
-  hiddenField
+  hiddenField,
+  pauseBefore
 } from './connector-server-harness.test-fixture.js'
 
 afterEach(cleanupConnectorHarnesses)
@@ -16,7 +17,7 @@ afterEach(cleanupConnectorHarnesses)
 const START: DeliveryBody = { kind: 'start', agent: 'claude', placeId: 'pl_1', prompt: 'fix it' }
 const SEND: DeliveryBody = { kind: 'send', text: 'and the tests' }
 
-async function setup(options: { pollHoldMs?: number } = {}) {
+async function setup(options: Parameters<typeof createConnectorHarness>[1] = {}) {
   const harness = await createConnectorHarness({}, options)
   const machine = await harness.linkedMachine()
   expect((await machine.hello()).status).toBe(204)
@@ -114,6 +115,32 @@ describe('connector inbox', () => {
     const second = await harness.json('/v1/connector/poll', { v: 1, helloRev: 1 }, auth)
     expect(ConnectorPollResponseSchema.parse(await second.json()).unsettled).toBeUndefined()
   })
+
+  // SQLite runs one transaction at a time, so only Postgres can interleave an ack with a claim.
+  it.skipIf(!process.env.ORCA_CONNECTOR_TEST_DATABASE_URL)(
+    'keeps a done that lands while a resend is being claimed',
+    async () => {
+      let gate!: ReturnType<typeof pauseBefore>
+      const { harness, machine, enqueue, poll } = await setup({
+        wrapDatabase: (database) => {
+          gate = pauseBefore(database, "UPDATE connector_inbox SET state = 'leased'", 1)
+          return gate.database
+        }
+      })
+      await enqueue('a', 'a1', START)
+      await poll()
+      harness.advance(CONNECTOR_LIMITS.leaseMs)
+      const resend = poll()
+      await gate.atStatement
+      await machine.ack([{ deliveryId: 'a1', step: 'done', result: { outcome: 'accepted' } }])
+      gate.release()
+      expect((await resend).deliveries).toEqual([])
+      const [row] = await harness.database.query(
+        "SELECT state FROM connector_inbox WHERE delivery_id = 'a1'"
+      )
+      expect(row?.state).toBe('done')
+    }
+  )
 
   it('keeps the first done', async () => {
     const { harness, machine, enqueue, poll } = await setup()
