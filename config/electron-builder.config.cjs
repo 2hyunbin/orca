@@ -473,6 +473,11 @@ module.exports = {
         'orca-keyboard-layout',
         context.packager
       )
+      await signMacStandaloneHelper(
+        join(resourcesDir, '..', 'MacOS', 'orca-process-footprint'),
+        'orca-process-footprint',
+        context.packager
+      )
       await packageMacTerminalHost(join(resourcesDir, '..', '..'), context)
     }
   },
@@ -587,6 +592,10 @@ module.exports = {
       {
         from: 'native/keyboard-layout-macos/.build/release/orca-keyboard-layout',
         to: 'MacOS/orca-keyboard-layout'
+      },
+      {
+        from: 'native/process-footprint-macos/.build/release/orca-process-footprint',
+        to: 'MacOS/orca-process-footprint'
       }
     ],
     target: [
