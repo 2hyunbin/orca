@@ -122,10 +122,8 @@ export abstract class RuntimeConstructionServices {
     record: TerminalHandleRecord
     leaf: RuntimeLeafRecord
   }
-  protected abstract getTerminalPtyForHandle(handle: string): {
-    record: TerminalHandleRecord
-    pty: RuntimePtyWorktreeRecord
-  }
+  protected abstract getTerminalPtyForHandle(handle: string): { pty: RuntimePtyWorktreeRecord }
+  protected abstract getRetainedHandlePty(handle: string): RuntimePtyWorktreeRecord | undefined
   protected abstract getOrchestrationMailboxTerminal(
     ptyId: string
   ): OrchestrationMailboxTerminal | null

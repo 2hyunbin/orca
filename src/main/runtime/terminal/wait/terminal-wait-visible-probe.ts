@@ -66,7 +66,7 @@ export abstract class OrcaRuntimeWithStartTuiIdleVisibleReadProbe extends OrcaRu
           !projection ||
           projection.source !== 'screen' ||
           !pty ||
-          !this.terminalWaiters.get(waiter.handle)?.has(waiter)
+          !this.terminalWaiters.has(waiter)
         ) {
           return
         }

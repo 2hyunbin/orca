@@ -180,12 +180,14 @@ export abstract class OrcaRuntimeWithGetTerminalInteractiveWait extends OrcaRunt
     }
     const live = this.getLivePtyForHandle(handle)
     const record = live?.record ?? this.handles.get(handle)
+    const pty =
+      live?.pty ??
+      (record?.ptyId ? this.ptysById.get(record.ptyId) : this.getRetainedHandlePty(handle))
+    if (pty?.incarnationId) {
+      return `${pty.ptyId}:${pty.incarnationId}`
+    }
     if (!record?.ptyId) {
       return this.getOrchestrationCompatibilitySshTerminal(handle)?.processIncarnation ?? null
-    }
-    const incarnationId = live?.pty.incarnationId ?? this.ptysById.get(record.ptyId)?.incarnationId
-    if (incarnationId) {
-      return `${record.ptyId}:${incarnationId}`
     }
     // Why: legacy providers may omit process incarnation; retain the prior restart-degraded fence.
     return `${this.runtimeId}:${record.ptyId}:${record.ptyGeneration}`

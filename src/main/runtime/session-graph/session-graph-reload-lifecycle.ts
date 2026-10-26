@@ -1,6 +1,5 @@
 import type { OrcaRuntimeWithTransitionGraphReloadToTerminalState as TransitionGraphReloadToTerminalStateMethods } from './session-graph-authority'
 import type { OrcaRuntimeWithBindPtyIncarnationHandle as BindPtyIncarnationHandleMethods } from '../terminal/identity/terminal-handle-bindings'
-import type { OrcaRuntimeWithResolveWaiter as ResolveWaiterMethods } from '../orca-runtime-resolve-waiter'
 import { OrcaRuntimeWithStopTerminalsForProject } from '../terminal/stop/project-terminal-stop'
 import type { RuntimeRendererReloadFence } from '../orca-runtime-core'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
@@ -26,10 +25,6 @@ export abstract class OrcaRuntimeWithHasTerminalsForWorktree extends OrcaRuntime
   protected abstract refreshWritableFlags(
     ...args: Parameters<BindPtyIncarnationHandleMethods['refreshWritableFlags']>
   ): ReturnType<BindPtyIncarnationHandleMethods['refreshWritableFlags']>
-
-  protected abstract rejectAllWaiters(
-    ...args: Parameters<ResolveWaiterMethods['rejectAllWaiters']>
-  ): ReturnType<ResolveWaiterMethods['rejectAllWaiters']>
 
   protected abstract rememberDetachedPreAllocatedLeaves(
     ...args: Parameters<BindPtyIncarnationHandleMethods['rememberDetachedPreAllocatedLeaves']>
@@ -215,7 +210,6 @@ export abstract class OrcaRuntimeWithHasTerminalsForWorktree extends OrcaRuntime
     this.handleByLeafKey.clear()
     this.clearPtyIncarnationHandles()
     // Keep pre-allocated CLI handles for reconnect adoption.
-    this.rejectAllWaiters('terminal_handle_stale')
   }
 
   protected handleGraphReloadTimeout(windowId: number): void {

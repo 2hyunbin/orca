@@ -364,18 +364,13 @@ describe('orchestration mailbox pointer submit', () => {
       lastAgentStatusObservedLive: true
     }
     const resumed = resumePendingOrchestrationMailboxPointer({
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resume reads only getDb and resolveSubmitTarget.
       deps: {
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resume calls only releaseMailboxPointerEnter here.
         getDb: () => ({ releaseMailboxPointerEnter }) as never,
         resolveSubmitTarget: () => ({ terminal: current, processIncarnation: 'inc-current' })
-      } as never,
-      state: new OrchestrationMailboxPointerState(),
+      },
       terminal: current,
-      mailboxHandle: 'run:run-1',
-      messages,
-      settle: vi.fn(),
-      redrive: vi.fn()
+      messages
     })
 
     expect(resumed).toBe(false)
@@ -503,7 +498,6 @@ describe('orchestration mailbox pointer submit', () => {
     ['Enter acceptance', MAILBOX_POINTER_ENTER_ATTEMPTED]
   ])('fails closed after restart following %s before durable settlement', (_boundary, phase) => {
     const ptyId = 'pty-surviving'
-    const mailboxHandle = 'run:run-surviving'
     const terminal = {
       ptyId,
       handle: 'term-surviving',
@@ -517,17 +511,12 @@ describe('orchestration mailbox pointer submit', () => {
     }
     const settleMailboxPointerEnter = vi.fn()
     const releaseMailboxPointerEnter = vi.fn()
-    const writePty = vi.fn(settledWriteStub())
-
     const resumed = resumePendingOrchestrationMailboxPointer({
       deps: {
         getDb: () => ({ settleMailboxPointerEnter, releaseMailboxPointerEnter }) as never,
-        resolveSubmitTarget: () => target,
-        writePty
-      } as never,
-      state: new OrchestrationMailboxPointerState(),
+        resolveSubmitTarget: () => target
+      },
       terminal,
-      mailboxHandle,
       messages: [
         {
           id: 'msg-surviving',
@@ -537,9 +526,7 @@ describe('orchestration mailbox pointer submit', () => {
           pointer_pty_id: ptyId,
           pointer_process_incarnation: target.processIncarnation
         }
-      ],
-      settle: vi.fn(),
-      redrive: vi.fn()
+      ]
     })
 
     expect(resumed).toBe(true)
@@ -549,6 +536,5 @@ describe('orchestration mailbox pointer submit', () => {
       [MAILBOX_POINTER_WRITE_ATTEMPTED, MAILBOX_POINTER_ENTER_ATTEMPTED]
     )
     expect(releaseMailboxPointerEnter).not.toHaveBeenCalled()
-    expect(writePty).not.toHaveBeenCalled()
   })
 })

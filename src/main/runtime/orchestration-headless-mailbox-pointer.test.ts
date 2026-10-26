@@ -145,6 +145,33 @@ describe('orchestration mailbox pointer for a terminal no pane shows', () => {
     db.close()
   })
 
+  // A serve window that retracted the pane is indistinguishable from STA-11630's unopened workspace.
+  it('points a PTY whose pane a serve window retracted before it closed', async () => {
+    const { db, runtime, write, sendRunMail } = await coordinator()
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, {
+      tabs: [
+        {
+          tabId: TAB_ID,
+          worktreeId: WORKTREE_ID,
+          title: 'Codex',
+          activeLeafId: LEAF_ID,
+          layout: null
+        }
+      ],
+      leaves: [
+        { tabId: TAB_ID, worktreeId: WORKTREE_ID, leafId: LEAF_ID, paneRuntimeId: 1, ptyId: PTY_ID }
+      ]
+    })
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
+    runtime.markGraphUnavailable(1)
+    await goIdle(runtime)
+    sendRunMail()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(pointerCount(write)).toBe(1)
+    db.close()
+  })
+
   // STA-11630: a window that shows no pane for the terminal (its workspace is not open) must not hide its mail.
   it.each(['window-empty-graph', 'window-graph-unavailable'] as const)(
     'points a coordinator no pane shows on a %s host',

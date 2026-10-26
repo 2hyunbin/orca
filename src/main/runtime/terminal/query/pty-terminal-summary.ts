@@ -119,21 +119,26 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
     return { record, leaf }
   }
 
-  /** The terminal a handle names: its runtime PTY, or the PTY its window pane shows. */
-  protected getTerminalPtyForHandle(handle: string): {
-    record: TerminalHandleRecord
-    pty: RuntimePtyWorktreeRecord
-  } {
-    const live = this.getLivePtyForHandle(handle)
-    if (live) {
-      return live
-    }
-    const { record, leaf } = this.getLiveLeafForHandle(handle)
-    const pty = leaf.ptyId ? this.ptysById.get(leaf.ptyId) : undefined
+  /** The terminal a handle names: its runtime PTY, the PTY its retained handle was issued for, or the PTY its window pane shows. */
+  protected getTerminalPtyForHandle(handle: string): { pty: RuntimePtyWorktreeRecord } {
+    const pty =
+      this.getLivePtyForHandle(handle)?.pty ??
+      this.getRetainedHandlePty(handle) ??
+      this.ptysById.get(this.getLiveLeafForHandle(handle).leaf.ptyId ?? '')
     if (!pty) {
       throw new Error('terminal_handle_stale')
     }
-    return { record, pty }
+    return { pty }
+  }
+
+  /** A pane-issued handle outlives the graph (a reload) while its PTY keeps the incarnation it was issued for. */
+  protected getRetainedHandlePty(handle: string): RuntimePtyWorktreeRecord | undefined {
+    const [ptyId, retained] =
+      [...this.handleByPtyIncarnation].find(([, r]) => r.handle === handle) ?? []
+    const pty = ptyId ? this.ptysById.get(ptyId) : undefined
+    return retained?.incarnationId && pty?.incarnationId === retained.incarnationId
+      ? pty
+      : undefined
   }
 
   /** The terminal orchestration points at its mail, whether or not a window pane shows it. */
@@ -164,7 +169,7 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
   }
 
   /** The handle a terminal is known by: its own, else the one its window pane issued. */
-  protected getTerminalHandleForPty(ptyId: string): string | undefined {
+  private getTerminalHandleForPty(ptyId: string): string | undefined {
     const handle =
       this.handleByPtyId.get(ptyId) ??
       this.handleByPtyIncarnation.get(ptyId)?.handle ??
@@ -199,9 +204,10 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
     return paneKey
   }
 
-  /** Whether a handle names a terminal; PTY-owned handles re-issue records a graph reload cleared. */
+  /** Whether a handle names a terminal, including one a graph reload cleared the record of. */
   protected hasMailboxTerminalHandle(handle: string): boolean {
-    return this.handles.has(handle) || this.getLivePtyForHandle(handle) !== null
+    const named = this.getLivePtyForHandle(handle)?.pty ?? this.getRetainedHandlePty(handle)
+    return this.handles.has(handle) || named !== undefined
   }
 
   protected getLivePtyForHandle(handle: string): {

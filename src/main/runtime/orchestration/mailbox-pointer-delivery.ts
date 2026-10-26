@@ -89,15 +89,7 @@ export class OrchestrationMailboxPointerDelivery<TWaiter extends OrchestrationMe
     const pending = db.getPendingMailboxPointerMessages(mailboxHandle)
     if (
       pending.length > 0 &&
-      resumePendingOrchestrationMailboxPointer({
-        deps: this.deps,
-        state: this.state,
-        terminal,
-        mailboxHandle,
-        messages: pending,
-        settle: (ptyId, flight) => this.settle(ptyId, flight),
-        redrive: (redriveMailbox, force) => this.redrive(redriveMailbox, force)
-      })
+      resumePendingOrchestrationMailboxPointer({ deps: this.deps, terminal, messages: pending })
     ) {
       return
     }
@@ -122,6 +114,15 @@ export class OrchestrationMailboxPointerDelivery<TWaiter extends OrchestrationMe
         this.redeliverAfterProbe(ptyId, mailboxHandle)
       )
     ) {
+      return
+    }
+    // Every path stages here, async retries included: type only for a mailbox this terminal still owns.
+    if (
+      this.deps.mailboxOwner.resolve(terminal, mailboxHandle, { routeDirectMail: false }) !==
+      mailboxHandle
+    ) {
+      this.parkRedelivery(mailboxHandle, options.reservedTypes)
+      this.redrive(mailboxHandle)
       return
     }
     stageOrchestrationMailboxPointer({
@@ -211,11 +212,11 @@ export class OrchestrationMailboxPointerDelivery<TWaiter extends OrchestrationMe
     }
     const current = this.deps.getTerminal(ptyId)
     for (const [mailboxHandle, reservedTypes] of parked) {
-      if (!current || this.deps.mailboxOwner.resolve(current, mailboxHandle) !== mailboxHandle) {
+      if (current) {
+        this.deliver(current, { mailboxHandle, reservedTypes })
+      } else {
         this.parkRedelivery(mailboxHandle, reservedTypes)
         this.redrive(mailboxHandle)
-      } else {
-        this.deliver(current, { mailboxHandle, reservedTypes })
       }
     }
   }

@@ -1,24 +1,22 @@
 import type { RuntimeTerminalWait } from '../../../../shared/runtime-terminal-contracts'
 import type { TerminalWaiter } from '../../runtime-terminal-contracts'
 
+/** Waits keyed by the terminal they follow; the handle they were asked through only labels the result. */
 export class RuntimeTerminalWaiterRegistry {
-  private readonly byHandle = new Map<string, Set<TerminalWaiter>>()
+  private readonly byPtyId = new Map<string, Set<TerminalWaiter>>()
 
-  get(handle: string): ReadonlySet<TerminalWaiter> | undefined {
-    return this.byHandle.get(handle)
+  has(waiter: TerminalWaiter): boolean {
+    return this.byPtyId.get(waiter.ptyId)?.has(waiter) ?? false
   }
 
-  /** Every wait on one terminal, whichever handle it was asked through. */
   forPty(ptyId: string): TerminalWaiter[] {
-    return [...this.byHandle.values()].flatMap((waiters) =>
-      [...waiters].filter((waiter) => waiter.ptyId === ptyId)
-    )
+    return [...(this.byPtyId.get(ptyId) ?? [])]
   }
 
   add(waiter: TerminalWaiter): void {
-    const waiters = this.byHandle.get(waiter.handle) ?? new Set<TerminalWaiter>()
+    const waiters = this.byPtyId.get(waiter.ptyId) ?? new Set<TerminalWaiter>()
     waiters.add(waiter)
-    this.byHandle.set(waiter.handle, waiters)
+    this.byPtyId.set(waiter.ptyId, waiters)
   }
 
   resolve(waiter: TerminalWaiter, result: RuntimeTerminalWait): void {
@@ -53,14 +51,6 @@ export class RuntimeTerminalWaiterRegistry {
     }
   }
 
-  rejectAll(code: string): void {
-    for (const waiters of Array.from(this.byHandle.values())) {
-      for (const waiter of Array.from(waiters)) {
-        this.reject(waiter, code)
-      }
-    }
-  }
-
   remove(waiter: TerminalWaiter): void {
     if (waiter.timeout) {
       clearTimeout(waiter.timeout)
@@ -72,13 +62,13 @@ export class RuntimeTerminalWaiterRegistry {
       waiter.abortCleanup()
       waiter.abortCleanup = null
     }
-    const waiters = this.byHandle.get(waiter.handle)
+    const waiters = this.byPtyId.get(waiter.ptyId)
     if (!waiters) {
       return
     }
     waiters.delete(waiter)
     if (waiters.size === 0) {
-      this.byHandle.delete(waiter.handle)
+      this.byPtyId.delete(waiter.ptyId)
     }
   }
 }
