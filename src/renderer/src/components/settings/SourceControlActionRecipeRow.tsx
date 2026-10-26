@@ -113,7 +113,7 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
             value={selectedAgent ?? DEFAULT_AGENT_VALUE}
             onValueChange={(value) => onAgentChange(actionId, value)}
           >
-            <SelectTrigger size="sm" className="h-8 w-full text-xs">
+            <SelectTrigger size="sm" density="compact" className="h-8 w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -183,12 +183,13 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
               spellCheck={false}
               placeholder={agentArgsPlaceholder}
               onChange={(event) => onAgentArgsChange(actionId, event.target.value)}
-              className="h-8 font-mono text-xs md:text-xs"
+              variant="code"
+              className="h-8"
             />
           </SourceControlActionOptionField>
         )}
         <div className="min-w-0 space-y-2">
-          <Label className="text-xs text-muted-foreground">
+          <Label variant="settings">
             {translate(
               'auto.components.settings.SourceControlAiActionRecipeDefaults.fb09da4345',
               'Command template'
