@@ -72,6 +72,12 @@ function makeRuntime(
   return { runtime, spawn }
 }
 
+/** Main's fresh launch: a new conversation, which can't collide with the vetoed one. */
+function expectFreshLaunch(command: string | undefined): void {
+  expect(command ?? '').not.toMatch(RESUMES)
+  expect(command).toContain('codex')
+}
+
 async function restore(runtime: InstanceType<typeof OrcaRuntimeService>): Promise<void> {
   await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab', HEADLESS_LEAF_ID, {
     notifyClients: false,
@@ -117,7 +123,7 @@ describe('restoring a pane its host recorded an agent in', () => {
     expect(command).toContain('codex')
   })
 
-  it('opens a plain shell when the pane’s own rows name two conversations', async () => {
+  it('launches the tab’s agent fresh when the pane’s own rows name two conversations', async () => {
     const { runtime, spawn } = makeRuntime(
       [
         codexRow({ receivedAt: 2 }),
@@ -126,10 +132,10 @@ describe('restoring a pane its host recorded an agent in', () => {
       'codex'
     )
     await restore(runtime)
-    expect(spawn.mock.calls[0]![0].command).toBeUndefined()
+    expectFreshLaunch(spawn.mock.calls[0]![0].command)
   })
 
-  it('opens a plain shell when another pane’s stored record holds the same conversation', async () => {
+  it('launches the tab’s agent fresh when another pane’s stored record holds the conversation', async () => {
     const otherPaneKey = 'other-tab:44444444-4444-4444-8444-444444444444'
     const { runtime, spawn } = makeRuntime([codexRow()], 'codex', {
       session: {
@@ -150,10 +156,10 @@ describe('restoring a pane its host recorded an agent in', () => {
       }
     })
     await restore(runtime)
-    expect(spawn.mock.calls[0]![0].command).toBeUndefined()
+    expectFreshLaunch(spawn.mock.calls[0]![0].command)
   })
 
-  it('opens a plain shell when another pane holds the conversation live', async () => {
+  it('launches the tab’s agent fresh when another pane holds the conversation live', async () => {
     const otherPaneKey = 'other-tab:44444444-4444-4444-8444-444444444444'
     const { runtime, spawn } = makeRuntime(
       [codexRow(), codexRow({ paneKey: otherPaneKey })],
@@ -166,7 +172,7 @@ describe('restoring a pane its host recorded an agent in', () => {
       'paneHoldsSession'
     ).mockImplementation((paneKey) => paneKey === otherPaneKey)
     await restore(runtime)
-    expect(spawn.mock.calls[0]![0].command).toBeUndefined()
+    expectFreshLaunch(spawn.mock.calls[0]![0].command)
   })
 
   it('falls back to the tab’s agent launch when the newest row is a structured host’s', async () => {
@@ -175,5 +181,21 @@ describe('restoring a pane its host recorded an agent in', () => {
     const { command } = spawn.mock.calls[0]![0]
     expect(command ?? '').not.toMatch(RESUMES)
     expect(command).toContain('codex')
+  })
+
+  it('resumes a pane whose only other row is a relayed SSH row naming another session', async () => {
+    const { runtime, spawn } = makeRuntime(
+      [
+        codexRow(),
+        codexRow({
+          providerSession: { key: 'session_id', id: 'remote-session' },
+          connectionId: 'ssh-1',
+          receivedAt: 2
+        })
+      ],
+      'codex'
+    )
+    await restore(runtime)
+    expect(spawn.mock.calls[0]![0].command).toMatch(RESUMES)
   })
 })

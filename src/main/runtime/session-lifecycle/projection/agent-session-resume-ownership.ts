@@ -1,7 +1,7 @@
 // Share recorded-session ownership checks and in-flight claims between pane reopen and targeted resume.
 
 import { findPaneSleepingRecord } from './pane-sleeping-record'
-import { hookRowPaneResumeRecord } from './hook-row-pane-resume-record'
+import { hookRowPaneResumeRecord, isPaneLocalHookRow } from './hook-row-pane-resume-record'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { OrcaRuntimeWithApplyMobileSessionTabNavigation } from './apply-mobile-session-tab-navigation'
 import type { RuntimeMobileSessionTerminalTab } from '../../../../shared/runtime-types'
@@ -64,7 +64,8 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
 
   /**
    * The pane's resume launch: undefined when it owns no record, `{}` (plain shell, record kept)
-   * when the record cannot be resumed here or another resume took it.
+   * when a stored record cannot be resumed here or another resume took it. A record read from the
+   * hook store is no promise to keep: its vetoes give undefined, so the tab's agent launches fresh.
    */
   protected async resolvePaneOwnedResumeStartup(
     worktreeId: string,
@@ -88,6 +89,7 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
     if (!record) {
       return undefined
     }
+    const vetoed = stored ? {} : undefined
     // Records are unspent here; exclude aliases and already-live panes to prevent duplicate transcript writers.
     const records = this.getWorkspaceSessionForWorktree(worktreeId)?.sleepingAgentSessionsByPaneKey
     const aliases = this.findPaneSleepingAgentRecord(worktreeId, tab)?.aliases ?? []
@@ -103,23 +105,24 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
       ? null
       : this.agentSessionResumeClaims.claim(record, makePaneKey(tab.parentTabId, tab.leafId))
     if (!resumeClaim) {
-      return {}
+      return vetoed
     }
-    const resume = await this.preparePaneOwnedResume(worktreeId, record).catch(() => null)
+    const resume = await this.preparePaneOwnedResume(worktreeId, record, !stored).catch(() => null)
     if (!resume) {
       resumeClaim.settleFailure(false)
-      return {}
+      return vetoed
     }
     return { ...resume, resumeClaim }
   }
 
   private async preparePaneOwnedResume(
     worktreeId: string,
-    record: SleepingAgentSessionRecord
+    record: SleepingAgentSessionRecord,
+    fromHookRows: boolean
   ): Promise<MobileTerminalResumeCommand | null> {
     if (
       (await this.isProviderSessionLiveInAnotherPane(record, record.paneKey)) ||
-      this.hookStoreNamesAnotherSessionForPane(record)
+      this.hookStoreNamesAnotherSessionForPane(record, fromHookRows)
     ) {
       return null
     }
@@ -187,10 +190,15 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
   }
 
   /** The pane moved on to another conversation after the record was saved; the hook store is authoritative. */
-  private hookStoreNamesAnotherSessionForPane(record: SleepingAgentSessionRecord): boolean {
+  private hookStoreNamesAnotherSessionForPane(
+    record: SleepingAgentSessionRecord,
+    fromHookRows: boolean
+  ): boolean {
     return (this.getAgentProviderSessionRowsForPaneFn?.(record.paneKey) ?? []).some(
       (row) =>
         row.providerSession !== undefined &&
+        // Judge a hook-read record by the rows it was read from.
+        (!fromHookRows || isPaneLocalHookRow(row, record.worktreeId)) &&
         !agentProviderSessionsEqual(record.agent, row.providerSession, record.providerSession)
     )
   }
