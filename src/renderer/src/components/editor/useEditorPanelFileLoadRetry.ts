@@ -54,7 +54,8 @@ export function shouldRetryFileLoadError(message: string, code?: string): boolea
     !lower.includes('access denied') &&
     !lower.includes('enoent') &&
     !lower.includes('no such file') &&
-    !lower.includes('file too large')
+    // Covers local prose, the host's `file_too_large` code and paged-read refusals alike.
+    !/too[ _]large/.test(lower)
   )
 }
 

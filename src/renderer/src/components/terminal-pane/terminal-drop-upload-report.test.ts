@@ -46,9 +46,7 @@ describe('reportTerminalDropUploadSkipsAndFailures', () => {
       'Failed to upload {{value0}} {{value1}}.',
       { value0: 1, value1: 'file' }
     )
-    expect(toast.error).toHaveBeenCalledWith(
-      expect.not.stringContaining('/secret/project/file.txt')
-    )
+    expect(vi.mocked(toast.error).mock.calls[0]?.[0]).not.toContain('/secret/project/file.txt')
   })
 
   it('names a shared known skip reason', () => {
@@ -83,5 +81,18 @@ describe('reportTerminalDropUploadSkipsAndFailures', () => {
       'Failed to upload {{value0}} {{value1}}.',
       { value0: 2, value1: 'files' }
     )
+  })
+
+  it('names a shared failure reason and leaves mixed failures generic', () => {
+    reportTerminalDropUploadSkipsAndFailures(
+      [],
+      [{ reason: "Error invoking remote method 'fs:x': Error: No space left on device" }]
+    )
+    reportTerminalDropUploadSkipsAndFailures([], [{ reason: 'a' }, { reason: 'b' }])
+
+    expect(vi.mocked(toast.error).mock.calls.map((call) => call[1])).toEqual([
+      { description: 'No space left on device' },
+      { description: undefined }
+    ])
   })
 })
