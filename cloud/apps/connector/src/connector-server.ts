@@ -19,8 +19,8 @@ import { limitByClientIp, RateLimiter, readClientIp } from './rate-limiter.js'
 import { RequestDrain } from './request-drain.js'
 import { ConnectorSignInRequests, formatUserCode } from './sign-in-requests.js'
 import { SignedCookies } from './signed-cookies.js'
-import { codeEntryPage, confirmPage, machinesPage, messagePage } from './web-pages.js'
-import { ConnectorWebSignIn, type WebSession } from './web-sign-in.js'
+import { registerWebRoutes } from './web-routes.js'
+import { ConnectorWebSignIn } from './web-sign-in.js'
 
 const MAX_BODY_BYTES = 64 * 1024
 const UNAUTHENTICATED_PER_MINUTE_PER_IP = 30
@@ -48,13 +48,6 @@ async function readJson(context: Context): Promise<unknown> {
   return await context.req.json().catch(() => null)
 }
 
-async function readForm(context: Context): Promise<Record<string, string>> {
-  const form = await context.req.parseBody().catch(() => ({}))
-  return Object.fromEntries(
-    Object.entries(form).flatMap(([key, value]) => (typeof value === 'string' ? [[key, value]] : []))
-  )
-}
-
 export function createConnectorServer(
   config: ConnectorConfig,
   database: CloudDatabase,
@@ -78,7 +71,6 @@ export function createConnectorServer(
     config.trustedProxyHops
   )
   const hostRequests = new RateLimiter(AUTHENTICATED_PER_MINUTE_PER_HOST, now)
-  const codeAttempts = new RateLimiter(CODE_ATTEMPTS_PER_MINUTE_PER_ACCOUNT, now)
   const limitBody = bodyLimit({
     maxSize: MAX_BODY_BYTES,
     onError: (context) => context.json({ error: 'request_too_large' }, 413)
@@ -197,98 +189,14 @@ export function createConnectorServer(
     return context.json({ sessionToken, expiresAt, hostId })
   })
 
-  // Browser pages: Orca web sign-in first, then a CSRF token bound to that session on every form.
-  const browserSession = async (
-    context: Context,
-    returnTo: '/host-login' | '/machines',
-    form?: Record<string, string>
-  ): Promise<WebSession | Response> => {
-    const session = web.session(context)
-    if (!session) return web.begin(context, returnTo)
-    if (form && !web.csrfMatches(context, form.csrf ?? '')) {
-      return context.html(messagePage('Request expired', 'Reload the page and try again.'), 403)
-    }
-    return session
-  }
-
-  app.get('/auth/callback', limitUnauthenticated, (context) => web.complete(context))
-
-  app.get('/host-login', limitUnauthenticated, async (context) => {
-    const session = await browserSession(context, '/host-login')
-    if (session instanceof Response) return session
-    return context.html(codeEntryPage({ email: session.account.email, csrf: session.csrf }))
-  })
-
-  app.post('/host-login', limitUnauthenticated, limitBody, async (context) => {
-    const form = await readForm(context)
-    const session = await browserSession(context, '/host-login', form)
-    if (session instanceof Response) return session
-    const page = { email: session.account.email, csrf: session.csrf }
-    if (!codeAttempts.allow(session.account.id)) {
-      return context.html(
-        codeEntryPage({ ...page, error: 'Too many attempts. Wait a minute and try again.' }),
-        429
-      )
-    }
-    const userCode = form.userCode ?? ''
-    const pending = await signIns.findPending(userCode)
-    if (!pending) {
-      return context.html(
-        codeEntryPage({ ...page, error: 'That code is not valid or has expired.' }),
-        404
-      )
-    }
-    return context.html(confirmPage({ csrf: session.csrf, userCode, pending, now: now() }))
-  })
-
-  app.post('/host-login/decision', limitUnauthenticated, limitBody, async (context) => {
-    const form = await readForm(context)
-    const session = await browserSession(context, '/host-login', form)
-    if (session instanceof Response) return session
-    const decision = await signIns.decide(
-      form.userCode ?? '',
-      session.account,
-      form.decision === 'allow'
-    )
-    const again = { href: '/host-login', label: 'Enter another code' }
-    switch (decision) {
-      case 'approved':
-        return context.html(
-          messagePage('Connected', 'Your Orca finishes signing in by itself. You can close this page.')
-        )
-      case 'denied':
-        return context.html(messagePage('Denied', 'Your Orca will stop waiting for approval.'))
-      case 'key_linked_elsewhere':
-        return context.html(
-          messagePage('Not connected', 'This machine is already connected to another Orca account.'),
-          409
-        )
-      case 'not_found':
-        return context.html(
-          messagePage('Not connected', 'That code is not valid or has expired.', again),
-          404
-        )
-    }
-  })
-
-  app.get('/machines', limitUnauthenticated, async (context) => {
-    const session = await browserSession(context, '/machines')
-    if (session instanceof Response) return session
-    return context.html(
-      machinesPage({
-        email: session.account.email,
-        csrf: session.csrf,
-        hosts: await hostLinks.listForAccount(session.account.id)
-      })
-    )
-  })
-
-  app.post('/v1/account/hosts/:hostId/revoke', limitUnauthenticated, limitBody, async (context) => {
-    const form = await readForm(context)
-    const session = await browserSession(context, '/machines', form)
-    if (session instanceof Response) return session
-    await hostLinks.revoke(session.account.id, context.req.param('hostId'))
-    return context.redirect('/machines', 303)
+  registerWebRoutes(app, {
+    web,
+    signIns,
+    hostLinks,
+    now,
+    limitUnauthenticated,
+    limitBody,
+    codeAttempts: new RateLimiter(CODE_ATTEMPTS_PER_MINUTE_PER_ACCOUNT, now)
   })
 
   return {
