@@ -15,6 +15,7 @@ import type { TerminalTab } from '../shared/terminal-tab-types'
 import { getDefaultWorkspaceSession } from '../shared/constants'
 import { toRuntimeExecutionHostId } from '../shared/execution-host'
 import { removeWorktreeMetaRow } from './persistence/host-qualified-worktree-meta'
+import { RUNTIME_PARTITION_TOPOLOGY_FENCE_MS } from './persistence/loading-store/runtime-partition-topology-fence'
 
 let hasCreatedStoreInCase = false
 
@@ -219,6 +220,86 @@ describe('worktree removal across host session partitions', () => {
     )
 
     expect(store.getWorkspaceSession(ENV_A).tabsByWorktree[STALE]).toEqual([])
+  })
+
+  // omarchy: one removal left a repo revision that froze every sibling at [] across restarts.
+  it('keeps saving live and new workspaces of a repo after a sibling removal and a restart', async () => {
+    const NEW = 'repo-gone::/workspace/new'
+    const store = await createStore()
+    store.setWorktreeMeta(hostWorktreeTarget({ id: STALE, hostId: ENV_A }), { hostId: ENV_A })
+    store.setWorkspaceSession(
+      {
+        ...getDefaultWorkspaceSession(),
+        tabsByWorktree: {
+          [STALE]: [makeTerminalTab({ id: 'stale-tab', worktreeId: STALE })],
+          [LIVE]: []
+        }
+      },
+      ENV_A
+    )
+    removeWorktreeMetaRow(store, STALE, undefined)
+    expect(store.getWorkspaceSession(ENV_A).terminalTopologyRevisionByRepoId?.['repo-gone']).toBe(1)
+    await store.flushPendingOrThrowAsync()
+
+    const restarted = await createStore()
+    const twoTabs = (worktreeId: string, prefix: string): TerminalTab[] => [
+      makeTerminalTab({ id: `${prefix}-1`, ptyId: `${prefix}-pty-1`, worktreeId }),
+      makeTerminalTab({ id: `${prefix}-2`, ptyId: `${prefix}-pty-2`, worktreeId, sortOrder: 1 })
+    ]
+    restarted.setWorkspaceSession(
+      {
+        ...getDefaultWorkspaceSession(),
+        tabsByWorktree: { [LIVE]: twoTabs(LIVE, 'live'), [NEW]: twoTabs(NEW, 'new') }
+      },
+      ENV_A
+    )
+    await restarted.flushPendingOrThrowAsync()
+
+    const reopened = await createStore()
+    const tabIds = (worktreeId: string): string[] | undefined =>
+      reopened.getWorkspaceSession(ENV_A).tabsByWorktree[worktreeId]?.map((tab) => tab.id)
+    expect(tabIds(LIVE)).toEqual(['live-1', 'live-2'])
+    expect(tabIds(NEW)).toEqual(['new-1', 'new-2'])
+    expect(
+      reopened.getWorkspaceSession(ENV_A).terminalTopologyRevisionByRepoId?.['repo-gone']
+    ).toBe(1)
+  })
+
+  it("lets the window's saves win again once main's fence has expired", async () => {
+    const now = vi.spyOn(performance, 'now')
+    try {
+      now.mockReturnValue(1_000_000)
+      const store = await createStore()
+      store.setWorktreeMeta(hostWorktreeTarget({ id: STALE, hostId: ENV_A }), { hostId: ENV_A })
+      store.setWorkspaceSession(
+        {
+          ...getDefaultWorkspaceSession(),
+          tabsByWorktree: { [STALE]: [makeTerminalTab({ id: 'stale-tab', worktreeId: STALE })] }
+        },
+        ENV_A
+      )
+      removeWorktreeMetaRow(store, STALE, undefined)
+      const save = (): void =>
+        store.setWorkspaceSession(
+          {
+            ...getDefaultWorkspaceSession(),
+            tabsByWorktree: { [LIVE]: [makeTerminalTab({ id: 'live-tab', worktreeId: LIVE })] }
+          },
+          ENV_A
+        )
+
+      now.mockReturnValue(1_000_000 + RUNTIME_PARTITION_TOPOLOGY_FENCE_MS - 1)
+      save()
+      expect(store.getWorkspaceSession(ENV_A).tabsByWorktree[LIVE] ?? []).toEqual([])
+
+      now.mockReturnValue(1_000_000 + RUNTIME_PARTITION_TOPOLOGY_FENCE_MS)
+      save()
+      expect(store.getWorkspaceSession(ENV_A).tabsByWorktree[LIVE]?.map((tab) => tab.id)).toEqual([
+        'live-tab'
+      ])
+    } finally {
+      now.mockRestore()
+    }
   })
 
   it('does not fence the local blob that holds only sibling worktrees of the removed runtime worktree', async () => {
