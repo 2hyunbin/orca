@@ -15,6 +15,7 @@ import type { ConnectorInbox, Unsettled } from './connector-inbox.js'
 import type { ConnectorThreads } from './connector-threads.js'
 import type { InboxWaker } from './inbox-waker.js'
 import type { MachineEnv } from './machine-auth.js'
+import type { SlackEdge } from './slack-edge.js'
 
 // The machine API behind a connector token: hello, the held poll, confirmations and turn events.
 export function registerMachineRoutes(
@@ -28,9 +29,10 @@ export function registerMachineRoutes(
     now: () => number
     holdMs: number
     limitBody: MiddlewareHandler
+    slack?: Pick<SlackEdge, 'onEvents' | 'onAcks'>
   }
 ): void {
-  const { database, inbox, threads, hosts, waker, now, holdMs, limitBody } = deps
+  const { database, inbox, threads, hosts, waker, now, holdMs, limitBody, slack } = deps
 
   app.put(CONNECTOR_PATHS.hello, limitBody, async (context) => {
     const body = ConnectorHelloRequestSchema.safeParse(await context.req.json().catch(() => null))
@@ -113,9 +115,14 @@ export function registerMachineRoutes(
       return context.json({ error: 'invalid_request' }, 400)
     }
     const { hostId } = context.get('host')
-    await database.transaction((transaction) =>
-      inbox.acknowledge(transaction, hostId, body.data.acks)
-    )
+    await database.transaction(async (transaction) => {
+      await inbox.acknowledge(transaction, hostId, body.data.acks)
+      await slack?.onAcks(
+        transaction,
+        hostId,
+        body.data.acks.map((ack) => ack.deliveryId)
+      )
+    })
     return context.body(null, 204)
   })
 
@@ -129,6 +136,7 @@ export function registerMachineRoutes(
     await database.transaction(async (transaction) => {
       if (await hosts.advanceEventsSeq(transaction, hostId, body.data.seq)) {
         await threads.applyEvents(transaction, hostId, body.data.events)
+        await slack?.onEvents(transaction, hostId, body.data.events)
       }
     })
     return context.body(null, 204)
