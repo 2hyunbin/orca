@@ -446,6 +446,24 @@ describe('WslHostService', () => {
     await vi.waitFor(() => expect(connector.connect).toHaveBeenCalledTimes(1))
   })
 
+  it('never boots a host for a poll unless it is visible, and does not park on lost contact', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    await connector.disconnect('Ubuntu')
+    connector.connect.mockClear()
+    // Not focused: a background poll (forge, worktree list, agent status) gets a refusal.
+    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toThrow('isn’t connected')
+    // Lost contact is not a confirmed stop, so the focused host still connects.
+    service.handleConnectionChange('Ubuntu', null, {
+      state: 'unverifiable',
+      reason: 'running-list-unavailable',
+      terminals: 'unverifiable'
+    })
+    service.setVisibleWork(['wsl:ubuntu'])
+    await vi.waitFor(() => expect(connector.connect).toHaveBeenCalledTimes(1))
+  })
+
   it('lifts a park on an explicit Connect', async () => {
     const connector = makeConnector([UBUNTU])
     const service = makeService(connector)

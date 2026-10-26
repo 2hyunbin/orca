@@ -53,6 +53,39 @@ describe('selectWslHostsWithVisibleWork', () => {
     expect(selectWslHostsWithVisibleWork(store.getState())).toEqual([WSL_ENV])
   })
 
+  it('boots only the focused host at launch when two hosts have saved tabs', () => {
+    const store = backgroundWslTabs()
+    const debianWorktree = 'debian-repo::/home/me/api'
+    store.setState({
+      runtimeEnvironments: [
+        ...store.getState().runtimeEnvironments,
+        {
+          ...store.getState().runtimeEnvironments[0],
+          id: 'wsl:debian',
+          name: 'Debian (WSL)',
+          orcadDeployment: { kind: 'wsl', distro: 'Debian', localPort: 42001, remotePort: 6768 }
+        }
+      ],
+      repos: [
+        ...store.getState().repos,
+        {
+          id: 'debian-repo',
+          path: '/home/me/api',
+          displayName: 'api',
+          badgeColor: '',
+          addedAt: 0,
+          executionHostId: toRuntimeExecutionHostId('wsl:debian')
+        }
+      ],
+      activeWorktreeId: debianWorktree,
+      tabsByWorktree: {
+        ...store.getState().tabsByWorktree,
+        [debianWorktree]: [makeTab({ id: 'tab-2', worktreeId: debianWorktree })]
+      }
+    })
+    expect(selectWslHostsWithVisibleWork(store.getState())).toEqual(['wsl:debian'])
+  })
+
   it('ignores a background workspace that only has saved tabs, so launch boots the focused host only', () => {
     const store = backgroundWslTabs()
     expect(selectWslHostsWithVisibleWork(store.getState())).toEqual([])
