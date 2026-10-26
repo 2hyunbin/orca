@@ -13,16 +13,13 @@ const CLIENT_ID = /^\d+\.\d+$/
 
 // Read from stdin as one JSON object, so no secret is ever a command-line argument.
 const AppSecretsSchema = z
-  .object({
-    clientSecret: z.string().min(1),
-    signingSecret: z.string().min(1),
-    botToken: z.string().startsWith('xoxb-')
-  })
+  .object({ clientSecret: z.string().min(1), signingSecret: z.string().min(1) })
   .strict()
 
 export const SLACK_OPERATOR_USAGE = `Usage:
-  register-app --app-id <A…> --client-id <id> --team <T…> --bot-user <U…>
-       stdin: {"clientSecret": "…", "signingSecret": "…", "botToken": "xoxb-…"}
+  register-app --app-id <A…> --client-id <id>
+       stdin: {"clientSecret": "…", "signingSecret": "…"}
+  install --team <T…> --bot-user <U…> --app-id <A…>     bot token is read from stdin
   pause --team <T…> | resume --team <T…>
   link --team <T…> --user <U…> --account <orca account id>
        [--default-host <host id>] [--default-project <name or owner/name>]
@@ -72,27 +69,36 @@ export async function runSlackOperator(
       if (!clientId || !CLIENT_ID.test(clientId)) {
         throw new Error('--client-id needs a Slack client id')
       }
-      const teamId = slackId(values.team, 'team')
-      const botUserId = slackId(values['bot-user'], 'bot-user')
       let secrets: z.infer<typeof AppSecretsSchema>
       try {
         secrets = AppSecretsSchema.parse(JSON.parse(await deps.readSecret()))
       } catch {
         // Never echo the parse error: it can quote the secrets.
-        throw new Error('stdin must be {"clientSecret", "signingSecret", "botToken": "xoxb-…"}')
+        throw new Error('stdin must be {"clientSecret": "…", "signingSecret": "…"}')
       }
-      const { clientSecret, signingSecret, botToken } = secrets
-      const now = deps.now()
-      await deps.database.transaction(async (transaction) => {
-        const app = { appId, clientId, clientSecret, signingSecret }
-        if (!(await new SlackApps(tokenKey()).register(transaction, app, now))) {
-          throw new Error(`${appId} is already registered`)
-        }
-        if (!(await installs().save(transaction, { teamId, appId, botUserId, botToken }, now))) {
-          throw new Error(`${teamId} already has another Orca app installed`)
-        }
-      })
-      return `Registered ${appId}, installed in ${teamId}.`
+      const app = { appId, clientId, ...secrets }
+      if (!(await new SlackApps(tokenKey()).register(deps.database, app, deps.now()))) {
+        throw new Error(`${appId} is already registered`)
+      }
+      return `Registered ${appId}.`
+    }
+    // Also binds a workspace installed before apps were rows to its app.
+    case 'install': {
+      const teamId = slackId(values.team, 'team')
+      const botUserId = slackId(values['bot-user'], 'bot-user')
+      const appId = slackId(values['app-id'], 'app-id')
+      const botToken = (await deps.readSecret()).trim()
+      if (!botToken.startsWith('xoxb-')) {
+        throw new Error('stdin must be a bot token (xoxb-…)')
+      }
+      if (!(await new SlackApps(tokenKey()).exists(deps.database, appId))) {
+        throw new Error(`${appId} is not registered`)
+      }
+      const install = { teamId, appId, botUserId, botToken }
+      if (!(await installs().save(deps.database, install, deps.now()))) {
+        throw new Error(`${teamId} already has another Orca app installed`)
+      }
+      return `Saved the bot token for ${teamId}, installed through ${appId}.`
     }
     case 'pause':
     case 'resume': {

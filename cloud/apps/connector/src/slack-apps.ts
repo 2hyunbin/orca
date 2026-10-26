@@ -8,6 +8,11 @@ export type SlackAppCredentials = {
   signingSecret: string
 }
 
+// Bot tokens are sealed under their bare team id (the shipped format), so a purpose prefix keeps
+// these from ever matching one.
+export const appSecretAad = (secret: 'client' | 'signing', appId: string) =>
+  `slack-${secret}-secret\0${appId}`
+
 // One row per Slack app Orca serves: a company's own copy, or one registered by an operator. Its
 // signing secret verifies the requests Slack sends to that app's own URLs.
 export class SlackApps {
@@ -21,8 +26,15 @@ export class SlackApps {
       [appId]
     )
     return row
-      ? openSecret(this.tokenKey, 'slack-signing-secret', [appId], String(row.signing_secret))
+      ? openSecret(this.tokenKey, appSecretAad('signing', appId), String(row.signing_secret))
       : null
+  }
+
+  async exists(database: CloudDatabase, appId: string): Promise<boolean> {
+    const [row] = await database.query('SELECT 1 AS found FROM connector_slack_apps WHERE app_id = ?', [
+      appId
+    ])
+    return row !== undefined
   }
 
   // False when the app is already registered: replacing an app's secrets is its own operation,
@@ -34,8 +46,8 @@ export class SlackApps {
       [
         app.appId,
         app.clientId,
-        sealSecret(this.tokenKey, 'slack-client-secret', [app.appId], app.clientSecret),
-        sealSecret(this.tokenKey, 'slack-signing-secret', [app.appId], app.signingSecret),
+        sealSecret(this.tokenKey, appSecretAad('client', app.appId), app.clientSecret),
+        sealSecret(this.tokenKey, appSecretAad('signing', app.appId), app.signingSecret),
         now
       ]
     )

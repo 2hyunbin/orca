@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import pg from 'pg'
 import { parseIntoClientConfig } from 'pg-connection-string'
-import { applyPostgresSchema } from '@orca-cloud/postgres-schema'
+import { applyPostgresSchema, schemaLockTarget } from '@orca-cloud/postgres-schema'
 
 const POSTGRES_LOCK_TIMEOUT_MS = 1_000
 const POSTGRES_CONNECTION_TIMEOUT_MS = 2_000
@@ -236,9 +236,21 @@ class PostgresDatabase implements CloudDatabase {
   }
 }
 
+// SQLite has no ADD COLUMN IF NOT EXISTS: run it as a plain ADD COLUMN only while the column is missing.
 async function applySchema(database: CloudDatabase, statements: string[]): Promise<void> {
   for (const statement of statements) {
-    await database.query(statement)
+    const target = schemaLockTarget(statement)
+    if (target?.kind !== 'column') {
+      await database.query(statement)
+      continue
+    }
+    const [present] = await database.query('SELECT 1 FROM pragma_table_info(?) WHERE name = ?', [
+      target.table,
+      target.name
+    ])
+    if (!present) {
+      await database.query(statement.replace(/\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\b/i, 'ADD COLUMN'))
+    }
   }
 }
 

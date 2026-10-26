@@ -76,24 +76,13 @@ export async function createSlackHarness(slack: Partial<SlackConfig> = {}) {
       database: harness.database,
       tokenKey,
       readSecret: async () =>
-        JSON.stringify({
-          clientSecret: 'test-client-secret',
-          signingSecret: SIGNING_SECRET,
-          botToken: 'xoxb-test-token'
-        }),
+        argv[0] === 'register-app'
+          ? JSON.stringify({ clientSecret: 'test-client-secret', signingSecret: SIGNING_SECRET })
+          : 'xoxb-test-token',
       now: harness.now
     })
-  await operator(
-    'register-app',
-    '--app-id',
-    APP,
-    '--client-id',
-    '1.2',
-    '--team',
-    TEAM,
-    '--bot-user',
-    BOT
-  )
+  await operator('register-app', '--app-id', APP, '--client-id', '1.2')
+  await operator('install', '--team', TEAM, '--bot-user', BOT, '--app-id', APP)
 
   const signedPost = (
     body: string,

@@ -115,8 +115,8 @@ CREATE TABLE IF NOT EXISTS connector_posts (
   PRIMARY KEY (source, post_id)
 );
 CREATE INDEX IF NOT EXISTS connector_posts_due ON connector_posts(state, next_at);
-CREATE INDEX IF NOT EXISTS connector_posts_channel_head
-  ON connector_posts(source, workspace_id, container_id, state, queued_at);
+CREATE INDEX IF NOT EXISTS connector_posts_container
+  ON connector_posts(source, container_id, state, queued_at);
 CREATE INDEX IF NOT EXISTS connector_posts_turn ON connector_posts(source, turn_key);
 `
 

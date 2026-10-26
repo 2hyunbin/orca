@@ -1,22 +1,12 @@
 // The Slack edge's own tables, applied with the connector schema; same column rules as there.
 const SLACK_SCHEMA = `
-CREATE TABLE IF NOT EXISTS connector_slack_apps (
-  app_id TEXT PRIMARY KEY,
-  client_id TEXT NOT NULL,
-  client_secret TEXT NOT NULL,
-  signing_secret TEXT NOT NULL,
-  created_at BIGINT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS connector_slack_installs (
   team_id TEXT PRIMARY KEY,
-  app_id TEXT NOT NULL,
   bot_user_id TEXT NOT NULL,
   bot_token TEXT NOT NULL,
   paused INTEGER NOT NULL,
   installed_at BIGINT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS connector_slack_installs_app ON connector_slack_installs(app_id);
 
 CREATE TABLE IF NOT EXISTS connector_slack_users (
   team_id TEXT NOT NULL,

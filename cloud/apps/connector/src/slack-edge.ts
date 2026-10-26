@@ -62,57 +62,70 @@ export function createSlackEdge(deps: {
       members.trustedNames(transaction, teamId, userIds)
   }
 
-  // Slack's requests to one app's own URLs: the path names the app, which only picks the secret
-  // the signature must match; nothing in the body is read before it does.
+  // Which workspaces a verified request may act in: those its app is installed in, or for the legacy
+  // env-secret route, the allowlisted ones whatever their app.
+  type Scope = { appId: string } | { legacyTeams: ReadonlySet<string> }
+  type Verified = (context: Context<MachineEnv>, rawBody: string, scope: Scope) => Promise<Response>
+
+  // The request's own install, if its scope reaches it; anything else is acknowledged and ignored.
+  const installIn = async (scope: Scope, appId: string, teamId: string) => {
+    const install = await installs.find(database, teamId)
+    if (!install) {
+      return null
+    }
+    return 'appId' in scope
+      ? appId === scope.appId && install.appId === scope.appId
+        ? install
+        : null
+      : scope.legacyTeams.has(teamId)
+        ? install
+        : null
+  }
+
+  // Slack's requests, signed over the raw body, size-capped. Nothing in the body is read before the
+  // signature checks out; on an app's own URL the path only picks which secret it must match.
   const fromSlack = (
     app: Hono<MachineEnv>,
-    kind: 'events' | 'interactivity',
+    path: string,
     limitClient: MiddlewareHandler,
-    handle: (context: Context<MachineEnv>, rawBody: string, appId: string) => Promise<Response>
+    verifier: (context: Context<MachineEnv>) => Promise<{ secret: string; scope: Scope } | null>,
+    handle: Verified
   ) =>
     app.post(
-      `/slack/apps/:appId/${kind}`,
+      path,
       limitClient,
       bodyLimit({
         maxSize: MAX_SLACK_BODY_BYTES,
         onError: (context) => context.json({ error: 'request_too_large' }, 413)
       }),
       async (context) => {
-        const appId = context.req.param('appId')
         const rawBody = await context.req.text()
-        const signingSecret = await apps.signingSecret(database, appId)
+        const key = await verifier(context)
         const verified =
-          signingSecret !== null &&
+          key !== null &&
           verifySlackSignature({
-            signingSecret,
+            signingSecret: key.secret,
             timestamp: context.req.header('x-slack-request-timestamp'),
             signature: context.req.header('x-slack-signature'),
             rawBody,
             nowMs: now()
           })
-        if (!verified) {
+        if (!key || !verified) {
           return context.json({ error: 'invalid_signature' }, 401)
         }
-        if (!appRequests.allow(appId)) {
+        if ('appId' in key.scope && !appRequests.allow(key.scope.appId)) {
           return context.json({ error: 'rate_limited' }, 429)
         }
-        return await handle(context, rawBody, appId)
+        return await handle(context, rawBody, key.scope)
       }
     )
-
-  // The workspace's install, when it is this app's: another app's signed traffic for a workspace
-  // it isn't installed in is acknowledged and ignored.
-  const installOf = async (appId: string, teamId: string) => {
-    const install = await installs.find(database, teamId)
-    return install?.appId === appId ? install : null
-  }
 
   function registerRoutes(
     app: Hono<MachineEnv>,
     core: Pick<ConnectorCore, 'route' | 'answerCard' | 'notify'>,
     limitClient: MiddlewareHandler
   ) {
-    fromSlack(app, 'events', limitClient, async (context, rawBody, appId) => {
+    const events: Verified = async (context, rawBody, scope) => {
       let payload: unknown
       try {
         payload = JSON.parse(rawBody)
@@ -127,39 +140,56 @@ export function createSlackEdge(deps: {
         return context.json({ challenge: envelope.challenge })
       }
       // Answered before any Slack call; a database failure is a 500, so Slack retries.
-      if (envelope.kind === 'message' && envelope.message.appId === appId) {
-        const install = await installOf(appId, envelope.message.teamId)
-        if (install && envelope.message.userId !== install.botUserId) {
-          await core.route(inboundSlackMessage(envelope.message, install, config.paused))
+      if (envelope.kind === 'message') {
+        const { message } = envelope
+        const install = await installIn(scope, message.appId, message.teamId)
+        if (install && message.userId !== install.botUserId) {
+          await core.route(inboundSlackMessage(message, install, config.paused))
         }
       }
       return context.body(null, 200)
-    })
+    }
 
     // Answer presses on prompt cards; answered before any Slack call, like events.
-    fromSlack(app, 'interactivity', limitClient, async (context, rawBody, appId) => {
+    const interactivity: Verified = async (context, rawBody, scope) => {
       const click = readSlackClick(rawBody)
       if (click === 'invalid') {
         return context.json({ error: 'invalid_request' }, 400)
       }
-      if (click !== 'ignored' && click.appId === appId) {
-        const install = await installOf(appId, click.teamId)
-        if (install) {
-          const reply = await core.answerCard('slack', {
-            workspaceId: click.teamId,
-            channelId: click.channelId,
-            messageRef: click.messageTs,
-            userId: click.userId,
-            optionId: click.optionId,
-            paused: config.paused || install.paused
-          })
-          if (reply) {
-            await core.notify('slack', reply)
-          }
+      const install = click === 'ignored' ? null : await installIn(scope, click.appId, click.teamId)
+      if (click !== 'ignored' && install) {
+        const reply = await core.answerCard('slack', {
+          workspaceId: click.teamId,
+          channelId: click.channelId,
+          messageRef: click.messageTs,
+          userId: click.userId,
+          optionId: click.optionId,
+          paused: config.paused || install.paused
+        })
+        if (reply) {
+          await core.notify('slack', reply)
         }
       }
       return context.body(null, 200)
-    })
+    }
+
+    const ownApp = async (context: Context<MachineEnv>) => {
+      const appId = context.req.param('appId') ?? ''
+      const secret = await apps.signingSecret(database, appId)
+      return secret === null ? null : { secret, scope: { appId } }
+    }
+    fromSlack(app, '/slack/apps/:appId/events', limitClient, ownApp, events)
+    fromSlack(app, '/slack/apps/:appId/interactivity', limitClient, ownApp, interactivity)
+
+    const { legacy } = config
+    if (legacy) {
+      const legacyKey = async () => ({
+        secret: legacy.signingSecret,
+        scope: { legacyTeams: legacy.teamIds }
+      })
+      fromSlack(app, '/slack/events', limitClient, legacyKey, events)
+      fromSlack(app, '/slack/interactivity', limitClient, legacyKey, interactivity)
+    }
   }
 
   return {

@@ -119,6 +119,41 @@ describe('Slack event ingress', () => {
     expect(await harness.poll()).toEqual([expect.objectContaining({ kind: 'start' })])
   })
 
+  it('keeps the legacy env-secret route for allowlisted workspaces until the app’s URL takes over', async () => {
+    const harness = await linkedOwner({
+      legacy: { signingSecret: 'legacy-secret', teamIds: new Set([TEAM]) }
+    })
+    // As before apps were rows: the install has no app yet.
+    await harness.database.query('UPDATE connector_slack_installs SET app_id = NULL')
+    const timestamp = String(Math.floor(harness.now() / 1000))
+    const legacyPost = (body: string, secret = 'legacy-secret') =>
+      harness.request('/slack/events', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-slack-request-timestamp': timestamp,
+          'x-slack-signature': `v0=${createHmac('sha256', secret).update(`v0:${timestamp}:${body}`).digest('hex')}`
+        },
+        body
+      })
+    const event = (teamId: string) =>
+      JSON.stringify({
+        type: 'event_callback',
+        api_app_id: APP,
+        team_id: teamId,
+        event: { type: 'message', user: OWNER, channel: CHANNEL, channel_type: 'channel', ...mention() }
+      })
+    // The app's own URL can't reach an install that isn't bound to it.
+    expect((await harness.message(mention())).status).toBe(200)
+    expect(await harness.poll()).toEqual([])
+    // The legacy route still needs its own secret and its allowlist.
+    expect((await legacyPost(event(TEAM), SIGNING_SECRET)).status).toBe(401)
+    expect((await legacyPost(event('T9'))).status).toBe(200)
+    expect(await harness.poll()).toEqual([])
+    expect((await legacyPost(event(TEAM))).status).toBe(200)
+    expect(await harness.poll()).toEqual([expect.objectContaining({ kind: 'start' })])
+  })
+
   it('starts the owner’s conversation once for the message and app_mention twins', async () => {
     const harness = await linkedOwner()
     expect((await harness.message(mention())).status).toBe(200)
