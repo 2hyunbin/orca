@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
+import type * as NodeFsPromises from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type * as AppServerSession from './codex-app-server-session'
@@ -9,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   runProcess: vi.fn()
 }))
 
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof NodeFsPromises>()
+  return { ...actual, rm: vi.fn(actual.rm) }
+})
 vi.mock('./codex-app-server-session', async (importOriginal) => ({
   ...(await importOriginal<typeof AppServerSession>()),
   runCodexAppServerSession: mocks.runCodexAppServerSession
@@ -254,17 +260,27 @@ describe('deriveCodexHookHashes', () => {
     expect(await probeCodexVersion('/bin/codex')).toBeNull()
   })
 
-  it('gives `codex --version` a throwaway CODEX_HOME of its own', async () => {
-    let versionHome = ''
-    mocks.runProcess.mockImplementation(async (spec: { env: Record<string, string> }) => {
-      versionHome = spec.env.CODEX_HOME!
-      expect(existsSync(versionHome)).toBe(true)
-      return { code: 0, stdout: 'codex-cli 0.150.1\n', stderr: '', timedOut: false }
-    })
+  it.each([false, true])(
+    'isolates version probes and preserves results when cleanup fails: %s',
+    async (fails) => {
+      let versionHome = ''
+      mocks.runProcess.mockImplementation(async (spec: { env: Record<string, string> }) => {
+        versionHome = spec.env.CODEX_HOME!
+        expect(existsSync(versionHome)).toBe(true)
+        return { code: 0, stdout: 'codex-cli 0.150.1\n', stderr: '', timedOut: false }
+      })
 
-    expect(await probeCodexVersion('/bin/codex')).toBe('codex-cli 0.150.1')
-    expect(existsSync(versionHome)).toBe(false)
-  })
+      if (fails) {
+        vi.mocked(rm).mockRejectedValueOnce(new Error('cleanup I/O failure'))
+      }
+      try {
+        expect(await probeCodexVersion('/bin/codex')).toBe('codex-cli 0.150.1')
+        expect(existsSync(versionHome)).toBe(fails)
+      } finally {
+        rmSync(versionHome, { recursive: true, force: true })
+      }
+    }
+  )
 })
 
 describe('readCodexHookHashes', () => {

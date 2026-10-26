@@ -11,7 +11,10 @@ import {
   BrowserClientUploadStaging
 } from './browser-client-upload-staging'
 
-const nodeRemovals = vi.hoisted(() => ({ rm: [] as { target: unknown; options: unknown }[] }))
+const nodeRemovals = vi.hoisted(() => ({
+  rm: [] as { target: unknown; options: unknown }[],
+  failures: 0
+}))
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof NodeFsPromises>()
@@ -19,11 +22,15 @@ vi.mock('node:fs/promises', async (importOriginal) => {
     ...actual,
     rm: (target: unknown, options: unknown) => {
       nodeRemovals.rm.push({ target, options })
+      if (nodeRemovals.failures-- > 0) {
+        return Promise.reject(Object.assign(new Error('staged file held open'), { code: 'EBUSY' }))
+      }
       return (actual.rm as (t: unknown, o: unknown) => Promise<void>)(target, options)
     }
   }
 })
 
+const originalPlatform = process.platform
 let stagingRoot = ''
 
 beforeEach(async () => {
@@ -32,6 +39,8 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
+  nodeRemovals.failures = 0
   await rm(stagingRoot, { recursive: true, force: true })
 })
 
@@ -309,23 +318,43 @@ describe('BrowserClientUploadStaging', () => {
     expect(staging.activeStagingCount()).toBe(1)
   })
 
-  it('retries the staged removal so a briefly held file is not orphaned', async () => {
-    const staging = new BrowserClientUploadStaging(stagingRoot)
-    const staged = await staging.stage({
-      browserPageId: 'page-1',
-      pageHostGeneration: 1,
-      files: [{ remotePath: 'a.txt', contents: Buffer.from('a') }]
-    })
-    const directory = staging.stagedDirectory(staged.stagingId)
-    nodeRemovals.rm.length = 0
+  it.each([1, Infinity])(
+    'releases default staged bytes after %s Windows lock failures',
+    async (failures) => {
+      const staging = new BrowserClientUploadStaging(stagingRoot)
+      const staged = await staging.stage({
+        browserPageId: 'page-1',
+        pageHostGeneration: 1,
+        files: [{ remotePath: 'a.txt', contents: Buffer.from('a') }]
+      })
+      const directory = staging.stagedDirectory(staged.stagingId)
+      nodeRemovals.rm.length = 0
 
-    expect(await staging.release(staged.stagingId)).toBe(true)
-
-    expect(nodeRemovals.rm).toEqual([
-      {
-        target: directory,
-        options: { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }
+      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
+      nodeRemovals.failures = failures
+      if (failures === Infinity) {
+        expect(await releaseFailures(staging.releasePage('page-1'))).toEqual([
+          'staged file held open'
+        ])
+        expect(staging.activeStagingCount()).toBe(1)
+        expect(staging.stagedDirectory(staged.stagingId)).toBe(directory)
+        expect(existsSync(staged.localFilePaths[0])).toBe(true)
+        expect(nodeRemovals.rm).toHaveLength(5)
+        nodeRemovals.failures = 0
+        expect(await staging.release(staged.stagingId)).toBe(true)
+      } else {
+        expect(await staging.releasePage('page-1')).toBe(1)
+        expect(nodeRemovals.rm).toHaveLength(2)
       }
-    ])
-  })
+      expect(nodeRemovals.rm).toEqual(
+        Array.from({ length: failures === Infinity ? 6 : 2 }, () => ({
+          target: directory,
+          options: { recursive: true, force: true }
+        }))
+      )
+      expect(staging.activeStagingCount()).toBe(0)
+      expect(staging.stagedDirectory(staged.stagingId)).toBeUndefined()
+      expect(existsSync(directory)).toBe(false)
+    }
+  )
 })

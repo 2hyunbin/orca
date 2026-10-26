@@ -126,9 +126,7 @@ describe('remote clipboard staging ownership', () => {
     expect(rmMock).toHaveBeenCalledOnce()
     expect(rmMock).toHaveBeenCalledWith(join(STAGING_ROOT, EXPIRED_TRANSFER), {
       force: true,
-      maxRetries: 3,
-      recursive: true,
-      retryDelay: 100
+      recursive: true
     })
   })
 
@@ -306,9 +304,7 @@ describe('legacy remote clipboard staging compatibility', () => {
     expect(rmMock).toHaveBeenCalledOnce()
     expect(rmMock).toHaveBeenCalledWith(join(TEMP_ROOT, LEGACY_EXPIRED), {
       force: true,
-      maxRetries: 3,
-      recursive: true,
-      retryDelay: 100
+      recursive: true
     })
     expect(writeFileMock).toHaveBeenCalledOnce()
   })
