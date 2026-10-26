@@ -248,6 +248,8 @@ export class ConversationEvents {
       return
     }
     this.announcedTurn.set(paneKey, at)
+    // The host stamps this pane, so a start recorded before its first stamp names nothing.
+    this.unstampedTurn.delete(paneKey)
     this.emit({ kind: 'turn-started', ...pane(link, worktreeId), at })
   }
 

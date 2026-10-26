@@ -6,7 +6,6 @@ import { interruptWorkingAgent } from '../runtime/terminal-agent-interrupt'
 import type { ConversationPrompts, PromptTerminal } from './external-conversation-prompts'
 import type { ConversationChain } from './external-conversation-chain'
 import type { ConversationEvents } from './external-conversation-events'
-import { provableOpenTurn } from './external-conversation-turn-id'
 import { findLink } from './external-conversation-links'
 import type { ExternalConversationSeamDeps } from './external-conversation-seam'
 import { bindPane } from './external-conversation-send'
@@ -33,16 +32,10 @@ export async function cancelConversation(
   terminal: CancelTerminal,
   seam: CancelSeam,
   key: ConversationKey,
-  signal: AbortSignal,
-  turnId?: number
+  signal: AbortSignal
 ): Promise<Delivery> {
   if (signal.aborted) {
     return refused('connectors_disabled')
-  }
-  // A Stop pressed for one turn must not stop, or drop the follow-ups of, the next.
-  if (turnId !== undefined && !isTurn(seam, findLink(seam.store, key)?.link.paneKey, turnId)) {
-    console.warn('[connector] ignored a cancel for a turn that is not running')
-    return refused('turn_not_running')
   }
   const id = conversationId(key)
   const settling = seam.chain.cancel(id, 'conversation_cancelled')
@@ -67,16 +60,7 @@ export async function cancelConversation(
     }
     throw new Error('external_conversation_not_found')
   }
-  return stopLinkedAgent(terminal, seam, linked.link, signal, turnId)
-}
-
-/** Bound cancels name this host's stamped turn; an unstamped, relayed or resting pane has none to match. */
-function isTurn(
-  seam: Pick<CancelSeam, 'readHookRow'>,
-  paneKey: string | undefined,
-  turnId: number
-): boolean {
-  return paneKey !== undefined && provableOpenTurn(seam.readHookRow(paneKey)) === turnId
+  return stopLinkedAgent(terminal, seam, linked.link, signal)
 }
 
 /** Reject approval or send one Escape to a working agent; idle cancellation records a receipt without proving turn end. */
@@ -84,15 +68,8 @@ async function stopLinkedAgent(
   terminal: CancelTerminal,
   { prompts, readHookRow, events }: CancelSeam,
   link: ExternalConversationLink,
-  signal: AbortSignal,
-  turnId: number | undefined
+  signal: AbortSignal
 ): Promise<Delivery> {
-  // Bound to a turn: it must still be the running one when the prompt or the agent is acted on.
-  const sameTurn = (): boolean =>
-    turnId === undefined || isTurn({ readHookRow }, link.paneKey, turnId)
-  if (!sameTurn()) {
-    return refused('turn_not_running')
-  }
   const pane = bindPane(terminal, link.paneKey)
   // A host out of contact cannot show the agent idle; refused leaves no receipt, so a retry acts.
   if (!pane || terminal.getPtyLivenessVerdict(pane.binding.ptyId)?.status === 'unverifiable') {
@@ -111,7 +88,6 @@ async function stopLinkedAgent(
   try {
     const interrupted = await interruptWorkingAgent(terminal, readHookRow, link.paneKey, {
       beforeWrite: (ptyId) => guard.beforeWrite(ptyId),
-      sameTurn,
       signal
     })
     switch (interrupted.outcome) {
@@ -120,10 +96,9 @@ async function stopLinkedAgent(
       case 'unknown':
         return { outcome: 'unknown', reason: 'writer_failed' }
       case 'refused':
-        if (interrupted.reason !== 'agent_not_working') {
-          return refused('agent_not_reachable')
-        }
-        return sameTurn() ? { outcome: 'accepted' } : refused('turn_not_running')
+        return interrupted.reason === 'agent_not_working'
+          ? { outcome: 'accepted' }
+          : refused('agent_not_reachable')
     }
   } finally {
     guard.dispose()

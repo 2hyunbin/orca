@@ -183,11 +183,13 @@ describe('hello and replies', () => {
       agents: ['claude', 'future-agent'],
       promptKinds: ['approval'],
       features: ['answer', 'future-feature'],
+      sources: ['slack', 'future-source'],
       projects: [
         { placeId: 'pl_1', name: 'orca', kind: 'git', where: { kind: 'ssh', label: 'openclaw' } }
       ]
     })
     expect(hello.features).toEqual(['answer', 'future-feature'])
+    expect(hello.sources).toEqual(['slack', 'future-source'])
   })
 
   it('caps a hello at maxHelloProjects projects with short display strings', () => {
@@ -208,6 +210,7 @@ describe('hello and replies', () => {
         agents: ['claude'],
         promptKinds: [],
         features: [],
+        sources: ['slack'],
         projects
       }).success
     const longest = 'x'.repeat(CONNECTOR_LIMITS.maxDisplayTextLength)
@@ -231,15 +234,6 @@ describe('hello and replies', () => {
       status: 'posted',
       messageId: '1793.0001'
     })
-  })
-
-  it('binds a cancel to the turn it targets, when it names one', () => {
-    const cancel = { ...base, kind: 'cancel' }
-    expect(ConnectorDeliverySchema.parse({ ...cancel, turnId: 1_793_000_000_100 })).toMatchObject({
-      turnId: 1_793_000_000_100
-    })
-    expect(ConnectorDeliverySchema.parse(cancel)).not.toHaveProperty('turnId')
-    expect(ConnectorDeliverySchema.safeParse({ ...cancel, turnId: -1 }).success).toBe(false)
   })
 
   it('carries a conversation from any connected platform', () => {

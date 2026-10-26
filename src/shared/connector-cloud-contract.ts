@@ -13,8 +13,7 @@ export const CONNECTOR_PATHS = {
   replies: '/v1/connector/replies'
 } as const
 
-// turnCancel: the machine honours cancel.turnId and refuses a cancel for any other turn.
-export const CONNECTOR_FEATURES = ['answer', 'cancel', 'reply', 'turnCancel'] as const
+export const CONNECTOR_FEATURES = ['answer', 'cancel', 'reply'] as const
 
 export const CONNECTOR_CLIENT_LIMITS = {
   pollTimeoutMs: 70_000,
@@ -77,12 +76,7 @@ export const ConnectorDelivery = z.discriminatedUnion('kind', [
     promptId: z.string().min(1),
     optionId: z.string().min(1)
   }),
-  z.object({
-    ...DeliveryBase,
-    kind: z.literal('cancel'),
-    // The turn it stops; absent: whatever turn is running.
-    turnId: z.number().int().nonnegative().optional()
-  })
+  z.object({ ...DeliveryBase, kind: z.literal('cancel') })
 ])
 export type ConnectorDelivery = z.infer<typeof ConnectorDelivery>
 

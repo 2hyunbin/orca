@@ -16,9 +16,7 @@ export const CONNECTOR_REFUSALS = [
   'prompt_unsupported',
   'option_not_offered',
   // Queued or held work a cancel settled before it was written.
-  'conversation_cancelled',
-  // A cancel bound to a turn that is not the one running (or the host stamps no turns).
-  'turn_not_running'
+  'conversation_cancelled'
 ] as const
 export type ConnectorRefusal = (typeof CONNECTOR_REFUSALS)[number]
 
