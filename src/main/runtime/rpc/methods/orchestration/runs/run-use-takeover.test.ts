@@ -228,12 +228,72 @@ describe('run-use against a Run whose coordinator is still running', () => {
     resultOf(await runUse(sub, true))
   })
 
+  it('fences the Run actually displaced during a probe and replays without cancellation', async () => {
+    resultOf(await as(SESSION_Y, 'orchestration.runCreate', { objective: 'B' }))
+    const target = h.db.createRun({
+      objective: 'T',
+      coordinatorHandle: 'term_coord',
+      coordinatorPaneKey: COORD_PANE
+    })
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<'exited'>()
+    vi.spyOn(h.runtime, 'coordinatorAgentPresence').mockImplementation(() => {
+      entered.resolve()
+      return release.promise
+    })
+    const request = orchestrationRequest(
+      'orchestration.runUse',
+      { id: target.id },
+      { sessionId: SESSION_Y, requestId: 'use-across-concurrent-create' }
+    )
+    const using = h.dispatch(request)
+    await entered.promise
+    const displaced = idOf(
+      resultOf(await as(SESSION_Y, 'orchestration.runCreate', { objective: 'C' })).run
+    )
+    const parked = Promise.withResolvers<void>()
+    const wait = h.runtime.waitForMessage.bind(h.runtime)
+    vi.spyOn(h.runtime, 'waitForMessage').mockImplementation((address, options) => {
+      const waiting = wait(address, options)
+      expect(address).toBe(`run:${displaced}`)
+      parked.resolve()
+      return waiting
+    })
+    const abort = new AbortController()
+    const checking = h.dispatcher.dispatch(
+      orchestrationRequest(
+        'orchestration.check',
+        { run: displaced, wait: true, timeoutMs: 60_000 },
+        { sessionId: SESSION_Y }
+      ),
+      { signal: abort.signal }
+    )
+    const cancel = vi.spyOn(h.runtime, 'cancelMessageWaiters')
+    try {
+      await parked.promise
+      release.resolve('exited')
+      expect(resultOf(await using).run).toMatchObject({ id: target.id })
+      expect(h.db.getRunRaw(target.id)?.coordinator_orca_session_id).toBe(SESSION_Y)
+      expect(h.db.getRunRaw(displaced)?.coordinator_orca_session_id).toBeNull()
+      expect(cancel).toHaveBeenCalledWith(`run:${displaced}`)
+      expect(await checking).toMatchObject({ ok: false, error: { code: 'consumer_fenced' } })
+      cancel.mockClear()
+      expect(resultOf(await h.dispatch(request))).toMatchObject({ mutation: { replayed: true } })
+      expect(cancel).not.toHaveBeenCalled()
+    } finally {
+      release.resolve('exited')
+      abort.abort()
+      await Promise.all([using, checking])
+    }
+  })
+
   it('re-probes when the binding moves under it, then refuses rather than bind blindly', async () => {
     const runId = h.db.createRun({
       objective: 'o',
       coordinatorHandle: 'term_coord',
       coordinatorPaneKey: COORD_PANE
     }).id
+    const cancel = vi.spyOn(h.runtime, 'cancelMessageWaiters')
     let racers = 0
     const probe = vi.spyOn(h.runtime, 'coordinatorAgentPresence').mockImplementation(async () => {
       racers += 1
@@ -254,5 +314,6 @@ describe('run-use against a Run whose coordinator is still running', () => {
     })
     expect(probe).toHaveBeenCalledTimes(3)
     expect(h.db.getRunRaw(runId)?.coordinator_handle).toBe('term_racer3')
+    expect(cancel).not.toHaveBeenCalled()
   })
 })

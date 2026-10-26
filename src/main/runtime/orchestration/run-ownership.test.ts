@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -184,17 +184,20 @@ describe('Run ownership', () => {
     const targetRun = create(target)
     issueRunHandover(db, { runId: run.id, caller: issuer, target: { taskId: task.id } })
     const before = db.getRun(run.id)
+    const committed = vi.fn()
     expect(() =>
       db.bindRun({
         runId: run.id,
         coordinatorHandle: target.terminalHandle,
         coordinatorPaneKey: target.paneKey,
         processIncarnation: target.processIncarnation,
+        onDisplacedRuns: committed,
         recordReceipt: () => {
           throw new Error('receipt failed')
         }
       })
     ).toThrow('receipt failed')
+    expect(committed).not.toHaveBeenCalled()
     expect(db.getRun(run.id)).toEqual(before)
     expect(db.getRun(targetRun.id)?.coordinator_handle).toBe('target')
     expect(getRunHandover(db, run.id)).toBeDefined()

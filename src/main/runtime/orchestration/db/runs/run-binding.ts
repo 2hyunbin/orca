@@ -18,6 +18,7 @@ export function bindRun(
     processIncarnation?: string | null
     recordReceipt?: (run: RunRow) => void
     onUnchangedWorker?: () => void
+    onDisplacedRuns?: (runIds: readonly string[]) => void
     takeover?: boolean
     probed?: { consumerGeneration: number; liveLabel: string | null }
     runId: string
@@ -41,6 +42,7 @@ export function bindRun(
     orcaSessionId: params.coordinatorOrcaSessionId ?? null,
     processIncarnation: params.processIncarnation ?? null
   }
+  let displacedRunIds: string[] = []
   this.db.exec('BEGIN IMMEDIATE')
   try {
     const run = this.getRunRaw(params.runId)
@@ -176,7 +178,7 @@ export function bindRun(
     if (decision.grantAccepted) {
       acceptRunHandover(this, params.runId)
     }
-    this.unbindOtherRunsForCoordinator(coordinator, params.runId)
+    displacedRunIds = this.unbindOtherRunsForCoordinator(coordinator, params.runId)
     for (const address of new Set([
       mailboxAddressOf(runCoordinatorKey(run)),
       mailboxAddressOf(coordinator)
@@ -243,6 +245,8 @@ export function bindRun(
     this.db.exec('ROLLBACK')
     throw error
   }
+  // Completion needs committed targets because caller bindings can move during the probe.
+  params.onDisplacedRuns?.(displacedRunIds)
   return this.getRun(params.runId)
 }
 

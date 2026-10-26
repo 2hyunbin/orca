@@ -105,13 +105,16 @@ export const ORCHESTRATION_RUN_METHODS = [
       }
       assertCallerHandleMatchesEvidence(runtime, params.from, orchestrationCompatibilityEvidence)
       const db = runtime.getOrchestrationDb()
-      const priorRun = db.getCurrentRunForCoordinator(caller)
       let unchangedWorker = false
+      let displacedRunIds: readonly string[] = []
       const run = await bindAfterProbe(runtime, db, () => {
         const key = resolveRunCallerKey(runtime, caller)
         return {
           onUnchangedWorker: () => {
             unchangedWorker = true
+          },
+          onDisplacedRuns: (runIds) => {
+            displacedRunIds = runIds
           },
           runId: params.id,
           coordinatorHandle: caller.terminalHandle,
@@ -137,8 +140,8 @@ export const ORCHESTRATION_RUN_METHODS = [
         runtime.cancelMessageWaiters(params.from)
         cancelBoundDispatchWaiters(runtime, caller, run.id)
         runtime.cancelMessageWaiters(`run:${params.id}`)
-        if (priorRun && priorRun.id !== params.id) {
-          runtime.cancelMessageWaiters(`run:${priorRun.id}`)
+        for (const runId of displacedRunIds) {
+          runtime.cancelMessageWaiters(`run:${runId}`)
         }
       }
       return {
