@@ -33,13 +33,7 @@ const SHELLS = [
 )
 
 async function waitFor(isDone: () => boolean, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (!isDone()) {
-    if (Date.now() > deadline) {
-      throw new Error('Timed out waiting for PTY output')
-    }
-    await new Promise((resolve) => setTimeout(resolve, 20))
-  }
+  await vi.waitFor(() => expect(isDone()).toBe(true), { timeout: timeoutMs, interval: 20 })
 }
 
 async function startShell(
@@ -96,32 +90,37 @@ async function startShell(
 describe.each(SHELLS)(
   'startup question ($shellPath $prompt)',
   ({ shellPath, startupFile, prompt, timeout }) => {
-    it('accepts the answer before readiness and runs startup once', async () => {
-      const command = timeout
-        ? `[[ -o nonomatch ]] && printf 'ORCA_STARTUP_%s\\n' COMMAND_RAN\r`
-        : undefined
-      const running = await startShell(
-        shellPath,
-        startupFile,
-        timeout ? 2_000 : 15_000,
-        prompt,
-        command
-      )
-      try {
-        await waitFor(() => running.output().includes('Enter passphrase:'), 5_000)
-        expect(running.session.shellState).toBe('pending')
-        expect(running.output()).not.toContain(STARTUP_OUTPUT)
-        running.session.write(`${SECRET}\r`)
-        await waitFor(() => running.output().includes(`RC_GOT:${SECRET}`), 1_000)
-        await waitFor(() => running.output().includes(STARTUP_OUTPUT), 5_000)
-        expect(running.session.shellState).toBe(timeout ? 'timed_out' : 'ready')
-        expect(running.output().split(STARTUP_OUTPUT).length - 1).toBe(1)
-        expect(running.output()).not.toContain(
-          'no such hash table element: __orca_deferred_sched_init'
+    it(
+      'accepts the answer before readiness and runs startup once',
+      async () => {
+        const command = timeout
+          ? `[[ -o nonomatch ]] && printf 'ORCA_STARTUP_%s\\n' COMMAND_RAN\r`
+          : undefined
+        const running = await startShell(
+          shellPath,
+          startupFile,
+          timeout ? 2_000 : 15_000,
+          prompt,
+          command
         )
-      } finally {
-        await running.cleanup()
-      }
-    }, 15_000)
+        try {
+          await waitFor(() => running.output().includes('Enter passphrase:'), 5_000)
+          expect(running.session.shellState).toBe('pending')
+          expect(running.output()).not.toContain(STARTUP_OUTPUT)
+          running.session.write(`${SECRET}\r`)
+          await waitFor(() => running.output().includes(`RC_GOT:${SECRET}`), 1_000)
+          await waitFor(() => running.output().includes(STARTUP_OUTPUT), 5_000)
+          expect(running.session.shellState).toBe(timeout ? 'timed_out' : 'ready')
+          expect(running.output().split(STARTUP_OUTPUT).length - 1).toBe(1)
+          expect(running.output()).not.toContain(
+            'no such hash table element: __orca_deferred_sched_init'
+          )
+        } finally {
+          await running.cleanup()
+        }
+      },
+      // Real shell startup and the no-ZLE readiness fallback must complete before cleanup.
+      15_000
+    )
   }
 )

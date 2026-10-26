@@ -261,6 +261,7 @@ fi
 `
   )
   try {
+    // ast-grep-ignore: test-no-real-time-wait -- Observe real PTY silence before timeout; fake timers cannot advance the shell.
     await new Promise((resolve) => setTimeout(resolve, 300))
     expect(running.session.shellState).toBe('pending')
     expect(running.output()).not.toContain(COMMAND_OUTPUT)
