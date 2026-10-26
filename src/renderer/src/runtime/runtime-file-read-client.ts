@@ -53,6 +53,7 @@ export async function readRuntimeFileContent({
   includeLocalLogMetadata,
   access,
   terminalArtifactGrantId,
+  expectedEnvironmentPairingRevision,
   pageOversizedBinary
 }: RuntimeFileReadArgs): Promise<RuntimeReadableFileContent> {
   assertExternalSshReadOwnership(target, connectionId, expectedExternalSshTargetId)
@@ -69,7 +70,8 @@ export async function readRuntimeFileContent({
       target,
       worktreeId,
       absolutePath: filePath,
-      grantId: terminalArtifactGrantId
+      grantId: terminalArtifactGrantId,
+      expectedEnvironmentPairingRevision
     })
   }
   // A workspace path first; a chat's scratch file is the absolute path no workspace contains.
