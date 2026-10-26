@@ -64,11 +64,13 @@ export class SshTargetOrcadClaims {
     }
     const target = this.requireTarget(targetId)
     const owned = getManagedOrcadFenceEnvironmentId(target) === environmentId
-    if (owned && target.generation) {
+    if (owned && target.generation && !target.managedServerRemoved) {
       return target
     }
     const claimed = this.store.updateSshTarget(targetId, {
       orcadFence: { environmentId },
+      // A new claim is the user setting a server up again; lift any earlier removal hold.
+      managedServerRemoved: undefined,
       generation: target.generation ?? this.store.allocateSshTargetGeneration(),
       ...(deployName && !target.orcadProvisioning
         ? { orcadProvisioning: { requestId: environmentId, name: deployName } }
