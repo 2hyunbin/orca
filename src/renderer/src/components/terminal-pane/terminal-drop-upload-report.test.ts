@@ -46,7 +46,10 @@ describe('reportTerminalDropUploadSkipsAndFailures', () => {
       'Failed to upload {{value0}} {{value1}}.',
       { value0: 1, value1: 'file' }
     )
-    expect(vi.mocked(toast.error).mock.calls[0]?.[0]).not.toContain('/secret/project/file.txt')
+    expect(toast.error).toHaveBeenCalledWith(
+      expect.not.stringContaining('/secret/project/file.txt'),
+      { description: undefined }
+    )
   })
 
   it('names a shared known skip reason', () => {
@@ -88,10 +91,15 @@ describe('reportTerminalDropUploadSkipsAndFailures', () => {
       [],
       [{ reason: "Error invoking remote method 'fs:x': Error: No space left on device" }]
     )
+    reportTerminalDropUploadSkipsAndFailures(
+      [],
+      [{ reason: "EACCES: permission denied, open '/home/me/secret/shot.png'" }]
+    )
     reportTerminalDropUploadSkipsAndFailures([], [{ reason: 'a' }, { reason: 'b' }])
 
     expect(vi.mocked(toast.error).mock.calls.map((call) => call[1])).toEqual([
       { description: 'No space left on device' },
+      { description: "EACCES: permission denied, open 'shot.png'" },
       { description: undefined }
     ])
   })

@@ -1,5 +1,6 @@
 import { translate } from '@/i18n/i18n'
 import { compactIpcErrorMessage } from '@/lib/ipc-error'
+import { basename } from '@/lib/path'
 import type { ImportSkipReason } from '../../../shared/filesystem-import-result-types'
 
 const SKIP_REASON_COPY: Record<ImportSkipReason, { key: string; fallback: string }> = {
@@ -55,8 +56,19 @@ export function describeSharedDropFailureReason(
   }
   // Why: skip reasons are codes with their own copy; only failures carry the host's prose.
   const skipCopy = describeDropSkipReason(reason)
-  return (
-    skipCopy ??
-    (items.some((item) => item.status === 'skipped') ? undefined : compactIpcErrorMessage(reason))
-  )
+  if (skipCopy || items.some((item) => item.status === 'skipped')) {
+    return skipCopy
+  }
+  return describeFailureProse(compactIpcErrorMessage(reason))
+}
+
+// Absolute POSIX, drive-letter or UNC paths, at the start or after a space, quote or bracket.
+const ABSOLUTE_PATH = /(?<=^|[\s'"`(])(?:[A-Za-z]:[\\/]|\\\\|\/)[^\s'"`)]*/g
+
+// Why: host errors quote absolute paths and toasts are often on shared screens; name only the file.
+function describeFailureProse(prose: string | undefined): string | undefined {
+  if (!prose || prose.replace(ABSOLUTE_PATH, '').trim() === '') {
+    return undefined
+  }
+  return prose.replace(ABSOLUTE_PATH, (path) => basename(path))
 }

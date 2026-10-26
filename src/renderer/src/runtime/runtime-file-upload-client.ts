@@ -151,7 +151,7 @@ export async function ensureRuntimeDropStagingIgnored(
   const ignoreRelativePath = joinRuntimeRelativePath(DROP_STAGING_RELATIVE_DIR, '.gitignore')
   try {
     session.assertCurrent()
-    // A user-edited ignore file is theirs to keep.
+    // A user-edited ignore file is theirs to keep; a concurrent drop can only rewrite the same content.
     if (
       await runtimePathExists(
         context,
