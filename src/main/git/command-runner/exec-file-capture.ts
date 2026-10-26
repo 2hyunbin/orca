@@ -1,4 +1,5 @@
 import { execFile, type ChildProcess, type ExecFileOptions } from 'node:child_process'
+import { constants, getPriority, setPriority } from 'node:os'
 import { recordSubprocessSpawn } from '../../diagnostics/main-thread-churn-probe'
 import { endSubprocessStdin } from '../../../shared/subprocess-stdin-write'
 import { runProcess } from '@orca/process-host'
@@ -22,6 +23,7 @@ type ExecFileCaptureOptions = Omit<ExecFileOptions, 'timeout'> & {
   onDeadlineKill?: () => void
   onStderr?: (chunk: string) => void
   spawnOnWorkerThread?: boolean
+  lowPriority?: boolean
 }
 
 const GIT_TERMINATION_BARRIER_FALLBACK_TIMEOUT_MS = 2_147_000_000
@@ -247,6 +249,17 @@ export function execFileCapture(
       }
     })
     child.once('close', reportChildTerminated)
+    if (options.lowPriority && process.platform === 'win32' && child.pid) {
+      try {
+        setPriority(
+          child.pid,
+          Math.max(getPriority(child.pid), constants.priority.PRIORITY_BELOW_NORMAL)
+        )
+      } catch (error) {
+        // Resource caps still apply if the OS refuses a best-effort priority change.
+        console.warn('[git] could not lower background process priority:', error)
+      }
+    }
     if (options.onStderr) {
       observeStderr(child, options.onStderr)
     }

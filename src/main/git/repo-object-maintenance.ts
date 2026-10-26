@@ -1,8 +1,9 @@
-import { opendir, readdir } from 'node:fs/promises'
+import { opendir } from 'node:fs/promises'
 import { posix, win32 } from 'node:path'
 import { isWindowsAbsolutePathLike } from '../../shared/cross-platform-path'
 import {
   isObjectMaintenanceDue,
+  LOOSE_OBJECT_THRESHOLD,
   OBJECT_MAINTENANCE_ARGS,
   OBJECT_PACK_COUNT_THRESHOLD,
   supportsPromisorGeometricRepack,
@@ -10,28 +11,34 @@ import {
   type ObjectStoreProbe
 } from '../../shared/repo-object-maintenance-policy'
 import type { RefMaintenanceSpan } from '../../shared/repo-ref-maintenance-policy'
-import { isWslUncPath } from '../../shared/wsl-paths'
 import { readHostGitVersion } from './git-version'
-import { removeStaleMaintenanceLocks } from './repo-maintenance-locks'
+import { isRepoMaintenanceLocked } from './repo-maintenance-locks'
 import { gitExecFileAsync } from './runner'
 
 /** Git samples fan-out directory 17 and scales by 256 for its auto-gc estimate. */
 const LOOSE_SAMPLE_DIRECTORY = '17'
 const LOOSE_OBJECT_NAME = /^[0-9a-f]{38}(?:[0-9a-f]{24})?$/
 
-/** Promisor packs count: they are the ones Git's own trigger ignores. */
-async function countPacks(directory: string, signal: AbortSignal): Promise<number> {
+async function countObjectFiles(
+  directory: string,
+  signal: AbortSignal,
+  threshold: number,
+  matches: (name: string) => boolean
+): Promise<number> {
+  if (signal.aborted) {
+    return 0
+  }
   const entries = await opendir(directory).catch(() => null)
-  let packs = 0
+  let count = 0
   for await (const entry of entries ?? []) {
-    if (entry.name.endsWith('.pack')) {
-      packs += 1
+    if (matches(entry.name)) {
+      count += 1
     }
-    if (packs >= OBJECT_PACK_COUNT_THRESHOLD || signal.aborted) {
+    if (count >= threshold || signal.aborted) {
       break
     }
   }
-  return packs
+  return count
 }
 
 export async function probeRepoObjectStore(
@@ -40,13 +47,20 @@ export async function probeRepoObjectStore(
 ): Promise<ObjectStoreProbe> {
   const paths = isWindowsAbsolutePathLike(commonDir) ? win32 : posix
   const objects = paths.join(commonDir, 'objects')
-  const [packCount, loose] = await Promise.all([
-    countPacks(paths.join(objects, 'pack'), signal),
-    readdir(paths.join(objects, LOOSE_SAMPLE_DIRECTORY)).catch(() => [])
+  const [packCount, looseCount] = await Promise.all([
+    countObjectFiles(paths.join(objects, 'pack'), signal, OBJECT_PACK_COUNT_THRESHOLD, (name) =>
+      name.endsWith('.pack')
+    ),
+    countObjectFiles(
+      paths.join(objects, LOOSE_SAMPLE_DIRECTORY),
+      signal,
+      Math.ceil(LOOSE_OBJECT_THRESHOLD / 256),
+      (name) => LOOSE_OBJECT_NAME.test(name)
+    )
   ])
   return {
     packCount,
-    looseObjects: loose.filter((name) => LOOSE_OBJECT_NAME.test(name)).length * 256
+    looseObjects: looseCount * 256
   }
 }
 
@@ -71,20 +85,19 @@ export async function maintainRepoObjects(
   }
   let started = false
   try {
-    const locks = await removeStaleMaintenanceLocks(args.commonDir, {
-      canInspectProcesses: !args.wslDistro && !isWslUncPath(args.commonDir)
-    })
-    span.setAttribute('git.maintenance_locks_removed', locks.removed.length)
+    if (signal.aborted || !args.canWrite()) {
+      return 'deferred'
+    }
     const probe = await probeRepoObjectStore(args.commonDir, signal)
     span.setAttribute('git.pack_count_floor', probe.packCount)
-    span.setAttribute('git.loose_object_estimate', probe.looseObjects)
+    span.setAttribute('git.loose_object_estimate_floor', probe.looseObjects)
     if (signal.aborted || !args.canWrite()) {
       return 'deferred'
     }
     if (!isObjectMaintenanceDue(probe)) {
       return 'below_threshold'
     }
-    if (locks.maintenanceLockHeld) {
+    if (await isRepoMaintenanceLocked(args.commonDir)) {
       return 'busy'
     }
     if (!supportsPromisorGeometricRepack(await readHostGitVersion(args.repoPath, args.wslDistro))) {
@@ -95,6 +108,7 @@ export async function maintainRepoObjects(
     await gitExecFileAsync([...OBJECT_MAINTENANCE_ARGS], {
       ...gitOptions,
       admissionSignal: signal,
+      lowPriority: true,
       canStart: () => (started = args.canWrite())
     })
     span.setAttribute('git.object_maintenance_ms', Date.now() - startedAt)

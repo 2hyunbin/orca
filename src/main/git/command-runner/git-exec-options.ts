@@ -19,6 +19,8 @@ export type GitExecOptions = {
   admissionSignal?: AbortSignal
   /** Rechecks owner eligibility after admission, before starting the child. */
   canStart?: () => boolean
+  /** Lower CPU priority on the execution host; buffered capture without a worker/barrier only. */
+  lowPriority?: boolean
   wslDistro?: string
   preferWslDirectGit?: boolean
   useConfiguredSshCommandForNetwork?: boolean

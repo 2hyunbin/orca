@@ -28,6 +28,7 @@ import { createAbortError } from './abort-error'
 import { readCapturedGitBuffer, readCapturedGitString } from './captured-git-output'
 import { runUnlessGitCwdKnownMissing } from './missing-git-spawn-cwd'
 import { trackGitWorktreeMutation } from '../git-worktree-mutation-state'
+import { lowPriorityGitCommand } from './low-priority-git-command'
 
 async function gitExecFileAsyncUnlocked(
   args: string[],
@@ -81,6 +82,7 @@ async function gitExecFileAsyncUnlocked(
       const capture = (
         command: ResolvedCommand
       ): Promise<{ stdout: string | Buffer; stderr: string | Buffer }> => {
+        const launch = options.lowPriority ? lowPriorityGitCommand(command, options) : command
         let reportTerminated: () => void = () => {}
         terminationState.current = new Promise<void>((resolve) => {
           reportTerminated = resolve
@@ -96,6 +98,7 @@ async function gitExecFileAsyncUnlocked(
           terminationBarrier: options.terminationBarrier,
           admissionTier: options.admissionTier,
           spawnOnWorkerThread: options.spawnOnWorkerThread,
+          lowPriority: options.lowPriority && !command.wsl,
           onChildTerminated: reportTerminated,
           ...(options.onStderr ? { onStderr: options.onStderr } : {}),
           ...(timeoutMs === undefined
@@ -104,12 +107,12 @@ async function gitExecFileAsyncUnlocked(
         }
         const captured = options.terminationBarrier
           ? execFileCaptureToTermination(
-              command.binary,
-              command.args,
+              launch.binary,
+              launch.args,
               captureOptions,
               command.termination
             )
-          : execFileCapture(command.binary, command.args, captureOptions)
+          : execFileCapture(launch.binary, launch.args, captureOptions)
         // Add a cause when a dead WSL distro returns empty stderr.
         return captured.catch((error: unknown) => {
           throw annotateWslHostFailure(error, command)

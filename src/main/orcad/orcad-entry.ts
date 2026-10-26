@@ -11,7 +11,6 @@
  * Chromium proves available at startup.
  */
 import { join } from 'node:path'
-import process from 'node:process'
 import { getAppEnvironment } from '../../shared/app-environment'
 import { resolveOrcadInstallRoot, resolveUserDataPath } from './orcad-app-paths'
 import { prepareOrcadCliLauncher } from './orcad-cli-launcher'
@@ -123,8 +122,7 @@ async function startOrcadRuntime(
   const { installHookStatusSessionTabsRepublish } =
     await import('../agent-hooks/hook-status-session-tabs-republish')
   const { startOrcadManagedAgentHooks } = await import('./orcad-managed-agent-hooks')
-  const { AgentStatusObservedPaneIdentities, AgentStatusObservedPaneIdentityCapture } =
-    await import('../runtime/agent-status-observed-pane-identity')
+  const identity = await import('../runtime/agent-status-observed-pane-identity')
 
   const { disposeWatcherProcessAndWait } =
     await import('../ipc/filesystem/watcher-process/parcel-watcher-process')
@@ -157,7 +155,6 @@ async function startOrcadRuntime(
   registerCleanup(() => disposeWatcherProcessAndWait())
   const { DesktopPushService } = await import('../runtime/push/desktop-push-service')
   const { resolvePushGatewayOrigin } = await import('../runtime/push/push-gateway-origin')
-
   const runtimeUserDataPath = getAppEnvironment().getPath('userData')
   const { startEventLoopDelayProbe } = await import('../diagnostics/event-loop-delay-probe')
   startEventLoopDelayProbe('orcad', runtimeUserDataPath)
@@ -170,11 +167,11 @@ async function startOrcadRuntime(
   await prepareOrcadSecretStoreAndMigrate(runtimeUserDataPath)
   const { store: profileStore, authority: profileStateAuthority } =
     await createOrcadProfileStateStartup(runtimeUserDataPath)
-  const observedPaneIdentities = new AgentStatusObservedPaneIdentities()
-  const observedStatusCapture = new AgentStatusObservedPaneIdentityCapture(observedPaneIdentities)
+  const observedPaneIdentities = new identity.AgentStatusObservedPaneIdentities()
+  const statusCapture = new identity.AgentStatusObservedPaneIdentityCapture(observedPaneIdentities)
   profileStoreForShutdown = profileStore
   uninstallObservedStatusIdentity = agentHookServer.subscribeEnrichedStatus((enriched) =>
-    observedStatusCapture.observe(enriched)
+    statusCapture.observe(enriched)
   )
   // Before the hook server starts: a turn that begins before the feed subscribes is never counted.
   const { startOrcadStats } = await import('./orcad-stats')
@@ -256,7 +253,6 @@ async function startOrcadRuntime(
     }
   })
   paneGridsForShutdown = runtime
-
   accountLaunch?.attachToRuntime(runtime)
 
   // Why before any launch: a desktop that owns this host's accounts pushed them on an earlier run.
@@ -329,7 +325,7 @@ async function startOrcadRuntime(
   registerCleanup(() => runtime.stopLegacyWorkerTerminalRecovery())
 
   // Recovery binds terminal and dispatch identities; only now can startup observations be fenced.
-  observedStatusCapture.attach(runtime)
+  statusCapture.attach(runtime)
   agentHookServer.setCliWriterExecutionMatcher(observedPaneIdentities, runtime)
   // Why before the RPC server binds: like `--serve`, the first client must find a ready graph.
   const { publishHeadlessRuntimeGraph } = await import('../runtime/headless-runtime-graph')
@@ -355,6 +351,8 @@ async function startOrcadRuntime(
   })
   // Stops first: no RPC may write while the rest of the runtime is torn down.
   registerCleanup(() => rpc.stop())
+  const { installOrcadRepoMaintenance } = await import('./orcad-repo-maintenance')
+  registerCleanup(installOrcadRepoMaintenance(rpc, agentHookServer, profileStore))
   await rpc.start()
   startOrcadAutomations(runtime, profileStore, registerCleanup)
   const pushService = DesktopPushService.create({

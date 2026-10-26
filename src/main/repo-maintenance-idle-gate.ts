@@ -1,31 +1,20 @@
 import { app, powerMonitor } from 'electron'
+import { REF_MAINTENANCE_QUIET_PERIOD_MS } from '../shared/repo-ref-maintenance-policy'
+import { postponeRepoRefMaintenance } from './git/local-repo-ref-maintenance'
 import {
-  disposeLocalRepoRefMaintenance,
-  postponeRepoRefMaintenance,
-  setRepoMaintenanceActivityProbe
-} from './git/local-repo-ref-maintenance'
-import { hasWorktreeRemovalsInFlight } from './ipc/worktrees/worktree-ipc-context'
-import { hasPendingWorktreeCreatePreparations } from './worktree-create-preparation'
-import { hasPendingWorktreeRemovals } from './worktree-removal-table'
+  installRepoMaintenanceHostIdleGate,
+  type RepoMaintenanceIdleInputs
+} from './repo-maintenance-host-idle-gate'
 
-// pack-refs shares a ref lock with worktree deletion; defer while user work is active.
-export type RepoMaintenanceIdleInputs = {
-  isQuitting: () => boolean
-  getWorkingAgentCount: () => number
-}
+export type { RepoMaintenanceIdleInputs } from './repo-maintenance-host-idle-gate'
 
 export function installRepoMaintenanceIdleGate(
   inputs: RepoMaintenanceIdleInputs
 ): () => Promise<void> {
-  setRepoMaintenanceActivityProbe(
-    () =>
-      inputs.isQuitting() ||
-      inputs.getWorkingAgentCount() > 0 ||
-      hasPendingWorktreeCreatePreparations() ||
-      hasWorktreeRemovalsInFlight() ||
-      hasPendingWorktreeRemovals() ||
-      isOnBatteryPower()
-  )
+  const uninstallHostGate = installRepoMaintenanceHostIdleGate({
+    ...inputs,
+    isBusy: () => (inputs.isBusy?.() ?? false) || isOnBatteryPower() || isUserRecentlyActive()
+  })
   // Postpone future packs; killing one in flight can strand a ref lock.
   const onBattery = (): void => {
     postponeRepoRefMaintenance()
@@ -38,10 +27,7 @@ export function installRepoMaintenanceIdleGate(
   return () => {
     app.off('browser-window-focus', onFocus)
     powerMonitor.off('on-battery', onBattery)
-    // Stop armed timers before removing the activity probe.
-    const stopped = disposeLocalRepoRefMaintenance()
-    setRepoMaintenanceActivityProbe(null)
-    return stopped
+    return uninstallHostGate()
   }
 }
 
@@ -51,5 +37,13 @@ function isOnBatteryPower(): boolean {
   } catch {
     // An unavailable power API is not evidence of battery use.
     return false
+  }
+}
+
+function isUserRecentlyActive(): boolean {
+  try {
+    return powerMonitor.getSystemIdleTime() * 1000 < REF_MAINTENANCE_QUIET_PERIOD_MS
+  } catch {
+    return true
   }
 }

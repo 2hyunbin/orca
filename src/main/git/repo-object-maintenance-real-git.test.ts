@@ -1,36 +1,23 @@
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type * as ProcessHost from '@orca/process-host'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   OBJECT_PACK_COUNT_THRESHOLD,
   supportsPromisorGeometricRepack
 } from '../../shared/repo-object-maintenance-policy'
 import { maintainRepoObjects, probeRepoObjectStore } from './repo-object-maintenance'
 
-// A real gc on the developer's machine must not decide whether the stale lock is removed.
-vi.mock('@orca/process-host', async (importOriginal) => {
-  const actual = await importOriginal<typeof ProcessHost>()
-  return {
-    ...actual,
-    runProcess: (options: Parameters<typeof actual.runProcess>[0]) =>
-      options.program === 'ps' || options.program === 'powershell.exe'
-        ? Promise.resolve({ code: 0, timedOut: false, stdout: '', stderr: '' })
-        : actual.runProcess(options)
-  }
-})
-
 const BLOBS = OBJECT_PACK_COUNT_THRESHOLD + 10
-const LONG_AGO = new Date(Date.UTC(2020, 0, 1))
 let root = ''
 
-function git(cwd: string, args: string[]): string {
-  return execFileSync('git', args, {
+function git(cwd: string, args: string[], input?: string): string {
+  return execFileSync('git', ['-c', 'gc.auto=0', '-c', 'maintenance.auto=false', ...args], {
     cwd,
     encoding: 'utf8',
+    input,
     stdio: ['pipe', 'pipe', 'pipe']
   }).trim()
 }
@@ -73,7 +60,7 @@ describe('pack count trigger', () => {
 
 describe.skipIf(!supported)('idle object maintenance against real Git', () => {
   // Builds a source repo, a partial clone and 60 lazy fetches, each its own git process.
-  it('clears a stale lock and compacts promisor packs without pruning a worktree', async () => {
+  it('compacts promisor packs without pruning a worktree', async () => {
     const source = join(root, 'source')
     git(root, ['init', '--quiet', source])
     git(source, ['config', 'user.email', 'test@example.com'])
@@ -113,29 +100,41 @@ describe.skipIf(!supported)('idle object maintenance against real Git', () => {
     git(clone, ['config', 'gc.worktreePruneExpire', 'now'])
     const before = await packCount(clone)
     expect(before).toBeGreaterThanOrEqual(BLOBS)
-    // A killed run's lock: every `git maintenance run` would exit 0 having done nothing.
-    const lock = join(clone, '.git', 'objects', 'maintenance.lock')
-    await writeFile(lock, '')
-    await utimes(lock, LONG_AGO, LONG_AGO)
-
-    const outcome = await maintainRepoObjects({
+    const args = {
       repoPath: clone,
       commonDir: join(clone, '.git'),
       signal: new AbortController().signal,
       span: { setAttribute: () => {} },
       canWrite: () => true
-    })
+    }
+    const lock = join(clone, '.git', 'objects', 'maintenance.lock')
+    await writeFile(lock, 'external lock')
+    const old = new Date(Date.UTC(2020, 0, 1))
+    await utimes(lock, old, old)
+    expect(await maintainRepoObjects(args)).toBe('busy')
+    expect(await packCount(clone)).toBe(before)
+    expect(await readFile(lock, 'utf8')).toBe('external lock')
+    await rm(lock)
+
+    const outcome = await maintainRepoObjects(args)
 
     expect(outcome).toBe('ran')
-    await expect(stat(lock)).rejects.toMatchObject({ code: 'ENOENT' })
     expect(await packCount(clone)).toBeLessThanOrEqual(2)
     await expect(
       stat(join(clone, '.git', 'worktrees', 'unmounted-volume-worktree', 'gitdir'))
     ).resolves.toBeDefined()
     // Every lazily fetched blob is still local: no remote is reachable from here on.
     await rm(source, { recursive: true, force: true })
-    for (const blob of blobs) {
-      expect(git(clone, ['cat-file', '-p', blob.oid])).toBe(blob.content)
-    }
+    expect(
+      git(clone, ['cat-file', '--batch'], `${blobs.map((blob) => blob.oid).join('\n')}\n`)
+    ).toBe(
+      blobs
+        .map(
+          (blob) =>
+            `${blob.oid} blob ${Buffer.byteLength(`${blob.content}\n`)}\n${blob.content}\n\n`
+        )
+        .join('')
+        .trim()
+    )
   }, 60_000)
 })

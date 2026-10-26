@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const isOnBatteryPowerMock = vi.hoisted(() => vi.fn(() => false))
+const getSystemIdleTimeMock = vi.hoisted(() => vi.fn(() => 600))
 const hasPendingPreparationsMock = vi.hoisted(() => vi.fn(() => false))
 const hasRemovalsInFlightMock = vi.hoisted(() => vi.fn(() => false))
 const setProbeMock = vi.hoisted(() => vi.fn())
@@ -16,6 +17,7 @@ vi.mock('electron', () => ({
   },
   powerMonitor: {
     isOnBatteryPower: isOnBatteryPowerMock,
+    getSystemIdleTime: getSystemIdleTimeMock,
     on: (event: string, listener: () => void) => powerListeners.set(event, listener),
     off: (event: string) => powerListeners.delete(event)
   }
@@ -50,6 +52,7 @@ function installProbe(
 
 beforeEach(() => {
   isOnBatteryPowerMock.mockReturnValue(false)
+  getSystemIdleTimeMock.mockReturnValue(600)
   hasPendingPreparationsMock.mockReturnValue(false)
   hasRemovalsInFlightMock.mockReturnValue(false)
   postponeMock.mockClear()
@@ -87,6 +90,21 @@ describe('repo maintenance idle gate', () => {
   it('vetoes on battery power', () => {
     isOnBatteryPowerMock.mockReturnValue(true)
 
+    expect(installProbe().probe()).toBe(true)
+  })
+
+  it('defers while the user is typing even when no agent is working', () => {
+    getSystemIdleTimeMock.mockReturnValue(599)
+    const { probe } = installProbe()
+    expect(probe()).toBe(true)
+    getSystemIdleTimeMock.mockReturnValue(600)
+    expect(probe()).toBe(false)
+  })
+
+  it('defers if system idle time is unavailable', () => {
+    getSystemIdleTimeMock.mockImplementation(() => {
+      throw new Error('unavailable')
+    })
     expect(installProbe().probe()).toBe(true)
   })
 
