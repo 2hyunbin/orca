@@ -248,6 +248,10 @@ export async function adoptLiveWorkspacePtySurfaces(
     ) {
       continue
     }
+    // A recorded tab createTab had to mint under another id already holds this PTY.
+    if (resolveTerminalTabPtyOwnership(getState(), worktreeId, ptyId).kind !== 'none') {
+      continue
+    }
     getState().createTab(worktreeId, undefined, undefined, {
       initialPtyId: ptyId,
       activate: false,
