@@ -12,9 +12,8 @@ vi.mock('@/store', async () => {
 import { useAppStore } from '@/store'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { flushMicrotasks } from '@/store/slices/agent-status-test-harness'
-import { useNativeChatHookStatus } from './use-native-chat-hook-status'
+import { useNativeChatHookStatus, resolveNativeChatHookState } from './use-native-chat-hook-status'
 import { useNativeChatTerminalTurnTiming } from './use-native-chat-terminal-turn-timing'
-import { resolveNativeChatHookState } from './use-native-chat-hook-status'
 
 describe('resolveNativeChatHookState', () => {
   const now = 1_000_000
