@@ -51,6 +51,7 @@ export async function stageAppAgentBrowserDriver(
     }
     return staged
   } catch {
-    return driver
+    // Without a copy, Chromium stays unavailable rather than locking the installed image.
+    return undefined
   }
 }

@@ -108,6 +108,7 @@ describe('orca serve host selection', () => {
       const driver = join(driverDir, orcadAgentBrowserNativeName(process.platform, process.arch))
       await mkdir(driverDir, { recursive: true })
       await writeFile(driver, '')
+      process.env.ORCA_USER_DATA_PATH = join(appRoot, 'profile')
       process.env.ORCA_SERVE_SUPERVISOR_APP_ROOT = appRoot
       const selection = { kind: 'orcad', runtime: '/node', entry: '/slot/orcad.js', version: '1' }
       resolveLocalServeRuntimeMock.mockResolvedValue(selection)
@@ -121,7 +122,9 @@ describe('orca serve host selection', () => {
         expect.not.objectContaining({ ELECTRON_RUN_AS_NODE: expect.anything() }),
         join(appRoot, 'out', 'web'),
         process.platform === 'win32' ? undefined : join(appRoot, 'node_modules', recognizer),
-        driver
+        process.platform === 'win32'
+          ? expect.stringContaining(join(appRoot, 'profile', 'orcad-agent-browser'))
+          : driver
       )
       expect(spawnMock).not.toHaveBeenCalled()
       expect(stderr.join('')).toContain('[serve] running on orcad 1')
