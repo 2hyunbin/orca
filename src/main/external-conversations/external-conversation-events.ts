@@ -276,7 +276,8 @@ export class ConversationEvents {
 
   /** The pane's turn still running or waiting on the user, by the id its turn events carry; null when none. */
   openTurn(paneKey: string): number | null {
-    const row = this.deps.readHookRow(paneKey)
+    // Turn ids are only known while watched.
+    const row = this.release ? this.deps.readHookRow(paneKey) : null
     if (!row || hookRowAgentPhase(row) === 'done' || hookRowAgentPhase(row) === 'rest') {
       return null
     }

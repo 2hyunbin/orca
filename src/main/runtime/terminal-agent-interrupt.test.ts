@@ -55,9 +55,10 @@ function harness() {
     )
   }
   const controller = new AbortController()
-  const interrupt = (beforeWrite?: () => Promise<void>, paneKey = PANE) =>
+  const interrupt = (beforeWrite?: () => Promise<void>, paneKey = PANE, sameTurn?: () => boolean) =>
     interruptWorkingAgent(runtime, () => state.row, paneKey, {
       beforeWrite,
+      sameTurn,
       signal: controller.signal
     })
   return { state, keys, interrupt, controller }
@@ -127,6 +128,19 @@ describe('interruptWorkingAgent', () => {
     await expect(h.interrupt()).resolves.toEqual({
       outcome: 'refused',
       reason: 'agent_not_reachable'
+    })
+    expect(h.keys).toEqual([])
+  })
+
+  it('types nothing when, at handoff, the working turn is no longer the caller’s', async () => {
+    const h = harness()
+    let same = true
+    h.state.atHandoff = () => {
+      same = false
+    }
+    await expect(h.interrupt(undefined, PANE, () => same)).resolves.toEqual({
+      outcome: 'refused',
+      reason: 'agent_not_working'
     })
     expect(h.keys).toEqual([])
   })
