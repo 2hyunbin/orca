@@ -257,6 +257,29 @@ describe('connector inbox', () => {
     }
   )
 
+  // SQLite runs one transaction at a time, so only Postgres can race two hellos.
+  it.skipIf(!process.env.ORCA_CONNECTOR_TEST_DATABASE_URL)(
+    'keeps the newer hello when an older one waited on it',
+    async () => {
+      let gate!: ReturnType<typeof pauseBefore>
+      const { harness, machine } = await setup({
+        wrapDatabase: (database) => {
+          gate = pauseBefore(database, 'INSERT INTO connector_hosts', 1)
+          return gate.database
+        }
+      })
+      const newer = machine.hello(3)
+      await gate.atStatement
+      const older = machine.hello(2)
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      gate.release()
+      expect([(await newer).status, (await older).status]).toEqual([204, 204])
+      const [host] = await harness.database.query('SELECT hello_rev FROM connector_hosts')
+      expect(Number(host?.hello_rev)).toBe(3)
+      expect((await machine.poll(3)).status).toBe(200)
+    }
+  )
+
   it('keeps the first done', async () => {
     const { harness, machine, enqueue, poll } = await setup()
     await enqueue('a', 'a1', START)

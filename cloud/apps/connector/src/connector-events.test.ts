@@ -211,6 +211,23 @@ describe('connector turn events', () => {
     expect(await thread()).toMatchObject({ pane_key: 'pane-2' })
   })
 
+  it('keeps the newer hello when an older one arrives late', async () => {
+    const { harness, machine, enqueue, events, thread } = await setup()
+    await enqueue(machine.hostId)
+    await machine.hello(2)
+    const linked = (paneKey: string) => [{ conversation, paneKey, kind: 'linked', agent: 'claude' }]
+    await events(linked('new-pane'), 3, 2)
+    expect((await machine.hello(1)).status).toBe(204)
+    expect((await events(linked('old-pane'), 0, 1)).status).toBe(204)
+    expect(await thread()).toMatchObject({ pane_key: 'new-pane' })
+    const [host] = await harness.database.query('SELECT hello_rev, events_seq FROM connector_hosts')
+    expect({ helloRev: Number(host?.hello_rev), eventsSeq: Number(host?.events_seq) }).toEqual({
+      helloRev: 2,
+      eventsSeq: 3
+    })
+    expect((await machine.poll(2)).status).toBe(200)
+  })
+
   // SQLite runs one transaction at a time, so only Postgres can race a batch with a hello.
   it.skipIf(!process.env.ORCA_CONNECTOR_TEST_DATABASE_URL)(
     'ignores a batch from the old hello that waited on a newer hello',

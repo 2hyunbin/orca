@@ -18,15 +18,16 @@ export class ConnectorHosts {
     private readonly now: () => number
   ) {}
 
-  // Under the host lock. The latest hello wins; held polls wake to find their revision stale, the
-  // next poll lists what was received but never settled, and a new revision restarts the events mark.
+  // Under the host lock. The highest revision wins (a delayed older hello changes nothing); held polls
+  // wake to find theirs stale, the next poll lists what was received but never settled, and a new
+  // revision restarts the events mark.
   async recordHello(
     transaction: CloudDatabase,
     host: { hostId: string; accountId: string },
     hello: ConnectorHelloRequest
   ): Promise<void> {
     const now = this.now()
-    await transaction.query(
+    const [recorded] = await transaction.query(
       `INSERT INTO connector_hosts
        (host_id, account_id, host_name, platform, runtime, orca_version, hello_rev, hello,
         unsettled_due, first_seen_at, last_seen_at)
@@ -36,7 +37,8 @@ export class ConnectorHosts {
          orca_version = excluded.orca_version, hello_rev = excluded.hello_rev,
          hello = excluded.hello, unsettled_due = 1, last_seen_at = excluded.last_seen_at,
          events_seq = CASE WHEN connector_hosts.hello_rev = excluded.hello_rev
-           THEN connector_hosts.events_seq END`,
+           THEN connector_hosts.events_seq END
+       WHERE connector_hosts.hello_rev <= excluded.hello_rev`,
       [
         host.hostId,
         host.accountId,
@@ -50,7 +52,9 @@ export class ConnectorHosts {
         now
       ]
     )
-    await this.inbox.wake(transaction, host.hostId)
+    if (Number(recorded?.changes ?? 0) > 0) {
+      await this.inbox.wake(transaction, host.hostId)
+    }
   }
 
   // Under the host lock: a request's hello is the machine's current one, an older one, or one the
