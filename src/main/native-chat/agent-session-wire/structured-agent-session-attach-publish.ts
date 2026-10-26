@@ -1,6 +1,3 @@
-// The attach's last commit: the child it spawned or kept becomes the session's, its sink the one
-// the session's events go through, and its open begins.
-
 import type { AttachedJournal } from './structured-agent-session-attach'
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
@@ -34,8 +31,7 @@ export type BoundAttach = {
   eventSink: DeferredStructuredAgentSessionEventSink
 }
 
-/** The provider's word on a rewind in doubt for the child this attach bound, read outside the
- *  commits so no send waits behind it. */
+/** Read uncertain-rewind evidence outside commits so sends do not wait behind provider reads. */
 export function readBoundChildRewind(
   context: StructuredAgentSessionAttachContext,
   sessionId: string,
@@ -50,7 +46,6 @@ export function readBoundChildRewind(
   )
 }
 
-/** The attach's last commit: its child, if it has one, becomes the session's. */
 export async function publishAttachedChild(
   context: StructuredAgentSessionAttachContext,
   sessionId: string,
@@ -80,7 +75,6 @@ export async function publishAttachedChild(
     owner === 'acquired' ? attempt.startup?.permissionMode : current?.permissionMode
   const accountHome = owner === 'acquired' ? bound.accountHome : current?.accountHome
   const startedFor = owner === 'acquired' ? input.startedFor : current?.startedFor
-  // A replayed create over a chat at rest has no child to index.
   const child =
     owner === 'acquired'
       ? {
@@ -88,6 +82,7 @@ export async function publishAttachedChild(
           fence,
           phase: 'starting' as const,
           heldSends: () => context.deps.adapter.heldSends?.(sessionId),
+          exitObservation: eventSink.exitObservation,
           ...(startedFor === undefined ? {} : { startedFor }),
           ...(permissionMode === undefined ? {} : { permissionMode }),
           ...(accountHome === undefined ? {} : { accountHome })
@@ -121,17 +116,20 @@ export async function publishAttachedChild(
   context.runtimeState.adoptEventSink(sessionId, candidate.sink)
   attempt.committed = candidate.sink === input.attemptSink
   indexProviderChild(conversation, candidate.child)
-  // An exit that landed while the start ran outside the serialize ends the child it now indexed.
-  const exited = context.runtimeState.startFlights.takeExit(sessionId, candidate.child)
-  const indexed = conversation.child
-  if (exited && indexed) {
-    await context.endExitedChild(sessionId, indexed, structuredAgentSessionEndedEventExit(exited))
-  } else if (attempt.startup) {
+  context.runtimeState.startFlights.published(sessionId, candidate.child)
+  if (attempt.startup) {
     context.runtimeState.startupAttempts.published(
       sessionId,
       attempt.startup.attemptId,
       candidate.child
     )
+  }
+  // Apply exits observed during background startup after indexing the matching child.
+  const exited = context.runtimeState.startFlights.takeExit(sessionId, candidate.child)
+  const indexed = conversation.child
+  if (exited && indexed) {
+    await context.endExitedChild(sessionId, indexed, structuredAgentSessionEndedEventExit(exited))
+  } else if (attempt.startup) {
     if (candidate.child.phase === 'ready') {
       noteStructuredAgentSessionProviderStarted(context.deps, sessionId)
     } else {

@@ -5,6 +5,7 @@ import { join, resolve as resolvePath } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
 import { claudeProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
+import type { AgentSessionRewindRecord } from '../../shared/agent-session-rewind'
 import { CLAUDE_PROFILE_SETUP_FAILED_MESSAGE } from '../../shared/claude-profile-routing'
 import {
   ClaudeProfileRouter,
@@ -73,7 +74,6 @@ it('launches each acquisition under the current selection, not the account it wa
     providerHandle: claudeProviderHandle('unused', null)
   }
 
-  // A missing folder is set up first; typed when that fails, so the chat names the situation.
   await expect(resolve({ identity })).rejects.toMatchObject({
     name: 'AgentSessionPreSpawnError',
     reason: 'claudeAccountSetupFailed',
@@ -82,7 +82,6 @@ it('launches each acquisition under the current selection, not the account it wa
 
   const home = join(root, 'claude-profiles', 'a', 'home')
   mkdirSync(home, { recursive: true })
-  // Already set up, so the launch does not wait for setup.
   writeFileSync(join(root, 'claude-profiles', 'a', 'profile.json'), '{}')
   const routed = await resolve({ identity })
   expect(routed.claudeConfigDir).toBe(home)
@@ -97,7 +96,7 @@ it('launches each acquisition under the current selection, not the account it wa
   expect(read()).toBe(resolvePath('/user/own'))
 })
 
-function routedResumeFixture() {
+function routedResumeFixture(rewind?: AgentSessionRewindRecord, transcriptFiles = false) {
   const root = mkdtempSync(join(tmpdir(), 'claude-launch-routing-'))
   roots.push(root)
   const home = join(root, 'claude-profiles', 'a', 'home')
@@ -122,7 +121,8 @@ function routedResumeFixture() {
     ...agentSessionRecordFixture(),
     providerHandleChain: [
       { linkId: 'link-1', origin: 'created' as const, mintedAtFence: 1, observedAt: 1, handle }
-    ]
+    ],
+    ...(rewind ? { rewind } : {})
   }
   const transcriptHomes = new Set<string>()
   const resolve = createClaudeStructuredLaunchResolver({
@@ -132,7 +132,9 @@ function routedResumeFixture() {
     resolveCommand: () => '/usr/local/bin/claude',
     resolveInheritedEnv: async () => ({ PATH: '/usr/bin' }),
     resolveAuthPolicy: () => ({ account: 'system' }),
-    hasTranscript: async ({ claudeConfigDir }) => transcriptHomes.has(claudeConfigDir)
+    hasTranscript: transcriptFiles
+      ? undefined
+      : async ({ claudeConfigDir }) => transcriptHomes.has(claudeConfigDir)
   })
   const identity = {
     sessionId: record.sessionId,
@@ -177,4 +179,43 @@ it('resumes a chat with a stored leaf whose transcript is in no known folder', a
   const resumed = await launch()
   expect(resumed.options).toMatchObject({ resume: 'ran-under-b' })
   expect(resumed.resumeLeafUuid).toBe('leaf-1')
+})
+
+it('refuses a rewind fork from its saved custom home and recovers when its source reaches the selected account', async () => {
+  const { root, home, record, launch } = routedResumeFixture(
+    {
+      operationId: 'rewind-1',
+      callerKey: 'desktop',
+      itemId: 'item-1',
+      expectedEpoch: 'epoch-1',
+      phase: 'completed',
+      providerFork: {
+        sessionId: 'forked',
+        sourceSessionId: 'ran-under-b',
+        throughEntryId: 'entry-1',
+        replacesSessionId: 'ran-under-b'
+      }
+    },
+    true
+  )
+  const customHome = join(root, 'custom-claude-home')
+  record.accountHome = { variable: 'CLAUDE_CONFIG_DIR', path: customHome }
+  const sourceProject = join(customHome, 'projects', '-repos-workspace-1')
+  mkdirSync(sourceProject, { recursive: true })
+  writeFileSync(join(sourceProject, 'ran-under-b.jsonl'), '{}\n')
+
+  await expect(launch()).rejects.toMatchObject({
+    name: 'AgentSessionPreSpawnError',
+    reason: 'historyInOtherAccount'
+  })
+
+  const selectedProject = join(home, 'projects', '-repos-workspace-1')
+  mkdirSync(selectedProject, { recursive: true })
+  writeFileSync(join(selectedProject, 'ran-under-b.jsonl'), '{}\n')
+  expect((await launch()).options).toMatchObject({
+    sessionId: 'forked',
+    resume: 'ran-under-b',
+    resumeSessionAt: 'entry-1',
+    forkSession: true
+  })
 })

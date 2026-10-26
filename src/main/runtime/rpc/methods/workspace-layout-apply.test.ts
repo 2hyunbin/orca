@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { LayoutApplyOutcome } from '../../../../shared/workspace-layout/workspace-layout-command-types'
+import type { Tab } from '../../../../shared/tab-types'
+import type { RuntimeStore } from '../../runtime-store-contract'
 import { RUNTIME_CAPABILITIES } from '../../../../shared/protocol-version'
 import { MOBILE_RPC_METHOD_ALLOWLIST } from '../../runtime-rpc/runtime-rpc-mobile-method-allowlist'
 import { OrcaRuntimeService } from '../../orca-runtime'
 import { eraseRpcMethods, isStreamingMethod, type RpcContext } from '../core'
 import { LAYOUT_APPLY_METHODS } from './workspace-layout'
+import { partialRuntimeStore, type PartialRuntimeStore } from '../../runtime-store-partial-fixture'
 
 const frozen = vi.hoisted(() => ({ workspaces: new Set<string>() }))
 vi.mock(
@@ -56,19 +61,25 @@ function sessionListing(tabId: string): WorkspaceSessionState {
   }
 }
 
-function runtimeHolding(hostId: string) {
-  const applyLayoutCommand = vi.fn(async () => ({ ok: true, result: { leafId: 'minted' } }))
+function runtimeHolding(hostId: ExecutionHostId) {
+  const applyLayoutCommand = vi.fn(async (): Promise<LayoutApplyOutcome> => ({
+    ok: true,
+    result: { leafId: 'minted' }
+  }))
   const applyTabRenames = vi.fn(async () => [])
   const empty: WorkspaceSessionState = { ...sessionListing('other'), tabsByWorktree: {} }
-  const store = {
+  const store: PartialRuntimeStore = {
     getRepo: () => undefined,
     getWorkspaceSessionHostIds: () => ['local', hostId],
     getWorkspaceSession: (host: string) => (host === hostId ? sessionListing('tab-1') : empty),
     applyLayoutCommand,
     applyTabRenames
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply path reads only these store methods.
-  return { runtime: new OrcaRuntimeService(store as never), applyLayoutCommand, applyTabRenames }
+  return {
+    runtime: new OrcaRuntimeService(partialRuntimeStore(store)),
+    applyLayoutCommand,
+    applyTabRenames
+  }
 }
 
 afterEach(() => {
@@ -107,6 +118,22 @@ describe('layout.apply', () => {
     expect(
       apply.params?.safeParse({ command: { ...SPLIT, newLeafId: 'window-minted' } }).success
     ).toBe(false)
+  })
+
+  it('takes no live-terminal adoption from the window: only main places a running terminal', () => {
+    const apply = eraseRpcMethods(LAYOUT_APPLY_METHODS).find(
+      (method) => method.name === 'layout.apply'
+    )
+    const create = {
+      type: 'createTerminalTab',
+      workspace: WORKTREE,
+      tabId: 'tab-2',
+      leafId: '44444444-4444-4444-8444-444444444444'
+    } as const
+
+    expect(apply?.params?.parse({ command: { ...create, adopt: { ptyId: 'pty-1' } } })).toEqual({
+      command: create
+    })
   })
 
   it('takes no close semantics or blank title from the window', async () => {
@@ -184,6 +211,30 @@ describe('layout.apply', () => {
       parse({ type: 'setGroupRatios', workspace: WORKTREE, groupLayout: { ...split, ratio: 3 } })
         ?.success
     ).toBe(false)
+  })
+
+  it('accepts divider ratio intents, or an older window’s tree, but not both or neither', async () => {
+    const apply = eraseRpcMethods(LAYOUT_APPLY_METHODS).find(
+      (method) => method.name === 'layout.apply'
+    )
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+    const pane = { type: 'setPaneRatios', workspace: WORKTREE, tabId: 'tab-1' }
+    const group = { type: 'setGroupRatios', workspace: WORKTREE }
+    const root = { type: 'leaf', leafId: 'leaf-1' }
+    const groupLayout = { type: 'leaf', groupId: 'g1' }
+    const ratios = [{ path: 'first.second', ratio: 0.3 }]
+
+    expect(parse({ ...pane, ratios })?.success).toBe(true)
+    expect(parse({ ...pane, root })?.success).toBe(true)
+    expect(parse({ ...pane, root, ratios })?.success).toBe(false)
+    expect(parse(pane)?.success).toBe(false)
+    expect(parse({ ...group, ratios })?.success).toBe(true)
+    expect(parse({ ...group, groupLayout })?.success).toBe(true)
+    expect(parse({ ...group, groupLayout, ratios })?.success).toBe(false)
+    expect(parse(group)?.success).toBe(false)
+    expect(parse({ ...pane, ratios: [] })?.success).toBe(false)
+    expect(parse({ ...pane, ratios: [{ path: 'third', ratio: 0.3 }] })?.success).toBe(false)
+    expect(parse({ ...pane, ratios: [{ path: '', ratio: 1 }] })?.success).toBe(false)
   })
 
   it('accepts the close of one tab with the window’s reason, but no force or refusals', async () => {
@@ -323,10 +374,12 @@ describe('layout.apply', () => {
 
     expect(
       apply?.params?.parse({
-        command: { ...open, file: { ...file, dirtyDraftContent: 'x' }, view: { mode: 'edit' } }
+        command: { ...open, file: { ...file, dirtyDraftContent: 'x' }, scrollTop: 3 }
       })
     ).toEqual({ command: { ...open, file } })
     expect(parse({ ...open, preview: true, groupId: 'g1' })?.success).toBe(true)
+    expect(parse({ ...open, groupId: 'g1', index: 2 })?.success).toBe(true)
+    expect(parse({ ...open, index: -1 })?.success).toBe(false)
     expect(parse({ ...open, tabId: undefined })?.success).toBe(false)
     expect(parse({ ...open, contentType: 'terminal' })?.success).toBe(false)
     expect(parse({ ...open, preview: false })?.success).toBe(false)
@@ -605,14 +658,23 @@ describe('layout.apply', () => {
     expect(parses({ kind: 'generated', renames: [] })).toBe(false)
     expect(parses({ kind: 'custom', renames: [titled] })).toBe(false)
     expect(parses({ kind: 'generated', renames: [{ ...titled, workspace: '' }] })).toBe(false)
+    const replacing = { ...titled, replaceExisting: true }
+    expect(
+      apply?.params?.safeParse({
+        command: { type: 'renameTabs', kind: 'generated', renames: [replacing] }
+      }).data
+    ).toEqual({ command: { type: 'renameTabs', kind: 'generated', renames: [replacing] } })
+    expect(parses({ kind: 'generated', renames: [{ ...titled, replaceExisting: false }] })).toBe(
+      false
+    )
   })
 
   it('gives each title in its tab’s partition in one write, naming a paired server’s tab', async () => {
-    const applyTabRenames = vi.fn(async (batches: { renames: { tabId: string }[] }[]) => [
+    const applyTabRenames = vi.fn<NonNullable<RuntimeStore['applyTabRenames']>>(async (batches) => [
       { rename: batches[0]!.renames[0]!, code: 'tab_not_found' }
     ])
     const hosts: Record<string, string> = { 'tab-1': 'local', 'tab-2': 'ssh:target-1' }
-    const store = {
+    const store: PartialRuntimeStore = {
       getRepo: () => undefined,
       getWorkspaceSessionHostIds: () => ['local', 'ssh:target-1', 'runtime:env-1'],
       getWorkspaceSession: (host: string) => ({
@@ -621,13 +683,23 @@ describe('layout.apply', () => {
         unifiedTabs: {
           [WORKTREE]: Object.entries({ ...hosts, 'tab-3': 'runtime:env-1' })
             .filter(([, owner]) => owner === host)
-            .map(([id]) => ({ id, entityId: id, contentType: 'terminal' }))
+            .map(([id]): Tab => ({
+              id,
+              entityId: id,
+              groupId: 'group-1',
+              worktreeId: WORKTREE,
+              contentType: 'terminal',
+              label: id,
+              customLabel: null,
+              color: null,
+              sortOrder: 0,
+              createdAt: 0
+            }))
         }
       }),
       applyTabRenames
     }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply path reads only these store methods.
-    const runtime = new OrcaRuntimeService(store as never)
+    const runtime = new OrcaRuntimeService(partialRuntimeStore(store))
     const titled = (tabId: string) => ({ workspace: WORKTREE, tabId, title: `Title ${tabId}` })
 
     const reply = await runtime.applyLayoutCommand({
@@ -694,7 +766,6 @@ describe('layout.apply', () => {
     await expect(runtime.applyLayoutCommand(SPLIT)).resolves.toEqual({
       ok: true,
       result: { leafId: 'minted' },
-      // No one subscribes, so the stream has sent nothing.
       frameSeq: 0
     })
     expect(applyLayoutCommand).toHaveBeenCalledWith(SPLIT, ['ssh:target-1'])
@@ -702,24 +773,23 @@ describe('layout.apply', () => {
 
   it('names the stream position of the frame its write produced, sent before the reply', async () => {
     let session = sessionListing('tab-1')
-    const written = new Set<(hostId: string | null) => void>()
+    const written = new Set<(hostId: ExecutionHostId | null) => void>()
     const order: string[] = []
-    const store = {
+    const store: PartialRuntimeStore = {
       getRepo: () => undefined,
       getWorkspaceSessionHostIds: () => ['local'],
       getWorkspaceSession: () => session,
-      onWorkspaceSessionWritten: (listener: (hostId: string | null) => void) => {
+      onWorkspaceSessionWritten: (listener: (hostId: ExecutionHostId | null) => void) => {
         written.add(listener)
         return () => written.delete(listener)
       },
-      applyLayoutCommand: vi.fn(async () => {
+      applyLayoutCommand: vi.fn(async (): Promise<LayoutApplyOutcome> => {
         session = { ...session, activeTabId: null, tabsByWorktree: {} }
         written.forEach((listener) => listener('local'))
         return { ok: true, result: { leafId: 'minted' } }
       })
     }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply and stream paths read only these store methods.
-    const runtime = new OrcaRuntimeService(store as never)
+    const runtime = new OrcaRuntimeService(partialRuntimeStore(store))
     const sent: number[] = []
     const { seq } = runtime.subscribeWorkspaceLayouts((event) => {
       order.push('frame')

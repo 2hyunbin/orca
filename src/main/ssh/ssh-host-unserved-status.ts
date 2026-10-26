@@ -1,11 +1,10 @@
-/** What a connect publishes when the managed server doesn't serve the host; there is no fallback. */
 import type { NodeDistMirrorAttempt } from '../../shared/node-dist-mirror'
 import type { SshManagedServerStatus } from '../../shared/ssh-types'
 import type { HostServerOnConnectResult } from './ssh-host-server-on-connect'
 
 type UnservedDecision = Extract<HostServerOnConnectResult, { route: 'unserved' }>
 
-// Why `kind: 'relay'`: the published status keeps its shipped shape; it now means "not served".
+// Keep shipped kind:relay wire compatibility even though it now means unserved.
 export function unservedServerStatus(
   decision: UnservedDecision
 ): Extract<SshManagedServerStatus, { kind: 'relay' }> {
@@ -24,7 +23,7 @@ export function unservedServerStatus(
 }
 
 const HELD_MOVE_MESSAGE =
-  'Orca paused moving this host’s projects to its managed server because it couldn’t confirm the server’s copy. Nothing is lost: the host keeps its projects and stays locked until the move finishes. Connect again to resume. If the server can’t come back, stop or forget it in Settings > Managed servers.'
+  'Orca paused moving this host’s projects to its Orca server because it couldn’t confirm the server’s copy. Nothing is lost: the host keeps its projects and stays locked until the move finishes. Connect again to resume. If the server can’t come back, stop or forget it in Settings > Orca on your SSH hosts.'
 
 const NOEXEC_MESSAGE =
   'This host doesn’t allow running programs from ~/.orca-remote, so Orca can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again.'
@@ -41,7 +40,7 @@ const NODE_DOWNLOAD_BLOCKED_MESSAGES: Record<NodeDistMirrorAttempt, string> = {
     'Neither this computer nor this host could download Node.js, which Orca’s server needs. Check the network or proxy on both machines, then connect again.'
 }
 
-/** Untranslated twin of the renderer's status line, for logs and callers without the catalog. */
+/** Reuse untranslated status wording for logs/clients without the catalog. */
 export function unservedHostServerMessage(decision: UnservedDecision): string {
   if (decision.held && (decision.reason === 'failed' || decision.reason === 'deferred')) {
     return HELD_MOVE_MESSAGE
@@ -57,7 +56,7 @@ export function unservedHostServerMessage(decision: UnservedDecision): string {
     case 'refused':
       return decision.detail ?? 'Orca couldn’t set up its server on this host.'
     case 'source_changed':
-      return 'An older version of Orca changed this host’s projects. Move those changes to its managed server in SSH Hosts settings to continue.'
+      return 'This computer has projects or folders for this host that its Orca server doesn’t have yet, often added by an older version of Orca. Move them to this host’s Orca server in SSH Hosts settings to continue.'
     case 'deferred':
     case 'failed':
       if (decision.contactLost) {

@@ -6,8 +6,7 @@ import type { AgentSessionAccountHome } from '../../../shared/agent-session-acco
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 
 export abstract class OrcaRuntimeWithStructuredSessionAccountHome extends OrcaRuntimeWithStructuredSessionCliWriterHost {
-  /** Where a launch of `agent` finds its account, resolved on this host by the agent's own
-   *  registration; null for an agent this runtime does not register, whose create is refused. */
+  /** Resolve account home through this host's agent registration; null means unregistered and create refuses. */
   protected structuredAgentAccountHomeResolver(
     agent: StructuredAgentId,
     worktree: string,

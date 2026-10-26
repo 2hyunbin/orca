@@ -45,7 +45,8 @@ vi.mock('../../observability/tracer', () => ({
 function listing(id: string): AgentModelCatalogSuccess {
   return {
     models: [{ id, label: id, isDefault: true, efforts: [] }],
-    origin: 'probe'
+    origin: 'probe',
+    complete: true
   }
 }
 
@@ -78,7 +79,6 @@ describe('model catalog prewarm', () => {
 
     const prewarmed = service.prewarm()
     await vi.waitFor(() => expect(codex).toHaveBeenCalledTimes(1))
-    // A picker opening while the prewarm lists joins it instead of spawning a second listing.
     expect(await service.read({ agent: 'codex' })).toEqual({
       origin: 'unknown',
       listingInProgress: true
@@ -88,13 +88,13 @@ describe('model catalog prewarm', () => {
 
     expect(codex).toHaveBeenCalledTimes(1)
     expect(codex).toHaveBeenCalledWith(HOME('CODEX_HOME', '/homes/a'), {
+      workspacePath: expect.any(String),
       signal: expect.any(AbortSignal)
     })
     expect(grok).toHaveBeenCalledTimes(1)
     expect((await service.read({ agent: 'codex' })).origin).toBe('probe')
     expect((await service.read({ agent: 'grok' })).origin).toBe('probe')
 
-    // Fresh: a second prewarm lists nothing; once old, it lists again.
     await service.prewarm()
     expect(codex).toHaveBeenCalledTimes(1)
     now += AGENT_MODEL_CATALOG_FRESH_MS
@@ -103,8 +103,6 @@ describe('model catalog prewarm', () => {
     expect(grok).toHaveBeenCalledTimes(2)
   })
 
-  // A project's opencode.json can add or remove models, so its folder keeps its own list.
-  // The folder lookup can answer the earlier report last; the later report must still win.
   it("saves a running chat's reports in the order it sent them, per folder", async () => {
     const store = new AgentModelCatalogStore()
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the service reads only provider, accountHome, location and launchDirectory.
@@ -170,7 +168,6 @@ describe('model catalog prewarm', () => {
       return read.origin === 'unknown' ? [] : read.models.map((model) => model.id)
     }
 
-    // Asked at once, neither folder joins the other's listing.
     expect(await Promise.all([ids('/work/a'), ids('/work/b')])).toEqual([
       ['big-pickle'],
       ['only-in-b']
@@ -179,7 +176,6 @@ describe('model catalog prewarm', () => {
       '/work/a',
       '/work/b'
     ])
-    // A chat running in B saves what it lists for B only.
     service.recordLiveListing('chat-b', { models: listing('live-b').models })
     await vi.waitFor(async () => expect(await ids('/work/b')).toEqual(['live-b']))
     expect(await ids('/work/a')).toEqual(['big-pickle'])
@@ -188,7 +184,6 @@ describe('model catalog prewarm', () => {
     expect(answer).toMatchObject({ modelsDifferByWorkspace: true })
   })
 
-  // A picker that joined a prewarm listing with no chat folder was answered nothing at all.
   it('never prewarms a listing that runs in a chat folder, so a picker lists in its own', async () => {
     const store = new AgentModelCatalogStore()
     const versionChecked = deferred<void>()
@@ -281,7 +276,6 @@ describe('model catalog prewarm', () => {
     await service.prewarm()
     expect(codex).toHaveBeenCalledTimes(1)
     expect(claude).not.toHaveBeenCalled()
-    // Each listing leaves its agent and outcome in the trace log; the span carries its duration.
     expect(spans.started).toEqual([
       {
         name: 'agentModelCatalog.discovery',
@@ -296,7 +290,6 @@ describe('model catalog prewarm', () => {
     const probeFor = (agent: string) =>
       vi.fn(async (_home: AgentSessionAccountHome) => listing(`${agent}-model`))
     const probes = { codex: probeFor('codex'), claude: probeFor('claude'), pi: probeFor('pi') }
-    // Claude has a catalog saved under another account; Codex has a chat; Pi was never used.
     store.recordSuccess('claude-other-account', 'claude', listing('opus'), 'discovery')
     const service = createAgentModelCatalogService({
       store,
@@ -311,7 +304,6 @@ describe('model catalog prewarm', () => {
     expect(probes.codex).toHaveBeenCalledTimes(1)
     expect(probes.claude).toHaveBeenCalledTimes(1)
     expect(probes.pi).not.toHaveBeenCalled()
-    // Its first chat still lists it on demand.
     expect(await service.read({ agent: 'pi' })).toEqual({
       origin: 'unknown',
       listingInProgress: true
@@ -352,12 +344,10 @@ describe('model catalog prewarm', () => {
     expect(started).toEqual(['codex', 'claude'])
     expect(signals.every((signal) => signal.aborted)).toBe(true)
 
-    // A read or another prewarm after stop spawns nothing.
     expect(await service.read({ agent: 'grok' })).toEqual({ origin: 'unknown' })
     hasChatRecords.mockClear()
     await service.prewarm()
     expect(started).toEqual(['codex', 'claude'])
-    // Not even the chat records are read.
     expect(hasChatRecords).not.toHaveBeenCalled()
   })
 
@@ -397,8 +387,8 @@ describe('one account, one catalog key', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the key reads only provider, accountHome and location.
     return {
       sessionId: 'session-1',
-      provider: 'codex',
-      accountHome: HOME('CODEX_HOME', path),
+      provider: 'grok',
+      accountHome: HOME('GROK_HOME', path),
       location: {
         executionHostId: 'local',
         wslDistro: null,
@@ -408,18 +398,16 @@ describe('one account, one catalog key', () => {
     } as AgentSessionRecord
   }
 
-  // The read and launch resolvers agreeing on the home is runtime-home-catalog-account-key.test.ts.
   it('a session’s saves through the host and through its adapter’s handle land under its record’s key', async () => {
     const store = new AgentModelCatalogStore()
-    const managedHome = '/orca/codex-accounts/acct-1/home'
+    const managedHome = '/orca/grok-accounts/acct-1/home'
     const launched = record(managedHome)
     const service = createAgentModelCatalogService({
       store,
       getRecord: () => launched,
       drivesRecord: () => true,
-      resolveAccountHome: async () => HOME('CODEX_HOME', managedHome)
+      resolveAccountHome: async () => HOME('GROK_HOME', managedHome)
     })
-    // What the chat saved, through the host and through the Codex adapter's own handle…
     service.recordLiveListing('session-1', { models: listing('gpt-live').models })
     const incoming = { models: [...listing('gpt-live').models, ...listing('gpt-new').models] }
     const retained = (launchOnlyModelId: string) =>
@@ -428,28 +416,27 @@ describe('one account, one catalog key', () => {
     expect(await retained('gpt-new')).toEqual(['gpt-live'])
     const adapterAccess = agentModelCatalogSessionAccess(
       store,
-      { agent: 'codex', accountHomeVariable: 'CODEX_HOME' },
+      { agent: 'grok', accountHomeVariable: 'GROK_HOME' },
       managedHome
     )
     expect(adapterAccess?.fingerprint).toBe(agentModelCatalogFingerprintForRecord(launched))
 
-    // …is what the next new chat reads for the same home: no cold start for this account.
-    const read = await service.read({ agent: 'codex' })
+    const read = await service.read({ agent: 'grok' })
     expect(read.origin !== 'unknown' && read.models.map((model) => model.id)).toEqual(['gpt-live'])
   })
 
   it('a chat that moved accounts lists under the account it runs on, never its first one', async () => {
     const store = new AgentModelCatalogStore()
     const founded = record('/accounts/a')
-    let live: AgentSessionAccountHome | undefined = HOME('CODEX_HOME', '/accounts/b')
+    let live: AgentSessionAccountHome | undefined = HOME('GROK_HOME', '/accounts/b')
     const launchAccountHome = vi.fn(async (): Promise<AgentSessionAccountHome | null> =>
-      HOME('CODEX_HOME', '/accounts/c')
+      HOME('GROK_HOME', '/accounts/c')
     )
     const service = createAgentModelCatalogService({
       store,
       getRecord: () => founded,
       drivesRecord: () => true,
-      resolveAccountHome: async () => HOME('CODEX_HOME', '/accounts/c'),
+      resolveAccountHome: async () => HOME('GROK_HOME', '/accounts/c'),
       liveAccountHome: () => live,
       launchAccountHome
     })
@@ -458,7 +445,7 @@ describe('one account, one catalog key', () => {
     expect(store.get(keyOf('/accounts/a'))).toBeNull()
     expect(store.get(keyOf('/accounts/b'))?.models.map((model) => model.id)).toEqual(['on-b'])
     const ids = async () => {
-      const read = await service.read({ agent: 'codex', sessionId: 'session-1', savedOnly: true })
+      const read = await service.read({ agent: 'grok', sessionId: 'session-1', savedOnly: true })
       return read.origin === 'unknown' ? null : read.models.map((model) => model.id)
     }
     expect(await ids()).toEqual(['on-b'])
@@ -466,7 +453,7 @@ describe('one account, one catalog key', () => {
     // At rest, the chat reads the account its next start launches under.
     live = undefined
     expect(await ids()).toBeNull()
-    store.recordSuccess(keyOf('/accounts/a'), 'codex', listing('on-a'), 'discovery')
+    store.recordSuccess(keyOf('/accounts/a'), 'grok', listing('on-a'), 'discovery')
     launchAccountHome.mockResolvedValueOnce(null)
     expect(await ids()).toEqual(['on-a'])
   })
@@ -535,7 +522,7 @@ describe('one account, one catalog key', () => {
       })
       expect(probe).toHaveBeenCalledExactlyOnceWith(
         HOME('CLAUDE_CONFIG_DIR', router.accountHome('b')),
-        { signal: expect.any(AbortSignal) }
+        { signal: expect.any(AbortSignal), workspacePath: root }
       )
       expect(store.get(keyA)).toEqual(savedA)
       expect(founded.accountHome).toEqual(HOME('CLAUDE_CONFIG_DIR', '/accounts/a'))

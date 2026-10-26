@@ -2,9 +2,10 @@ import { sameAgentStatusTerminalOwner } from '../../../../shared/agent-status-te
 import type { AppState } from '../types'
 import { resolveAgentStatusLiveEntryMainAgent } from './agent-status-live-entry-main-agent'
 import { resolveAgentStatusLiveEntryStateHistory } from '../../../../shared/agent-status-live-entry-state-history'
-import type {
-  MigrationUnsupportedPtyEntry,
-  AgentStatusEntry
+import {
+  pickHostTurnEnd,
+  type MigrationUnsupportedPtyEntry,
+  type AgentStatusEntry
 } from '../../../../shared/agent-status-types'
 import {
   agentProviderSessionsEqual,
@@ -96,9 +97,10 @@ export function buildAgentStatusLiveEntry(
           worktreeId: routing?.worktreeId ?? existing.worktreeId
         }
       )
-        ? existing
+        ? { ...existing, agentPresence: metadata?.paneOwner }
         : undefined,
     incoming: payload.agentType,
+    incomingSession: metadata?.providerSession?.id,
     now: updatedAt
   })
   const commandCodeNewTurn =
@@ -122,11 +124,17 @@ export function buildAgentStatusLiveEntry(
       : existing && existing.state === payload.state
         ? existing.stateStartedAt
         : updatedAt)
-  // Why: a writer with no turn clock (an OSC repaint) keeps the host's stamp only within one state;
-  // a state change it cannot date must not inherit another turn's start.
+  // Clockless OSC repaints retain host turn start only within the same state; undated transitions must not inherit another turn.
   const turnStartedAt =
     timing?.turnStartedAt ??
     (existing && existing.state === payload.state ? existing.turnStartedAt : undefined)
+  // Why: the end stamp and its disposition are one host fact, inherited together.
+  const turnEnd =
+    timing?.turnEndedAt !== undefined || timing?.turnEndDisposition !== undefined
+      ? pickHostTurnEnd(timing)
+      : existing && existing.state === payload.state
+        ? pickHostTurnEnd(existing)
+        : {}
   if (
     existing &&
     shouldSuppressInheritedTerminalStatus({
@@ -207,8 +215,7 @@ export function buildAgentStatusLiveEntry(
     workingMode: payload.workingMode,
     prompt: payload.prompt,
     updatedAt,
-    // Why: a writer that carries no observation clock (OSC bytes, launch seeds) is itself
-    // fresh evidence, so it must not inherit the previous row's older observation time.
+    // Clockless OSC/launch writes are fresh evidence; never inherit prior observation time.
     ...(timing?.evidenceObservedAt !== undefined
       ? { evidenceObservedAt: timing.evidenceObservedAt }
       : {}),
@@ -216,6 +223,7 @@ export function buildAgentStatusLiveEntry(
     stateStartedAt,
     stateObservedAt,
     ...(turnStartedAt !== undefined ? { turnStartedAt } : {}),
+    ...turnEnd,
     agentType: identity.agentType,
     model:
       payload.model ?? (existing?.agentType === identity.agentType ? existing.model : undefined),

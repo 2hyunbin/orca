@@ -23,6 +23,9 @@ import {
   makeRuntimeStoreWithWorkspaceSession
 } from '../orca-runtime-test-fixtures.spec'
 import type { HostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { collectLeafIds } from '../../../shared/terminal-pane-layout-tree'
+import { ProvisioningRuntime } from '../orca-runtime-layout-owner-start-fixture'
 
 describe('OrcaRuntimeService', () => {
   it('sends follow-up prompts for CLI-created stdin-after-start startup agents', async () => {
@@ -59,7 +62,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
       closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
@@ -132,7 +134,6 @@ describe('OrcaRuntimeService', () => {
         renameTerminal: vi.fn(),
         focusTerminal: vi.fn(),
         closeTerminal: vi.fn(),
-        sleepWorktree: vi.fn(),
         terminalFitOverrideChanged: vi.fn(),
         terminalDriverChanged: vi.fn()
       })
@@ -201,7 +202,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
       closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
@@ -276,7 +276,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
       closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
@@ -378,7 +377,10 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('hands only the host window a setup main tried and failed to start', async () => {
-    const runtime = new OrcaRuntimeService(store)
+    const mainLayout = makeRuntimeStoreWithWorkspaceSession(getDefaultWorkspaceSession())
+    const runtime = new ProvisioningRuntime(
+      ORCA_LAYOUT_OWNER_IS_MAIN ? mainLayout.runtimeStore : store
+    )
     const spawn = vi
       .fn()
       .mockResolvedValueOnce({ id: 'pty-startup-main' })
@@ -400,7 +402,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
       closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
@@ -446,6 +447,24 @@ describe('OrcaRuntimeService', () => {
     unsubscribe()
 
     expect(spawn).toHaveBeenCalledTimes(2)
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      expect(activateWorktree.mock.calls).toEqual([
+        ['repo-1', expect.any(String), undefined, undefined, undefined]
+      ])
+      const setupRow = Object.values(mainLayout.getSession().tabsByWorktree)
+        .flat()
+        .find((tab) => tab.customTitle === 'Setup')
+      const setupLayout = mainLayout.getSession().terminalLayoutsByTabId[setupRow!.id]
+      const [setupLeafId] = collectLeafIds(setupLayout?.root)
+      expect(runtime.startStatusOf(`${setupRow!.id}:${setupLeafId}`)).toEqual({
+        status: 'failed',
+        reason: 'setup spawn failed'
+      })
+      expect(
+        events.filter((event) => event.type === 'activateWorktree' && event.setup !== undefined)
+      ).toEqual([])
+      return
+    }
     expect(activateWorktree).toHaveBeenCalledWith(
       'repo-1',
       expect.any(String),
@@ -457,7 +476,7 @@ describe('OrcaRuntimeService', () => {
       undefined
     )
     expect(activateWorktree).toHaveBeenCalledOnce()
-    // The window retries it where the user sees its output or its spawn error; clients never run it.
+    // The window retries setup where output is visible; paired clients must not execute it.
     expect(
       events.filter((event) => event.type === 'activateWorktree' && event.setup !== undefined)
     ).toEqual([])
@@ -501,7 +520,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
       closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
@@ -535,7 +553,6 @@ describe('OrcaRuntimeService', () => {
         cwd: '/tmp/workspaces/runtime-explicit-draft',
         command: "codex '--dangerously-bypass-approvals-and-sandbox'",
         worktreeId: result.worktree.id,
-        // The host picked and launched this agent, so it carries the caller's surface too.
         telemetry: { agent_kind: 'codex', launch_source: 'cli', request_kind: 'new' }
       })
     )
@@ -587,7 +604,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
       closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
