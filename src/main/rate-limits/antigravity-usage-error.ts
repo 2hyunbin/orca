@@ -20,7 +20,8 @@ const SIGNED_OUT_PHRASES = [
 ] as const
 
 const AGY_MESSAGE_MAX_LENGTH = 160
-const EMAIL_PATTERN = /[^\s@]+@[^\s@]+\.[^\s@]+/g
+// Start at a boundary to avoid quadratic retries inside long, unbroken diagnostics.
+const EMAIL_PATTERN = /(^|[\s@])[^\s@]+@[^\s@]+\.[^\s@]+/g
 const TOKEN_LIKE_PATTERN = /[\w-]{32,}/g
 
 export type AntigravityUsageFailure = {
@@ -97,7 +98,7 @@ export function formatAgyErrorForDisplay(text: string): string | null {
   const line = redactString(stripTerminalControl(text))
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(EMAIL_PATTERN, '[email]')
+    .replace(EMAIL_PATTERN, '$1[email]')
     .replace(TOKEN_LIKE_PATTERN, '[redacted]')
   if (!line) {
     return null

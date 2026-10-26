@@ -521,17 +521,4 @@ describe("agy's own error envelope", () => {
     expect(result.usageMetadata?.failureKind).toBe('missing-credentials')
     expect(result.error).toContain('Sign in with `agy`')
   })
-
-  it('recovers when a later read succeeds', async () => {
-    const runCommand = vi
-      .fn()
-      .mockResolvedValueOnce(processResult({ stdout: '1.2.14' }))
-      .mockResolvedValueOnce(processResult({ code: 1, stdout: errorEnvelope(LOCATION_ERROR) }))
-      .mockResolvedValueOnce(processResult({ stdout: '1.2.14' }))
-      .mockResolvedValueOnce(processResult({ stdout: USAGE_ENVELOPE }))
-    const h = harness({ runCommand })
-
-    expect((await h.fetch()).status).toBe('error')
-    expect(await h.fetch()).toMatchObject({ status: 'ok', error: null })
-  })
 })

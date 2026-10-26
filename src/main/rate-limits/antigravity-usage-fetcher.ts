@@ -215,8 +215,6 @@ export async function fetchAntigravityRateLimits(
         now()
       )
     }
-  }
-  if (!reading) {
     const agyError = formatAgyErrorForDisplay(readAntigravityErrorEnvelope(result.stdout) ?? '')
     if (agyError) {
       return failed(`Antigravity usage is not available. agy reported: ${agyError}`, 'parse', now())
