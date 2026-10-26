@@ -5,11 +5,9 @@
  */
 import { errorMessage } from '../../shared/error-message'
 import { focusReachability } from './wsl-host-focus-reachability'
+import { rethrowRetryable, settlingConnectFailure } from './wsl-host-connect-failure'
 import { removeWslHostEnvironment } from '../../shared/runtime-environment-wsl-host-store'
-import {
-  readWslHostDeployments,
-  type WslHostDeploymentRecord
-} from '../../shared/wsl-host-deployment-store'
+import type { WslHostDeploymentRecord } from '../../shared/wsl-host-deployment-store'
 import type {
   WslHostAddResult,
   WslHostConnectIntent,
@@ -17,8 +15,13 @@ import type {
   WslHostServerStop,
   WslHostStatus
 } from '../../shared/wsl-host-types'
+import type { WslHostConnector } from './wsl-host-connector-contract'
 import { wslDistroHolderKey } from './wsl-distro-holder-record'
-import { persistWslHostConnection, toWslHostStatus } from './wsl-host-connection-record'
+import {
+  persistWslHostConnection,
+  readWslHostRecordsQuietly,
+  toWslHostStatus
+} from './wsl-host-connection-record'
 import {
   sameWslDistro,
   wslHostNotConnectedMessage,
@@ -29,7 +32,7 @@ import {
 import type { WslOrcadConnection } from './wsl-orcad-connection'
 import { registerWslHost } from './wsl-host-registration'
 import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
-import { WslProjectHostEnsurer } from './wsl-project-host-ensurer'
+import { WslProjectHostEnsurer, createWslProjectCaller } from './wsl-project-host-ensurer'
 import { toWslHostDistroList } from './wsl-host-distro-list'
 import {
   forgetWslHostToWake,
@@ -37,7 +40,7 @@ import {
   rememberWslHostsToWake
 } from './wsl-host-early-wake'
 
-import type { WslHostConnector, WslHostServiceDependencies } from './wsl-host-service-contract'
+import type { WslHostServiceDependencies } from './wsl-host-service-contract'
 export type * from './wsl-host-service-contract'
 
 export class WslHostService {
@@ -153,17 +156,7 @@ export class WslHostService {
     return this.projectHosts.ensure(distro)
   }
 
-  callProject(
-    environmentId: string,
-    method: string,
-    params: unknown,
-    beforeSend?: () => void
-  ): Promise<unknown> {
-    if (!this.deps.call) {
-      throw new Error('WSL host project operations are not available.')
-    }
-    return this.deps.call(environmentId, method, params, 10 * 60_000, beforeSend)
-  }
+  callProject = createWslProjectCaller(() => this.deps)
 
   async remove(environmentId: string): Promise<WslHostServerStop> {
     const record = this.recordForEnvironment(environmentId)
@@ -260,14 +253,13 @@ export class WslHostService {
     }
     // Unconfirmed (running list unreadable, or possibly stale right after an exit) or not
     // visible: refuse rather than risk a boot; liveness publishes the verdict.
-    if (
-      reachability !== 'unreachable' ||
-      !this.visible.has(environmentId) ||
-      connector.isSettling(record.distro)
-    ) {
+    if (reachability !== 'unreachable' || !this.visible.has(environmentId)) {
       throw new Error(wslHostNotConnectedMessage(record.distro))
     }
-    await connector.connect(record.distro, { noBoot: true })
+    if (connector.isSettling(record.distro)) {
+      throw settlingConnectFailure(record.distro)
+    }
+    await connector.connect(record.distro, { noBoot: true }).catch(rethrowRetryable(record.distro))
   }
 
   /**
@@ -276,21 +268,43 @@ export class WslHostService {
    */
   focusHost(environmentId: string | null): void {
     const record = environmentId ? this.recordForEnvironment(environmentId) : null
-    const runnable =
-      record && this.connector && this.canRun() && !this.removing.has(record.environmentId)
+    const runnable = record !== null && this.mayWake(record)
     // The next launch starts booting only this distro, early (none when off WSL or not runnable).
-    rememberWslHostsToWake(this.deps.userDataPath(), runnable ? [record.distro] : [])
-    if (!record || !runnable || !this.connector) {
-      return
-    }
-    this.parked.delete(record.environmentId)
-    void focusReachability(this.connector, record)
-      .then((reachability) =>
-        reachability === 'available' ? undefined : this.connector?.connect(record.distro)
-      )
-      .catch((error: unknown) => {
+    rememberWslHostsToWake(this.deps.userDataPath(), record && runnable ? [record.distro] : [])
+    if (record && runnable) {
+      this.wake(record).catch((error: unknown) => {
         console.warn(`[wsl-hosts] Could not connect to ${record.distro}:`, error)
       })
+    }
+  }
+
+  /** E9: an enabled automation came due with the host off; boots the distro once, lifting a park. */
+  async wakeForAutomation(environmentId: string): Promise<void> {
+    const record = this.recordForEnvironment(environmentId)
+    if (record && this.mayWake(record)) {
+      await this.wake(record)
+    }
+  }
+
+  private mayWake(record: WslHostDeploymentRecord): boolean {
+    return Boolean(this.connector) && this.canRun() && !this.removing.has(record.environmentId)
+  }
+
+  /** A focus entry or a due automation: lifts a park and may boot the distro. */
+  private async wake(record: WslHostDeploymentRecord): Promise<void> {
+    this.parked.delete(record.environmentId)
+    // No bridge in this process yet means nothing answers; skip the WSL round trip (#33110).
+    if (this.connector && (await focusReachability(this.connector, record)) !== 'available') {
+      await this.connector.connect(record.distro)
+    }
+  }
+
+  /** Whether the host's server answers through this process now; never starts a stopped distro. */
+  async isConnected(environmentId: string): Promise<boolean> {
+    const record = this.recordForEnvironment(environmentId)
+    return record && this.connector
+      ? (await this.connector.reachability(record.distro, environmentId)) === 'available'
+      : false
   }
 
   /** Whether anything may still be started for this distro (spawn guard). */
@@ -343,12 +357,7 @@ export class WslHostService {
   }
 
   private records(): WslHostDeploymentRecord[] {
-    try {
-      return readWslHostDeployments(this.deps.userDataPath()).deployments
-    } catch (error) {
-      console.warn('[wsl-hosts] Could not read WSL host records:', error)
-      return []
-    }
+    return readWslHostRecordsQuietly(this.deps.userDataPath())
   }
 
   private recordForDistro(distro: string): WslHostDeploymentRecord | null {

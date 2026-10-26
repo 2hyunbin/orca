@@ -2,6 +2,7 @@ import { readWslHostDeployments } from '../../shared/wsl-host-deployment-store'
 import type { WslHostAddResult } from '../../shared/wsl-host-types'
 import { admitWslHostDistro, sameWslDistro, wslHostRunRefusal } from './wsl-host-add-admission'
 import type { WslHostDistroCandidate } from './wsl-host-distro-list'
+import type { WslHostServiceDependencies } from './wsl-host-service-contract'
 
 type WslProjectHostDependencies = {
   userDataPath(): string
@@ -63,5 +64,20 @@ export class WslProjectHostEnsurer {
       throw new Error(result.message)
     }
     return result.environmentId
+  }
+}
+
+export function createWslProjectCaller(getDependencies: () => WslHostServiceDependencies) {
+  return (
+    environmentId: string,
+    method: string,
+    params: unknown,
+    beforeSend?: () => void
+  ): Promise<unknown> => {
+    const deps = getDependencies()
+    if (!deps.call) {
+      throw new Error('WSL host project operations are not available.')
+    }
+    return deps.call(environmentId, method, params, 10 * 60_000, beforeSend)
   }
 }
