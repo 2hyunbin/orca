@@ -131,8 +131,8 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerTermina
       this.commitStatusRowMutation(rowBefore, previous)
       return previous
     }
-    if (payload.hookEventName === 'UserPromptSubmit') {
-      // Repeated prompt text still opens a new turn; OSC must not inherit the old completion stamp.
+    // Any submitted prompt (incl. a replayed Codex start) opens a new turn; OSC must not inherit the old stamp.
+    if (payload.hookEventName === 'UserPromptSubmit' || payload.hasExplicitPrompt === true) {
       this.activeHookTurnCompletedAtByPaneKey.delete(payload.paneKey)
     }
     if (terminalOwnedPayload.connectionId) {
