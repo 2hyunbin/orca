@@ -9,7 +9,6 @@ import type { WorkerStartModeReceipt } from '../orchestration-worker-start-mode'
 import { observeChatAssignee } from '../../../orchestration/chat-assignee'
 import type { OrchestrationDb } from '../../../orchestration/db'
 import { OrchestrationError } from '../../../orchestration/orchestration-error'
-import type { OrchestrationParty } from '../../../orchestration/orchestration-party'
 import { readAgentSessionRecordStore } from '../../../orchestration/structured-session-lineage'
 import { refuseUndeliverableSessionRecipient } from './messaging/session-recipient'
 
@@ -17,11 +16,6 @@ const NO_EFFECTS = 'No effects were applied.'
 
 /** A chat has no pane or process; its Dispatch names it by its Orca session ID alone. */
 export const CHAT_WORKER_AUTHORITY = { paneKey: null, processIncarnation: null } as const
-
-/** The chat a Dispatch assignee party names; null for a terminal or a structured worker. */
-export function chatAssigneeOf(party: OrchestrationParty): OrcaSessionId | null {
-  return party.terminalHandle === null ? party.orcaSessionId : null
-}
 
 /** Use the same reach rules as mail before creating anything; return the assignee's currently running session. */
 export async function admitChatAssignee(

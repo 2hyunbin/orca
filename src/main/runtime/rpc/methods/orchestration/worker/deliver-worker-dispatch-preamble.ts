@@ -6,12 +6,14 @@ import {
   isOrcaSessionId
 } from '../../../../../../shared/orca-session-address'
 import { canonicalOrcaSessionId } from '../../../../orchestration/canonical-orca-session-id'
-import { orcaSessionIdOrHandle } from '../../../../orchestration/orchestration-party'
+import {
+  orcaSessionIdOrHandle,
+  resolveOrchestrationParty
+} from '../../../../orchestration/orchestration-party'
 import { buildDispatchPreamble } from '../../../../orchestration/preamble'
 import { sendAgentTurn } from '../../../../orchestration/send-agent-turn'
 import { createWorkerBriefWriteGuard } from '../../../../launched-agent-write-guard'
 import { sendStructuredWorkerPreamble } from '../../orchestration-structured-worker-session'
-import { chatAssigneeSessionId } from '../../../../orchestration/chat-assignee'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { sendChatTask, type ChatTaskDelivery } from '../chat-task-delivery'
 import { dispatchTaskSource } from '../../../../orchestration/dispatch-task-source'
@@ -57,22 +59,10 @@ export async function deliverWorkerDispatchPreamble(args: {
     workerHandle:
       structuredSession && isOrcaSessionId(structuredSession.identity.sessionId)
         ? formatOrcaSessionAddress(canonicalOrcaSessionId(structuredSession.identity.sessionId))
-        : terminalHandle,
+        : orcaSessionIdOrHandle(terminalHandle, args.db),
     devMode: args.devMode,
     cliCommand: runtime.getTerminalOrchestrationCliCommand(terminalHandle)
   })
-  if (chatAssigneeSessionId(terminalHandle)) {
-    const dispatch = args.db.getDispatchContextById(args.dispatchId)
-    if (!dispatch) {
-      throw new OrchestrationError(
-        'dispatch_not_found',
-        `Dispatch ${args.dispatchId} was not found.`
-      )
-    }
-    const from = workerTaskSource(args)
-    const delivery = await sendChatTask({ db: args.db, dispatch, from, preamble })
-    return { structuredTurnStart: chatTaskTurnStart(delivery) }
-  }
   if (structuredSession) {
     const delivery = await sendStructuredWorkerPreamble({
       host: structuredSession.host,
@@ -94,6 +84,19 @@ export async function deliverWorkerDispatchPreamble(args: {
                 'settles normally.'
             }
     }
+  }
+  // A chat, or a structured worker given a further task, takes it as a send into its session.
+  if (resolveOrchestrationParty(terminalHandle, args.db).orcaSessionId) {
+    const dispatch = args.db.getDispatchContextById(args.dispatchId)
+    if (!dispatch) {
+      throw new OrchestrationError(
+        'dispatch_not_found',
+        `Dispatch ${args.dispatchId} was not found.`
+      )
+    }
+    const from = workerTaskSource(args)
+    const delivery = await sendChatTask({ db: args.db, dispatch, from, preamble })
+    return { structuredTurnStart: chatTaskTurnStart(delivery) }
   }
   // A shell back at its prompt also reads as ready, so the brief needs the agent found in front.
   const briefGuard = createWorkerBriefWriteGuard(runtime, args.launchedAgent, !!args.launchedAgent)

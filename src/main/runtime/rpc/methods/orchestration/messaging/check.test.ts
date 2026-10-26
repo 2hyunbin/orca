@@ -90,6 +90,26 @@ describe('orchestration RPC methods', () => {
       expect(result.count).toBe(2)
     })
 
+    it("leaves another live terminal's mail unread for it, while still letting the caller peek", async () => {
+      setup()
+      resolveDirectPanes('b')
+      db.insertMessage({ from: 'term_coord', to: 'b', subject: 'for b' })
+      const asCaller = (terminalHandle: string) => ({
+        ...ctx,
+        orchestrationCompatibilityEvidence: { terminalHandle }
+      })
+
+      await expect(
+        h.call('orchestration.check', { terminal: 'b' }, asCaller('term_coord'))
+      ).rejects.toMatchObject({ code: 'consumer_fenced' })
+      await expect(
+        h.call('orchestration.check', { terminal: 'b', peek: true }, asCaller('term_coord'))
+      ).resolves.toMatchObject({ count: 1 })
+      await expect(
+        h.call('orchestration.check', { terminal: 'b' }, asCaller('b'))
+      ).resolves.toMatchObject({ count: 1 })
+    })
+
     it('never mixes two bound Run mailboxes', async () => {
       setup(false)
       const paneA = 'tab_a:11111111-1111-4111-8111-111111111111'

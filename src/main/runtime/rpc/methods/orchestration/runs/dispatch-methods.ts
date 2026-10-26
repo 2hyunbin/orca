@@ -14,11 +14,8 @@ import {
   orcaSessionIdOrHandle,
   resolveDispatchAssigneeParty
 } from '../../../../orchestration/orchestration-party'
-import {
-  admitChatAssignee,
-  chatAssigneeOf,
-  refuseChatSelfAssignment
-} from '../chat-assignee-admission'
+import { admitChatAssignee, refuseChatSelfAssignment } from '../chat-assignee-admission'
+import { chatAssigneeSessionId } from '../../../../orchestration/chat-assignee'
 import { sendChatTask } from '../chat-task-delivery'
 import { dispatchTaskSource } from '../../../../orchestration/dispatch-task-source'
 
@@ -59,10 +56,10 @@ export const ORCHESTRATION_DISPATCH_METHODS = [
       }
       const assigneeParty = params.to ? resolveDispatchAssigneeParty(params.to, db) : undefined
       const assignee = assigneeParty?.address
-      // A chat has no pane, process or agent to probe: it is reached as mail to it is.
-      const chatAssignee = assigneeParty ? chatAssigneeOf(assigneeParty) : null
-      if (chatAssignee) {
-        await admitChatAssignee(runtime, chatAssignee, db)
+      // A chat or a structured worker is reached through its agent session, not as terminal input.
+      const sessionAssignee = assigneeParty?.orcaSessionId ?? null
+      if (sessionAssignee) {
+        await admitChatAssignee(runtime, sessionAssignee, db)
       }
 
       // Dry-run previews without state changes; skip readiness and use a placeholder Dispatch id.
@@ -98,8 +95,10 @@ export const ORCHESTRATION_DISPATCH_METHODS = [
         )
       }
 
-      const dispatchAuthority = chatAssignee ? null : runtime.getOrchestrationDispatchAuthority(to)
-      const assigneePaneKey = chatAssignee
+      // A chat has no pane or process; a structured worker keeps the authority its first Dispatch had.
+      const paneless = chatAssigneeSessionId(to) !== null
+      const dispatchAuthority = paneless ? null : runtime.getOrchestrationDispatchAuthority(to)
+      const assigneePaneKey = paneless
         ? undefined
         : (dispatchAuthority?.paneKey ?? runtime.getTerminalPaneKey(to) ?? undefined)
       const processIncarnation =
@@ -112,10 +111,10 @@ export const ORCHESTRATION_DISPATCH_METHODS = [
           runtime.getTerminalPaneKey(params.from) ??
           null)
         : null
-      if (params.inject && chatAssignee) {
+      if (params.inject && sessionAssignee) {
         // The session wins over `--from`, so a chat calling with none is still refused here.
         refuseChatSelfAssignment({
-          sessionId: chatAssignee,
+          sessionId: sessionAssignee,
           coordinatorSessionId: orchestrationCaller?.orcaSessionId,
           remedy: 'Dispatch to a different agent, or use worker-start to create one.'
         })
@@ -133,14 +132,14 @@ export const ORCHESTRATION_DISPATCH_METHODS = [
       }
 
       // Require a detected agent before injection so a bare shell cannot execute the preamble.
-      if (params.inject && !chatAssignee) {
+      if (params.inject && !sessionAssignee) {
         const hasAgent = await runtime.isTerminalRunningAgent(to)
         if (!hasAgent) {
           throw injectRejectedError(to, 'no_agent_detected')
         }
       }
 
-      if (params.inject && !chatAssignee && (!assigneePaneKey || !processIncarnation)) {
+      if (params.inject && !sessionAssignee && (!assigneePaneKey || !processIncarnation)) {
         throw new OrchestrationError(
           'stable_pane_required',
           `Terminal ${to} has no stable pane/process incarnation for lifecycle authority.`
@@ -174,7 +173,7 @@ export const ORCHESTRATION_DISPATCH_METHODS = [
       let prompt
       if (params.inject) {
         try {
-          if (chatAssignee) {
+          if (sessionAssignee) {
             const from = dispatchTaskSource({
               db,
               dispatch: ctx,

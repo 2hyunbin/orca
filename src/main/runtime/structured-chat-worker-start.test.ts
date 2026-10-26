@@ -1,7 +1,7 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
 // worker-start adopts a chat through its queued send; Stop and failed start must leave the chat intact.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { formatOrcaSessionAddress } from '../../shared/orca-session-address'
 import { testOrcaSessionId } from '../../shared/orca-session-address-test-fixture'
 import type { FakeConnection } from './structured-chat-coordinator-fake-codex-fixture'
@@ -23,6 +23,12 @@ import {
 } from './structured-chat-coordinator-mail-rig.test-fixture'
 
 import type { placeWorkerAgent } from './rpc/methods/orchestration/worker/worker-start-agent-placement'
+import {
+  mintStructuredWorkerHandle,
+  mintStructuredWorkerPaneKey,
+  structuredWorkerIdentities,
+  structuredWorkerProcessIncarnation
+} from './structured-worker-identity'
 
 type WorkspaceLookup = {
   showManagedTerminalWorkspace: (
@@ -197,6 +203,59 @@ describe('worker-start --terminal names a chat', () => {
       processAction: 'none'
     })
     expectChatOpen()
+  })
+})
+
+describe('a settled structured worker takes a further task through its session', () => {
+  afterEach(() => structuredWorkerIdentities.clear())
+
+  /** PEER_CHAT as a structured worker: a minted handle and pane, not a chat named by session ID. */
+  function registerStructuredWorker(): { handle: string; paneKey: string } {
+    const identity = structuredWorkerIdentities.register({
+      handle: mintStructuredWorkerHandle(),
+      sessionId: PEER_CHAT,
+      agent: 'codex',
+      paneKey: mintStructuredWorkerPaneKey(PEER_CHAT),
+      processIncarnation: structuredWorkerProcessIncarnation(PEER_CHAT),
+      worktreeId: host.deps.store.getRecord(PEER_CHAT)!.location.workspaceId,
+      hostScope: { kind: 'local', hostId: 'local' }
+    })
+    return { handle: identity.handle, paneKey: identity.paneKey }
+  }
+
+  it.each([
+    [
+      'worker-start --terminal',
+      (taskId: string, handle: string) => startWorker({ task: taskId, terminal: handle })
+    ],
+    [
+      'dispatch --inject',
+      (taskId: string, handle: string) =>
+        call(
+          'orchestration.dispatch',
+          { task: taskId, to: handle, inject: true },
+          { sessionId: COORDINATOR }
+        )
+    ]
+  ])('%s keeps the worker identity of its first Dispatch', async (_name, give) => {
+    await openChat(COORDINATOR)
+    const worker = await openChat(PEER_CHAT)
+    const { handle, paneKey } = registerStructuredWorker()
+    const { taskId } = await coordinatorRunAndTask()
+
+    const given = give(taskId, handle)
+    await vi.waitFor(() => expect(worker.turns).toHaveLength(1), WAIT)
+    await settleTurn(PEER_CHAT, 0)
+    await given
+
+    const dispatch = db.getDispatchContext(taskId)
+    expect(dispatch).toMatchObject({
+      assignee_handle: handle,
+      assignee_pane_key: paneKey,
+      process_incarnation: structuredWorkerProcessIncarnation(PEER_CHAT)
+    })
+    expect(turnText(worker.turns[0]!)).toContain(dispatch!.id)
+    expect(turnText(worker.turns[0]!)).toContain(`Your Orca session ID is: ${WORKER}`)
   })
 })
 

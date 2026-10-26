@@ -1,4 +1,7 @@
 import { defineMethod } from '../../../core'
+import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { OrchestrationCompatibilityEvidence } from '../../../../../../shared/orchestration-compatibility-evidence'
+import { isEquivalentPaneKey } from '../../../../orchestration/db/pane-key-match'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { CheckParams } from '../schemas'
 import { parseMessageTypes } from '../routing'
@@ -34,6 +37,10 @@ export const ORCHESTRATION_CHECK_METHODS = [
       const db = runtime.getOrchestrationDb()
       const handle = params.terminal ?? 'unknown'
       const typeFilter = parseMessageTypes(params.types)
+      const consumingCheck = params.peek !== true && params.all !== true && params.unread !== false
+      if (consumingCheck && !orchestrationCaller) {
+        assertCallerOwnsMailbox(runtime, handle, orchestrationCompatibilityEvidence)
+      }
 
       const caller = orchestrationCallerIdentity(runtime, {
         handle,
@@ -94,7 +101,6 @@ export const ORCHESTRATION_CHECK_METHODS = [
           recordMutationReceipt
         })
       }
-      const consumingCheck = params.peek !== true && params.all !== true && params.unread !== false
       // A superseded Attempt must receive a stop signal, not an empty checkpoint; this outranks pane rebind advice.
       const settledDispatch = consumingCheck ? db.getLatestDispatchForTerminal(handle) : undefined
       if (settledDispatch && isSupersededDispatch(settledDispatch)) {
@@ -112,3 +118,21 @@ export const ORCHESTRATION_CHECK_METHODS = [
     }
   })
 ]
+
+/** A consuming check opens or acks the mailbox's Delivery, so a caller whose own live pane is another terminal's may only peek. */
+function assertCallerOwnsMailbox(
+  runtime: OrcaRuntimeService,
+  handle: string,
+  evidence: OrchestrationCompatibilityEvidence | undefined
+): void {
+  const own = evidence?.terminalHandle
+  const ownPane = own ? runtime.getTerminalPaneKey(own) : null
+  const mailboxPane = runtime.getTerminalPaneKey(handle)
+  if (ownPane && mailboxPane && !isEquivalentPaneKey(ownPane, mailboxPane)) {
+    throw new OrchestrationError(
+      'consumer_fenced',
+      `This terminal is ${own} and cannot consume the mail of ${handle}. Read it with --peek or --all, which leave it unread. No effects were applied.`,
+      { effectsApplied: false }
+    )
+  }
+}
