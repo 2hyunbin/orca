@@ -20475,8 +20475,8 @@
         "session": "Sesión de Claude",
         "settingKeep": "Nunca reiniciar",
         "settingRestart": "Reiniciar siempre",
-        "settingTitle": "Cuando cambias de cuenta mientras Claude se está ejecutando",
-        "settingDescription": "El reinicio continúa con cada conversación en ejecución en la nueva cuenta.",
+        "settingTitle": "Cuando cambias de cuenta mientras Claude se está ejecutando en terminales",
+        "settingDescription": "Al reiniciar, cada conversación en un terminal continúa en la nueva cuenta.",
         "restartingOther": "Reiniciando {{count}} sesiones de Claude con {{account}}",
         "restartingOne": "Reiniciando 1 sesión de Claude con {{account}}"
       }

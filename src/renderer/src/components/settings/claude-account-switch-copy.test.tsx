@@ -42,7 +42,14 @@ vi.mock('@/lib/claude-session-account-move', async (original) => ({
   findQueuedClaudeRestartsOnAccount: () => []
 }))
 
-const catalogs = { en, fr, es, ja, ko, zh }
+const catalogs = {
+  en: { catalog: en, terminalWord: /terminal/i },
+  fr: { catalog: fr, terminalWord: /termin(?:al|aux)/i },
+  es: { catalog: es, terminalWord: /terminal/i },
+  ja: { catalog: ja, terminalWord: /ターミナル/ },
+  ko: { catalog: ko, terminalWord: /터미널/ },
+  zh: { catalog: zh, terminalWord: /终端/ }
+}
 const accounts: ClaudeRateLimitAccountsState = {
   accounts: ['A', 'B'].map((id) => ({
     id,
@@ -65,7 +72,7 @@ afterEach(async () => {
 
 it.each(Object.entries(catalogs))(
   '%s mounts the terminal setting and search copy and interpolates Keep A → B',
-  async (locale, catalog) => {
+  async (locale, { catalog, terminalWord }) => {
     i18n.addResourceBundle(locale, 'translation', catalog, true, true)
     await i18n.changeLanguage(locale)
     const title = translate(
@@ -76,6 +83,8 @@ it.each(Object.entries(catalogs))(
       'accounts.claude.switchSessions.settingDescription',
       'Restarting continues each terminal conversation on the new account.'
     )
+    expect(title).toMatch(terminalWord)
+    expect(description).toMatch(terminalWord)
     expect(i18n.getResource(locale, 'translation', 'accounts.claude.nextLaunch')).toBeTruthy()
     const entry = getAccountsClaudeSearchEntries().find((candidate) => candidate.title === title)
     expect(entry).toMatchObject({ description })
@@ -118,6 +127,7 @@ it.each(Object.entries(catalogs))(
     expect(message).toBe(
       translate('accounts.claude.nextLaunch', '', { value0: 'Account A', value1: 'Account B' })
     )
+    expect(message).toMatch(terminalWord)
     expect(message).toContain('Account A')
     expect(message).toContain('Account B')
     expect(message).not.toMatch(/\{\{|\}\}/)
