@@ -24,6 +24,7 @@ describe('agent note submission receipts', () => {
         case 'terminal.waitPrompt':
           observations += 1
           if (observations < 3) {
+            // ast-grep-ignore: test-no-real-time-wait -- Fake timers model the RPC observation budget.
             await new Promise((resolve) => setTimeout(resolve, 10_000))
             return { submission: { requestId: params.requestId, status: 'pending' } }
           }

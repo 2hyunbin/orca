@@ -180,11 +180,7 @@ export abstract class OrcaRuntimeWithWriteTerminalAgentPrompt extends OrcaRuntim
           baseline,
           readActivity: () => this.getAgentPromptActivity(handle, ptyId, waitTextCache),
           prompt: options.promptForSchedule,
-          heldBudgetMs: getAgentPromptHeldSubmitBudgetMs(
-            writeHostPlatform,
-            agent,
-            pastePayload
-          )
+          heldBudgetMs: getAgentPromptHeldSubmitBudgetMs(writeHostPlatform, agent, pastePayload)
         }))
     const effectTimeoutMs = resolveAgentPromptEffectTimeoutMs(agent)
     if (!options.acceptQueued || !options.requestId) {
