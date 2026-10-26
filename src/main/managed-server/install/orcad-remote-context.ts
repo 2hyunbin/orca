@@ -17,9 +17,7 @@ import {
   orcadMachineOwnershipUnresolvedMessage
 } from '../host-state/orcad-machine-home'
 import {
-  ORCAD_MACHINE_CLAIM_FILENAME,
   orcadMachineHomeProbeCommand,
-  orcadMachineOwnerRecord,
   parseOrcadMachineHomeProbe
 } from '../host-state/orcad-machine-home-probe'
 import {
@@ -157,14 +155,7 @@ export async function resolveOrcadMachineHome(
     }
   }
   const orcadHome = orcadMachineHomeDir(host, loginHome, decision.machineKey)
-  const owner = quotePosixShell(joinRemotePath(host, orcadHome, ORCAD_MACHINE_CLAIM_FILENAME))
-  const record = quotePosixShell(orcadMachineOwnerRecord(decision.machineKey, hostname))
-  // Best effort: an unrecorded home falls back to its data-root owners as evidence.
-  await execOrcadRemote(
-    remote,
-    `umask 077; mkdir -p ${quotePosixShell(orcadHome)} && ` +
-      `{ [ -s ${owner} ] || printf %s ${record} > ${owner}; } 2>/dev/null; true`
-  )
+  await execOrcadRemote(remote, `umask 077; mkdir -p ${quotePosixShell(orcadHome)}`)
   return {
     loginHome,
     orcadHome,

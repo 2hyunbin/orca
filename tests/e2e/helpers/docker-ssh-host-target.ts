@@ -178,11 +178,7 @@ export function writeDockerSshHostTargetFile(
 export function startDockerSshHostTarget(
   testInfo: Pick<TestInfo, 'workerIndex'>,
   /** A Docker volume mounted as `/root`, so several containers share one home as on NFS. */
-  options: {
-    sharedHomeVolume?: string
-    /** Machines cloned from one image share their machine-id. */
-    machineId?: string
-  } = {}
+  options: { sharedHomeVolume?: string } = {}
 ): DockerSshHostTarget {
   const host = process.env.ORCA_E2E_SSH_TARGET_HOST?.trim() || '127.0.0.1'
   if (host === 'localhost' || host === '::1' || host.startsWith('127.')) {
@@ -215,7 +211,7 @@ export function startDockerSshHostTarget(
               '-v',
               `${options.sharedHomeVolume}:/root`,
               '-e',
-              `MACHINE_ID=${options.machineId ?? randomUUID().replace(/-/g, '')}`
+              `MACHINE_ID=${randomUUID().replace(/-/g, '')}`
             ]
           : []),
         '-e',

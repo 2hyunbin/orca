@@ -163,7 +163,14 @@ export function acquireOrcadInstanceLock(
   const serialized = JSON.stringify(record)
   // Before publishing: reclaiming the lock of a clone's older server would leave it running unlocked.
   const platform = hooks.platform ?? process.platform
-  const sharedMachineIdOwner = findSharedMachineIdProfileOwner(dataRoot, record, platform)
+  const dataRootIsLocal = (): boolean =>
+    (hooks.dataRootIsOnLocalDisk ?? orcadDataRootIsOnLocalDisk)(dataRoot)
+  const sharedMachineIdOwner = findSharedMachineIdProfileOwner(
+    dataRoot,
+    record,
+    dataRootIsLocal,
+    platform
+  )
   if (sharedMachineIdOwner) {
     throw sharedMachineIdOwnerError(dataRoot, sharedMachineIdOwner)
   }
@@ -192,8 +199,6 @@ export function acquireOrcadInstanceLock(
     return makeLock(lockPath, record)
   }
 
-  const dataRootIsLocal = (): boolean =>
-    (hooks.dataRootIsOnLocalDisk ?? orcadDataRootIsOnLocalDisk)(dataRoot)
   const judgedHere = (holder: OrcadLockRecord, role: 'holder' | 'recovery-owner'): boolean => {
     const locality = orcadLockHolderLocality(holder, record, dataRootIsLocal, platform)
     return (
@@ -248,7 +253,7 @@ export function acquireOrcadInstanceLock(
     throw orcadLockHolderUnverifiableError({
       holder: `${describeLockHolder(existing)} (pid ${existing.pid}, started ${existing.acquiredAt})`,
       foreign: orcadLockHolderLocality(existing, record, dataRootIsLocal, platform) === 'foreign',
-      sharedMachineId: orcadPeerSharesMachineIdOnly(existing, record, platform),
+      sharedMachineId: orcadPeerSharesMachineIdOnly(existing, record, dataRootIsLocal, platform),
       dataRoot,
       lockPath,
       hintRuntime:

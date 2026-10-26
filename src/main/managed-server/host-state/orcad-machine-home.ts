@@ -26,10 +26,8 @@ function ownerMachine(
   host: RemoteHostPlatform
 ): 'this' | 'foreign' | 'unknown' {
   if (owner.machineIdentity) {
-    if (owner.machineIdentity.toLowerCase() !== identity.machineIdentity) {
-      return 'foreign'
-    }
-    return isCloneHostname(owner.host, identity) ? 'foreign' : 'this'
+    // A clone sharing this machine-id is judged separately by cloneIsUsing.
+    return owner.machineIdentity.toLowerCase() === identity.machineIdentity ? 'this' : 'foreign'
   }
   // Older owners lack machine identity, leaving only weaker hostname evidence.
   if (!owner.host || !identity.hostname) {
@@ -42,38 +40,35 @@ function ownerMachine(
   return host.os === 'darwin' ? 'unknown' : 'foreign'
 }
 
-/** Images cloned with one /etc/machine-id differ only by hostname; a recorded other hostname is a clone's. */
-function isCloneHostname(recorded: string | null, identity: OrcadMachineIdentity): boolean {
-  return identity.cloneKey !== null && recorded !== null && recorded !== identity.hostname
-}
-
-/** This machine's own home when the one it would use was taken by a clone; a machine home it already recorded stays put. */
-function cloneHomeIfTakenBy(
-  probe: OrcadMachineHomeProbe,
-  recorded: string | null,
-  identity: OrcadMachineIdentity
-): OrcadMachineHomeDecision | null {
-  if (!identity.cloneKey || !isCloneHostname(recorded, identity)) {
-    return null
-  }
-  const ownKeyHome = probe.machineHomes.get(identity.key) === identity.hostname
-  return { kind: 'machine-home', machineKey: ownKeyHome ? identity.key : identity.cloneKey }
-}
-
-/** Homes taken before hostnames were recorded leave only their data-root owners as evidence. */
-function cloneOwnerHost(
+/**
+ * Linux images cloned with one /etc/machine-id differ only by hostname and boot. Require positive
+ * evidence: a shared filesystem and an owner record from another host and boot. A renamed host
+ * keeps its boot, and a local disk has one machine.
+ */
+function cloneIsUsing(
   probe: OrcadMachineHomeProbe,
   identity: OrcadMachineIdentity,
   root: string
-): string | null {
-  return (
-    probe.dataRootOwners.find(
-      (owner) =>
-        owner.root === root &&
-        owner.machineIdentity?.toLowerCase() === identity.machineIdentity &&
-        isCloneHostname(owner.host, identity)
-    )?.host ?? null
+): boolean {
+  if (!identity.cloneKey || !identity.bootId || probe.homeOnLocalDisk) {
+    return false
+  }
+  const owners = probe.dataRootOwners.filter(
+    (owner) =>
+      owner.root === root && owner.machineIdentity?.toLowerCase() === identity.machineIdentity
   )
+  const clone = owners.some(
+    (owner) =>
+      owner.host !== null &&
+      owner.host !== identity.hostname &&
+      !!owner.bootIdentity &&
+      owner.bootIdentity !== identity.bootId
+  )
+  // This machine already writes there too: stay, and its server's lock refuses the second writer.
+  const ours = owners.some(
+    (owner) => owner.host === identity.hostname || owner.bootIdentity === identity.bootId
+  )
+  return clone && !ours
 }
 
 function orcadMachineHomeFor(
@@ -81,14 +76,22 @@ function orcadMachineHomeFor(
   identity: OrcadMachineIdentity,
   machineKey: string
 ): OrcadMachineHomeDecision {
-  const home: OrcadMachineHomeDecision = { kind: 'machine-home', machineKey }
-  if (machineKey === identity.cloneKey) {
-    return home
-  }
-  const recorded =
-    probe.machineHomes.get(machineKey) ??
-    cloneOwnerHost(probe, identity, orcadMachineDataRootName(machineKey))
-  return cloneHomeIfTakenBy(probe, recorded, identity) ?? home
+  return identity.cloneKey &&
+    machineKey !== identity.cloneKey &&
+    cloneIsUsing(probe, identity, orcadMachineDataRootName(machineKey))
+    ? { kind: 'machine-home', machineKey: identity.cloneKey }
+    : { kind: 'machine-home', machineKey }
+}
+
+/** The login home claimed with this machine-id, unless a clone proves it is the one using it. */
+function claimedLoginHome(
+  probe: OrcadMachineHomeProbe,
+  identity: OrcadMachineIdentity,
+  claimedBy: string | null
+): OrcadMachineHomeDecision {
+  return claimedBy !== identity.hostname && cloneIsUsing(probe, identity, '.orca')
+    ? orcadMachineHomeFor(probe, identity, identity.key)
+    : { kind: 'login-home' }
 }
 
 /** Keep established machine homes stable; refuse ambiguous prior owners or unreadable claims before risking another machine's state. */
@@ -105,23 +108,23 @@ export function decideOrcadMachineHome(
       `orcad cannot tell which machine owns ${RELAY_REMOTE_DIR}/${ORCAD_MACHINE_CLAIM_FILENAME}: ${claim.reason}`
     )
   }
-  if (identity.cloneKey && probe.machineHomes.has(identity.cloneKey)) {
+  if (identity.cloneKey && probe.machineHomeKeys.includes(identity.cloneKey)) {
     return { kind: 'machine-home', machineKey: identity.cloneKey }
   }
   if (claim.state === 'present') {
     if (claim.machineKey !== identity.key) {
       return orcadMachineHomeFor(probe, identity, identity.key)
     }
-    const claimedBy = claim.hostname ?? cloneOwnerHost(probe, identity, '.orca')
-    return cloneHomeIfTakenBy(probe, claimedBy, identity) ?? { kind: 'login-home' }
+    return claimedLoginHome(probe, identity, claim.hostname)
   }
   const owners = probe.dataRootOwners
     .filter((owner) => owner.root === '.orca')
     .map((owner) => ownerMachine(owner, identity, host))
-  // A clone's machine home under this key says nothing about who owns the login home.
-  const keyHomeOwner = probe.machineHomes.get(identity.key)
-  const ownsKeyHome = keyHomeOwner !== undefined && !isCloneHostname(keyHomeOwner, identity)
-  if (ownsKeyHome || owners.includes('foreign')) {
+  // A clone running in this key's machine home leaves the login home to this machine.
+  const ownsKeyHome =
+    probe.machineHomeKeys.includes(identity.key) &&
+    !cloneIsUsing(probe, identity, orcadMachineDataRootName(identity.key))
+  if (ownsKeyHome || owners.includes('foreign') || cloneIsUsing(probe, identity, '.orca')) {
     return orcadMachineHomeFor(probe, identity, identity.key)
   }
   if (probe.homeOnLocalDisk) {
@@ -168,7 +171,7 @@ export function decideOrcadMachineHomeAfterClaim(
   if (won.machineKey !== identity.key) {
     return orcadMachineHomeFor(probe, identity, identity.key)
   }
-  return cloneHomeIfTakenBy(probe, won.hostname, identity) ?? { kind: 'login-home' }
+  return claimedLoginHome(probe, identity, won.hostname)
 }
 
 export function orcadMachineHomeDir(

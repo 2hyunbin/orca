@@ -50,6 +50,8 @@ export type OrcadMachineIdentity = {
   /** Match the identity recorded by profile-state owners. */
   machineIdentity: string
   hostname: string | null
+  /** Linux boot_id; one boot proves one machine whatever its hostname. */
+  bootId: string | null
 }
 
 export type OrcadMachineClaimRead =
@@ -63,8 +65,7 @@ export type OrcadMachineHomeProbe = {
   claim: OrcadMachineClaimRead
   /** Include live and crashed owners when attributing shared-home state. */
   dataRootOwners: readonly OrcadDataRootOwner[]
-  /** Machine-home owner hostnames; null for homes made before they were recorded. */
-  machineHomes: ReadonlyMap<string, string | null>
+  machineHomeKeys: readonly string[]
   loginHomeInstalled: boolean
   /** Local disks cannot belong to another machine's live server. */
   homeOnLocalDisk: boolean
@@ -75,6 +76,7 @@ export type OrcadDataRootOwner = {
   root: string
   host: string | null
   machineIdentity: string | null
+  bootIdentity?: string | null
 }
 
 /** Probe home ownership once, using the same machine identity sources as profile-state access. */
@@ -88,7 +90,7 @@ export function orcadMachineHomeProbeCommand(host: RemoteHostPlatform): string {
       ? // Try PATH first for relocated host tools before the standard macOS location.
         '{ ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null ||' +
         ' /usr/sbin/ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null; } | grep IOPlatformUUID;'
-      : 'cat /etc/machine-id 2>/dev/null;',
+      : 'cat /etc/machine-id 2>/dev/null; echo; cat /proc/sys/kernel/random/boot_id 2>/dev/null;',
     `echo; echo ${SECTION}; uname -n 2>/dev/null; echo; echo ${SECTION};`,
     // Full disks can leave an empty claim; publication can replace it.
     `if { [ ! -e ${claim} ] && [ ! -L ${claim} ]; } || { [ -f ${claim} ] && [ ! -s ${claim} ]; };`,
@@ -99,8 +101,7 @@ export function orcadMachineHomeProbeCommand(host: RemoteHostPlatform): string {
     `for r in "$HOME"/.orca "$HOME"/.orca-????????; do a="$r"/${quotePosixShell(ACCESS_DIRNAME)};`,
     `for f in "$a"/participants/*/*.owner "$a"/maintenance/*.owner; do`,
     `[ -f "$f" ] && { printf '%s ' "\${r##*/}"; head -c ${RECORD_MAX_BYTES} "$f"; echo; }; done; done; echo ${SECTION};`,
-    `for d in ${homes}/*; do [ -d "$d" ] && { printf '%s ' "\${d##*/}";`,
-    `head -c ${RECORD_MAX_BYTES} "$d"/${quotePosixShell(ORCAD_MACHINE_CLAIM_FILENAME)} 2>/dev/null; echo; }; done; echo ${SECTION};`,
+    `ls -1 ${homes} 2>/dev/null; echo ${SECTION};`,
     `[ -e ${activation} ] && echo ${INSTALLED}; echo ${SECTION};`,
     // BSD stat -f has different semantics; macOS uses df device source instead.
     host.os === 'darwin' ? '' : `stat -f -c %T "$HOME" 2>/dev/null; echo ${SECTION};`,
@@ -131,16 +132,10 @@ export function parseOrcadMachineHomeProbe(
       .split('\n')
       .map((line) => parseOwnerLine(line.trim()))
       .filter((owner) => owner !== null),
-    machineHomes: new Map(
-      homesRaw
-        .split('\n')
-        .map((line) => /^([a-f0-9]{16})(?: (.*))?$/u.exec(line.trim()))
-        .filter((match) => match !== null)
-        .map(([, key, marker]): [string, string | null] => {
-          const read = marker ? parseOrcadMachineClaim(marker) : null
-          return [key, read?.state === 'present' && read.machineKey === key ? read.hostname : null]
-        })
-    ),
+    machineHomeKeys: homesRaw
+      .split('\n')
+      .map((name) => name.trim())
+      .filter((name) => /^[a-f0-9]{16}$/u.test(name)),
     loginHomeInstalled: installedRaw.trim() === INSTALLED,
     // Without a filesystem type, only a device source proves local storage.
     homeOnLocalDisk: filesystemType
@@ -155,11 +150,15 @@ export function orcadMachineIdentity(
   machineRaw: string,
   hostnameRaw: string
 ): OrcadMachineIdentity | null {
+  const [linuxMachineId = '', linuxBootId = ''] = machineRaw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
   const machineIdentity =
     host.os === 'darwin'
       ? parseDarwinPlatformUuid(machineRaw)
-      : /^[a-f0-9]{32}$/u.test(machineRaw) && !/^0+$/u.test(machineRaw)
-        ? machineRaw
+      : /^[a-f0-9]{32}$/u.test(linuxMachineId) && !/^0+$/u.test(linuxMachineId)
+        ? linuxMachineId
         : null
   if (!machineIdentity) {
     return null
@@ -173,7 +172,8 @@ export function orcadMachineIdentity(
         ? machineKeyOf(`${host.os}:${machineIdentity}:${hostname}`)
         : null,
     machineIdentity,
-    hostname
+    hostname,
+    bootId: host.os !== 'darwin' && /^[a-f0-9-]{36}$/u.test(linuxBootId) ? linuxBootId : null
   }
 }
 
@@ -236,6 +236,10 @@ function parseOwnerLine(line: string): OrcadDataRootOwner | null {
       machineIdentity:
         'machineIdentity' in owner && typeof owner.machineIdentity === 'string'
           ? owner.machineIdentity
+          : null,
+      bootIdentity:
+        'bootIdentity' in owner && typeof owner.bootIdentity === 'string'
+          ? owner.bootIdentity
           : null
     }
   } catch {

@@ -18,7 +18,9 @@ export function orcadLockHolderLocality(
     if (holder.machineIdentity !== self.machineIdentity) {
       return 'foreign'
     }
-    return orcadPeerSharesMachineIdOnly(holder, self, platform) ? 'unknown' : 'local'
+    return orcadPeerSharesMachineIdOnly(holder, self, dataRootIsOnLocalDisk, platform)
+      ? 'unknown'
+      : 'local'
   }
   if (holder.bootId && holder.bootId === self.bootId) {
     return 'local'
@@ -26,19 +28,27 @@ export function orcadLockHolderLocality(
   return dataRootIsOnLocalDisk() ? 'local' : 'unknown'
 }
 
-/** Linux images cloned with one /etc/machine-id differ only by hostname; macOS hostnames follow the network. */
+/**
+ * Linux images cloned with one /etc/machine-id differ only by hostname and boot. Require both on a
+ * shared filesystem: a renamed host keeps its boot, and a local disk has one machine.
+ */
 export function orcadPeerSharesMachineIdOnly(
   holder: OrcadPeerMachine,
   self: OrcadPeerMachine,
+  dataRootIsOnLocalDisk: () => boolean,
   platform: NodeJS.Platform = process.platform
 ): boolean {
   return (
-    platform !== 'darwin' &&
+    platform === 'linux' &&
     !!holder.machineIdentity &&
     holder.machineIdentity === self.machineIdentity &&
     !!holder.host &&
     !!self.host &&
-    holder.host !== self.host
+    holder.host !== self.host &&
+    !!holder.bootId &&
+    !!self.bootId &&
+    holder.bootId !== self.bootId &&
+    !dataRootIsOnLocalDisk()
   )
 }
 

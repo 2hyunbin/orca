@@ -4,7 +4,6 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
-  readlinkSync,
   renameSync,
   rmSync,
   statSync,
@@ -502,12 +501,14 @@ describe('acquireOrcadInstanceLock', () => {
   it('never reclaims the lock of a host cloned with this machine-id (#32918)', () => {
     const root = makeRoot()
     const lockPath = join(root, ORCAD_LOCK_FILE_NAME)
-    const linux = { platform: 'linux' as const }
-    writeFileSync(
-      lockPath,
-      JSON.stringify(persistedRecord({ machineIdentity: 'machine-a', host: 'dev-clone' }))
-    )
-    expect(() => acquireOrcadInstanceLock(root, hooks(linux))).toThrow(
+    const nfs = hooks({
+      platform: 'linux',
+      dataRootIsOnLocalDisk: () => false,
+      incarnation: () => ({ linuxStartTicks: '1', bootId: 'boot-self' })
+    })
+    const clone = { machineIdentity: 'machine-a', host: 'dev-clone', bootId: 'boot-clone' }
+    writeFileSync(lockPath, JSON.stringify(persistedRecord(clone)))
+    expect(() => acquireOrcadInstanceLock(root, nfs)).toThrow(
       expect.objectContaining({
         code: 'orcad_instance_lock_holder_unverifiable',
         message: expect.stringContaining('same /etc/machine-id')
@@ -517,40 +518,40 @@ describe('acquireOrcadInstanceLock', () => {
 
     // An older clone's lock names no host; its profile-state owner record still does.
     writeFileSync(lockPath, JSON.stringify(persistedRecord({ machineIdentity: 'machine-a' })))
-    const owners = join(root, '.profile-state-access', 'participants', 'token')
-    mkdirSync(owners, { recursive: true })
-    writeFileSync(
-      join(owners, 'token.owner'),
-      JSON.stringify({ pid: 4242, host: 'dev-clone', machineIdentity: 'machine-a' })
-    )
-    expect(() => acquireOrcadInstanceLock(root, hooks(linux))).toThrow(
+    const owner = join(root, '.profile-state-access', 'participants', 'token', 'token.owner')
+    mkdirSync(join(owner, '..'), { recursive: true })
+    const ownerRecord = { pid: 4242, host: 'dev-clone', machineIdentity: 'machine-a' }
+    writeFileSync(owner, JSON.stringify({ ...ownerRecord, bootIdentity: 'boot-clone' }))
+    expect(() => acquireOrcadInstanceLock(root, nfs)).toThrow(
       expect.objectContaining({
         code: 'orcad_instance_lock_holder_unverifiable',
-        message: expect.stringContaining(`delete ${join(owners, 'token.owner')}`)
+        message: expect.stringContaining(`delete ${owner}`)
       })
     )
     expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
   })
 
-  it.runIf(process.platform === 'linux')(
-    'still starts after this host was renamed within the boot its owner record names',
-    () => {
-      const root = makeRoot()
-      const owners = join(root, '.profile-state-access', 'participants', 'token')
-      mkdirSync(owners, { recursive: true })
-      writeFileSync(
-        join(owners, 'token.owner'),
-        JSON.stringify({
-          pid: 4242,
-          host: 'old-name',
-          machineIdentity: 'machine-a',
-          bootIdentity: readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(),
-          pidNamespace: readlinkSync('/proc/self/ns/pid')
-        })
-      )
-      acquireOrcadInstanceLock(root, hooks({ platform: 'linux' })).release()
+  it('reclaims a dead holder renamed within its boot, or on a local disk', () => {
+    const root = makeRoot()
+    const lockPath = join(root, ORCAD_LOCK_FILE_NAME)
+    const linux = {
+      platform: 'linux' as const,
+      incarnation: () => ({ linuxStartTicks: '1', bootId: 'boot-self' })
     }
-  )
+    const renamed = { machineIdentity: 'machine-a', host: 'old-name', bootId: 'boot-self' }
+    writeFileSync(lockPath, JSON.stringify(persistedRecord(renamed)))
+    acquireOrcadInstanceLock(
+      root,
+      hooks({ ...linux, dataRootIsOnLocalDisk: () => false })
+    ).release()
+
+    const rebooted = { ...renamed, bootId: 'boot-earlier' }
+    writeFileSync(lockPath, JSON.stringify(persistedRecord(rebooted)))
+    const owner = join(root, '.profile-state-access', 'participants', 'token', 'token.owner')
+    mkdirSync(join(owner, '..'), { recursive: true })
+    writeFileSync(owner, JSON.stringify({ pid: 4242, ...rebooted, bootIdentity: 'boot-earlier' }))
+    acquireOrcadInstanceLock(root, hooks({ ...linux, dataRootIsOnLocalDisk: () => true })).release()
+  })
 
   it('never lets a confirmed reclaim take a lock another machine id holds', () => {
     const root = makeRoot()

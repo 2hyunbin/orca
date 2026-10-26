@@ -99,6 +99,7 @@ type MachineOptions = {
   catStderrNoise?: string
   /** Model a Linux machine with this /etc/machine-id instead of a Mac. */
   linuxMachineId?: string
+  linuxBootId?: string
 }
 
 /** Model macOS machines sharing one NFS home. */
@@ -158,7 +159,11 @@ function machine(name: string, hostname = name, options: MachineOptions = {}) {
   if (options.linuxMachineId !== undefined) {
     tool(
       'cat',
-      `[ "$1" = /etc/machine-id ] && { echo ${options.linuxMachineId}; exit 0; }; exec /bin/cat "$@"`
+      [
+        `[ "$1" = /etc/machine-id ] && { echo ${options.linuxMachineId}; exit 0; }`,
+        `[ "$1" = /proc/sys/kernel/random/boot_id ] && { echo ${options.linuxBootId ?? bootOf(name)}; exit 0; }`,
+        'exec /bin/cat "$@"'
+      ].join('\n')
     )
   }
   const env = {
@@ -182,17 +187,32 @@ function claimPath(): string {
   return join(home, '.orca-remote', ORCAD_MACHINE_CLAIM_FILENAME)
 }
 
-function legacyOwner(name: string, machineIdentity: string | null = uuidOf(name)): void {
-  const dir = join(home, '.orca', '.profile-state-access', 'participants', 'token')
+function bootOf(name: string): string {
+  return uuidOf(`boot-${name}`.slice(-16))
+}
+
+function legacyOwner(
+  name: string,
+  machineIdentity: string | null = uuidOf(name),
+  options: { dataRoot?: string; bootIdentity?: string } = {}
+): void {
+  const token = `token-${name}`
+  const dir = join(
+    options.dataRoot ?? join(home, '.orca'),
+    '.profile-state-access',
+    'participants',
+    token
+  )
   mkdirSync(dir, { recursive: true })
   writeFileSync(
-    join(dir, 'token.owner'),
+    join(dir, `${token}.owner`),
     JSON.stringify({
-      token: 'token',
+      token,
       pid: 4242,
       host: name,
       platform: 'darwin',
-      ...(machineIdentity === null ? {} : { machineIdentity })
+      ...(machineIdentity === null ? {} : { machineIdentity }),
+      ...(options.bootIdentity ? { bootIdentity: options.bootIdentity } : {})
     })
   )
 }
@@ -356,42 +376,71 @@ describe.runIf(POSIX)('resolveOrcadMachineHome on a home several machines share'
   })
 
   it('gives Linux machines cloned with one machine-id each their own home (#32918)', async () => {
-    const cloned = { linuxMachineId: 'c'.repeat(32), homeSource: 'filer:/export/home' }
+    const mid = 'c'.repeat(32)
+    const cloned = { linuxMachineId: mid, homeSource: 'filer:/export/home' }
     const a = machine('dev-a', 'dev-a', cloned)
-    const b = machine('dev-b', 'dev-b', cloned)
     expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
+    legacyOwner('dev-a', mid, { bootIdentity: bootOf('dev-a') })
+
+    const b = machine('dev-b', 'dev-b', cloned)
     const bHome = await resolveOrcadMachineHome(b, true)
     expect(bHome.userDataDir).not.toBe(join(home, '.orca'))
+    legacyOwner('dev-b', mid, { dataRoot: bHome.userDataDir, bootIdentity: bootOf('dev-b') })
     expect(await resolveOrcadMachineHome(b, true)).toEqual(bHome)
     expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
 
-    // A third clone must not take the home of the second either.
+    // A third clone must not take the second's home either.
     const c = await resolveOrcadMachineHome(machine('dev-c', 'dev-c', cloned), true)
-    expect(new Set([home, bHome.orcadHome, c.orcadHome]).size).toBe(3)
     expect(new Set([join(home, '.orca'), bHome.userDataDir, c.userDataDir]).size).toBe(3)
   })
 
-  it('moves a clone off a login home claimed before hostnames were recorded, while its twin runs there', async () => {
-    const cloned = { linuxMachineId: 'c'.repeat(32), homeSource: 'filer:/export/home' }
-    const a = machine('dev-a', 'dev-a', cloned)
-    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
+  it('stays on a login home claimed before hostnames were recorded when it runs there too', async () => {
+    const mid = 'c'.repeat(32)
+    const cloned = { linuxMachineId: mid, homeSource: 'filer:/export/home' }
+    const legacyClaim = machine('dev-a', 'dev-a', cloned)
+    expect(await resolveOrcadMachineHome(legacyClaim, true)).toEqual(loginHomeResult())
     const claim = JSON.parse(readFileSync(claimPath(), 'utf8'))
     writeFileSync(claimPath(), JSON.stringify({ schemaVersion: 1, machineKey: claim.machineKey }))
-    legacyOwner('dev-a', 'c'.repeat(32))
+    legacyOwner('dev-a', mid, { bootIdentity: bootOf('dev-a') })
+    legacyOwner('dev-b', mid, { bootIdentity: bootOf('dev-b') })
 
+    // Both clones already write ~/.orca: neither strands its state, and the server lock refuses one.
+    expect(await resolveOrcadMachineHome(machine('dev-b', 'dev-b', cloned), true)).toEqual(
+      loginHomeResult()
+    )
+    rmSync(join(home, '.orca', '.profile-state-access', 'participants', 'token-dev-b'), {
+      recursive: true
+    })
     expect(
       (await resolveOrcadMachineHome(machine('dev-b', 'dev-b', cloned), true)).orcadHome
     ).not.toBe(home)
-    expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
   })
 
-  it('keeps a clone on the machine home it took before its twin claimed the login home', async () => {
-    const cloned = { linuxMachineId: 'c'.repeat(32), homeSource: 'filer:/export/home' }
-    legacyOwner('dev-a', 'c'.repeat(32))
+  it('keeps a renamed Linux host, or one on a local disk, on its own install', async () => {
+    const mid = 'c'.repeat(32)
+    const nfs = { linuxMachineId: mid, homeSource: 'filer:/export/home' }
+    expect(await resolveOrcadMachineHome(machine('dev-a', 'dev-a', nfs), true)).toEqual(
+      loginHomeResult()
+    )
+    legacyOwner('dev-a', mid, { bootIdentity: bootOf('dev-a') })
+    const renamed = { ...nfs, linuxBootId: bootOf('dev-a') }
+    expect(await resolveOrcadMachineHome(machine('dev-a', 'renamed', renamed), true)).toEqual(
+      loginHomeResult()
+    )
+    const local = { linuxMachineId: mid, homeSource: '/dev/sda1' }
+    expect(await resolveOrcadMachineHome(machine('dev-a', 'rebooted-rename', local), true)).toEqual(
+      loginHomeResult()
+    )
+  })
+
+  it('leaves the login home to its live owner when a clone runs in this key’s machine home', async () => {
+    const mid = 'c'.repeat(32)
+    const cloned = { linuxMachineId: mid, homeSource: 'filer:/export/home' }
+    legacyOwner('dev-a', mid, { bootIdentity: bootOf('dev-a') })
     const b = machine('dev-b', 'dev-b', cloned)
     const bHome = await resolveOrcadMachineHome(b, true)
     expect(bHome.orcadHome).not.toBe(home)
-    rmSync(join(home, '.orca'), { recursive: true })
+    legacyOwner('dev-b', mid, { dataRoot: bHome.userDataDir, bootIdentity: bootOf('dev-b') })
     expect(await resolveOrcadMachineHome(machine('dev-a', 'dev-a', cloned), true)).toEqual(
       loginHomeResult()
     )
@@ -520,7 +569,7 @@ function probe(host: Host, overrides: Partial<Probe> = {}): Probe {
     identity: orcadMachineIdentity(host, 'a'.repeat(32), 'node-a'),
     claim: { state: 'absent' },
     dataRootOwners: [],
-    machineHomes: new Map(),
+    machineHomeKeys: [],
     loginHomeInstalled: false,
     homeOnLocalDisk: false,
     ...overrides
@@ -561,9 +610,16 @@ describe('decideOrcadMachineHome', () => {
       dataRootOwners: [{ root: '.orca', host: 'node-a', machineIdentity: 'b'.repeat(32) }]
     })
     expect(decideOrcadMachineHome(other, linux).kind).toBe('machine-home')
-    // Linux images cloned with one machine-id differ only by hostname, so this is not node-a.
+    const renamed = probe(linux, {
+      dataRootOwners: [{ root: '.orca', host: 'old-name', machineIdentity: 'a'.repeat(32) }]
+    })
+    expect(decideOrcadMachineHome(renamed, linux).kind).toBe('claim')
+    // Another host and boot with this machine-id is a clone made from the same image.
     const clone = probe(linux, {
-      dataRootOwners: [{ root: '.orca', host: 'node-b', machineIdentity: 'a'.repeat(32) }]
+      identity: orcadMachineIdentity(linux, `${'a'.repeat(32)}\n${'1'.repeat(36)}`, 'node-a'),
+      dataRootOwners: [
+        { root: '.orca', host: 'node-b', machineIdentity: 'a'.repeat(32), bootIdentity: 'b' }
+      ]
     })
     expect(decideOrcadMachineHome(clone, linux).kind).toBe('machine-home')
     const unrecorded = probe(linux, {
