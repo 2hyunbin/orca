@@ -45,7 +45,8 @@ export class HistoryManager {
   private readonly recoveryFreezes: TerminalHistoryRecoveryFreezes
   private onWriteError?: (sessionId: string, error: Error) => void
   private checkpointMaxBytes: number
-  private resizeModel: () => string | null | undefined
+  /** The hosting daemon's reported model, which its live output (and so a rebuild) follows. */
+  readonly hostingResizeModel: () => string | null | undefined
 
   constructor(
     private readonly basePath: string,
@@ -53,7 +54,7 @@ export class HistoryManager {
   ) {
     this.onWriteError = opts?.onWriteError
     this.checkpointMaxBytes = opts?.checkpointMaxBytes ?? TERMINAL_HISTORY_CHECKPOINT_MAX_BYTES
-    this.resizeModel = opts?.resizeModel ?? (() => null)
+    this.hostingResizeModel = opts?.resizeModel ?? (() => null)
     this.recoveryFreezes = new TerminalHistoryRecoveryFreezes(basePath)
     // Resume reclamation left pending by a quit between tombstoning and deletion.
     schedulePendingSessionTreeRemovals(this.basePath)
@@ -79,7 +80,7 @@ export class HistoryManager {
       this.recoveryFreezes.release(sessionId)
       ensurePrivateDir(dir)
 
-      writeTerminalHistoryMeta(dir, newTerminalHistoryMeta(opts, this.resizeModel() ?? null))
+      writeTerminalHistoryMeta(dir, newTerminalHistoryMeta(opts, this.hostingResizeModel() ?? null))
 
       if (!opts.quarantineUnreadableRecovery) {
         clearReplayableTerminalHistorySessionFiles(dir)
@@ -238,7 +239,7 @@ export class HistoryManager {
     try {
       // Write asynchronously to avoid stalling IPC; per-session serialization protects the fixed temporary path.
       const checkpoint = await writer.checkpoint(snapshot, opts)
-      const resizeModel = this.resizeModel()
+      const resizeModel = this.hostingResizeModel()
       // The fresh log is recorded against the daemon hosting the session now; unknown keeps the stamp.
       if (checkpoint.result === 'committed' && resizeModel !== undefined) {
         stampTerminalHistoryResizeModel(writer.dir, resizeModel)
