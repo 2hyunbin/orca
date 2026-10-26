@@ -511,6 +511,32 @@ describe('ConnectorPollClient', () => {
     expect(fake.events).toMatchObject([{ kind: 'snapshot' }, { kind: 'turn-ended', turnId: 4 }])
     client.stop()
   })
+
+  it('sends a done again under a new hello when the old one was still in flight', async () => {
+    const seam = fakeSeam()
+    const sent = Promise.withResolvers<Delivery>()
+    seam.outcomes.set('d1', sent.promise)
+    const { client, machine } = startClient(seam)
+    await settle()
+    poll([{ ...base, deliveryId: 'd1', kind: 'send', text: 'hi' }])
+    await settle()
+    fake.holdAcks = true
+    sent.resolve({ outcome: 'accepted' })
+    await settle()
+    machine.agentList = ['claude']
+    poll([], { unsettled: [{ deliveryId: 'd1', conversation }] })
+    await settle()
+    expect(fake.hellos).toHaveLength(2)
+    fake.holdAcks = false
+    fake.releaseAcks()
+    await settle(5_000)
+    expect(fake.acks).toContainEqual({
+      deliveryId: 'd1',
+      step: 'done',
+      result: { outcome: 'accepted' }
+    })
+    client.stop()
+  })
 })
 
 function isRecord(value: unknown): value is Record<string, unknown> {

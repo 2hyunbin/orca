@@ -211,6 +211,8 @@ export class ConnectorPollClient {
     }
     this.helloRev = helloRev
     this.helloSaid = JSON.stringify(said)
+    // Owed acks go again under this hello; one still in flight under the old one would be ignored.
+    this.acks.restart([], () => true)
     // A fresh watch's first event is the snapshot, which opens this hello's numbered events.
     this.watch()
     this.options.events.attach(this.sendEvents)

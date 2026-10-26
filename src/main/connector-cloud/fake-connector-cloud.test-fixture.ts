@@ -18,6 +18,9 @@ export class FakeConnectorCloud {
   pollReplyDelayMs = 0
   /** Requests never answer, as on a stalled network. */
   hang = false
+  /** Ack requests wait for `releaseAcks()`, then are judged against the hello current at that time. */
+  holdAcks = false
+  private readonly heldAcks: (() => void)[] = []
   /** Accounts the auth service still mints for; removing one is a sign-out elsewhere. */
   readonly signedIn = new Set<string>(['ada'])
   /** Every token minted, in order. */
@@ -77,6 +80,10 @@ export class FakeConnectorCloud {
     this.heldPoll?.()
   }
 
+  releaseAcks(): void {
+    this.heldAcks.splice(0).forEach((release) => release())
+  }
+
   /** Refuses every token issued so far, as a key rotation would. */
   refuseTokens(): void {
     this.tokens.clear()
@@ -119,6 +126,9 @@ export class FakeConnectorCloud {
       this.hellos.push(body)
       this.hello = { rev: Number(fields.helloRev), seq: -1 }
       return { status: 204 }
+    }
+    if (path === CONNECTOR_PATHS.acks && this.holdAcks) {
+      await new Promise<void>((resolve) => this.heldAcks.push(resolve))
     }
     const { hello } = this
     if (path === CONNECTOR_PATHS.acks) {
