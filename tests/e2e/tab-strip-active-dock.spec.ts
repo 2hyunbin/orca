@@ -74,6 +74,59 @@ test.describe('Tab strip active-tab dock', () => {
     await ensureTerminalVisible(orcaPage)
   })
 
+  test('sizes tabs to their titles and keeps the new-tab button beside them', async ({
+    orcaPage
+  }) => {
+    const worktreeId = await waitForActiveWorktree(orcaPage)
+    const tabIds = await orcaPage.evaluate((worktreeId) => {
+      const state = window.__store!.getState()
+      const short = state.createTab(worktreeId, undefined, undefined, { activate: false })
+      const long = state.createTab(worktreeId, undefined, undefined, { activate: false })
+      state.setTabCustomTitle(short.id, 'Terminal 1')
+      state.setTabCustomTitle(long.id, 'Investigate the conversation title and tab layout')
+      return { short: short.id, long: long.id }
+    }, worktreeId)
+    const short = orcaPage.locator(slotSelector(tabIds.short))
+    const long = orcaPage.locator(slotSelector(tabIds.long))
+    const width = (tab: typeof short): Promise<number> =>
+      tab.evaluate((element) => element.getBoundingClientRect().width)
+
+    await expect(short).toContainText('Terminal 1')
+    await expect(long).toContainText('Investigate the conversation title and tab layout')
+    expect(await width(short)).toBeLessThan(140)
+    expect(await width(long)).toBeGreaterThan((await width(short)) + 100)
+
+    await orcaPage.evaluate(
+      ({ id }) => {
+        window.__store!.getState().setTabCustomTitle(id, 'Chat')
+      },
+      { id: tabIds.long }
+    )
+    await expect(long).toContainText('Chat')
+    await expect.poll(() => width(long)).toBeLessThan(100)
+
+    await orcaPage.evaluate(
+      ({ id }) => {
+        window
+          .__store!.getState()
+          .setTabCustomTitle(id, 'A very long conversation title '.repeat(20))
+      },
+      { id: tabIds.long }
+    )
+    await expect(long).toContainText('A very long conversation title')
+    await expect.poll(() => width(long)).toBeLessThanOrEqual(384)
+    const strip = orcaPage.locator(STRIP).first()
+    const stripBox = await strip.boundingBox()
+    const buttonBox = await orcaPage
+      .getByRole('button', { name: 'New tab', exact: true })
+      .first()
+      .boundingBox()
+    expect(stripBox).not.toBeNull()
+    expect(buttonBox).not.toBeNull()
+    expect(buttonBox!.x - stripBox!.x - stripBox!.width).toBeGreaterThanOrEqual(0)
+    expect(buttonBox!.x - stripBox!.x - stripBox!.width).toBeLessThanOrEqual(12)
+  })
+
   test('docks an offscreen active tab and reveals an arriving tab beside it without flicker', async ({
     orcaPage
   }) => {

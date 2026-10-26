@@ -42,40 +42,43 @@ type E2EWindow = typeof window & {
   __store?: E2EStore
 }
 
-async function seedFloatingSimulatorTabs(page: Page): Promise<E2EUnifiedTab[]> {
-  const tabs = await page.evaluate((worktreeId) => {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `__store` is the dev/e2e store handle Orca injects on window; the cast only names it.
-    const store = (window as E2EWindow).__store
-    if (!store) {
-      throw new Error('Store unavailable')
-    }
-    const state = store.getState()
-    store.setState({
-      settings: {
-        ...state.settings,
-        floatingTerminalEnabled: true,
-        mobileEmulatorEnabled: true
+async function seedFloatingSimulatorTabs(page: Page, count = 2): Promise<E2EUnifiedTab[]> {
+  const tabs = await page.evaluate(
+    ({ worktreeId, count }) => {
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `__store` is the dev/e2e store handle Orca injects on window; the cast only names it.
+      const store = (window as E2EWindow).__store
+      if (!store) {
+        throw new Error('Store unavailable')
       }
-    })
-    const refreshed = store.getState()
-    const existing = (refreshed.unifiedTabsByWorktree[worktreeId] ?? []).filter(
-      (tab) => tab.contentType === 'simulator'
-    )
-    while (existing.length < 2) {
-      existing.push(
-        refreshed.createUnifiedTab(worktreeId, 'simulator', {
-          label: `Mobile Emulator ${existing.length + 1}`,
-          recordInteraction: false
-        })
+      const state = store.getState()
+      store.setState({
+        settings: {
+          ...state.settings,
+          floatingTerminalEnabled: true,
+          mobileEmulatorEnabled: true
+        }
+      })
+      const refreshed = store.getState()
+      const existing = (refreshed.unifiedTabsByWorktree[worktreeId] ?? []).filter(
+        (tab) => tab.contentType === 'simulator'
       )
-    }
-    refreshed.activateTab(existing[0].id)
-    return existing.map((tab) => ({
-      id: tab.id,
-      contentType: tab.contentType,
-      groupId: tab.groupId
-    }))
-  }, FLOATING_WORKTREE_ID)
+      while (existing.length < count) {
+        existing.push(
+          refreshed.createUnifiedTab(worktreeId, 'simulator', {
+            label: `Mobile Emulator ${existing.length + 1}`,
+            recordInteraction: false
+          })
+        )
+      }
+      refreshed.activateTab(existing[0].id)
+      return existing.map((tab) => ({
+        id: tab.id,
+        contentType: tab.contentType,
+        groupId: tab.groupId
+      }))
+    },
+    { worktreeId: FLOATING_WORKTREE_ID, count }
+  )
   await page.waitForFunction(
     (panelSelector) => Boolean(document.querySelector(panelSelector)),
     PANEL_SELECTOR,
@@ -143,4 +146,53 @@ test('floating panel group bodies and panes own real pixels, single group and sp
   // Click body coordinates because its anchored overlay owns the same focus-group pointer handler.
   await orcaPage.mouse.click(firstBodyBox!.x + 20, firstBodyBox!.y + 20)
   await expect(openPanel.locator(`[data-tab-id="${first.id}"]`)).toBeVisible()
+})
+
+test('floating header keeps a drag and maximize target with expanded and overflowing tabs', async ({
+  orcaPage
+}) => {
+  for (const count of [1, 16]) {
+    await seedFloatingSimulatorTabs(orcaPage, count)
+    await openFloatingPanel(orcaPage)
+
+    const panel = orcaPage.locator(OPEN_PANEL_SELECTOR).first()
+    const handle = panel.locator('[data-floating-terminal-drag-handle]')
+    const strip = panel.locator('.terminal-tab-strip').first()
+    await expect
+      .poll(() => strip.evaluate((element) => element.scrollWidth > element.clientWidth))
+      .toBe(count > 1)
+
+    const before = await panel.boundingBox()
+    const grab = await handle.boundingBox()
+    expect(before).not.toBeNull()
+    expect(grab).not.toBeNull()
+    expect(grab!.width).toBeGreaterThanOrEqual(48)
+    expect(grab!.height).toBeGreaterThanOrEqual(28)
+
+    const x = grab!.x + grab!.width / 2
+    const y = grab!.y + grab!.height / 2
+    await orcaPage.mouse.move(x, y)
+    await orcaPage.mouse.down()
+    await orcaPage.mouse.move(x - 40, y + 24, { steps: 4 })
+    await orcaPage.mouse.up()
+    await expect
+      .poll(() => panel.evaluate((element) => element.getBoundingClientRect().x))
+      .toBeCloseTo(before!.x - 40, 0)
+    await expect
+      .poll(() => panel.evaluate((element) => element.getBoundingClientRect().y))
+      .toBeCloseTo(before!.y + 24, 0)
+
+    await handle.dblclick()
+    await expect(panel.getByRole('button', { name: 'Restore floating workspace' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    await handle.dblclick()
+    await expect(
+      panel.getByRole('button', { name: 'Maximize floating workspace' })
+    ).toHaveAttribute('aria-pressed', 'false')
+    await expect
+      .poll(() => panel.evaluate((element) => element.getBoundingClientRect().x))
+      .toBeCloseTo(before!.x - 40, 0)
+  }
 })
