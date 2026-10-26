@@ -14,7 +14,8 @@ export const mountPendingCloseOwner = () => effectOwner.effect?.()
 
 const store = vi.hoisted((): { current: AppState | null } => ({ current: null }))
 vi.mock('../../store', () => ({ useAppStore: { getState: () => store.current } }))
-vi.mock('react', () => ({
+vi.mock('react', async (original) => ({
+  ...(await original<object>()),
   useCallback: (fn: unknown) => fn,
   useEffect: (effect: () => (() => void) | void) => {
     effectOwner.effect = effect

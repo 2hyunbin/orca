@@ -31,12 +31,17 @@ const heldScreen = {
     }
   ]
 } satisfies NonNullable<ContextType<typeof MobileHeldTerminalContext>>
+const futureScreen = { ...heldScreen, agent: 'future-cli' }
 const missingScreen = { ...heldScreen, tabs: [] }
-it.each(['named', 'workspace', 'missing', 'replaced', 'legacy'] as const)(
+it.each(['named', 'workspace', 'missing', 'replaced', 'legacy', 'unknown-agent'] as const)(
   'renders a plain title only for the matching screen: %s',
   (kind) => {
     const text = renderToStaticMarkup(
-      <MobileHeldTerminalContext.Provider value={kind === 'missing' ? missingScreen : heldScreen}>
+      <MobileHeldTerminalContext.Provider
+        value={
+          kind === 'missing' ? missingScreen : kind === 'unknown-agent' ? futureScreen : heldScreen
+        }
+      >
         <MobileNativeChatNoticeRow
           fontScale={1}
           blocks={[
@@ -56,8 +61,8 @@ it.each(['named', 'workspace', 'missing', 'replaced', 'legacy'] as const)(
       </MobileHeldTerminalContext.Provider>
     )
     expect(text).toContain(
-      kind === 'named'
-        ? 'Codex may still be running this conversation in Review.'
+      kind === 'named' || kind === 'unknown-agent'
+        ? `${kind === 'named' ? 'Codex' : 'future-cli'} may still be running this conversation in Review.`
         : 'Unnamed fallback'
     )
     expect(text).not.toMatch(/<(a|button)\b/)

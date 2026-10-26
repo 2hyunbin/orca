@@ -1,5 +1,5 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
-import { preparePendingSplitClose } from '../../renderer/src/components/terminal-pane/pending-split-close-test-fixture'
+import { capturedPinnedTerminalCloseRequest } from '../../shared/__fixtures__/captured-pinned-terminal-close.test-fixture'
 import { expect, it, vi } from 'vitest'
 import { join } from 'node:path'
 import { Store } from '../persistence/loading-store/store'
@@ -106,20 +106,14 @@ async function confirmedPinnedClose(main: boolean) {
   })
   await store.flushPendingOrThrowAsync()
   const source = runtime.resolveTerminalPane(`${TAB_ID}:${LEAF_ID}`, WORKTREE_ID)
-  expect(source.presentation).toBeDefined()
   expect(source.supportsPinCloseConsent).toBe(true)
-  expect(source.incarnationId).toBe(INCARNATION_ID)
-  if (!source.presentation || !source.incarnationId) {
-    throw new Error('Missing authenticated original')
-  }
   const apply = vi.spyOn(store, 'applyLayoutCommand')
   const forget = vi.spyOn(ClientSessionTabSelectionStore.prototype, 'forgetTabs')
   const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_LIFECYCLE_METHODS })
-  const params = {
-    terminal: source.handle,
-    expectedIncarnationId: source.incarnationId,
-    originalPresentation: source.presentation
-  }
+  const request = capturedPinnedTerminalCloseRequest(source.handle)
+  expect(source.presentation).toEqual(request.originalPresentation)
+  expect(source.incarnationId).toBe(request.expectedIncarnationId)
+  const { force: _consent, ...params } = request
   const dispatch = async (input: unknown) => {
     const replies: string[] = []
     await dispatcher.dispatchStreaming(
@@ -131,7 +125,7 @@ async function confirmedPinnedClose(main: boolean) {
   await expect(dispatch(params)).resolves.toMatchObject({ ok: false })
   await expect(
     store.applyLayoutCommand(command, ['local'], {
-      originalPresentation: source.presentation
+      originalPresentation: request.originalPresentation
     })
   ).rejects.toThrow('terminal_tab_pinned')
   expect(stopAndWait).not.toHaveBeenCalled()
@@ -140,51 +134,7 @@ async function confirmedPinnedClose(main: boolean) {
     dispatch({ ...params, expectedIncarnationId: 'successor', force: true })
   ).resolves.toMatchObject({ ok: false })
   expect(stopAndWait).not.toHaveBeenCalled()
-  const pane = await preparePendingSplitClose(PTY_ID, WORKTREE_ID, TAB_ID)
-  const manager = pane.controller.managerRef.current
-  if (!manager) {
-    throw new Error('Missing renderer manager')
-  }
-  vi.spyOn(manager, 'getPanes').mockReturnValue(manager.getPanes().slice(0, 1))
-  const pin = vi.fn<(request: { onConfirm: () => void; onCancel?: () => void }) => void>()
-  Object.assign(pane.state, store.getWorkspaceSession())
-  Object.assign(pane.state, {
-    settings: { confirmClosePinnedTab: main },
-    unifiedTabsByWorktree: {
-      [WORKTREE_ID]: [
-        {
-          id: pane.tabId,
-          entityId: pane.tabId,
-          contentType: 'terminal',
-          worktreeId: WORKTREE_ID,
-          isPinned: true
-        }
-      ]
-    },
-    requestPinnedTabCloseConfirm: pin
-  })
-  const { closeTerminalTab: closeRendererTab } =
-    await import('../../renderer/src/components/terminal/terminal-tab-actions')
-  vi.mocked(pane.controller.onCloseTab).mockImplementation((options) =>
-    closeRendererTab(pane.tabId, { ...options, skipRunningProcessConfirm: true })
-  )
-  let hostResult: Promise<unknown> | undefined
-  const onConfirm = (force?: true) => {
-    hostResult = dispatch({ ...params, ...(force === true ? { force } : {}) })
-  }
-  if (main) {
-    const onCancel = vi.fn()
-    pane.actions.handleRequestClosePane(1, { onConfirm, onCancel })
-    pin.mock.calls.at(-1)?.[0].onCancel?.()
-    expect(onCancel).toHaveBeenCalledOnce()
-    expect(hostResult).toBeUndefined()
-    expect(stopAndWait).not.toHaveBeenCalled()
-  }
-  pane.actions.handleRequestClosePane(1, { onConfirm })
-  if (main) {
-    pin.mock.calls.at(-1)?.[0].onConfirm()
-  }
-  expect(hostResult).toBeDefined()
+  const hostResult = dispatch(TerminalClose.parse(request))
   await expect(hostResult).resolves.toMatchObject({
     ok: true,
     result: { close: { ptyKilled: true } }
@@ -197,8 +147,6 @@ async function confirmedPinnedClose(main: boolean) {
     PTY_ID,
     expect.objectContaining({ expectedIncarnationId: INCARNATION_ID })
   )
-  pane.spawn.resolve({ id: PTY_ID, isReattach: true })
-  await pane.connecting
   expect(kill).not.toHaveBeenCalled()
   expect(closeTerminalTab).toHaveBeenCalledExactlyOnceWith(TAB_ID, {
     localPtyTeardownOwnedExternally: true,

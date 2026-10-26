@@ -1,10 +1,13 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { useAppStore } from '@/store'
-import { replaceRuntimeEnvironmentRevisions } from '@/runtime/runtime-environment-revision'
-import { captureTerminalSurfaceIdentity } from '../../../../shared/terminal-tab-close'
-import type * as PtyDispatcherModule from '../terminal-pane/pty-dispatcher'
+import { preparePendingSplitClose } from '../terminal-pane/pending-split-close-test-fixture'
+import { capturedPinnedTerminalCloseRequest } from '../../../../shared/__fixtures__/captured-pinned-terminal-close.test-fixture'
 import { TerminalClose } from '../../../../shared/rpc-contract/terminal-unary-params'
+import type * as RuntimeEnvironmentRevisionModule from '@/runtime/runtime-environment-revision'
+import type * as AppStoreModule from '@/store'
+import type * as HoldingTerminalModule from './close-holding-terminal'
+let replaceRuntimeEnvironmentRevisions: typeof RuntimeEnvironmentRevisionModule.replaceRuntimeEnvironmentRevisions
+import type * as PtyDispatcherModule from '../terminal-pane/pty-dispatcher'
 import type { TerminalPaneCloseCallbacks } from '@/constants/terminal'
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
@@ -33,18 +36,23 @@ vi.mock('../terminal-pane/pty-dispatcher', async (importOriginal) => {
   return { ...actual, subscribeToPtyExit: mocks.exit }
 })
 import type { HeldTerminalTarget } from './native-chat-held-terminal'
-import { closeHoldingTerminal, HOLDING_TERMINAL_EXIT_TIMEOUT_MS } from './close-holding-terminal'
+const { useAppStore } = await vi.importActual<typeof AppStoreModule>('@/store')
+let closeHoldingTerminal: typeof HoldingTerminalModule.closeHoldingTerminal
+let HOLDING_TERMINAL_EXIT_TIMEOUT_MS: number
 const original = useAppStore.getState()
+const request = capturedPinnedTerminalCloseRequest('handle')
+const { identity } = request.originalPresentation
 const target = {
+  ...identity,
   executionHostId: 'local' as const,
-  worktreeId: 'w',
-  tabId: 't',
-  leafId: '11111111-1111-4111-8111-111111111111',
-  paneKey: 't:11111111-1111-4111-8111-111111111111',
-  ptyId: 'pty',
-  incarnationId: 'life',
+  ptyId: identity.ptyId ?? '',
+  incarnationId: request.expectedIncarnationId,
+  paneKey: `${identity.tabId}:${identity.leafId}`,
   title: 'Build'
 }
+const worktree = target.worktreeId,
+  tab = target.tabId,
+  life = target.incarnationId
 let callbacks: TerminalPaneCloseCallbacks
 let exit: (code: number, context: { hadPrimary: boolean; incarnationId?: string }) => void
 let spawned: (event: { id: string; incarnationId?: string }) => void
@@ -53,7 +61,11 @@ let frame: FrameRequestCallback
 let closing: ReturnType<typeof Promise.withResolvers<{ close: { ptyKilled: boolean } }>>
 const unsubscribe = vi.fn()
 const activeWatchers = new Set<() => void>()
-beforeEach(() => {
+beforeEach(async () => {
+  vi.doMock('../../store', () => ({ useAppStore }))
+  ;({ replaceRuntimeEnvironmentRevisions } = await import('@/runtime/runtime-environment-revision'))
+  ;({ closeHoldingTerminal, HOLDING_TERMINAL_EXIT_TIMEOUT_MS } =
+    await import('./close-holding-terminal'))
   vi.useFakeTimers()
   vi.clearAllMocks()
   mocks.supportsPinCloseConsent = true
@@ -62,18 +74,16 @@ beforeEach(() => {
     return 1
   })
   vi.stubGlobal('cancelAnimationFrame', vi.fn())
-  vi.stubGlobal('api', {
-    pty: {
-      onSpawned: (listener: typeof spawned) => {
-        spawned = listener
-        return () => {}
-      },
-      onData: () => () => {},
-      onReplay: () => () => {},
-      onExit: (listener: typeof dispatchExit) => {
-        dispatchExit = listener
-        return () => {}
-      }
+  Object.assign(window.api.pty, {
+    onSpawned: (listener: typeof spawned) => {
+      spawned = listener
+      return () => {}
+    },
+    onData: () => () => {},
+    onReplay: () => () => {},
+    onExit: (listener: typeof dispatchExit) => {
+      dispatchExit = listener
+      return () => {}
     }
   })
   useAppStore.setState({
@@ -81,13 +91,13 @@ beforeEach(() => {
     activeWorkspaceExecutionHostId: 'local',
     activeView: 'terminal',
     tabsByWorktree: {
-      w: [
+      [worktree]: [
         {
-          id: 't',
-          worktreeId: 'w',
+          id: tab,
+          worktreeId: worktree,
           title: 'Build',
           customTitle: null,
-          ptyId: 'pty',
+          ptyId: target.ptyId,
           color: null,
           createdAt: 1,
           sortOrder: 0
@@ -95,18 +105,19 @@ beforeEach(() => {
       ]
     },
     terminalLayoutsByTabId: {
-      t: {
+      [tab]: {
         root: { type: 'leaf', leafId: '11111111-1111-4111-8111-111111111111' },
         activeLeafId: '11111111-1111-4111-8111-111111111111',
         expandedLeafId: null,
-        ptyIdsByLeafId: { '11111111-1111-4111-8111-111111111111': 'pty' }
+        ptyIdsByLeafId: { '11111111-1111-4111-8111-111111111111': target.ptyId }
       }
     },
-    terminalPtyIncarnationsByPaneKey: {},
     groupsByWorktree: {},
     unifiedTabsByWorktree: {},
-    setActiveWorktree: (id, host) =>
-      useAppStore.setState({ activeWorktreeId: id, activeWorkspaceExecutionHostId: host ?? null }),
+    setActiveWorktree: (id, host) => {
+      useAppStore.setState({ activeWorktreeId: id, activeWorkspaceExecutionHostId: host ?? null })
+      return true
+    },
     setActiveView: (view) => useAppStore.setState({ activeView: view })
   })
   closing = Promise.withResolvers()
@@ -114,22 +125,13 @@ beforeEach(() => {
     if (method === 'terminal.close') {
       return closing.promise
     }
-    const identity = captureTerminalSurfaceIdentity(
-      useAppStore.getState(),
-      'w',
-      useAppStore.getState().tabsByWorktree.w[0].id,
-      '11111111-1111-4111-8111-111111111111'
-    )
     return {
       terminal: {
         handle: 'handle',
-        ptyId: 'pty',
-        incarnationId: 'life',
+        ptyId: target.ptyId,
+        incarnationId: life,
         supportsPinCloseConsent: mocks.supportsPinCloseConsent,
-        presentation: {
-          identity: { ...identity, tabId: 't', ptyId: 'pty', incarnationId: 'life' },
-          holders: []
-        }
+        presentation: request.originalPresentation
       }
     }
   })
@@ -156,9 +158,9 @@ beforeEach(() => {
   })
   mocks.reveal.mockImplementation(() => {
     if (!useAppStore.getState().isNavigatingHistory) {
-      useAppStore.getState().recordWorktreeVisit('w')
+      useAppStore.getState().recordWorktreeVisit(worktree)
     }
-    useAppStore.setState({ activeWorktreeId: 'w' })
+    useAppStore.setState({ activeWorktreeId: worktree })
     return true
   })
   replaceRuntimeEnvironmentRevisions([{ id: 'host', createdAt: 1 }])
@@ -177,6 +179,11 @@ async function begin(input: HeldTerminalTarget = target) {
   return { result }
 }
 it('uses host-captured incarnation without a renderer map, subscribes before consent, and restores origin while awaiting actual exit', async () => {
+  const chat = useAppStore.getState().createUnifiedTab('origin', 'agent-session', {
+    entityId: 'chat',
+    executionHostId: 'local'
+  })
+  useAppStore.getState().activateTab(chat.id, { worktreeId: 'origin' })
   const history = useAppStore.getState().worktreeNavHistory
   const { result } = await begin()
   expect(useAppStore.getState().worktreeNavHistory).toBe(history)
@@ -185,21 +192,24 @@ it('uses host-captured incarnation without a renderer map, subscribes before con
   )
   expect(mocks.rpc).toHaveBeenCalledTimes(1)
   callbacks.onConfirm?.()
-  expect(mocks.rpc).toHaveBeenLastCalledWith(
-    { kind: 'local' },
-    'terminal.close',
-    expect.objectContaining({
-      terminal: 'handle',
-      expectedIncarnationId: 'life',
-      originalPresentation: expect.any(Object)
-    })
-  )
+  expect(mocks.rpc.mock.calls.at(-1)?.[2]).not.toHaveProperty('force')
   expect(useAppStore.getState().activeWorktreeId).toBe('origin')
+  expect(
+    useAppStore.getState().groupsByWorktree.origin.find((g) => g.id === chat.groupId)?.activeTabId
+  ).toBe(chat.id)
+  const later = useAppStore.getState().createUnifiedTab('origin', 'agent-session', {
+    entityId: 'later-chat',
+    executionHostId: 'local'
+  })
+  useAppStore.getState().activateTab(later.id, { worktreeId: 'origin' })
   useAppStore.setState({ tabsByWorktree: {} })
   exit(0, { hadPrimary: false, incarnationId: 'replacement' })
   expect(activeWatchers.size).toBe(1)
-  exit(0, { hadPrimary: false, incarnationId: 'life' })
+  exit(0, { hadPrimary: false, incarnationId: life })
   expect(await result).toBe(true)
+  expect(
+    useAppStore.getState().groupsByWorktree.origin.find((g) => g.id === later.groupId)?.activeTabId
+  ).toBe(later.id)
   expect(mocks.rpc.mock.calls.map((call) => call[1])).toEqual([
     'terminal.resolvePane',
     'terminal.close'
@@ -211,14 +221,19 @@ it.each(['cancel', 'replace', 'navigate', 'timeout', 'host-loss', 'spawn'] as co
   async (outcome) => {
     const { result } = await begin()
     if (outcome === 'spawn') {
-      spawned({ id: 'pty', incarnationId: 'replacement' })
+      spawned({ id: target.ptyId, incarnationId: 'replacement' })
     }
     if (outcome === 'cancel') {
       callbacks.onCancel?.()
     }
     if (outcome === 'replace') {
       useAppStore.setState({
-        terminalPtyIncarnationsByPaneKey: { 't:11111111-1111-4111-8111-111111111111': 'new' }
+        terminalLayoutsByTabId: {
+          [tab]: {
+            ...useAppStore.getState().terminalLayoutsByTabId[tab],
+            ptyIdsByLeafId: { [target.leafId]: 'replacement' }
+          }
+        }
       })
       expect(callbacks.isCurrent?.()).toBe(false)
       callbacks.onConfirm?.()
@@ -228,7 +243,7 @@ it.each(['cancel', 'replace', 'navigate', 'timeout', 'host-loss', 'spawn'] as co
     }
     if (outcome === 'host-loss') {
       callbacks.onConfirm?.()
-      exit(-1, { hadPrimary: false, incarnationId: 'life' })
+      exit(-1, { hadPrimary: false, incarnationId: life })
     }
     if (outcome === 'timeout') {
       callbacks.onConfirm?.()
@@ -244,36 +259,39 @@ it.each(['cancel', 'replace', 'navigate', 'timeout', 'host-loss', 'spawn'] as co
     expect(vi.getTimerCount()).toBe(0)
   }
 )
-it.each([true, false])(
-  'fences paired completion without requiring removed presentation, replaced=%s',
-  async (replaced) => {
+it.each(['current', 'replaced', 'malformed'] as const)(
+  'checks paired completion without requiring removed presentation, result=%s',
+  async (outcome) => {
     const paired = {
       ...target,
       executionHostId: 'runtime:host' as const,
-      tabId: 'web-terminal-t',
+      tabId: `web-terminal-${tab}`,
       paneKey: `web-terminal-${target.paneKey}`,
       ptyId: 'remote:host@@handle'
     }
     useAppStore.setState({
       tabsByWorktree: {
-        w: useAppStore.getState().tabsByWorktree.w.map((tab) => ({ ...tab, id: paired.tabId }))
+        [worktree]: useAppStore
+          .getState()
+          .tabsByWorktree[worktree].map((tab) => ({ ...tab, id: paired.tabId }))
       },
       terminalLayoutsByTabId: {
         [paired.tabId]: {
-          ...useAppStore.getState().terminalLayoutsByTabId.t,
+          ...useAppStore.getState().terminalLayoutsByTabId[tab],
           ptyIdsByLeafId: { '11111111-1111-4111-8111-111111111111': paired.ptyId }
         }
       }
     })
-    const call = vi
-      .fn()
-      .mockImplementation(async () => ({ ok: true, result: await closing.promise }))
-    vi.stubGlobal('api', { runtimeEnvironments: { call } })
+    const call = vi.fn().mockImplementation(async () => {
+      const result = await closing.promise
+      return { ok: true, result: outcome === 'malformed' ? null : result }
+    })
+    Object.assign(window.api, { runtimeEnvironments: { call } })
     const { result } = await begin(paired)
     expect(mocks.rpc).toHaveBeenCalledWith(
       { kind: 'environment', environmentId: 'host' },
       'terminal.resolvePane',
-      { paneKey: target.paneKey, worktreeId: 'w' }
+      { paneKey: target.paneKey, worktreeId: worktree }
     )
     callbacks.onConfirm?.(true)
     expect(call).toHaveBeenCalledWith(
@@ -285,11 +303,11 @@ it.each([true, false])(
       })
     )
     useAppStore.setState({ tabsByWorktree: {} })
-    if (replaced) {
+    if (outcome === 'replaced') {
       replaceRuntimeEnvironmentRevisions([{ id: 'host', createdAt: 2 }])
     }
     closing.resolve({ close: { ptyKilled: true } })
-    expect(await result).toBe(!replaced)
+    expect(await result).toBe(outcome === 'current')
   }
 )
 it.each([1, 10])(
@@ -307,53 +325,68 @@ it.each([1, 10])(
   }
 )
 
-it('restores the invoking chat through its real tab consumer and preserves later user selection', async () => {
-  const chat = useAppStore
-    .getState()
-    .createUnifiedTab('origin', 'agent-session', { entityId: 'chat', executionHostId: 'local' })
-  useAppStore.getState().activateTab(chat.id, { worktreeId: 'origin' })
-  const { result } = await begin()
-  callbacks.onConfirm?.()
-  expect(
-    useAppStore.getState().groupsByWorktree.origin.find((group) => group.id === chat.groupId)
-      ?.activeTabId
-  ).toBe(chat.id)
-  const later = useAppStore.getState().createUnifiedTab('origin', 'agent-session', {
-    entityId: 'later-chat',
-    executionHostId: 'local'
-  })
-  useAppStore.getState().activateTab(later.id, { worktreeId: 'origin' })
-  closing.resolve({ close: { ptyKilled: true } })
-  expect(await result).toBe(true)
-  expect(
-    useAppStore.getState().groupsByWorktree.origin.find((group) => group.id === later.groupId)
-      ?.activeTabId
-  ).toBe(later.id)
-})
-
-it('emits only effective literal consent on the captured parser/handler contract', async () => {
-  const { result } = await begin()
-  callbacks.onConfirm?.(true)
-  const params = mocks.rpc.mock.calls.find(([, method]) => method === 'terminal.close')?.[2]
-  expect(params).toMatchObject({ terminal: 'handle', expectedIncarnationId: 'life', force: true })
-  expect(TerminalClose.parse(params)).toEqual(params)
-  for (const force of [false, null, 'true']) {
-    expect(TerminalClose.safeParse({ ...params, force }).success).toBe(false)
-  }
-  expect(TerminalClose.safeParse({ terminal: 'handle', force: true }).success).toBe(false)
-  expect(TerminalClose.safeParse({ ...params, expectedIncarnationId: undefined }).success).toBe(
-    false
-  )
-  expect(TerminalClose.safeParse({ ...params, originalPresentation: undefined }).success).toBe(
-    false
-  )
-  expect(TerminalClose.parse({ terminal: 'handle' })).toEqual({ terminal: 'handle' })
-  closing.resolve({ close: { ptyKilled: true } })
-  expect(await result).toBe(true)
-})
 it('fresh unsupported capture refuses before reveal or confirmation', async () => {
   mocks.supportsPinCloseConsent = false
   expect(await closeHoldingTerminal(target)).toBe(false)
   expect(mocks.reveal).not.toHaveBeenCalled()
   expect(mocks.request).not.toHaveBeenCalled()
 })
+
+it.each([false, true])(
+  'real final-pane consent emits the shared parsed request, prompt=%s',
+  async (prompt) => {
+    const pane = await preparePendingSplitClose(target.ptyId, worktree, tab)
+    const manager = pane.controller.managerRef.current
+    if (!manager) {
+      throw new Error('Missing pane manager')
+    }
+    vi.spyOn(manager, 'getPanes').mockReturnValue(manager.getPanes().slice(0, 1))
+    const pin = vi.fn<(request: { onConfirm: () => void; onCancel?: () => void }) => void>()
+    useAppStore.setState({
+      settings: { ...useAppStore.getState().settings, confirmClosePinnedTab: prompt },
+      requestPinnedTabCloseConfirm: pin
+    })
+    const unified = useAppStore
+      .getState()
+      .createUnifiedTab(worktree, 'terminal', { entityId: tab, executionHostId: 'local' })
+    useAppStore.getState().pinTab(unified.id, { recordInteraction: false })
+    const { closeTerminalTab } = await import('../terminal/terminal-tab-actions')
+    vi.mocked(pane.controller.onCloseTab).mockImplementation((options) =>
+      closeTerminalTab(tab, { ...options, skipRunningProcessConfirm: true })
+    )
+    mocks.request.mockImplementation((_tab: string, options: TerminalPaneCloseCallbacks) => {
+      pane.actions.handleRequestClosePane(1, options)
+      return true
+    })
+    if (prompt) {
+      const { result } = await begin()
+      pin.mock.calls[0][0].onCancel?.()
+      expect(await result).toBe(false)
+      expect(mocks.rpc.mock.calls.filter(([, method]) => method === 'terminal.close')).toHaveLength(
+        0
+      )
+    }
+    const { result } = await begin()
+    if (prompt) {
+      pin.mock.calls[1][0].onConfirm()
+    }
+    const emitted = mocks.rpc.mock.calls.find(([, method]) => method === 'terminal.close')?.[2]
+    expect(emitted).toEqual(request)
+    expect(TerminalClose.parse(emitted)).toEqual(TerminalClose.parse(request))
+    for (const force of [false, null, 'true']) {
+      expect(TerminalClose.safeParse({ ...request, force }).success).toBe(false)
+    }
+    for (const omitted of ['expectedIncarnationId', 'originalPresentation'] as const) {
+      expect(TerminalClose.safeParse({ ...request, [omitted]: undefined }).success).toBe(false)
+    }
+    expect(TerminalClose.safeParse({ terminal: request.terminal, force: true }).success).toBe(false)
+    expect(TerminalClose.parse({ terminal: request.terminal })).toEqual({
+      terminal: request.terminal
+    })
+    closing.resolve({ close: { ptyKilled: true } })
+    expect(await result).toBe(true)
+    expect(mocks.rpc.mock.calls.filter(([, method]) => method === 'terminal.close')).toHaveLength(1)
+    pane.spawn.resolve({ id: target.ptyId, isReattach: true })
+    await pane.connecting
+  }
+)

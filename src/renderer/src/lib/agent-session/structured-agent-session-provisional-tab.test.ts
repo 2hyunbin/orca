@@ -475,7 +475,11 @@ it.each(['refused', 'unknown', 'ready'] as const)(
     await vi.waitFor(() => expect(mocks.launch).toHaveBeenCalledOnce())
     expect(useAppStore.getState().unifiedTabsByWorktree['wt-1'] ?? []).toHaveLength(0)
     if (outcome === 'ready') {
-      reply.resolve({ sessionId: launch.sessionId, fence: 1 })
+      const [request] = mocks.launch.mock.calls[0]
+      if (typeof request.sessionId !== 'string') {
+        throw new Error('Missing admitted launch identity')
+      }
+      reply.resolve({ sessionId: request.sessionId, fence: 1 })
     } else {
       reply.reject(
         outcome === 'unknown'

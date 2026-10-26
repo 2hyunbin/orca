@@ -239,9 +239,7 @@ export async function closeHoldingTerminal(target: HeldTerminalTarget): Promise<
             ...(force === true ? { force } : {})
           }
           const closing = call
-            ? call({ method: 'terminal.close', params }).then((response) =>
-                unwrapRuntimeRpcResult<{ close: RuntimeTerminalClose }>(response)
-              )
+            ? call({ method: 'terminal.close', params }).then(unwrapRuntimeRpcResult)
             : callRuntimeRpc<{ close: RuntimeTerminalClose }>(
                 captured.target,
                 'terminal.close',
@@ -251,7 +249,16 @@ export async function closeHoldingTerminal(target: HeldTerminalTarget): Promise<
           restore()
           void closing.then(
             (result) =>
-              finish(result.close?.ptyKilled === true && result.close.ptyStopVerdict === undefined),
+              finish(
+                typeof result === 'object' &&
+                  result !== null &&
+                  'close' in result &&
+                  typeof result.close === 'object' &&
+                  result.close !== null &&
+                  'ptyKilled' in result.close &&
+                  result.close.ptyKilled === true &&
+                  (!('ptyStopVerdict' in result.close) || result.close.ptyStopVerdict === undefined)
+              ),
             () => finish(false)
           )
         }

@@ -1,22 +1,26 @@
-import { useTerminalPaneLocalClose } from './use-terminal-pane-local-close'
 import type {
   RequestActiveTerminalPaneCloseDetail,
   TerminalPaneCloseCallbacks
 } from '@/constants/terminal'
+import { useTerminalPaneCloseRequest } from './use-terminal-pane-close-request'
 import { useCallback, useEffect, useRef } from 'react'
 import { onActiveTerminalPaneCloseRequest } from './request-active-terminal-pane-close'
 import { useAppStore } from '../../store'
+import { retireUnboundRuntimeTerminalPane } from './retire-unbound-runtime-terminal-pane'
 import type { PaneExternalDropTarget } from '@/lib/pane-manager/pane-manager'
-import { resolveLeafCloseCopyKind } from '../terminal/terminal-close-copy-kind'
-import { RUNNING_CLOSE_PROBE_TIMEOUT_MS } from '../terminal/running-terminal-close-guard'
-import { probePtyRunningWork } from '../terminal/pty-running-work-probe'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
+import { closeWebRuntimeTerminal } from '@/runtime/web-runtime-terminal-actions'
 import {
   detachTerminalPaneToTab,
   isTerminalTabStripDropTarget,
   resolveTerminalTabStripDropTarget
 } from './terminal-pane-tab-detach'
+import { clearPaneTerminalError } from './terminal-error-accumulation'
 import type { TerminalPaneBindingController } from './use-terminal-pane-layout-bindings'
+import { retireUnboundIpcTerminalPane } from './retire-unbound-ipc-terminal-pane'
 import { capturePendingTerminalPaneClose } from './terminal-pane-close-admission'
+import { commitTerminalSurfaceClose } from '@/store/terminals/terminal-surface-close-intent'
+import { noteAgentLaunchPaneClosedByUser } from '@/lib/agent-launch-pane-closes'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { sendUserPaneCloseToLayoutOwner } from './layout-owner-pane-close-command'
 
@@ -24,6 +28,7 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
   const cancelCloseRef = useRef<(() => void) | undefined>(undefined)
   const confirmedCloseRef = useRef<(() => void) | null>(null)
   const {
+    clearSessionRestoredBannerForPane,
     managerRef,
     onCloseTab,
     paneCwdRef,
@@ -31,11 +36,78 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
     pendingCloseConfirmation,
     persistLayoutSnapshot,
     setPendingCloseConfirmation,
+    setTerminalErrorsByPaneId,
+    syncPanePtyLayoutBinding,
+    syncPanePtyLayoutBindingForLeaf,
     tabId,
     updateSettings,
     worktreeId
   } = controller
-  const closePaneLocally = useTerminalPaneLocalClose(controller)
+  // The window's half of a split pane's close: its transport, status and pane go.
+  const closePaneLocally = useCallback(
+    (paneId: number, committedLeafId?: string) => {
+      const manager = managerRef.current
+      // Why the pane check: main's answer can land after the pane already went.
+      if (!manager || (committedLeafId && manager.getLeafId(paneId) !== committedLeafId)) {
+        return
+      }
+      // A sibling went while main answered: this pane is now the tab's last, so the tab closes.
+      if (committedLeafId && manager.getPanes().length <= 1) {
+        onCloseTab()
+        return
+      }
+      const ptyId = paneTransportsRef.current.get(paneId)?.getPtyId() ?? null
+      closeWebRuntimeTerminal(ptyId, worktreeId)
+      clearSessionRestoredBannerForPane(paneId)
+      const leafId = manager.getLeafId(paneId)
+      if (leafId) {
+        const launchPane = useAppStore
+          .getState()
+          .tabsByWorktree[worktreeId]?.find((tab) => tab.id === tabId)?.agentLaunchPane
+        if (launchPane?.leafId === leafId && !launchPane.outcome) {
+          // The user closed a launch pane whose agent is still starting; main stops that launch.
+          noteAgentLaunchPaneClosedByUser(tabId, leafId)
+        }
+        if (!committedLeafId) {
+          commitTerminalSurfaceClose(worktreeId, { kind: 'pane', tabId, leafId })
+        }
+        retireUnboundIpcTerminalPane({
+          getState: useAppStore.getState,
+          tabId,
+          leafId,
+          transport: paneTransportsRef.current.get(paneId),
+          getTransports: () => paneTransportsRef.current
+        })
+        useAppStore.getState().setCacheTimerStartedAt(makePaneKey(tabId, leafId), null)
+        useAppStore.getState().dropAgentStatus(makePaneKey(tabId, leafId), { paneRemoved: true })
+      }
+      setTerminalErrorsByPaneId((current) => clearPaneTerminalError(current, paneId))
+      if (leafId) {
+        retireUnboundRuntimeTerminalPane({
+          getState: useAppStore.getState,
+          tabId,
+          leafId,
+          transport: paneTransportsRef.current.get(paneId),
+          getTransports: () => paneTransportsRef.current
+        })
+        syncPanePtyLayoutBindingForLeaf?.(leafId, null, paneId)
+      } else {
+        syncPanePtyLayoutBinding(paneId, null)
+      }
+      manager.closePane(paneId)
+    },
+    [
+      clearSessionRestoredBannerForPane,
+      onCloseTab,
+      syncPanePtyLayoutBinding,
+      syncPanePtyLayoutBindingForLeaf,
+      tabId,
+      worktreeId,
+      managerRef,
+      paneTransportsRef,
+      setTerminalErrorsByPaneId
+    ]
+  )
   const executeClosePane = useCallback(
     (paneId: number, callbacks?: TerminalPaneCloseCallbacks) => {
       const manager = managerRef.current
@@ -85,9 +157,11 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
     },
     [closePaneLocally, onCloseTab, tabId, worktreeId, managerRef]
   )
-  const getCloseDialogCopyKind = useCallback(
-    (paneId: number) => resolveLeafCloseCopyKind(tabId, managerRef.current?.getLeafId(paneId)),
-    [tabId, managerRef]
+  const { requestClose, getCloseDialogCopyKind } = useTerminalPaneCloseRequest(
+    controller,
+    executeClosePane,
+    cancelCloseRef,
+    confirmedCloseRef
   )
   const handleRequestClosePane = useCallback(
     (paneId: number, callbacks?: TerminalPaneCloseCallbacks) => {
@@ -110,88 +184,11 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
         executeClosePane(paneId, callbacks)
         return
       }
-      const settings = useAppStore.getState().settings
-      let active = true
-      let probeTimeout: ReturnType<typeof setTimeout> | undefined
-      const cancel = () => {
-        if (!active) {
-          return
-        }
-        active = false
-        clearTimeout(probeTimeout)
-        callbacks?.signal?.removeEventListener('abort', cancel)
-        cancelCloseRef.current = undefined
-        confirmedCloseRef.current = null
-        setPendingCloseConfirmation(null)
-        callbacks?.onCancel?.()
-      }
-      cancelCloseRef.current = cancel
-      callbacks?.signal?.addEventListener('abort', cancel, { once: true })
-      const close = (): void => {
-        if (!active) {
-          return
-        }
-        active = false
-        callbacks?.signal?.removeEventListener('abort', cancel)
-        cancelCloseRef.current = undefined
-        if ((!pending || pending.isCurrent()) && callbacks?.isCurrent?.() !== false) {
-          executeClosePane(paneId, callbacks)
-        } else {
-          callbacks?.onCancel?.()
-        }
-      }
-      let decided = false
-      const decide = (act: () => void): void => {
-        if (decided || !active) {
-          return
-        }
-        decided = true
-        act()
-      }
-      const confirmClose = (): void => {
-        if ((pending && !pending.isCurrent()) || callbacks?.isCurrent?.() === false) {
-          cancel()
-          return
-        }
-        confirmedCloseRef.current = close
-        setPendingCloseConfirmation({
-          paneId,
-          copyKind: getCloseDialogCopyKind(paneId)
-        })
-      }
-      probeTimeout = setTimeout(
-        () =>
-          decide(
-            pending && settings?.skipCloseTerminalWithRunningProcessConfirm ? close : confirmClose
-          ),
-        RUNNING_CLOSE_PROBE_TIMEOUT_MS
-      )
-      // Reuse tab-close admission so unanswered-host behavior cannot drift between split and tab closes.
-      void probePtyRunningWork([ptyId], { timeoutMs: RUNNING_CLOSE_PROBE_TIMEOUT_MS })
-        .then((probes) => {
-          clearTimeout(probeTimeout)
-          decide(() => {
-            if (
-              (pending ? probes[0]?.verdict === 'exited' : probes[0]?.verdict !== 'live') ||
-              settings?.skipCloseTerminalWithRunningProcessConfirm
-            ) {
-              close()
-            } else {
-              confirmClose()
-            }
-          })
-        })
-        .catch(() => {
-          clearTimeout(probeTimeout)
-          decide(
-            pending && !settings?.skipCloseTerminalWithRunningProcessConfirm ? confirmClose : close
-          )
-        })
+      requestClose(paneId, ptyId, pending, callbacks)
     },
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
-    [executeClosePane, getCloseDialogCopyKind]
+    [executeClosePane, requestClose]
   )
-
   const closeActivePane = useCallback(
     (request: RequestActiveTerminalPaneCloseDetail): void => {
       const manager = managerRef.current

@@ -34,6 +34,7 @@ import { captureHeldTerminal, closeHoldingTerminal } from './close-holding-termi
 import { createBrowserUuid } from '@/lib/browser-uuid'
 
 export type HeldTerminalTarget = TerminalPaneRevealTarget & {
+  leafId: string
   executionHostId: ExecutionHostId
   incarnationId: string
   ptyId: string | null

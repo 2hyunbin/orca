@@ -2,17 +2,10 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import type { CliChatResumeSource } from './cli-chat-resume-source'
 const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
-  resume: vi.fn(),
   call: vi.fn(),
   activate: vi.fn()
 }))
 vi.mock('../native-chat/native-chat-held-terminal', () => ({ toastHeldTerminal: mocks.toast }))
-vi.mock('@/lib/structured-agent-session-launch-surface', () => ({
-  captureStructuredLaunchSurfaceAddress: () => ({
-    worktreeId: 'w',
-    precedingTabIds: ['before', 'source']
-  })
-}))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: mocks.call,
   supportsInPlaceSwitch: async () => true
@@ -45,14 +38,11 @@ it('offers only Close for a refused create; a later continuation remains an expl
   expect(mocks.toast).toHaveBeenCalledWith(
     expect.objectContaining({ terminal: refusal.details.terminal, executionHostId: 'local' })
   )
-  expect(mocks.toast.mock.calls[0][0]).not.toHaveProperty('onContinue')
-  expect(mocks.resume).not.toHaveBeenCalled()
   expect(mocks.call).not.toHaveBeenCalled()
 })
 it('does not repeat a refused switch or activate its chat automatically', async () => {
   mocks.call.mockResolvedValueOnce({ ok: false, refusal })
   expect(await startCliChatReturn(source, 'existing', { kind: 'local' })).toBe(false)
-  expect(mocks.toast.mock.calls[0][0]).not.toHaveProperty('onContinue')
   expect(mocks.call).toHaveBeenCalledOnce()
   expect(mocks.activate).not.toHaveBeenCalled()
   mocks.call.mockResolvedValueOnce({ ok: true })

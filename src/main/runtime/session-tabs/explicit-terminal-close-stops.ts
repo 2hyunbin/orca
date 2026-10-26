@@ -6,6 +6,7 @@ import {
   matchesTerminalSurfaceCapture,
   type TerminalSurfaceCloseCapture
 } from '../../../shared/terminal-tab-close'
+import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import type { WorktreePtyHostFence } from '../worktree-pty-host-fence'
 import type { RuntimeTerminalClose } from '../../../shared/runtime-types'
 import type { RuntimePtyTabCloseAuthority } from '../runtime-terminal-state-records'
