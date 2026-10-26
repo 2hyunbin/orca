@@ -82,10 +82,11 @@ function updateManagedProfiles(
       if (!parsed.ok || next.content === null) {
         continue
       }
-      onUpdated(getPluginDir(home))
+      // Config first: a failed write must not leave orca-status enabled without its plugin.
       if (next.content !== parsed.content) {
         writeConfigFile(configPath, next.content)
       }
+      onUpdated(getPluginDir(home))
     } catch (error) {
       console.warn(`[hermes] skipped profile ${home}:`, error)
     }
