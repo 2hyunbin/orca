@@ -50,11 +50,12 @@ export function WorktreeCardLinkedItemsSection({
   if (!workspace) {
     return null
   }
+  // Why: references are stored in link order; show the newest first.
   const rows = getWorkspaceLinkedItemRows(
     workspace,
     { review, issue, linearIssue, jiraIssue },
     referenceDetails
-  )
+  ).toReversed()
   const groups = [
     {
       label: translate('workspace.links.reviews', 'Reviews'),
