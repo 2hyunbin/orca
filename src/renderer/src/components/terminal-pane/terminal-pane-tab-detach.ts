@@ -19,6 +19,10 @@ import {
   settleHostPaneMove
 } from '@/runtime/web-runtime-leaf-move'
 import { resolveHostTabDropTarget } from '@/runtime/web-runtime-session-tab-move'
+import {
+  beginPendingHostPaneMove,
+  holdHostPaneMoveUntilSnapshot
+} from '@/runtime/pending-host-pane-moves'
 export {
   isTerminalTabStripDropTarget,
   resolveTerminalTabStripDropTarget
@@ -170,10 +174,27 @@ async function moveLeafToNewTab(
     // the window moves first. The call is dispatched before the move's layout pushes, so the host
     // sees the move first.
     const hostMove = moveWebRuntimeLeafToNewTab(paneMoveHost, request, placement)
-    const applied = applyMove(args, request, false, request.ptyId)
+    // Why: until the host settles, a snapshot taken before its move must not read the new tab's pane as stale.
+    const releasePending = beginPendingHostPaneMove(request.targetTabId, leafId)
+    let applied: ReturnType<typeof applyMove>
+    try {
+      applied = applyMove(args, request, false, request.ptyId)
+    } catch (error) {
+      releasePending()
+      throw error
+    }
     void hostMove
-      .then((outcome) => settleHostPaneMove(paneMoveHost, request, outcome, applied !== null))
+      .then(async (outcome) => {
+        // Why: the host's reply can beat its snapshot of the move, so a committed move stays
+        // pending until a snapshot shows it.
+        if (
+          (await settleHostPaneMove(paneMoveHost, request, outcome, applied !== null)) === 'kept'
+        ) {
+          holdHostPaneMoveUntilSnapshot(request.targetTabId, leafId)
+        }
+      })
       .catch((error: unknown) => console.warn('[terminal-pane-detach] move not settled', error))
+      .finally(releasePending)
     return applied
   }
   // Switch point: main moves the pane and names the new tab.

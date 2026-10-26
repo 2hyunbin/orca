@@ -117,7 +117,8 @@ async function hostHoldsMovedPane(
 /**
  * Settles this window with the host's answer. A committed move this window could not draw, and a
  * lost reply the host turns out to have committed, take the host's tabs; a refusal undoes the move.
- * A lost reply the host cannot be asked about waits for its next snapshot.
+ * A lost reply the host cannot be asked about waits for its next snapshot. `kept` means this window
+ * keeps a move the host committed.
  */
 export async function settleHostPaneMove(
   environmentId: string,
@@ -125,19 +126,23 @@ export async function settleHostPaneMove(
   outcome: HostPaneMoveOutcome,
   /** This window moved the pane before the answer. */
   movedHere: boolean
-): Promise<void> {
+): Promise<'kept' | 'settled'> {
   const committed =
     outcome === 'unknown' ? await hostHoldsMovedPane(environmentId, request) : outcome === 'moved'
-  if (committed === null || (committed && movedHere)) {
-    return
+  if (committed && movedHere) {
+    return 'kept'
+  }
+  if (committed === null) {
+    return 'settled'
   }
   if (!committed && movedHere) {
     await revertRefusedPaneMove(environmentId, request)
-    return
+    return 'settled'
   }
   await refreshWebRuntimeSessionTabsSnapshot(environmentId, request.worktreeId, {
     acceptCurrentSnapshot: true
   })
+  return 'settled'
 }
 
 /**

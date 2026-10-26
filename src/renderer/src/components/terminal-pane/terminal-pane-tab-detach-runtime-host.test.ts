@@ -9,6 +9,10 @@ import {
 } from './terminal-pane-tab-detach-fixture'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
+  clearPendingHostPaneMovesForTests,
+  isPendingHostPaneMoveTarget
+} from '@/runtime/pending-host-pane-moves'
+import {
   isWebTerminalSurfaceTabId,
   toHostSessionTabId,
   toWebTerminalSurfaceTabId
@@ -61,6 +65,7 @@ describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
     paneMoveHost.mockReset().mockResolvedValue('env-1')
     moveLocally.mockReset().mockResolvedValue({ status: 'not_held' })
     vi.stubGlobal('window', { api: { pty: { moveLeafToNewTab: moveLocally } } })
+    clearPendingHostPaneMovesForTests()
   })
   itSwitchOff('moves locally before the host answers, under the host target tab id', async () => {
     let answer: (value: unknown) => void = () => {}
@@ -86,6 +91,22 @@ describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
     expect(settle).not.toHaveBeenCalled()
     answer('moved')
     await vi.waitFor(() => expect(settle).toHaveBeenCalledWith('env-1', request, 'moved', true))
+  })
+  itSwitchOff('keeps a committed move pending past the reply, a refused one not', async () => {
+    moveOnHost.mockResolvedValue('moved')
+    settle.mockResolvedValue('kept')
+    await detach(mirroredStore()).result
+    const kept = moveOnHost.mock.calls[0][1]
+    moveOnHost.mockResolvedValue('refused')
+    settle.mockResolvedValue('settled')
+    await detach(mirroredStore()).result
+    const refused = moveOnHost.mock.calls[1][1]
+    await vi.waitFor(() => expect(settle).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() =>
+      expect(isPendingHostPaneMoveTarget(refused.targetTabId, LEAF_2)).toBe(false)
+    )
+    // The first move settled first, so its reply's release has run too; only the hold keeps it.
+    expect(isPendingHostPaneMoveTarget(kept.targetTabId, LEAF_2)).toBe(true)
   })
   itSwitchOff('names the drop to the host in its own group ids', async () => {
     moveOnHost.mockReturnValue(new Promise(() => {}))

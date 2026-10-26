@@ -1,4 +1,5 @@
 import type {
+  TerminalLayoutSnapshot,
   TerminalPaneLayoutNode,
   TerminalPaneSplitDirection
 } from '../../../../shared/terminal-tab-types'
@@ -166,27 +167,55 @@ export function planTerminalLiveLayoutInsertions(
   return insertions
 }
 
-/** Close only retired leaves with cleared PTYs; missing transports may still mount, and live bindings may outdate snapshots. Never remove the last pane. */
+/** Whether another tab of the worktree binds this PTY: the host moved its pane there. */
+export function isPtyBoundInAnotherTab(
+  state: {
+    tabsByWorktree: Readonly<Record<string, readonly { id: string }[] | undefined>>
+    terminalLayoutsByTabId: Readonly<Record<string, TerminalLayoutSnapshot | undefined>>
+  },
+  worktreeId: string,
+  tabId: string,
+  ptyId: string
+): boolean {
+  return (state.tabsByWorktree[worktreeId] ?? []).some((tab) => {
+    const layout = tab.id === tabId ? undefined : state.terminalLayoutsByTabId[tab.id]
+    // Why: an off-tree binding is a stale record, not a pane that tab draws.
+    return (
+      !!layout?.root &&
+      collectLeafIds(layout.root).some((leafId) => layout.ptyIdsByLeafId?.[leafId] === ptyId)
+    )
+  })
+}
+
+export type RetiredPaneRemovals = { closed: number[]; moved: number[] }
+
+/** Ghosts (PTY ended) to close and moved panes (live PTY another tab binds) to detach; never the last pane. */
 export function selectRetiredPaneIds(
   retiredLeafIds: readonly string[],
   view: {
     paneCount: number
     paneIdForLeaf: (leafId: string) => number | null
     ptyIdForPane: (paneId: number) => string | null | undefined
+    isPtyBoundInAnotherTab: (ptyId: string) => boolean
   }
-): number[] {
-  const paneIds: number[] = []
+): RetiredPaneRemovals {
+  const removals: RetiredPaneRemovals = { closed: [], moved: [] }
   for (const leafId of retiredLeafIds) {
-    if (view.paneCount - paneIds.length <= 1) {
+    if (view.paneCount - removals.closed.length - removals.moved.length <= 1) {
       break
     }
     const paneId = view.paneIdForLeaf(leafId)
-    if (paneId === null || view.ptyIdForPane(paneId) !== null) {
+    if (paneId === null) {
       continue
     }
-    paneIds.push(paneId)
+    const ptyId = view.ptyIdForPane(paneId)
+    if (ptyId === null) {
+      removals.closed.push(paneId)
+    } else if (ptyId && view.isPtyBoundInAnotherTab(ptyId)) {
+      removals.moved.push(paneId)
+    }
   }
-  return paneIds
+  return removals
 }
 
 /** Retain omitted previously published leaves until removal or host republication, retrying after live PTY bindings clear. */

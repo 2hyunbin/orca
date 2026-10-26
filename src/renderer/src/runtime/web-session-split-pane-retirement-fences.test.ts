@@ -2,19 +2,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import { collectLeafIds } from '../../../shared/terminal-pane-layout-tree'
 import {
+  isPtyBoundInAnotherTab,
   planTerminalLiveLayoutRemovals,
   selectRetiredPaneIds,
-  trackRetiredLeafIds
+  trackRetiredLeafIds,
+  type RetiredPaneRemovals
 } from '../components/terminal-pane/terminal-live-layout-reconciliation'
-import { applyFreshWebSessionTabsSnapshot } from './web-session-tabs-sync/snapshot-api'
+import { toRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
 import {
-  clearWebSessionTerminalOrphanRecoveryForTests,
-  recoverWebSessionTerminalOrphansBeforeApply
-} from './web-session-terminal-orphan-recovery'
+  beginPendingHostPaneMove,
+  clearPendingHostPaneMovesForTests,
+  confirmHostPaneMovesInSnapshot,
+  holdHostPaneMoveUntilSnapshot,
+  isPendingHostPaneMoveTarget
+} from './pending-host-pane-moves'
+import { recoverMirroredTerminalOrphansBeforeApply } from './web-session-tabs-sync/mirror-terminal-orphan-recovery'
+import { applyFreshWebSessionTabsSnapshot } from './web-session-tabs-sync/snapshot-api'
+import { clearWebSessionTerminalOrphanRecoveryForTests } from './web-session-terminal-orphan-recovery'
 import {
   ENV,
   LEAF_ID,
   SECOND_LEAF_ID,
+  WT,
   makeSnapshot,
   makeState,
   resetWebSessionTabsSyncTestState
@@ -28,12 +37,16 @@ vi.mock('@/hooks/agent-hook-completion-notifications', () => ({
 const TAB_ID = 'web-terminal-host-tab-1'
 const mountedLeaves = [LEAF_ID, SECOND_LEAF_ID]
 
-function snapshot(version: number, leaves = mountedLeaves): RuntimeMobileSessionTabsResult {
+function snapshot(
+  version: number,
+  leaves = mountedLeaves,
+  parentTabIdOf: (leafId: string) => string = () => 'host-tab-1'
+): RuntimeMobileSessionTabsResult {
   return makeSnapshot(
     leaves.map((leafId) => ({
       type: 'terminal' as const,
-      id: `host-tab-1::${leafId}`,
-      parentTabId: 'host-tab-1',
+      id: `${parentTabIdOf(leafId)}::${leafId}`,
+      parentTabId: parentTabIdOf(leafId),
       leafId,
       title: 'shell',
       isActive: leafId === LEAF_ID,
@@ -68,7 +81,7 @@ function createReconciliation() {
     throw new Error('execution host unavailable')
   })
 
-  function plan(secondPtyId: string | null): number[] {
+  function planRemovals(secondPtyId: string | null): RetiredPaneRemovals {
     const root = state.terminalLayoutsByTabId[TAB_ID]?.root
     expect(root).toBeDefined()
     const layoutLeafIds = new Set(root ? collectLeafIds(root) : [])
@@ -82,17 +95,48 @@ function createReconciliation() {
     return selectRetiredPaneIds(planTerminalLiveLayoutRemovals(root, mounted, retiredLeafIds), {
       paneCount: mounted.size,
       paneIdForLeaf: (leaf) => (leaf === LEAF_ID ? 1 : 2),
-      ptyIdForPane: (pane) => (pane === 1 ? 'remote:first' : secondPtyId)
+      ptyIdForPane: (pane) => (pane === 1 ? 'remote:first' : secondPtyId),
+      isPtyBoundInAnotherTab: (ptyId) => isPtyBoundInAnotherTab(state, WT, TAB_ID, ptyId)
     })
   }
 
   return {
     call,
-    plan,
+    plan: (secondPtyId: string | null): number[] => planRemovals(secondPtyId).closed,
+    planRemovals,
+    layoutOf: (tabId: string) => state.terminalLayoutsByTabId[tabId],
+    /** This window's optimistic move of the second pane into a new tab, before the host has it. */
+    moveSecondLocally(targetTabId: string) {
+      const source = state.terminalLayoutsByTabId[TAB_ID]!
+      const sourceTab = state.tabsByWorktree[WT]!.find((tab) => tab.id === TAB_ID)!
+      const ptyId = source.ptyIdsByLeafId![SECOND_LEAF_ID]!
+      state = {
+        ...state,
+        tabsByWorktree: {
+          ...state.tabsByWorktree,
+          [WT]: [...state.tabsByWorktree[WT]!, { ...sourceTab, id: targetTabId, ptyId }]
+        },
+        terminalLayoutsByTabId: {
+          ...state.terminalLayoutsByTabId,
+          [TAB_ID]: {
+            ...source,
+            root: { type: 'leaf', leafId: LEAF_ID },
+            activeLeafId: LEAF_ID,
+            ptyIdsByLeafId: { [LEAF_ID]: source.ptyIdsByLeafId![LEAF_ID]! }
+          },
+          [targetTabId]: {
+            root: { type: 'leaf', leafId: SECOND_LEAF_ID },
+            activeLeafId: SECOND_LEAF_ID,
+            expandedLeafId: null,
+            ptyIdsByLeafId: { [SECOND_LEAF_ID]: ptyId }
+          }
+        }
+      }
+    },
     removeSecond: () => mounted.delete(SECOND_LEAF_ID),
     leaves: () => collectLeafIds(state.terminalLayoutsByTabId[TAB_ID].root!),
     async receive(incoming: RuntimeMobileSessionTabsResult) {
-      const recovered = await recoverWebSessionTerminalOrphansBeforeApply(state, incoming, ENV, {
+      const recovered = await recoverMirroredTerminalOrphansBeforeApply(state, incoming, ENV, {
         call
       })
       expect(recovered).not.toBeNull()
@@ -107,6 +151,7 @@ describe('host snapshot fences before split-pane retirement', () => {
   beforeEach(() => {
     resetWebSessionTabsSyncTestState()
     clearWebSessionTerminalOrphanRecoveryForTests()
+    clearPendingHostPaneMovesForTests()
   })
 
   it('keeps a null-transport pane when an older layout arrives', async () => {
@@ -138,6 +183,83 @@ describe('host snapshot fences before split-pane retirement', () => {
     expect(view.plan(null)).toEqual([2])
     view.removeSecond()
     expect(view.plan(null)).toEqual([])
+  })
+
+  it('drops a pane another client moved to a new tab from its source tab, PTY kept', async () => {
+    const view = createReconciliation()
+    await view.receive(snapshot(2))
+    view.plan('remote:second')
+    // The host moved the second pane, same terminal, into a new tab.
+    await view.receive(
+      snapshot(3, mountedLeaves, (leafId) => (leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'))
+    )
+    const movedPtyId = toRemoteRuntimePtyId(`terminal-${SECOND_LEAF_ID}`, ENV)
+    expect(view.call).not.toHaveBeenCalled()
+    expect(view.leaves()).toEqual([LEAF_ID])
+    expect(view.layoutOf('web-terminal-host-tab-2')?.ptyIdsByLeafId).toEqual({
+      [SECOND_LEAF_ID]: movedPtyId
+    })
+    expect(view.planRemovals(movedPtyId)).toEqual({ closed: [], moved: [2] })
+  })
+
+  it('keeps this window’s own pending move when a snapshot from before the host move lands', async () => {
+    const view = createReconciliation()
+    await view.receive(snapshot(2))
+    const targetTabId = 'web-terminal-host-tab-2'
+    view.moveSecondLocally(targetTabId)
+    const release = beginPendingHostPaneMove(targetTabId, SECOND_LEAF_ID)
+    try {
+      await view.receive(snapshot(3))
+    } finally {
+      release()
+    }
+    // The binding stays an orphan candidate the host is asked about, not a stale copy to drop.
+    expect(view.call).toHaveBeenCalled()
+    expect(view.layoutOf(targetTabId)?.ptyIdsByLeafId).toEqual({
+      [SECOND_LEAF_ID]: toRemoteRuntimePtyId(`terminal-${SECOND_LEAF_ID}`, ENV)
+    })
+  })
+
+  it('keeps a move the host committed until a host snapshot shows it, even after the reply', async () => {
+    const view = createReconciliation()
+    await view.receive(snapshot(2))
+    const targetTabId = 'web-terminal-host-tab-2'
+    view.moveSecondLocally(targetTabId)
+    // The host's reply settled the move before its snapshot of the move arrived.
+    beginPendingHostPaneMove(targetTabId, SECOND_LEAF_ID)()
+    holdHostPaneMoveUntilSnapshot(targetTabId, SECOND_LEAF_ID)
+    await view.receive(snapshot(3))
+    expect(view.layoutOf(targetTabId)?.ptyIdsByLeafId).toEqual({
+      [SECOND_LEAF_ID]: toRemoteRuntimePtyId(`terminal-${SECOND_LEAF_ID}`, ENV)
+    })
+    await view.receive(
+      snapshot(4, mountedLeaves, (leafId) => (leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'))
+    )
+    expect(isPendingHostPaneMoveTarget(targetTabId, SECOND_LEAF_ID)).toBe(false)
+  })
+
+  it('a row this window retained for its own move does not count as the host showing it', async () => {
+    const view = createReconciliation()
+    await view.receive(snapshot(2))
+    const targetTabId = 'web-terminal-host-tab-2'
+    view.moveSecondLocally(targetTabId)
+    const release = beginPendingHostPaneMove(targetTabId, SECOND_LEAF_ID)
+    // A snapshot from before the host move: recovery keeps the target pane with a row of its own.
+    await view.receive(snapshot(3))
+    holdHostPaneMoveUntilSnapshot(targetTabId, SECOND_LEAF_ID)
+    release()
+    expect(isPendingHostPaneMoveTarget(targetTabId, SECOND_LEAF_ID)).toBe(true)
+  })
+
+  it('needs no hold for a move whose snapshot arrived before its reply', () => {
+    const targetTabId = 'web-terminal-host-tab-2'
+    const release = beginPendingHostPaneMove(targetTabId, SECOND_LEAF_ID)
+    confirmHostPaneMovesInSnapshot(
+      snapshot(4, mountedLeaves, (leafId) => (leafId === LEAF_ID ? 'host-tab-1' : 'host-tab-2'))
+    )
+    holdHostPaneMoveUntilSnapshot(targetTabId, SECOND_LEAF_ID)
+    release()
+    expect(isPendingHostPaneMoveTarget(targetTabId, SECOND_LEAF_ID)).toBe(false)
   })
 
   it('clears deferred retirement when the host reintroduces the leaf before detach', async () => {
