@@ -13,7 +13,7 @@ import {
   TERMINAL_PATH_CROSS_WORKSPACE_RUNTIME_CAPABILITY,
   type RuntimeTerminalPathResolution
 } from '../../../../shared/runtime-file-contracts'
-import { HostFileRefusal, hostAbsentRefusal } from './host-file-refusal'
+import { HostFileRefusal, hostAbsentRefusal, hostSavesGrantedFiles } from './host-file-refusal'
 
 export type HostWorkspaceFile = {
   kind: 'host'
@@ -126,7 +126,7 @@ export async function resolveHostWorkspaceFile(
         absolutePath: openTarget.absolutePath,
         grantId: openTarget.grantId,
         isDirectory: false,
-        readOnly: openTarget.readOnly === true
+        readOnly: openTarget.readOnly === true || !(await hostSavesGrantedFiles(environmentId))
       }
     }
     if (resolved.exists) {

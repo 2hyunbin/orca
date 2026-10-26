@@ -1,6 +1,11 @@
 import type { ILink } from '@xterm/xterm'
 import { describe, expect, it, vi } from 'vitest'
 import { createTerminalLinkTestDoubles } from './terminal-link-handlers-test-fixtures'
+import {
+  createCompatibleRuntimeStatusResponseIfNeeded,
+  type RuntimeEnvironmentCallRequest
+} from '@/runtime/runtime-compatibility-test-fixture'
+import { TERMINAL_PATH_ABSOLUTE_FILES_RUNTIME_CAPABILITY } from '../../../../shared/runtime-file-contracts'
 import { createProviderSetup, makeBufferLine } from './terminal-link-provider-buffer-fixtures'
 import {
   flushDoubleRaf,
@@ -8,7 +13,13 @@ import {
 } from './terminal-link-handlers-test-harness'
 
 const doubles = createTerminalLinkTestDoubles()
-const { storeState, statMock, openFileMock, runtimeEnvironmentCallMock } = doubles
+const {
+  storeState,
+  statMock,
+  openFileMock,
+  runtimeEnvironmentCallMock,
+  runtimeEnvironmentTransportCallMock
+} = doubles
 
 vi.mock('@/store', () => ({
   useAppStore: {
@@ -112,16 +123,35 @@ describe('a paired-server terminal path outside its workspace', () => {
     expect(openFileMock.mock.calls[0]?.[0]).not.toHaveProperty('readOnly')
   })
 
-  it('keeps a read-only grant from an older host read-only', async () => {
-    hostGrants(true)
+  it.each(['a read-only grant', 'a host that cannot renew grants'])(
+    'keeps %s read-only',
+    async (reason) => {
+      if (reason === 'a read-only grant') {
+        hostGrants(true)
+      } else {
+        hostGrants()
+        runtimeEnvironmentTransportCallMock.mockImplementation(
+          (args: RuntimeEnvironmentCallRequest) => {
+            const status = createCompatibleRuntimeStatusResponseIfNeeded(args)
+            if (!status?.ok) {
+              return runtimeEnvironmentCallMock(args)
+            }
+            const capabilities = status.result.capabilities?.filter(
+              (capability) => capability !== TERMINAL_PATH_ABSOLUTE_FILES_RUNTIME_CAPABILITY
+            )
+            return { ...status, result: { ...status.result, capabilities } }
+          }
+        )
+      }
 
-    await clickLink()
+      await clickLink()
 
-    expect(openFileMock).toHaveBeenCalledWith(
-      expect.objectContaining({ terminalArtifactGrantId: 'g-1', readOnly: true }),
-      { forceContentReload: true }
-    )
-  })
+      expect(openFileMock).toHaveBeenCalledWith(
+        expect.objectContaining({ terminalArtifactGrantId: 'g-1', readOnly: true }),
+        { forceContentReload: true }
+      )
+    }
+  )
 
   it('shows no link for a path the host refuses, even when this computer has it', async () => {
     runtimeEnvironmentCallMock.mockResolvedValue({

@@ -29,3 +29,12 @@ export async function hostAbsentRefusal(
     )
   )
 }
+
+/** Older hosts' grants go stale on any host-side change and can't be renewed, so their tabs stay read-only. */
+export function hostSavesGrantedFiles(environmentId: string): Promise<boolean> {
+  return runtimeEnvironmentSupportsCapability(
+    environmentId,
+    TERMINAL_PATH_ABSOLUTE_FILES_RUNTIME_CAPABILITY,
+    15_000
+  )
+}

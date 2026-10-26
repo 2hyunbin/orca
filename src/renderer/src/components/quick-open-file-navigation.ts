@@ -12,7 +12,7 @@ import {
   isQuickOpenAbsolutePath,
   type QuickOpenQueryTarget
 } from '../../../shared/quick-open-query-target'
-import { hostAbsentRefusal } from './terminal-pane/host-file-refusal'
+import { hostAbsentRefusal, hostSavesGrantedFiles } from './terminal-pane/host-file-refusal'
 import { scheduleEditorLineReveal } from '@/store/slices/editor/focus/editor-focus-reveal'
 import {
   captureFileExplorerOperationGuard,
@@ -105,7 +105,9 @@ export async function openQuickOpenFile(
     if (resolved.openTarget?.kind === 'absolute-file') {
       // Why: a host file outside its workspaces is readable only through the grant it issued.
       terminalArtifactGrantId = resolved.openTarget.grantId
-      grantReadOnly = resolved.openTarget.readOnly === true
+      grantReadOnly =
+        resolved.openTarget.readOnly === true ||
+        !(await hostSavesGrantedFiles(target.environmentId))
       filePath = resolved.openTarget.absolutePath
       relativePath = filePath
     } else if (
