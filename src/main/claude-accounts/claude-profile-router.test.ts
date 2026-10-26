@@ -30,8 +30,11 @@ import { getPosixClaudeShellFunction } from '../../shared/claude-shell-function'
 import { ClaudeProfileRouter, type ClaudeProfileRouterSettings } from './claude-profile-router'
 import {
   claudeProfileHistoryDirs,
+  getClaudeObservedConfigDirs,
+  installClaudeObservedConfigDirs,
   installClaudeProfileRouter
 } from './claude-profile-installed-router'
+import { ClaudeObservedConfigDirs } from './claude-observed-config-dirs'
 
 const shell = vi.hoisted(() => ({ hang: false }))
 vi.mock('../startup/login-shell-environment', () => ({
@@ -52,6 +55,7 @@ afterEach(() => {
   vi.useRealTimers()
   shell.hang = false
   installClaudeProfileRouter(undefined)
+  installClaudeObservedConfigDirs(undefined)
   roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true }))
 })
 
@@ -553,6 +557,30 @@ describe('ClaudeProfileRouter', () => {
     roots.push(configDir)
     mkdirSync(join(configDir, 'projects'), { recursive: true })
     installClaudeProfileRouter(fixture({ CLAUDE_CONFIG_DIR: configDir }).router)
+    expect(claudeProfileHistoryDirs('projects')).toEqual([join(configDir, 'projects')])
+  })
+
+  it('lists history under a wrapper CLAUDE_CONFIG_DIR seen in a hook, after restart too', () => {
+    const f = fixture()
+    const projects = join(f.root, '.claude-work', 'projects')
+    const file = join(f.root, 'observed.json')
+    mkdirSync(join(projects, '-proj'), { recursive: true })
+    const observe = () => new ClaudeObservedConfigDirs(file, () => ({}))
+    installClaudeObservedConfigDirs(observe())
+    expect(claudeProfileHistoryDirs('projects')).toEqual([])
+    getClaudeObservedConfigDirs()?.observeTranscriptPath(join(projects, '-proj', 'id.jsonl'))
+    installClaudeObservedConfigDirs(observe())
+    expect(claudeProfileHistoryDirs('projects')).toEqual([projects])
+  })
+
+  it("lists history under the CLAUDE_CONFIG_DIR set in Orca's Claude launch environment", () => {
+    const f = fixture()
+    const configDir = join(f.root, '.claude-settings')
+    mkdirSync(join(configDir, 'projects'), { recursive: true })
+    const agentDefaultEnv = { claude: { CLAUDE_CONFIG_DIR: configDir } }
+    installClaudeObservedConfigDirs(
+      new ClaudeObservedConfigDirs(join(f.root, 'observed.json'), () => ({ agentDefaultEnv }))
+    )
     expect(claudeProfileHistoryDirs('projects')).toEqual([join(configDir, 'projects')])
   })
 })
