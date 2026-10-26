@@ -3,6 +3,7 @@ import {
   CONNECTOR_LIMITS,
   ConnectorDeliverySchema,
   type ConnectorAcksRequest,
+  type ConnectorConversation,
   type ConnectorDelivery
 } from '@orca-cloud/connector-contract'
 
@@ -18,7 +19,7 @@ export type DeliveryBody = ConnectorDelivery extends infer D
   : never
 
 export type EnqueueResult = 'queued' | 'duplicate' | 'dropped'
-export type Unsettled = { deliveryId: string; conversation: { source: 'slack'; externalId: string } }
+export type Unsettled = { deliveryId: string; conversation: ConnectorConversation }
 
 const conversation = (externalId: string) => ({ source: 'slack' as const, externalId })
 
