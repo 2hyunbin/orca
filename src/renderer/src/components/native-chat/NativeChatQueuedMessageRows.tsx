@@ -187,7 +187,7 @@ function QueuedMessagePresentation({
               variant="ghost"
               size="icon-xs"
               ref={sortable.setActivatorNodeRef}
-              className="h-7 w-5 cursor-grab touch-none p-0 active:cursor-grabbing"
+              className="h-7 w-5 cursor-grab touch-none active:cursor-grabbing"
               {...sortable.attributes}
               {...sortable.listeners}
               aria-label={label}
