@@ -745,7 +745,6 @@ describe('the lineage journal page', () => {
     expect(page?.items).toHaveLength(STRUCTURED_JOURNAL_PAGE_LIMIT)
     expect(page?.items[0]?.itemId).toBe(`${MINTED}-100`)
     expect(page?.items.at(-1)?.itemId).toBe(`${SUCCESSOR}-149`)
-    expect(page?.sessionIds.filter((id) => id === MINTED)).toHaveLength(50)
     expect(page?.hasOlder).toBe(true)
   })
 

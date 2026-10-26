@@ -38,7 +38,7 @@ export async function readStructuredJournalPage(
 }
 
 /** The worker's own conversation on a history page. */
-export function structuredJournalPage(page: AgentSessionHistoryPage): StructuredJournalPage {
+function structuredJournalPage(page: AgentSessionHistoryPage): StructuredJournalPage {
   return {
     items: page.items.filter(isRootAgentJournalItem),
     hasOlder: page.hasOlder,
@@ -65,25 +65,18 @@ export async function readStructuredJournalChanges(
   }
 }
 
-/** A lineage page: `sessionIds[i]` is the session `items[i]` was read from. */
-export type StructuredLineageJournalPage = StructuredJournalPage & {
-  sessionIds: readonly string[]
-}
-
 /** Bound the whole lineage oldest-session-first; unreadable current session returns null, while missing earlier history ends the page. */
 export async function readStructuredLineageJournalPage(
   lineage: readonly string[]
-): Promise<StructuredLineageJournalPage | null> {
+): Promise<StructuredJournalPage | null> {
   const currentSessionId = lineage.at(-1)
   const current = currentSessionId ? await readStructuredJournalPage(currentSessionId) : null
   if (!currentSessionId || !current) {
     return null
   }
   const items = [...current.items]
-  const sessionIds = items.map(() => currentSessionId)
-  const lineagePage = (hasOlder: boolean): StructuredLineageJournalPage => ({
+  const lineagePage = (hasOlder: boolean): StructuredJournalPage => ({
     items,
-    sessionIds,
     hasOlder,
     liveCursor: current.liveCursor
   })
@@ -97,7 +90,6 @@ export async function readStructuredLineageJournalPage(
       return lineagePage(true)
     }
     items.unshift(...page.items)
-    sessionIds.unshift(...page.items.map(() => sessionId))
     if (page.hasOlder) {
       return lineagePage(true)
     }
@@ -108,7 +100,7 @@ export async function readStructuredLineageJournalPage(
 /** For retired unreadable tails, return the latest readable history and count every skipped session. */
 export async function readRetiredLineageJournalPage(
   lineage: readonly string[]
-): Promise<{ page: StructuredLineageJournalPage | null; unreadable: number }> {
+): Promise<{ page: StructuredJournalPage | null; unreadable: number }> {
   for (let unreadable = 1; unreadable < lineage.length; unreadable += 1) {
     const page = await readStructuredLineageJournalPage(lineage.slice(0, -unreadable))
     if (page) {

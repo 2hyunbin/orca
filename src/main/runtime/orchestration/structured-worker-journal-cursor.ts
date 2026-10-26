@@ -10,7 +10,7 @@ import { projectStructuredItemsToNativeChat } from '../../../shared/structured-a
 import { OrchestrationError } from './orchestration-error'
 import {
   readStructuredJournalChanges,
-  structuredJournalPage,
+  readStructuredJournalPage,
   type StructuredJournalPage
 } from './structured-worker-journal-page'
 import { boundWorkerTranscriptMessages } from './worker-transcript-payload'
@@ -57,28 +57,22 @@ export async function readStructuredJournalSince(
   for (let writes = AGENT_SESSION_HISTORY_MAX_LIMIT; ; writes = Math.ceil(writes / 2)) {
     const result = await readStructuredJournalChanges(sessionId, cursor, writes)
     if (!result) {
-      throw new OrchestrationError(
-        'transcript_required',
-        'The worker transcript could not be read; its session is not attached.'
-      )
+      throw transcriptRequired()
     }
     if (!result.ok) {
-      // A journal that cannot continue this cursor answers with its newest messages.
-      const tail = readStructuredJournalTail(structuredJournalPage(result.page), limit)
-      return {
-        ...tail,
-        warnings: [
-          `The transcript cannot continue from this cursor (${result.reset}); this page starts at its newest messages.`,
-          ...tail.warnings
-        ]
-      }
+      return restartAtNewest(sessionId, limit, result.reset)
     }
     const page = result.page
     const messages = projectStructuredItemsToNativeChat(page.items.filter(isRootAgentJournalItem))
     const bounded = boundWorkerTranscriptMessages(messages)
+    const dropped = bounded.messages.length < messages.length
     // Narrow rather than advance the cursor past messages the page cannot hold.
-    if ((messages.length > limit || bounded.messages.length < messages.length) && writes > 1) {
+    if ((messages.length > limit || dropped) && writes > 1) {
       continue
+    }
+    // One save too large to send whole cannot be split, so the reader starts over at the newest messages.
+    if (dropped) {
+      return restartAtNewest(sessionId, limit, 'update_too_large')
     }
     return {
       messages: bounded.messages,
@@ -97,4 +91,31 @@ export async function readStructuredJournalSince(
       ]
     }
   }
+}
+
+/** The newest messages, for a cursor the journal cannot continue. */
+async function restartAtNewest(
+  sessionId: string,
+  limit: number,
+  reason: string
+): Promise<StructuredJournalRead> {
+  const page = await readStructuredJournalPage(sessionId)
+  if (!page) {
+    throw transcriptRequired()
+  }
+  const tail = readStructuredJournalTail(page, limit)
+  return {
+    ...tail,
+    warnings: [
+      `The transcript cannot continue from this cursor (${reason}); this page starts at its newest messages.`,
+      ...tail.warnings
+    ]
+  }
+}
+
+function transcriptRequired(): OrchestrationError {
+  return new OrchestrationError(
+    'transcript_required',
+    'The worker transcript could not be read; its session is not attached.'
+  )
 }

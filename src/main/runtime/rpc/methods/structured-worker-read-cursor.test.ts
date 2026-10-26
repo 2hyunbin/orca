@@ -175,6 +175,33 @@ describe('the structured worker-read cursor over a live journal', () => {
     expect(second.warnings).toEqual([])
   })
 
+  it('starts over at the newest messages when one save is too large to send', async () => {
+    // A cursor advanced past a whole save whose messages the size limit had dropped.
+    await write('a', say('a'))
+    const first = await read()
+    const block = { type: 'text' as const, text: 'x'.repeat(1_200) }
+    await journal.appendLifecycleBatch({
+      settlementId: 'big',
+      fence: 1,
+      mutations: Array.from({ length: 100 }, (_, index) => ({
+        kind: 'item' as const,
+        identity: { provider: 'orca' as const, clientMessageId: `big-${index}` },
+        body: {
+          kind: 'message' as const,
+          role: 'assistant' as const,
+          blocks: Array.from({ length: 6 }, () => ({ ...block }))
+        },
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE
+      }))
+    })
+    const second = await read(first.cursor)
+    expect(second.warnings[0]).toMatch(/update_too_large.*newest messages/)
+    expect(second.transcript.messages.at(-1)?.id).toContain('big-99')
+
+    await write('after', say('after'))
+    expect(textsOf(await read(second.cursor))).toEqual(['after'])
+  })
+
   it('pages many writes forward exactly once', async () => {
     await write('a', say('a'))
     const first = await read()
