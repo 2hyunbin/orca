@@ -6,7 +6,7 @@ import type {
 } from '../../shared/runtime-types'
 import type { Tab } from '../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
-import { editorRowHost } from '../../shared/workspace-layout/old-client/old-client-session-editor-rows'
+import { editorRowHost } from '../../shared/session-tab-file-host'
 import {
   editorTabNamesFile,
   sameEditorFile

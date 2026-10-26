@@ -5,6 +5,7 @@ import type {
   RuntimeMobileSessionMarkdownTab
 } from '../../runtime-mobile-session-tab-contracts'
 import type { LayoutEditorView } from '../layout-editor-view'
+import { editorRowHost } from '../../session-tab-file-host'
 import type { DesktopLayoutView } from '../workspace-layout-beside'
 import { editorFileKey, editorTabFile } from '../workspace-layout-editor-tab-file'
 import type { LayoutContentTab, LayoutEditorFile, WorkspaceLayout } from '../workspace-layout-model'
@@ -20,14 +21,6 @@ type EditorRow = RuntimeMobileSessionMarkdownTab | RuntimeMobileSessionFileTab
 
 const fileName = (relativePath: string, fallback: string): string =>
   relativePath.split(/[\\/]/).pop() || relativePath || fallback
-
-/** Names the paired server a row's file lives on, for runtimes to keep from other runtimes (#33424). */
-export function editorRowHost(file: {
-  runtimeEnvironmentId?: string | null
-}): Pick<RuntimeMobileSessionFileTab, 'hostRuntimeEnvironmentId'> {
-  const hostRuntimeEnvironmentId = file.runtimeEnvironmentId?.trim()
-  return hostRuntimeEnvironmentId ? { hostRuntimeEnvironmentId } : {}
-}
 
 const tabRowProps = (tab: LayoutContentTab, scope: EditorRowScope) => ({
   color: tab.color ?? null,

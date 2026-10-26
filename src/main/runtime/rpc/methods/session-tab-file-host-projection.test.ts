@@ -59,6 +59,24 @@ describe("a desktop's tab on a paired server's file", () => {
     expect(served.activeGroupId).toBe('group-1')
   })
 
+  it('leaves another runtime no groups or focus when every row is on a server', () => {
+    const snapshot = desktopSnapshot()
+    const onlyServerRows = {
+      ...snapshot,
+      tabs: snapshot.tabs.filter((tab) => tab.id === 'server-readme'),
+      tabGroups: snapshot.tabGroups?.map((group) => ({
+        ...group,
+        tabOrder: ['server-readme'],
+        recentTabIds: ['server-readme']
+      }))
+    }
+    const served = projectSessionTabsForClient(onlyServerRows, 'runtime', [])
+    expect(served.tabs).toEqual([])
+    expect(served.tabGroups).toBeUndefined()
+    expect(served.activeTabId).toBeNull()
+    expect(served.activeGroupId).toBeNull()
+  })
+
   it.each([
     ['its phone', 'mobile' as const],
     ['a local caller', undefined]
