@@ -1333,7 +1333,6 @@
 6 test-timeout-needs-reason:src/main/windows/windows-pty-job.win32.test.ts
 8 test-timeout-needs-reason:src/main/worker-thread-child-process/worker-thread-child-process.test.ts
 6 test-timeout-needs-reason:src/main/wsl/wsl-runner.wsl.test.ts
-3 test-timeout-needs-reason:src/main/zcode/interactive-capability.live.test.ts
 4 test-timeout-needs-reason:src/packages/process-host/src/run-process.test.ts
 5 test-timeout-needs-reason:src/renderer/src/components/sidebar/WorktreeCard.compact-hover.test.tsx
 2 test-timeout-needs-reason:src/renderer/src/components/sidebar/WorktreeCard.host-badge-toggle.test.tsx
