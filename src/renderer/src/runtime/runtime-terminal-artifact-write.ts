@@ -83,6 +83,10 @@ export async function writeRuntimeTerminalArtifactFile(
       return null
     }
     const current = grantId === null ? null : await readGrantedText(args, grantId)
+    // Why: a grant can only rewrite a file that exists; the host has no route to recreate one.
+    if (current === null && args.precondition.allowMissing === true) {
+      throw new Error(`${args.absolutePath} was deleted on its host; Orca can't recreate it there.`)
+    }
     const comparison = compareDiskWritePrecondition(args.precondition, current, args.content)
     if (comparison === 'identical') {
       return FILE_WRITE_UNCHANGED

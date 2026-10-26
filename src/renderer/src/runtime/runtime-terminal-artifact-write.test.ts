@@ -164,4 +164,22 @@ describe('saving a granted host file outside every workspace', () => {
     await expect(save('# new', '# old')).rejects.toThrow('EACCES')
     expect(callsTo('files.writeTerminalArtifact')).toHaveLength(0)
   })
+
+  it('explains that a file deleted on its host cannot be recreated through its grant', async () => {
+    runtimeEnvironmentCall.mockImplementation(async () =>
+      refused("ENOENT: no such file or directory, open '/private/tmp/handoff.md'")
+    )
+
+    await expect(
+      writeRuntimeTerminalArtifactFile({
+        target: { kind: 'environment', environmentId: 'env-1' },
+        worktreeId: 'wt-1',
+        absolutePath: PATH,
+        grantId: 'g-1',
+        content: '# new',
+        precondition: { expectedSignature: getDiskBaselineSignature('# old'), allowMissing: true }
+      })
+    ).rejects.toThrow("can't recreate it")
+    expect(callsTo('files.writeTerminalArtifact')).toHaveLength(0)
+  })
 })
