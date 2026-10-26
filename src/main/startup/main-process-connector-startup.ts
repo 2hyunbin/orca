@@ -3,14 +3,20 @@ import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
 import { mainProcessState as state } from './main-process-state'
 
 // Desktop only: the connector acts as the signed-in Orca account, which `orca serve` does not have yet.
-export function startDesktopConnectorCloud(): void {
+// Created before the window exists, so its sign-in and sign-out hooks always find it.
+export function installDesktopConnectorCloud(): void {
   if (!state.runtime || !state.store) {
     return
   }
   state.connectorCloud = createDesktopConnectorCloud(
     state.runtime,
     state.store,
-    getProfileUserDataPath()
+    getProfileUserDataPath(),
+    () => state.isQuitting
   )
-  state.connectorCloud?.connect()
+}
+
+// Registered with the relay; like it, the first request waits for the persisted proxy.
+export function connectDesktopConnectorCloud(): void {
+  void state.initialProxyApplicationReady.then(() => state.connectorCloud?.connect())
 }

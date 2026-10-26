@@ -12,6 +12,7 @@ let outbox: string
 let fake: FakeConnectorCloud
 let enabled: boolean
 let account: string | null
+let quitting: boolean
 let seam: FakeSeam
 let machine: ReturnType<typeof fakeMachine>
 
@@ -21,6 +22,7 @@ function connectorCloud(): ConnectorCloud {
     origin: fake.origin,
     machine,
     account: () => account,
+    isFenced: () => quitting,
     mintFor: (who) => fake.mintFor(who),
     fetchImpl: fake.fetch
   })
@@ -42,6 +44,7 @@ beforeEach(() => {
   fake = new FakeConnectorCloud()
   enabled = true
   account = 'ada'
+  quitting = false
   seam = fakeSeam()
   machine = fakeMachine(() => (enabled ? seam : null))
 })
@@ -143,5 +146,23 @@ describe('ConnectorCloud', () => {
     connectorCloud().connect()
     await vi.advanceTimersByTimeAsync(10)
     expect(fake.events).toEqual([{ kind: 'snapshot', conversations: [] }])
+  })
+
+  it('stops when Orca quits or relaunches into another profile, keeping pending turn ends', async () => {
+    writeFileSync(outbox, JSON.stringify({ account: 'ada', turnEnds: [turnEnd] }))
+    fake.forced.set(CONNECTOR_PATHS.events, { status: 503 })
+    const cloud = connectorCloud()
+    cloud.connect()
+    await vi.advanceTimersByTimeAsync(10)
+    quitting = true
+    account = 'grace'
+    cloud.fence()
+    machine.toggle()
+    cloud.accountChanged()
+    fake.answerPoll({ status: 200, body: { v: 1, serverNow: 1, holdMs: 0, deliveries: [] } })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(fake.requestsTo(CONNECTOR_PATHS.poll)).toHaveLength(1)
+    expect(fake.minted.every((minted) => minted.account === 'ada')).toBe(true)
+    expect(existsSync(outbox)).toBe(true)
   })
 })

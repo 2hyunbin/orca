@@ -120,11 +120,14 @@ export class FakeConnectorCloud {
       this.hello = { rev: Number(fields.helloRev), seq: -1 }
       return { status: 204 }
     }
+    const { hello } = this
     if (path === CONNECTOR_PATHS.acks) {
-      this.acks.push(...(Array.isArray(fields.acks) ? fields.acks : []))
+      // Acks from an older hello are ignored; those deliveries come back as unsettled instead.
+      if (hello && fields.helloRev === hello.rev) {
+        this.acks.push(...(Array.isArray(fields.acks) ? fields.acks : []))
+      }
       return { status: 204 }
     }
-    const { hello } = this
     if (!hello || fields.helloRev !== hello.rev) {
       return { status: 409, body: { error: 'hello_required' } }
     }

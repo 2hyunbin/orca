@@ -10,6 +10,8 @@ export type ConnectorCloudOptions = {
   machine: ConnectorMachine
   /** The signed-in Orca account, or null while signed out. */
   account: () => string | null
+  /** Quitting or relaunching into another profile: nothing new starts, as for the relay. */
+  isFenced: () => boolean
   /** Mints connector tokens for one account and no other. */
   mintFor: (account: string) => ConnectorTokenMint
   fetchImpl?: typeof globalThis.fetch
@@ -52,6 +54,11 @@ export class ConnectorCloud {
     }
   }
 
+  /** Quit or relaunch: stop now; pending turn ends stay on disk for the next launch of this account. */
+  fence(): void {
+    this.reconcile()
+  }
+
   /** The sign-out ended, either way; a sign-in that finished meanwhile resumes here. */
   signOutFinished(): void {
     this.signingOut = false
@@ -62,7 +69,7 @@ export class ConnectorCloud {
     if (!this.connected) {
       return
     }
-    const account = this.signingOut ? null : this.options.account()
+    const account = this.signingOut || this.options.isFenced() ? null : this.options.account()
     const seam = this.options.machine.seam()
     if (account && this.events?.account !== account) {
       this.stopClient()

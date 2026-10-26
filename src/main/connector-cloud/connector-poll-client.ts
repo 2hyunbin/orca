@@ -86,7 +86,9 @@ export class ConnectorPollClient {
         }
       }
     })
-    this.sendAcks = (acks) => this.post(CONNECTOR_PATHS.acks, { v: 1, acks })
+    // Acks name the current hello; the cloud ignores older ones and lists those deliveries as unsettled.
+    this.sendAcks = (acks) =>
+      this.post(CONNECTOR_PATHS.acks, { v: 1, helloRev: this.helloRev, acks })
     // Every hello restarts the numbering with a snapshot, so the current one always owns the queue.
     this.sendEvents = (events, seq) =>
       this.post(CONNECTOR_PATHS.events, { v: 1, helloRev: this.helloRev, seq, events })

@@ -40,7 +40,10 @@ import { startAppImageCopyPreExtraction } from '../cli/appimage-copy-pre-extract
 import { scheduleAllPendingHistoryTreeRemovals } from '../terminal-history-deletion'
 import { triggerStartupNotificationRegistration } from '../ipc/startup-notification-registration'
 import { startDesktopPushService } from './main-process-push-startup'
-import { startDesktopConnectorCloud } from './main-process-connector-startup'
+import {
+  connectDesktopConnectorCloud,
+  installDesktopConnectorCloud
+} from './main-process-connector-startup'
 import { mainProcessState as state } from './main-process-state'
 import { logStartupMilestone } from './startup-diagnostics'
 import { setupHeadlessServeAutoUpdater } from '../window/main-window-updater'
@@ -229,11 +232,11 @@ async function launchDesktopMode(
   }
   // Register before proxy await so concurrent token mints wait rather than fail provider_missing; installer requests are already guarded.
   startDesktopRelayService(runtimeRpc)
+  connectDesktopConnectorCloud()
   // Create the window before awaiting proxy readiness; the request guard already fences fetches.
   await state.initialProxyApplicationReady
-  // Apply persisted proxy before the push gateway's or the connector's first request.
+  // Apply persisted proxy before the push gateway's first request.
   startDesktopPushService(runtimeRpc)
-  startDesktopConnectorCloud()
   // Request macOS notification permission after reveal or the maximized window can hide it.
   win.once('show', () => {
     // Initialization failure can leave no Store; do not throw inside Electron listeners.
@@ -263,6 +266,9 @@ export async function initializeMainProcessRuntimeLaunch(
   state.serveOptions = serveOptions
   installCloudSessionShutdownFlush()
   const runtimeRpc = installRuntimeRpc(runtime, serveOptions)
+  if (!serveOptions) {
+    installDesktopConnectorCloud()
+  }
   const shellPathReady = shellPathHydration.whenReady()
   // Publish the same shell-PATH generation to renderer Git and terminal startup barriers.
   state.shellPathReady = shellPathReady
