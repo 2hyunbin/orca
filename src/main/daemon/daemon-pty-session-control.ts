@@ -185,11 +185,18 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
         this.historyManager?.suspendSession(id)
       }
     }
-    await this.client.request(
-      'kill',
-      { sessionId: id, immediate: opts.immediate ?? false },
-      remainingDaemonRequestTimeoutMs(opts.deadlineMs)
-    )
+    try {
+      await this.client.request(
+        'kill',
+        { sessionId: id, immediate: opts.immediate ?? false },
+        remainingDaemonRequestTimeoutMs(opts.deadlineMs)
+      )
+    } catch (error) {
+      // Already gone (e.g. a host-loss exit kept its tab): an explicit close still drops its history.
+      if (opts.keepHistory || !(error instanceof SessionNotFoundError)) {
+        throw error
+      }
+    }
     await this.completeShutdownWithHistoryLock(id, opts)
   }
 

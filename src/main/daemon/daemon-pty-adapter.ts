@@ -220,7 +220,8 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
         }
         const wslDistro = this.wslDistrosBySessionId.get(event.sessionId)
         if (wslDistro && isProvenProcessExit(event.payload.code)) {
-          void this.finishWslBridgeExit(event.sessionId, event.payload, wslDistro)
+          const exitAt = performance.now()
+          void this.finishWslBridgeExit(event.sessionId, event.payload, wslDistro, exitAt)
           return
         }
         this.finishExit(event.sessionId, event.payload)
@@ -239,9 +240,10 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
   private async finishWslBridgeExit(
     sessionId: string,
     exit: Omit<DaemonPtyRouterExitEvent, 'id'>,
-    wslDistro: string
+    wslDistro: string,
+    exitAt: number
   ): Promise<void> {
-    const lost = await isWslBridgeDistroLost(wslDistro, this.readRunningWslDistros)
+    const lost = await isWslBridgeDistroLost(wslDistro, exitAt, this.readRunningWslDistros)
     // A spawn that replaced this incarnation meanwhile owns the session now.
     const current = this.sessionIncarnations.get(sessionId)
     if (current !== undefined && current !== exit.incarnationId) {

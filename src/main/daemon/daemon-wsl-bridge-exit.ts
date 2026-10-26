@@ -12,18 +12,22 @@ import {
 /** The code a synthetic host-loss exit carries, as after a daemon crash. */
 export const WSL_DISTRO_LOSS_EXIT_CODE = -1
 
-// The probe's own wsl.exe timeout bounds it already; this bounds a hung settle as well.
-const WSL_EXIT_CHECK_TIMEOUT_MS = 8_000
+// Every bridge exit, a user's own `exit` too, waits on this before its tab reacts: keep it short.
+const WSL_EXIT_CHECK_TIMEOUT_MS = 3_000
 
-export type ReadRunningWslDistros = () => Promise<WslRunningDistrosRead>
+export type ReadRunningWslDistros = (options: {
+  startedAfter?: number
+}) => Promise<WslRunningDistrosRead>
 
 /**
- * True only when the running list is confirmed and the distro is not in it. The probe is the
- * shared, coalesced `wsl --list --running` (it never boots), so a terminate that exits many panes
- * at once costs one spawn. Unavailable or late means unchanged: the exit stays an exit.
+ * True only when a running list confirmed after the exit lacks the distro. The probe is the shared,
+ * coalesced `wsl --list --running` (it never boots): a terminate that exits many panes costs one
+ * spawn, and a probe already in flight from before the exit (which may predate the distro's boot)
+ * gets one fresh probe after it. Unavailable or late means unchanged: the exit stays an exit.
  */
 export async function isWslBridgeDistroLost(
   distro: string,
+  exitAt: number,
   readRunning: ReadRunningWslDistros = readConfirmedRunningWslDistros,
   timeoutMs = WSL_EXIT_CHECK_TIMEOUT_MS
 ): Promise<boolean> {
@@ -33,7 +37,9 @@ export async function isWslBridgeDistroLost(
   })
   try {
     const running = await Promise.race([
-      readRunning().catch((): WslRunningDistrosRead => ({ status: 'unavailable' })),
+      readRunning({ startedAfter: exitAt }).catch((): WslRunningDistrosRead => ({
+        status: 'unavailable'
+      })),
       timedOut
     ])
     const key = distro.trim().toLowerCase()

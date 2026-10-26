@@ -1,9 +1,12 @@
 // verify-15a 5e: `wsl --terminate` exited a live bridge pane with code 1, which closed its tab.
-import { rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WslRunningDistrosRead } from '../wsl-background-distro-gate'
 import type { DaemonPtyAdapter } from './daemon-pty-adapter'
 import type { DaemonServer } from './daemon-server'
+import { HistoryManager } from './history-manager'
 import {
   createMockSubprocess,
   startDaemonAdapterHarness,
@@ -14,6 +17,7 @@ type Exit = { id: string; code: number; cause?: unknown }
 
 describe('a WSL bridge pane exit', () => {
   let dir: string
+  let historyDir: string
   let server: DaemonServer
   let adapter: DaemonPtyAdapter
   let subprocesses: ReturnType<typeof createMockSubprocess>[]
@@ -21,6 +25,7 @@ describe('a WSL bridge pane exit', () => {
   const readRunning = vi.fn(() => running())
 
   beforeEach(async () => {
+    historyDir = mkdtempSync(join(tmpdir(), 'orca-distro-loss-history-'))
     subprocesses = []
     running = async () => ({ status: 'confirmed', distros: ['Ubuntu'] })
     readRunning.mockClear()
@@ -30,7 +35,10 @@ describe('a WSL bridge pane exit', () => {
         subprocesses.push(subprocess)
         return subprocess
       },
-      { readRunningWslDistros: readRunning }
+      {
+        readRunningWslDistros: readRunning,
+        historyPath: historyDir
+      }
     )
     dir = harness.dir
     server = harness.server
@@ -40,6 +48,7 @@ describe('a WSL bridge pane exit', () => {
     adapter?.dispose()
     await server?.shutdown()
     rmSync(dir, { recursive: true, force: true })
+    rmSync(historyDir, { recursive: true, force: true })
   })
 
   async function spawnBridgePane(): Promise<string> {
@@ -126,5 +135,17 @@ describe('a WSL bridge pane exit', () => {
     await waitFor(() => exits.length > 0)
     expect(exits[0]).toMatchObject({ id, code: 1 })
     expect(readRunning).not.toHaveBeenCalled()
+  })
+
+  it('drops a kept tab’s history when the user later closes it, though its session is gone', async () => {
+    running = async () => ({ status: 'confirmed', distros: [] })
+    const exits = collectExits()
+    const id = await spawnBridgePane()
+    subprocesses[0]!._simulateExit(1)
+    await waitFor(() => exits.length > 0)
+    const removeSession = vi.spyOn(HistoryManager.prototype, 'removeSession')
+
+    await expect(adapter.shutdown(id, { immediate: true })).resolves.toBeUndefined()
+    expect(removeSession).toHaveBeenCalledWith(id)
   })
 })
