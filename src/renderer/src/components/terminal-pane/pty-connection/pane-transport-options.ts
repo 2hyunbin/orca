@@ -1,4 +1,5 @@
 import { useAppStore } from '@/store'
+import { terminalShowsReplayedHistory } from '../replayed-history-terminals'
 import { isWebTerminalSurfaceTabId } from '../../../../../shared/terminal-surface-id'
 import { shouldRetainDisposedPaneSpawn } from './disposed-spawn-retention'
 import { findColdRestoreResumeSource } from './cold-restore-resume-startup'
@@ -37,14 +38,23 @@ function holdsInputUntilConnect(session: ConnectPanePtySession): boolean {
 }
 
 /**
- * Whether the pane may show an old terminal: its leaf names one, it mirrors a host's tab, or saved
- * scrollback was replayed into it (a cleared binding can still replay history).
+ * Whether the pane may show an old terminal: it mirrors a host's tab, or saved history was replayed
+ * into it (a cleared binding can still replay). Before its first connect, also: its leaf names a
+ * terminal or it shows output. Those are not re-read at bind, where the fresh create causes both.
  */
-function paneMayShowOldTerminal(session: ConnectPanePtySession): boolean {
+function paneMayShowOldTerminal(session: ConnectPanePtySession, atBind: boolean): boolean {
+  if (
+    isWebTerminalSurfaceTabId(session.deps.tabId) ||
+    terminalShowsReplayedHistory(session.pane.terminal)
+  ) {
+    return true
+  }
+  if (atBind) {
+    return false
+  }
   const state = useAppStore.getState()
   return Boolean(
     session.restoredPtyIdForTransport ||
-    isWebTerminalSurfaceTabId(session.deps.tabId) ||
     state.terminalLayoutsByTabId[session.deps.tabId]?.ptyIdsByLeafId?.[session.pane.leafId] ||
     terminalShowsOutput(session.pane.terminal)
   )
@@ -79,8 +89,13 @@ export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPt
           releasePreconnectInput: () => holdsInputUntilConnect(session)
         }
       : {}),
-    // Why re-read at bind: typing on old pixels must never reach a fresh shell (#10065).
-    ...(holdsInput ? { keepTypeAheadForNewTerminal: () => !paneMayShowOldTerminal(session) } : {}),
+    // Why: typing on old pixels must never reach a fresh shell (#10065).
+    ...(holdsInput
+      ? {
+          keepTypeAheadForNewTerminal: (phase: 'connect' | 'bind') =>
+            !paneMayShowOldTerminal(session, phase === 'bind')
+        }
+      : {}),
     // Why gated: a seed alone arms the transport hold, which would flush ahead of startup work.
     ...(holdsInput && session.deps.preconnectInput?.length
       ? { preconnectInput: session.deps.preconnectInput }

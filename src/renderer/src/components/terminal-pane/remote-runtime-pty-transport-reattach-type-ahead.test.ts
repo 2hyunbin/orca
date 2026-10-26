@@ -316,6 +316,30 @@ describe('remote reattach type-ahead', () => {
       transport.destroy?.()
     })
 
+    it('drops typing held across a failed first create when a later connect creates', async () => {
+      const { transport, created, waitForCreate } = await createGatedTransport({
+        keepTypeAheadForNewTerminal: () => true
+      })
+      expect(transport.sendInput('first try\r', 'driving')).toBe(true)
+      const first = transport.connect({ url: '', callbacks: {} })
+      await waitForCreate()
+      created.resolve(new Error('offline'))
+      await first
+      const call = runtimeCall.getMockImplementation()
+      runtimeCall.mockImplementation(async (request: { method: string }) =>
+        request.method === 'terminal.create'
+          ? { ok: true, result: { terminal: { handle: 'terminal-second' } } }
+          : call?.(request)
+      )
+      transport.sendInput('between\r', 'driving')
+      await transport.connect({ url: '', callbacks: {} })
+      await completeAttach()
+      expect(transport.sendInput('live', 'driving')).toBe(true)
+      await vi.waitFor(() => expect(inputFrameTexts().join('')).toMatch(/live$/))
+      expect(inputFrameTexts().join('')).toBe('live')
+      transport.destroy?.()
+    })
+
     it('drops its typing when replayed history appeared before the terminal bound', async () => {
       let blank = true
       const { transport, created, waitForCreate } = await createGatedTransport({

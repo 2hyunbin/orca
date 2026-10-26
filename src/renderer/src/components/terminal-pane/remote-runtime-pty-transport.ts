@@ -3371,7 +3371,7 @@ export function createRemoteRuntimePtyTransport(
     }
     // Why: a brand-new pane shows no old screen, so its typing belongs to the terminal it creates.
     const newTerminal =
-      !options.sessionId && isFirstConnect && opts.keepTypeAheadForNewTerminal?.() === true
+      !options.sessionId && isFirstConnect && opts.keepTypeAheadForNewTerminal?.('connect') === true
     isFirstConnect = false
     const expected = newTerminal
       ? recoveryInputHold.expectNewTerminal()
@@ -3390,7 +3390,7 @@ export function createRemoteRuntimePtyTransport(
         boundHandle &&
           createdFresh &&
           opts.releasePreconnectInput?.() !== false &&
-          opts.keepTypeAheadForNewTerminal?.() === true
+          opts.keepTypeAheadForNewTerminal?.('bind') === true
           ? heldInputEndpoint(boundHandle)
           : null
       )

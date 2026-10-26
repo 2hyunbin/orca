@@ -2,6 +2,7 @@ import type * as React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { connectPanePty } from './pty-connection'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
+import { markTerminalShowsReplayedHistory } from './replayed-history-terminals'
 import { flushAsyncTicks } from './pty-connection-test-async'
 import {
   createManager,
@@ -276,9 +277,13 @@ describe('connectPanePty pre-connect input', () => {
     const keep = createdTransportOptions[0]?.keepTypeAheadForNewTerminal
     expect(typeof keep === 'function' && keep()).toBe(true)
 
+    // The fresh create's own prompt and leaf binding count only before it starts, never at bind.
     pane.terminal.buffer.active.baseY = 12
+    expect(typeof keep === 'function' && keep('connect')).toBe(false)
+    expect(typeof keep === 'function' && keep('bind')).toBe(true)
 
-    expect(typeof keep === 'function' && keep()).toBe(false)
+    markTerminalShowsReplayedHistory(pane.terminal)
+    expect(typeof keep === 'function' && keep('bind')).toBe(false)
     binding.dispose()
   })
 
