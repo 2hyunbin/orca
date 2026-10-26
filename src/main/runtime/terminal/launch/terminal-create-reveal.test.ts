@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { RuntimeNotifier } from '../../runtime-notifier-contract'
 import { revealCreatedTerminal } from './terminal-create-reveal'
 
 const launchConfig = { agentArgs: '--dangerously-skip-permissions', agentEnv: {} }
@@ -10,8 +9,7 @@ function reveal(presentation: 'background' | 'focused') {
     rememberAgentLaunchConfig: vi.fn()
   }
   const result = revealCreatedTerminal({
-    // SAFETY: the reveal reads only these two notifier methods.
-    notifier: notifier as unknown as RuntimeNotifier,
+    notifier,
     workspace: { id: 'wt', path: '/repo' },
     ptyId: 'pty',
     handle: 'term_1',

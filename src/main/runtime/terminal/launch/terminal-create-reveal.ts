@@ -4,7 +4,7 @@ import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-t
 import type { RuntimeTerminalPresentation } from '../../../../shared/runtime-types'
 
 export function revealCreatedTerminal(args: {
-  notifier: RuntimeNotifier | null
+  notifier: Pick<RuntimeNotifier, 'revealTerminalSession' | 'rememberAgentLaunchConfig'> | null
   workspace: Pick<TerminalWorkspaceLaunchScope, 'id' | 'path'>
   ptyId: string
   handle: string
