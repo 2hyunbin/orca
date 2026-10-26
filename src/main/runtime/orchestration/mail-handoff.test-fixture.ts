@@ -33,12 +33,20 @@ export function observeMailSql(
     const statement = prepare(sql)
     if (match.test(sql) && !seen.has(statement)) {
       seen.add(statement)
-      const read = statement[method].bind(statement)
-      vi.spyOn(statement, method).mockImplementation((...args) => {
-        const result = read(...args)
-        visit({ sql, args, rows: Array.isArray(result) ? result : result ? [result] : [] })
-        return result
-      })
+      const observe =
+        <T extends SqliteRow[] | SqliteRow | undefined>(read: (...args: SqliteBindings) => T) =>
+        (...args: SqliteBindings): T => {
+          const result = read(...args)
+          visit({ sql, args, rows: Array.isArray(result) ? result : result ? [result] : [] })
+          return result
+        }
+      if (method === 'all') {
+        const read = observe(statement.all.bind(statement))
+        vi.spyOn(statement, 'all').mockImplementation(read)
+      } else {
+        const read = observe(statement.get.bind(statement))
+        vi.spyOn(statement, 'get').mockImplementation(read)
+      }
     }
     return statement
   })

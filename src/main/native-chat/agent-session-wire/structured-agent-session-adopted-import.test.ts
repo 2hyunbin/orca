@@ -177,8 +177,9 @@ describe('adopting a provider conversation on create', () => {
       const transcriptPath = join(root, 'rollout.jsonl')
       await writeCodexRollout(transcriptPath, 'token ORCA-ADOPT-1')
       const sessionAdapter = adapter(providerOnly ? 'created' : 'resumed')
+      const providerHandle = { kind: 'codex', threadId: THREAD } as const
       const params = providerOnly
-        ? attachParams(undefined, { adopt: undefined, providerHandle: codexProviderHandle(THREAD) })
+        ? attachParams(undefined, { adopt: undefined, providerHandle })
         : attachParams(transcriptPath)
       const result = await attach(transcriptPath, sessionAdapter, undefined, params)
       expect(

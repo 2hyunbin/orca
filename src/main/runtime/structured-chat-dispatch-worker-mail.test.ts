@@ -286,7 +286,7 @@ it.each([
         store: host.deps.store,
         probe: async () => ({ outcome: 'indeterminate', reason: 'fixture' }),
         holdsLiveChild: () => true,
-        now: () => Date.now() + 10_000,
+        now: () => own.lease.lastRenewedAt + 10_000,
         logger: createStructuredAgentSessionLogger()
       })
       await renewer.renewNow()

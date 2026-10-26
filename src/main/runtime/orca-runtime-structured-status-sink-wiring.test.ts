@@ -67,7 +67,8 @@ describe('structured status sink wiring', () => {
       expect(actualScope).toBe(capture.mock.calls.length === 1 ? scope : null)
       return {}
     })
-    const installedCapture = installed.deps?.['captureSessionMail']
+    const installedDeps = (): Record<string, unknown> | null => installed.deps
+    const installedCapture = installedDeps()?.['captureSessionMail']
     if (typeof installedCapture !== 'function') {
       throw new Error('missing Stop capture installer')
     }

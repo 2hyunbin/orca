@@ -42,7 +42,7 @@ export function sessionMailRecipient(
     terminalHandle: worker?.handle ?? null,
     paneKey: worker?.paneKey ?? null
   }
-  const direct = new Set(aliases.filter(isOrcaSessionId).map(formatOrcaSessionAddress))
+  const direct = new Set<string>(aliases.filter(isOrcaSessionId).map(formatOrcaSessionAddress))
   if (worker) {
     direct.add(worker.handle)
   }

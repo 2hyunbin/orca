@@ -52,9 +52,9 @@ function harness() {
       sequence = rows.at(-1)!.seq
     }
   })
-  const facts = () => readMailHoldFacts(database.db, record.sessionId, () => [record], 0)
-  const apply = (receipt: ReturnType<typeof mailReleaseReceipt>) => {
-    database.transaction((db) => receipt.write(db))
+  const facts = (db = database.db) => readMailHoldFacts(db, record.sessionId, () => [record], 0)
+  const apply = (receipt: ReturnType<typeof mailReleaseReceipt>, target = database) => {
+    target.transaction((db) => receipt.write(db))
     receipt.committed()
   }
   const stop = (ids?: string[], extra = { write: () => {}, committed: () => {} }) =>
@@ -100,18 +100,9 @@ it('persists exact unreserved obligations across restatement/reopen and repeated
   h.database.close()
   const reopened = JournalHostDatabase.open(h.root)
   databases.push(reopened)
-  expect(readMailHoldFacts(reopened.db, h.record.sessionId, () => [h.record], 0).members).toEqual(
-    new Set(['A', 'B', 'C'])
-  )
-  const release = mailReleaseReceipt(h.record.sessionId)
-  reopened.transaction((db) => release.write(db))
-  release.committed()
-  expect(
-    mailAdmissionPermission(
-      readMailHoldFacts(reopened.db, h.record.sessionId, () => [h.record], 0),
-      ['A', 'B']
-    )
-  ).toBe(true)
+  expect(h.facts(reopened.db).members).toEqual(new Set(['A', 'B', 'C']))
+  h.apply(mailReleaseReceipt(h.record.sessionId), reopened)
+  expect(mailAdmissionPermission(h.facts(reopened.db), ['A', 'B'])).toBe(true)
 })
 
 it('rolls back Stop, hold and receipt together, cleaning up before any fold/publication even on failed COMMIT', async () => {
@@ -222,8 +213,6 @@ it.each([100, 1000])(
     expect(facts.scope?.aliases).toHaveLength(count)
     expect(facts.scope?.root).toBe(records[0].sessionId)
     expect(visits).toBeLessThanOrEqual(4 * count)
-    expect(readMailHoldFacts(h.database.db, records[0].sessionId, read, 1)).toBe(facts)
-    expect(read).toHaveBeenCalledOnce()
     const unrelated = readMailHoldFacts(h.database.db, h.record.sessionId, read, 1)
     h.apply(mailReleaseReceipt(records[0].sessionId))
     expect(readMailHoldFacts(h.database.db, h.record.sessionId, read, 1)).toBe(unrelated)

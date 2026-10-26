@@ -238,7 +238,11 @@ export class StructuredAgentSessionClientDelivery {
     try {
       this.deps().onSessionMailActivity?.(sessionId)
     } catch (error) {
-      this.deps().logger.warn('mail journal redrive failed', { sessionId, error })
+      this.deps().logger.warn('mail journal redrive failed', {
+        scope: 'mail-journal-redrive',
+        sessionId,
+        error
+      })
     }
   }
 

@@ -57,7 +57,10 @@ const mailHandoffStoreMethods = {
   claimMailHandoff<
     T extends {
       address: string
-      batch: { messages: MessageRow[]; reference: AutomaticMailHandoff }
+      batch: {
+        messages: MessageRow[]
+        reference: AutomaticMailHandoff & { nonAdmission?: unknown }
+      }
     }
   >(this: OrchestrationDb, select: () => T | null): T | null {
     if (this.db.isTransaction) {

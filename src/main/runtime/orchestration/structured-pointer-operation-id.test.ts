@@ -23,10 +23,10 @@ it('re-mints for a different batch of the same size', async () => {
       frontier: 'frontier',
       waiters: undefined,
       reservedTypes: undefined,
-      readEvidence: async () => ({
+      readEvidence: () => ({
         epoch: 'epoch',
         frontier: 'frontier',
-        stopInForce: false,
+        mailHold: { members: new Set<string>(), ambiguous: false, key: 'released' },
         submission: undefined,
         owner: null,
         personStopped: false,

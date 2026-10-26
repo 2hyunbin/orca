@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, assert, expect, it, vi } from 'vitest'
 import { openAttachedHostRig, send, hello, framesOf } from './acp-structured-host.test-support'
 import { PROVIDER_SESSION, waitFor } from './acp-structured-adapter.test-support'
 import { closeProviderTimelineRigs } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
@@ -41,12 +41,14 @@ it('holds mail while an ACP turn runs instead of cancelling it, then sends it on
   await send(host, 'work')
   const prompt = await rig.frame('session/prompt')
   const pointer = createStructuredMailboxPointerHost()
-  await waitFor(() => expect(pointer.takesMailNow(SESSION)).toBe(false))
-  const operationId = mintAgentSessionOperationId(Date.now())
+  const takesMailNow = pointer.takesMailNow?.bind(pointer)
+  assert(takesMailNow, 'missing ACP mail admission check')
+  await waitFor(() => expect(takesMailNow(SESSION)).toBe(false))
+  const operationId = mintAgentSessionOperationId(1_800_000_000_000)
   expect(await sendMail(host, operationId)).toEqual({ kind: 'held' })
   expect(framesOf(rig.child(), 'session/cancel')).toHaveLength(0)
   rig.child().agent.reply(prompt, { stopReason: 'end_turn' })
-  await waitFor(() => expect(pointer.takesMailNow(SESSION)).toBe(true))
+  await waitFor(() => expect(takesMailNow(SESSION)).toBe(true))
   const sent = sendMail(host, operationId)
   rig.child().agent.reply(await rig.frame('session/prompt', 1), { stopReason: 'end_turn' })
   expect(await sent).toMatchObject({ kind: 'sent' })

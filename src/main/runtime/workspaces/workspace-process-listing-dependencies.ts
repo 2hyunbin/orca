@@ -40,7 +40,7 @@ export abstract class OrcaRuntimeWithWorktreePsDependencies extends OrcaRuntimeW
   ): ReturnType<
     OrcaRuntimeWithGetStructuredAgentSessionCreateSupport['resolveStructuredAgentAccountHome']
   >
-  abstract captureSessionMail: CaptureSessionMail
+  declare captureSessionMail: CaptureSessionMail
   abstract notifyStructuredSessionJournalActivity(sessionId: string): void
   abstract onStructuredSessionStatusForMail(
     ...args: Parameters<OrcaRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionStatusForMail']>
