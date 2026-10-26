@@ -2,7 +2,7 @@ import { vi } from 'vitest'
 import { encodePairingOffer } from '../../shared/pairing'
 import type { WslHostServerStop } from '../../shared/wsl-host-types'
 import type { WslHostDistroCandidate } from './wsl-host-distro-list'
-import type { WslHostConnector } from './wsl-host-service'
+import type { WslDistroPresence, WslHostConnector } from './wsl-host-service'
 import type { WslOrcadConnection } from './wsl-orcad-connection'
 
 export const KEY = Buffer.alloc(32, 3).toString('base64')
@@ -58,6 +58,9 @@ export function makeConnector(distros: WslHostDistroCandidate[]) {
       async (_distro: string, _environmentId: string): Promise<WslHostServerStop> => ({
         stopped: true
       })
+    ),
+    distroPresence: vi.fn(
+      async (_distro: string, _distroId?: string): Promise<WslDistroPresence> => 'running'
     ),
     releaseHolder: vi.fn(async (_distro: string) => {}),
     adoptHolders: vi.fn(async (_isWanted: (distro: string) => boolean) => {}),
