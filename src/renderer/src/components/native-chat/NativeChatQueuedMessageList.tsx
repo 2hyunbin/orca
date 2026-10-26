@@ -65,11 +65,14 @@ export function NativeChatQueuedMessageList({
     : null
   const listRef = useRef<HTMLUListElement>(null)
   const newestIsPersons = newest !== undefined && !newest.from
-  const shownIds = useRef<ReadonlySet<string>>(new Set(cards.map((card) => card.messageId)))
+  const shownIds = useRef<ReadonlySet<string> | null>(null)
   // Before paint, so the new card never shows a frame before the scroll.
   useLayoutEffect(() => {
     const appended =
-      shownIds.current.size > 0 && newest !== undefined && !shownIds.current.has(newest.messageId)
+      shownIds.current !== null &&
+      shownIds.current.size > 0 &&
+      newest !== undefined &&
+      !shownIds.current.has(newest.messageId)
     shownIds.current = new Set(cards.map((card) => card.messageId))
     // The list opens on the next card to send; a card the person just queued is shown instead.
     if (appended && newestIsPersons && listRef.current) {
