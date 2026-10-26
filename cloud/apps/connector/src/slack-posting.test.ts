@@ -86,6 +86,23 @@ describe('Slack thread status and posts', () => {
     expect(await harness.status()).toBe('Your Orca on build-box couldn’t take this.')
   })
 
+  it('records a refusal whose code is an inherited property name, and reads it generically', async () => {
+    for (const reason of ['__proto__', 'toString']) {
+      const harness = await startedThread()
+      const response = await harness.machine.ack([
+        {
+          deliveryId: harness.start?.deliveryId,
+          step: 'done',
+          result: { outcome: 'refused', reason }
+        }
+      ])
+      expect(response.status).toBe(204)
+      const [row] = await harness.database.query('SELECT state FROM connector_inbox')
+      expect(row?.state).toBe('done')
+      expect(await harness.status()).toBe('Your Orca on build-box couldn’t take this.')
+    }
+  })
+
   it('shows a turn the machine can no longer vouch for', async () => {
     const harness = await startedThread()
     await harness.machine.ack([
