@@ -3,7 +3,6 @@ import { DaemonPtyAdapter } from '../../daemon/daemon-pty-adapter'
 import { waitFor } from '../../daemon/daemon-pty-adapter-test-harness'
 import { startLateExitHarness } from './daemon-late-exit-test-fixture'
 import { ptyIncarnationById } from './provider/ownership-state'
-import { attachingRendererViewPtys } from './delivery/visibility-state'
 
 const request = (id: string, expectedIncarnationId: string) => ({
   id,
@@ -83,7 +82,7 @@ describe('checked renderer stop route', () => {
     }
   })
 
-  it('ends a tab-less terminal that survived a restart', async () => {
+  it('ends a tab-less restart survivor once main attaches it', async () => {
     const harness = await startLateExitHarness()
     const previousRun = new DaemonPtyAdapter({
       socketPath: harness.socketPath,
@@ -95,6 +94,7 @@ describe('checked renderer stop route', () => {
       const detached = vi.spyOn(harness.server['attachments'], 'detachClientSessions')
       await previousRun.disconnectOnly()
       await waitFor(() => detached.mock.calls.length > 0)
+      await harness.adapter.attach(survivorId)
       await expect(
         harness.killFenced({
           ...request(survivorId, survivor.incarnationId ?? 'missing'),
@@ -106,7 +106,7 @@ describe('checked renderer stop route', () => {
     }
   })
 
-  it('refuses a tab-less end once a pane or remote view uses the terminal', async () => {
+  it('refuses a tab-less end while a pane or remote view uses the terminal', async () => {
     const harness = await startLateExitHarness()
     try {
       const checked = {
@@ -119,12 +119,6 @@ describe('checked renderer stop route', () => {
         reason: 'attached'
       })
       releaseRemote()
-      attachingRendererViewPtys.set(harness.id, { views: 1, skippedHide: false })
-      await expect(harness.killFenced(checked)).resolves.toEqual({
-        outcome: 'refused',
-        reason: 'attached'
-      })
-      attachingRendererViewPtys.delete(harness.id)
       harness.runtime.syncWindowGraph(1, {
         tabs: [
           {

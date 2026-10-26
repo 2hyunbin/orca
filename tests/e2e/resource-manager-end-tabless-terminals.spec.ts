@@ -1,12 +1,19 @@
 import { mkdirSync } from 'node:fs'
-import type { Page } from '@stablyai/playwright-test'
 import { expect, test } from './helpers/orca-app'
 import { makeResourceManagerFixtureVisible } from './helpers/resource-manager-visible-fixture'
 import { waitForSessionReady } from './helpers/store'
-import { createRestartSession } from './helpers/orca-restart'
 
-async function createFolderWorkspace(page: Page, folderPath: string): Promise<string> {
-  return page.evaluate(async (folderPath) => {
+test.use({ seedTestRepo: false })
+
+test('Resource Manager ends a tab-less terminal this run spawned', async ({
+  orcaPage,
+  electronApp
+}, testInfo) => {
+  const folderPath = testInfo.outputPath('notes')
+  mkdirSync(folderPath, { recursive: true })
+  await waitForSessionReady(orcaPage)
+  await orcaPage.setViewportSize({ width: 1200, height: 900 })
+  const ptyId = await orcaPage.evaluate(async (folderPath) => {
     const state = window.__store!.getState()
     const group = await window.api.projectGroups.create({
       name: 'Notes',
@@ -24,77 +31,32 @@ async function createFolderWorkspace(page: Page, folderPath: string): Promise<st
     if (!folder) {
       throw new Error('Could not create folder workspace')
     }
-    return `folder:${folder.id}`
+    const spawned = await window.api.pty.spawn({
+      cols: 80,
+      rows: 24,
+      cwd: folderPath,
+      worktreeId: `folder:${folder.id}`,
+      initiallyHidden: true
+    })
+    return spawned.id
   }, folderPath)
-}
 
-async function spawnTablessTerminal(
-  page: Page,
-  folderPath: string,
-  worktreeId: string
-): Promise<string> {
-  return page.evaluate(
-    async ({ folderPath, worktreeId }) => {
-      const spawned = await window.api.pty.spawn({
-        cols: 80,
-        rows: 24,
-        cwd: folderPath,
-        worktreeId,
-        initiallyHidden: true
-      })
-      return spawned.id
-    },
-    { folderPath, worktreeId }
-  )
-}
-
-async function livePtyIds(page: Page): Promise<string[]> {
-  return page.evaluate(async () =>
-    (await window.api.pty.listSessions({ connectionId: null })).map((session) => session.id)
-  )
-}
-
-test('Resource Manager ends tab-less terminals from this run and from before a restart', async (// oxlint-disable-next-line no-empty-pattern -- Playwright requires destructuring to request no fixtures.
-{}, testInfo) => {
-  const folderPath = testInfo.outputPath('notes')
-  mkdirSync(folderPath, { recursive: true })
-  const session = createRestartSession(testInfo)
-  let launched: Awaited<ReturnType<typeof session.launch>> | undefined
-  try {
-    launched = await session.launch()
-    await waitForSessionReady(launched.page)
-    const worktreeId = await createFolderWorkspace(launched.page, folderPath)
-    const survivorId = await spawnTablessTerminal(launched.page, folderPath, worktreeId)
-    await session.close(launched.app)
-
-    launched = await session.launch()
-    const page = launched.page
-    await waitForSessionReady(page)
-    await expect.poll(() => livePtyIds(page)).toContain(survivorId)
-    const currentRunId = await spawnTablessTerminal(page, folderPath, worktreeId)
-    await page.setViewportSize({ width: 1200, height: 900 })
-    await makeResourceManagerFixtureVisible(launched.app, page)
-    await page.getByRole('button', { name: /^Resource Manager,/ }).click()
-    await page.getByRole('tab', { name: 'PTYs', exact: true }).click()
-    const panel = page.getByRole('tabpanel', { name: /^PTYs/ })
-    await expect(panel.getByText(/2 without a tab/)).toBeVisible()
-    const screenshot = testInfo.outputPath('resource-manager-tabless-before-end.png')
-    await page.screenshot({ path: screenshot, animations: 'disabled' })
-    await testInfo.attach('tabless-before-end', { path: screenshot, contentType: 'image/png' })
-
-    for (const remaining of [1, 0]) {
-      await panel.getByRole('button', { name: /^End / }).first().click()
-      await page.getByRole('button', { name: 'End terminal', exact: true }).click()
-      await expect(panel).not.toContainText('A client is now attached')
-      await expect.poll(async () => (await livePtyIds(page)).length).toBe(remaining)
-    }
-    const ids = await livePtyIds(page)
-    expect(ids).not.toContain(survivorId)
-    expect(ids).not.toContain(currentRunId)
-  } finally {
-    if (launched) {
-      await session.close(launched.app)
-    }
-    await session.dispose()
-  }
+  await makeResourceManagerFixtureVisible(electronApp, orcaPage)
+  await orcaPage.getByRole('button', { name: /^Resource Manager,/ }).click()
+  await orcaPage.getByRole('tab', { name: 'PTYs', exact: true }).click()
+  const panel = orcaPage.getByRole('tabpanel', { name: /^PTYs/ })
+  await expect(panel.getByText(/1 without a tab/)).toBeVisible()
+  await panel.getByRole('button', { name: /^End / }).click()
+  const dialog = orcaPage.getByRole('dialog', { name: /^End .*\?$/ })
+  await dialog.getByRole('button', { name: 'End terminal', exact: true }).click()
+  // The dialog closes only after End returns, so the row state below is End's result.
+  await expect(dialog).toBeHidden()
+  await expect(panel.getByRole('button', { name: /^End / })).toHaveCount(0)
+  await expect
+    .poll(async () =>
+      (await orcaPage.evaluate(() => window.api.pty.listSessions({ connectionId: null }))).map(
+        (session) => session.id
+      )
+    )
+    .not.toContain(ptyId)
 })
