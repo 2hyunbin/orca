@@ -65,6 +65,7 @@ export async function countChatFailureOperations(
       counts.lineageVisits++
       yield record
     }
+    return undefined
   })
   const runningTurns: (string | null)[] = []
   const runningTurn = liveTurn.runningStructuredAgentSessionTurnItemBySequence
