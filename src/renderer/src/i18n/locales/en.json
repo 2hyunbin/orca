@@ -19745,6 +19745,11 @@
       "imagePreview": {
         "fileActions": "File actions",
         "linkActions": "Link actions"
+      },
+      "heldTerminal": {
+        "close": "Close terminal",
+        "continue": "{{agent}} may still be running this conversation in <terminal>{{terminal}}</terminal>. Close that terminal to continue here.",
+        "open": "{{agent}} may still be running this conversation in <terminal>{{terminal}}</terminal>. Close that terminal to open it in chat."
       }
     },
     "tab": {

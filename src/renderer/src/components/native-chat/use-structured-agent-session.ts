@@ -1,12 +1,13 @@
+import type { StructuredAgentSessionControllerInput } from './structured-agent-session-controller-input'
+import { heldTerminalMessageRetry } from './native-chat-held-terminal-resend'
+import { agentSessionContextFloorSequence } from '../../../../shared/agent-session-context-clear'
 import { refreshStructuredAgentSessionCommands } from './structured-agent-session-command-refresh'
 import { useMemo, useRef } from 'react'
 import { useStructuredAgentSessionSendOptions } from './use-structured-agent-session-send-options'
 import { useStructuredAgentSessionSends } from './use-structured-agent-session-sends'
 import { useStructuredAgentSessionCommandWrite } from './use-structured-agent-session-command-write'
 import { structuredAgentSessionNewSendsQueue } from './structured-agent-session-queue-request'
-import type { AgentType } from '../../../../shared/agent-status-types'
 import type { AgentSessionCancelResult } from '../../../../shared/agent-session-wire'
-import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { structuredAgentLabel } from '@/lib/structured-agent-session-launch-label'
 import { useStructuredLegacyLaunchStop } from '@/lib/structured-agent-session-legacy-launch-stop'
 import {
@@ -30,7 +31,6 @@ import { useStructuredAgentSessionTransportState } from './use-structured-agent-
 import { useStructuredAgentSessionStop } from './use-structured-agent-session-stop'
 import { useStructuredAgentSessionTransport } from './use-structured-agent-session-transport'
 import { useStructuredAgentSessionOptions } from './use-structured-agent-session-options'
-import type { StructuredAgentSessionLaunchView } from './use-native-chat-provisional-launch'
 import { useStructuredAgentSessionThreadGoal } from './use-structured-agent-session-thread-goal'
 import { useStructuredAgentSessionContextUsage } from './use-structured-agent-session-context-usage'
 import { useStructuredAgentSessionRailOutline } from './use-structured-agent-session-rail-outline'
@@ -45,33 +45,10 @@ import { pendingPromptsAllUnanswerableHere } from '../../../../shared/agent-sess
 import { withNativeChatCutTurnNotices } from '../../../../shared/native-chat-cut-turn-notice'
 import { useNativeChatContextClearFloor } from './use-native-chat-context-clear-floor'
 import { useStructuredAgentSessionRewind } from './use-structured-agent-session-rewind'
-import type { NativeChatRewindHost } from './use-native-chat-rewind'
 
 export type { StructuredPromptItem } from './structured-agent-session-message-projection'
 
-export function useStructuredAgentSession(args: {
-  sessionId: string
-  target: RuntimeClientTarget
-  agent: AgentType
-  isVisible: boolean
-  transportEnabled?: boolean
-  /** The host has published the session but its provider has not answered startup yet. */
-  providerStarting?: boolean
-  /** The host runs the session's provider and its start is proven. */
-  providerRunning?: boolean
-  /** This view started the session; only then does the stored selection name what it runs. */
-  launch?: StructuredAgentSessionLaunchView
-  /** Composer destination for preserved text from queued-card edits. */
-  composerScopeKey?: string
-  /** The chat-wide "queue follow-ups" setting; off keeps mid-turn sends immediate. */
-  queueFollowUps?: boolean
-  /** The host says a person's Stop is still ending this session's work. */
-  hostStopping?: boolean
-  /** The option values the host's status carries; a change re-reads the chat's options. */
-  hostOptionStamp?: string
-  /** The host's rewind latch and what follows a message returned by a rewind. */
-  rewind?: NativeChatRewindHost
-}) {
+export function useStructuredAgentSession(args: StructuredAgentSessionControllerInput) {
   const {
     agent,
     hostStopping = false,
@@ -169,6 +146,8 @@ export function useStructuredAgentSession(args: {
   const usage = useStructuredAgentSessionContextUsage(journalItems, usageSupport, state.epoch)
 
   const contextFloor = usageSupport?.contextFloor ?? threadGoalSupport?.contextFloor
+  const retryContextFloor = useRef(contextFloor)
+  retryContextFloor.current = contextFloor
   const railOutline = useStructuredAgentSessionRailOutline({
     sessionId,
     target,
@@ -245,6 +224,15 @@ export function useStructuredAgentSession(args: {
     capturePresentation
   })
   return {
+    retryTerminalMessage: (noticeId: string | undefined) =>
+      heldTerminalMessageRetry(
+        () => stateRef.current,
+        noticeId,
+        sessionId,
+        send,
+        capturePresentation(),
+        () => agentSessionContextFloorSequence(retryContextFloor.current, stateRef.current.epoch)
+      ),
     epoch: state.epoch,
     /** Whether a live `/clear` is fading the old transcript out, and how many this view drew. */
     contextClear,

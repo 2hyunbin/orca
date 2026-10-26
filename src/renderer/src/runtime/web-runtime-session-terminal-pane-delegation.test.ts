@@ -785,6 +785,32 @@ describe('closeWebRuntimeTerminal', () => {
     vi.clearAllMocks()
   })
 
+  it.each(['stopped', 'live', 'unverifiable', 'failed'] as const)(
+    'reports the existing host close outcome: %s',
+    async (outcome) => {
+      const runtimeCall = vi.fn().mockResolvedValue(
+        outcome === 'failed'
+          ? { id: 'close', ok: false, error: { code: 'runtime_unavailable', message: 'offline' } }
+          : {
+              id: 'close',
+              ok: true,
+              result: {
+                close: {
+                  handle: 'terminal-1',
+                  tabId: 'tab-1',
+                  ptyKilled: outcome === 'stopped',
+                  ...(outcome !== 'stopped' ? { ptyStopVerdict: outcome } : {})
+                }
+              }
+            }
+      )
+      stubRuntimeEnvironmentBridge({ call: runtimeCall })
+      const closed = vi.fn()
+      expect(closeWebRuntimeTerminal('remote:web-env-1@@terminal-1', undefined, closed)).toBe(true)
+      await vi.waitFor(() => expect(closed).toHaveBeenCalledExactlyOnceWith(outcome === 'stopped'))
+    }
+  )
+
   it('delegates remote pane close to the host runtime', async () => {
     const runtimeCall = vi.fn().mockResolvedValue({
       id: 'close',

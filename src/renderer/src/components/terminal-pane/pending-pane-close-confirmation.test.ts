@@ -227,3 +227,27 @@ it.each(['probe', 'dialog'] as const)(
     expect(p.closed()).toBe(false)
   }
 )
+
+it.each(['cancel', 'replacement', 'confirm'] as const)(
+  'settles a leaf-targeted close callback after %s',
+  async (outcome) => {
+    const p = await prepare()
+    const onClosed = vi.fn(),
+      onCancel = vi.fn()
+    let current = true
+    p.actions.handleRequestClosePane(1, { isCurrent: () => current, onClosed, onCancel })
+    p.verdict('live')
+    await flushPtySideEffects()
+    if (outcome === 'cancel') {
+      p.actions.handleCancelClose()
+    } else {
+      if (outcome === 'replacement') {
+        current = false
+      }
+      p.actions.handleConfirmClose(false)
+    }
+    await p.settle()
+    expect(onClosed).toHaveBeenCalledTimes(outcome === 'confirm' ? 1 : 0)
+    expect(onCancel).toHaveBeenCalledTimes(outcome === 'confirm' ? 0 : 1)
+  }
+)

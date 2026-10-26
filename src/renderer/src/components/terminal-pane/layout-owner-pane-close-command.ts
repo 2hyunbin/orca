@@ -14,6 +14,9 @@ function sendPaneCloseToLayoutOwner(
     lastPane: () => void
     /** Close locally if main already removed the pane or no frame stream can deliver its removal. */
     closeHere: () => void
+    onHostClosed?: (closed: boolean) => void
+    onClosed?: () => void
+    onCancel?: () => void
   }
 ): boolean {
   const { tabId, leafId } = pane
@@ -23,6 +26,8 @@ function sendPaneCloseToLayoutOwner(
     { type: 'closePane', tabId, leafId },
     {
       apply: (result) => {
+        on.onClosed?.()
+        on.onHostClosed?.(true)
         // Already gone from main's copy (a workspace it lacks): no frame will drop it.
         if (result.alreadyClosed || !layoutFramesFlowing()) {
           forget()
@@ -37,6 +42,8 @@ function sendPaneCloseToLayoutOwner(
         forget()
         if (code === 'last_pane') {
           on.lastPane()
+        } else {
+          on.onCancel?.()
         }
       }
     }
@@ -51,6 +58,9 @@ export function sendUserPaneCloseToLayoutOwner(
   pane: { worktreeId: string; tabId: string; leafId: string; paneId: number },
   tab: {
     getManager: () => PaneManager | null
+    onHostClosed?: (closed: boolean) => void
+    onClosed?: () => void
+    onCancel?: () => void
     closeTab: () => void
     closePaneLocally: (paneId: number, committedLeafId?: string) => void
   }
@@ -59,15 +69,23 @@ export function sendUserPaneCloseToLayoutOwner(
   return sendPaneCloseToLayoutOwner(
     { worktreeId: pane.worktreeId, tabId, leafId },
     {
+      onHostClosed: tab.onHostClosed,
+      onClosed: tab.onClosed,
+      onCancel: tab.onCancel,
       asToday: () => tab.closePaneLocally(paneId),
-      lastPane: () =>
+      lastPane: () => {
+        if (!tab.getManager()) {
+          tab.onCancel?.()
+          return
+        }
         closeAfterLastPaneRefusal(
           tabId,
           tab.getManager(),
           tab.closeTab,
           tab.closePaneLocally,
           paneId
-        ),
+        )
+      },
       closeHere: () => tab.closePaneLocally(paneId, leafId)
     }
   )

@@ -3359,6 +3359,11 @@
         "waitForStart": "Wait for the agent to finish starting.",
         "waitForTurn": "Wait for the agent to finish responding, or stop it.",
         "waitMoment": "Wait a moment."
+      },
+      "heldTerminal": {
+        "close": "Close terminal",
+        "continue": "{{agent}} may still be running this conversation in <terminal>{{terminal}}</terminal>. Close that terminal to continue here.",
+        "open": "{{agent}} may still be running this conversation in <terminal>{{terminal}}</terminal>. Close that terminal to open it in chat."
       }
     },
     "onboarding": {

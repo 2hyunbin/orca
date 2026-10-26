@@ -36,7 +36,7 @@ import { NativeChatStructuredSessionStatus } from './NativeChatStructuredSession
 import { useNativeChatLaunchDraftSignal } from './use-native-chat-launch-draft-adoption'
 import { useNativeChatInterruptedContinuation } from './NativeChatInterruptedContinue'
 import { NativeChatOrcaStopContext } from './native-chat-orca-stop-context'
-import { structuredSessionNotices } from './native-chat-structured-session-notices'
+import { useStructuredSessionNotices } from './native-chat-structured-session-notices'
 import { NativeChatPromptSlotNotices } from './NativeChatComposerNotices'
 import { NativeChatInstallSlot, useNativeChatInstallSlot } from './NativeChatInstallSlot'
 import { useNativeChatComposerError } from './use-native-chat-composer-notice'
@@ -61,11 +61,7 @@ import { useNativeChatHostPermissionGate } from './use-native-chat-host-permissi
 import { useNativeChatAvailabilityNotice } from './use-native-chat-availability-notice'
 import { useStructuredAgentSessionStartFailureFacts } from './use-structured-agent-session-start-failure-facts'
 import { pendingPromptsAllUnanswerableHere } from '../../../../shared/agent-session-approval-subject'
-import {
-  isClaudeSignInFailureKind,
-  NativeChatClaudeSignInContext,
-  useNativeChatClaudeSignIn
-} from './native-chat-claude-sign-in'
+import { NativeChatClaudeSignInContext } from './native-chat-claude-sign-in'
 
 export function NativeChatStructuredSession(
   props: Omit<NativeChatStructuredViewProps, 'mode'>
@@ -244,19 +240,17 @@ export function NativeChatStructuredSession(
     submissions: controller.submissions,
     deliveryNotices
   })
-  const claudeSignIn = useNativeChatClaudeSignIn({
+  // While Install shows, it says what to do; a start failure's "send again" or Retry can't help.
+  const { notices, stopView, claudeSignIn } = useStructuredSessionNotices({
     agent: props.agent,
     target: props.target,
-    failure: provisionalLaunch.failure,
-    failureRows: startFailures.filter((fact) => isClaudeSignInFailureKind(fact.kind)).length
-  })
-  // While Install shows, it says what to do; a start failure's "send again" or Retry can't help.
-  const notices = structuredSessionNotices({
+    startFailures,
+    stopView: continuation.view,
+    retryFor: controller.retryTerminalMessage,
     launch: install.slot.kind === 'install' ? { ...launch, lifecycle: null } : launch,
     agentLabel,
     sessionError,
     composerError: composerError ?? continuation.continueError,
-    claudeSignIn,
     availability,
     hostPermission: hostPermission.notice
   })
@@ -300,7 +294,7 @@ export function NativeChatStructuredSession(
           <NativeChatEmptyPane slot={install.slot} agent={props.agent} />
         ) : (
           <NativeChatRewindContext.Provider value={controller.rewind.surface}>
-            <NativeChatOrcaStopContext.Provider value={continuation.view}>
+            <NativeChatOrcaStopContext.Provider value={stopView}>
               <NativeChatClaudeSignInContext.Provider value={claudeSignIn}>
                 <NativeChatMessageList
                   // A rewind or a /clear replaces the conversation; nothing the old one held carries over.

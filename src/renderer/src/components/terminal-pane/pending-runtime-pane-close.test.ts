@@ -120,3 +120,33 @@ it('never turns a late different resolved handle into close authority', async ()
     p.runtimeCall.mock.calls.filter(([request]) => request.method === 'terminal.close')
   ).toEqual([[expect.objectContaining({ params: { terminal: 'term_original' } })]])
 })
+
+it.each(['closed', 'live', 'failed'] as const)(
+  'reports the reconnecting pane close RPC outcome: %s',
+  async (outcome) => {
+    const p = await preparePendingRuntimeClose()
+    const original = p.runtimeCall.getMockImplementation()!
+    p.runtimeCall.mockImplementation((request) =>
+      request.method === 'terminal.close'
+        ? outcome === 'failed'
+          ? Promise.reject(new Error('offline'))
+          : Promise.resolve({
+              ok: true,
+              result: {
+                close: {
+                  handle: 'term_original',
+                  tabId: p.tabId,
+                  ptyKilled: outcome === 'closed',
+                  ...(outcome === 'live' ? { ptyStopVerdict: 'live' } : {})
+                }
+              }
+            })
+        : original(request)
+    )
+    const closed = vi.fn()
+    p.actions.executeClosePane(1, { onHostClosed: closed })
+    p.acceptCompatibility()
+    await p.settle()
+    expect(closed).toHaveBeenCalledExactlyOnceWith(outcome === 'closed')
+  }
+)

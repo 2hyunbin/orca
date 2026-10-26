@@ -47,10 +47,16 @@ export function closeTerminalTab(
     localPtyTeardownOwnedExternally?: boolean
     precomputedRetirementPlan?: TerminalTabRetirementPlan
     precomputedCloseState?: PrecomputedTerminalCloseState
+    isCurrent?: () => boolean
     onClosed?: () => void
+    onHostClosed?: (closed: boolean) => void
     onCancel?: () => void
   }
 ): void {
+  if (options?.isCurrent?.() === false) {
+    options.onCancel?.()
+    return
+  }
   const state = useAppStore.getState()
   const precomputedCloseState = validatePrecomputedTerminalCloseState(
     tabId,
@@ -168,7 +174,10 @@ export function closeTerminalTab(
           options?.force || pinnedCloseConsented
           ? { force: true }
           : {})
-    })
+    }).then(
+      (outcome) => options?.onHostClosed?.(outcome === 'applied' || outcome === 'unknown-tab'),
+      () => options?.onHostClosed?.(false)
+    )
     options?.onClosed?.()
     return
   }

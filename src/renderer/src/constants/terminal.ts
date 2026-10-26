@@ -52,9 +52,17 @@ export type RequestActiveTerminalPaneSplitDetail = {
   direction: 'horizontal' | 'vertical'
 }
 
+export type TerminalPaneCloseCallbacks = {
+  isCurrent?: () => boolean
+  onClosed?: () => void
+  onCancel?: () => void
+  onHostClosed?: (closed: boolean) => void
+}
+
 /** Unlike a split request, a close always names its tab: an untargeted close must not reach every mounted pane. */
-export type RequestActiveTerminalPaneCloseDetail = {
+export type RequestActiveTerminalPaneCloseDetail = TerminalPaneCloseCallbacks & {
   tabId: string
+  leafId?: string
 }
 
 export type CloseTerminalPaneDetail = {

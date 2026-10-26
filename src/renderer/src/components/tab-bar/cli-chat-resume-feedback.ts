@@ -1,3 +1,7 @@
+import { toastHeldTerminal } from '../native-chat/native-chat-held-terminal'
+import { executionHostIdForStructuredTarget } from '@/runtime/structured-agent-session-owner'
+import { resumeCliConversationInNewChat } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
+import { captureStructuredLaunchSurfaceAddress } from '@/lib/structured-agent-session-launch-surface'
 import { useAppStore } from '@/store'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getIndexedWorktreeById } from '@/store/worktree-repo-index'
@@ -47,7 +51,13 @@ export async function switchIntoOwner(
     await activateAiVaultStructuredSession({ structuredSession }, undefined, target)
     return false
   }
-  if (!(await startCliChatReturn(source, structuredSession.sessionId, target))) {
+  if (
+    !(await startCliChatReturn(
+      { ...source, workspaceId: structuredSession.workspaceId },
+      structuredSession.sessionId,
+      target
+    ))
+  ) {
     return false
   }
   const shown = await activateAiVaultStructuredSessionVerified(
@@ -106,7 +116,7 @@ export async function switchIntoOwner(
 
 /** Explicit returns await the selected child; ordinary lazy creation remains unchanged. */
 export async function startCliChatReturn(
-  source: Pick<CliChatResumeSource, 'agent'>,
+  source: Pick<CliChatResumeSource, 'agent' | 'workspaceId'>,
   sessionId: string,
   target: RuntimeClientTarget
 ): Promise<boolean> {
@@ -118,14 +128,32 @@ export async function startCliChatReturn(
       ? structuredLaunchFailure(Object.assign(new Error(switched.refusal.message), switched))
       : undefined
     // Never the owner shortcut again: a refused start keeps the terminal and says why.
-    toast.error(
+    if (
       failure?.code === 'agent_session_operation_invalid' &&
-        failure.details?.reason === 'conversationOpenInTerminal'
-        ? cliConversationExitGuidance(source.agent, true)
-        : agentSessionWriteFailureText(failure ?? { kind: 'unconfirmed' }, 'read-history', {
-            agentName: agentLabel(source.agent)
-          })
-    )
+      failure.details?.reason === 'conversationOpenInTerminal'
+    ) {
+      toastHeldTerminal({
+        terminal: failure.details.terminal,
+        executionHostId: executionHostIdForStructuredTarget(target),
+        agent: agentLabel(source.agent),
+        fallback: cliConversationExitGuidance(source.agent, true),
+        onContinue: async () => {
+          if (await startCliChatReturn(source, sessionId, target)) {
+            await activateAiVaultStructuredSession(
+              { structuredSession: { sessionId, workspaceId: source.workspaceId } },
+              undefined,
+              target
+            )
+          }
+        }
+      })
+    } else {
+      toast.error(
+        agentSessionWriteFailureText(failure ?? { kind: 'unconfirmed' }, 'read-history', {
+          agentName: agentLabel(source.agent)
+        })
+      )
+    }
     return false
   }
   return true
@@ -134,26 +162,42 @@ export async function startCliChatReturn(
 export function toastCliChatResumeFailure(source: CliChatResumeSource, error: unknown): void {
   const refusal = structuredLaunchFailure(error)
   if (
+    (refusal?.code === 'agent_session_conflict' &&
+      refusal.details?.reason === 'conversationHeldElsewhere' &&
+      !refusal.owner) ||
+    (refusal?.code === 'agent_session_operation_invalid' &&
+      refusal.details?.reason === 'conversationOpenInTerminal')
+  ) {
+    const resume = {
+      rowAgent: source.agent,
+      executionHostId: source.executionHostId,
+      worktreeId: source.workspaceId,
+      providerSessionId: source.providerSessionId,
+      surfaceAddress: captureStructuredLaunchSurfaceAddress(
+        source.workspaceId,
+        undefined,
+        source.tabId
+      )
+    }
+    toastHeldTerminal({
+      terminal: refusal.details?.terminal,
+      executionHostId: source.executionHostId,
+      agent: agentLabel(source.agent),
+      fallback: cliConversationExitGuidance(source.agent, true),
+      onContinue: () => resumeCliConversationInNewChat(resume)
+    })
+    return
+  }
+  if (
     refusal?.code === 'agent_session_conflict' ||
     refusal?.code === 'agent_session_ownership_unknown'
   ) {
     toast.error(
-      refusal.code === 'agent_session_conflict' &&
-        refusal.details?.reason === 'conversationHeldElsewhere'
-        ? cliConversationExitGuidance(source.agent, true)
-        : translate(
-            'auto.components.right.sidebar.AiVaultPanel.resumeInChatConflict',
-            'Another chat is already holding this conversation.'
-          )
+      translate(
+        'auto.components.right.sidebar.AiVaultPanel.resumeInChatConflict',
+        'Another chat is already holding this conversation.'
+      )
     )
-    return
-  }
-  // The chat's agent refused to start while the terminal may still write the conversation.
-  if (
-    refusal?.code === 'agent_session_operation_invalid' &&
-    refusal.details?.reason === 'conversationOpenInTerminal'
-  ) {
-    toast.error(cliConversationExitGuidance(source.agent, true))
     return
   }
   if (refusal?.code === 'agent_session_identity_required') {

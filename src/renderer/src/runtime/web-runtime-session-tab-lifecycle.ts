@@ -72,7 +72,7 @@ export async function activateWebRuntimeSessionTab(args: {
 }
 
 /** Only unknown-tab proves definitive absence and permits teardown; timeouts/disconnects merely mean retry later and may leave a live host tab. */
-export type WebRuntimeSessionTabCloseOutcome = 'applied' | 'unknown-tab' | 'failed'
+export type WebRuntimeSessionTabCloseOutcome = 'applied' | 'unknown-tab' | 'failed' | 'refused'
 
 export async function closeWebRuntimeSessionTab(args: {
   worktreeId: string
@@ -276,7 +276,7 @@ async function callWebRuntimeSessionTabMethod(
         expectedEnvironmentPairingRevision: intentOwner.pairingRevision
       })
     }
-    return 'applied'
+    return isClose && result?.refused === true ? 'refused' : 'applied'
   } catch (error) {
     if (activationHostTabId) {
       clearWebSessionFocusIntentIfMatches(intentOwner, args.worktreeId, activationHostTabId)
