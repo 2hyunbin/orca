@@ -19,6 +19,7 @@ const getRemoteSnapshots = methods.find((method) => method.name === 'layout.getR
 
 function harness(epoch?: string) {
   const cleanups = new Map<string, () => void>()
+  const { promise: subscribed, resolve: markSubscribed } = Promise.withResolvers<void>()
   let publish: (event: WorkspaceLayoutStreamEvent) => void = () => {}
   const unsubscribe = vi.fn()
   const fake = {
@@ -34,13 +35,17 @@ function harness(epoch?: string) {
         unsubscribe
       }
     },
-    registerSubscriptionCleanup: (id: string, cleanup: () => void) => cleanups.set(id, cleanup),
+    registerSubscriptionCleanup: (id: string, cleanup: () => void) => {
+      cleanups.set(id, cleanup)
+      markSubscribed()
+    },
     cleanupSubscription: (id: string) => cleanups.get(id)?.()
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler calls only the three runtime methods this fake implements.
   const runtime = fake as unknown as OrcaRuntimeService
   return {
     runtime,
+    subscribed,
     cleanups,
     unsubscribe,
     publish: (event: WorkspaceLayoutStreamEvent) => publish(event)
@@ -55,7 +60,7 @@ describe('layout.subscribe', () => {
   })
 
   it('sends the snapshot, then the named workspaces’ changes, and ends on unsubscribe', async () => {
-    const { runtime, cleanups, unsubscribe, publish } = harness()
+    const { runtime, cleanups, unsubscribe, publish, subscribed } = harness()
     const emitted: unknown[] = []
     if (!subscribe || !isStreamingMethod(subscribe)) {
       throw new Error('layout.subscribe is not a streaming method')
@@ -66,6 +71,7 @@ describe('layout.subscribe', () => {
       { runtime, connectionId: 'conn-1' } as RpcContext,
       (event) => emitted.push(event)
     )
+    await subscribed
     const [cleanupKey] = [...cleanups.keys()]
     expect(emitted).toEqual([
       {
@@ -84,7 +90,7 @@ describe('layout.subscribe', () => {
   })
 
   it('sends each records frame with only the named workspaces, an empty one too', async () => {
-    const { runtime, cleanups, publish } = harness('epoch-1')
+    const { runtime, cleanups, publish, subscribed } = harness('epoch-1')
     const emitted: unknown[] = []
     if (!subscribe || !isStreamingMethod(subscribe)) {
       throw new Error('layout.subscribe is not a streaming method')
@@ -95,6 +101,7 @@ describe('layout.subscribe', () => {
       { runtime, connectionId: 'conn-1' } as RpcContext,
       (event) => emitted.push(event)
     )
+    await subscribed
     const removed = (key: string) => ({ key, change: 'removed' as const })
     publish({ type: 'records', epoch: 'epoch-1', seq: 5, workspaces: [removed('a'), removed('b')] })
     // Sent though it names none of them, so the subscriber's positions stay gapless.
@@ -110,7 +117,7 @@ describe('layout.subscribe', () => {
   })
 
   it('ends a subscription only for the connection that opened it', async () => {
-    const { runtime, unsubscribe } = harness()
+    const { runtime, unsubscribe, subscribed } = harness()
     const emitted: unknown[] = []
     if (!subscribe || !isStreamingMethod(subscribe) || !unsubscribeMethod) {
       throw new Error('layout methods are missing')
@@ -124,6 +131,7 @@ describe('layout.subscribe', () => {
       { runtime, connectionId: 'conn-1' } as RpcContext,
       (event) => emitted.push(event)
     )
+    await subscribed
     const [snapshot] = emitted
     const subscriptionId =
       snapshot && typeof snapshot === 'object' && 'subscriptionId' in snapshot

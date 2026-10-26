@@ -211,6 +211,7 @@
   "ignorePatterns": [
     "src/main/acp/generated/acp-protocol.generated.ts",
     "src/shared/rpc-contract/rpc-params-catalog.generated.ts",
+    "src/main/runtime/rpc/methods/method-metadata.generated.ts",
     "**/node_modules",
     "**/dist",
     "**/out",

@@ -22,6 +22,7 @@
     "**/out",
     "cloud/**",
     "src/shared/rpc-contract/rpc-params-catalog.generated.ts",
+    "src/main/runtime/rpc/methods/method-metadata.generated.ts",
     "tests/e2e/.cross-version-checkouts"
   ],
   "rules": {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeClientEvent } from '../../../../shared/runtime-client-events'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import { OrcaRuntimeService } from '../../orca-runtime'
 import {
   eraseRpcMethods,
   isStreamingMethod,
@@ -18,8 +18,10 @@ function makeRuntime(): {
   runtime: OrcaRuntimeService
   onClientEvent: ReturnType<typeof vi.fn>
   cleanups: (() => void)[]
+  subscribed: Promise<void>
 } {
   const cleanups: (() => void)[] = []
+  const { promise: subscribed, resolve: markSubscribed } = Promise.withResolvers<void>()
   const onClientEvent = vi.fn(
     (
       _listener: (event: RuntimeClientEvent) => void,
@@ -27,18 +29,18 @@ function makeRuntime(): {
     ) =>
       () => {}
   )
-  const runtime = {
-    onClientEvent,
-    registerSubscriptionCleanup: (_id: string, cleanup: () => void) => {
-      cleanups.push(cleanup)
-    }
-  } as unknown as OrcaRuntimeService
-  return { runtime, onClientEvent, cleanups }
+  const runtime = new OrcaRuntimeService()
+  vi.spyOn(runtime, 'onClientEvent').mockImplementation(onClientEvent)
+  vi.spyOn(runtime, 'registerSubscriptionCleanup').mockImplementation((_id, cleanup) => {
+    cleanups.push(cleanup)
+    markSubscribed()
+  })
+  return { runtime, onClientEvent, cleanups, subscribed }
 }
 
 describe('runtime.clientEvents.subscribe', () => {
   it('registers mobile subscriptions as non-consumers of terminal side effects', async () => {
-    const { runtime, onClientEvent, cleanups } = makeRuntime()
+    const { runtime, onClientEvent, cleanups, subscribed } = makeRuntime()
 
     const done = subscribeMethod.handler(
       undefined,
@@ -46,6 +48,7 @@ describe('runtime.clientEvents.subscribe', () => {
       () => {}
     )
 
+    await subscribed
     expect(onClientEvent).toHaveBeenCalledWith(expect.any(Function), {
       consumesTerminalSideEffects: false
     })
@@ -54,7 +57,7 @@ describe('runtime.clientEvents.subscribe', () => {
   })
 
   it('keeps non-mobile subscriptions consuming terminal side effects', async () => {
-    const { runtime, onClientEvent, cleanups } = makeRuntime()
+    const { runtime, onClientEvent, cleanups, subscribed } = makeRuntime()
 
     const done = subscribeMethod.handler(
       undefined,
@@ -62,6 +65,7 @@ describe('runtime.clientEvents.subscribe', () => {
       () => {}
     )
 
+    await subscribed
     expect(onClientEvent).toHaveBeenCalledWith(expect.any(Function), {
       consumesTerminalSideEffects: true
     })

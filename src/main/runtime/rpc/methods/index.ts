@@ -1,149 +1,117 @@
-import { STATUS_METHODS } from './status'
-import { SIDEBAR_INPUT_METHODS } from './sidebar-inputs'
-import { ORCAD_TERMINAL_CENSUS_METHODS } from './orcad-terminal-census'
-import { ORCAD_MIGRATION_METHODS } from './orcad-migration'
-import { AI_VAULT_METHODS } from './ai-vault'
-import { AUTOMATION_METHODS } from './automations'
-import { REPO_METHODS } from './repo'
-import { WORKTREE_METHODS } from './worktree'
-import { REFERENCE_METHODS } from './reference'
-import { TERMINAL_METHODS } from './terminal'
-import { TERMINAL_ORPHAN_METHODS } from './terminal-orphan'
-import { BROWSER_CORE_METHODS } from './browser-core'
-import { BROWSER_IDENTITY_METHODS } from './browser-identity-rpc'
-import { BROWSER_EXTRA_METHODS } from './browser-extras'
-import { BROWSER_SCREENCAST_METHODS } from './browser-screencast'
-import { BROWSER_CLIENT_HOST_METHODS } from './browser-client-host'
-import { DESKTOP_BROWSER_BRIDGE_RPC_METHODS } from './desktop-browser-bridge'
-import { BROWSER_CLIENT_FILE_CHANNEL_METHODS } from './browser-client-file-channel'
-import { BROWSER_NETWORK_TUNNEL_METHODS } from './browser-network-tunnel'
-import { ORCHESTRATION_METHODS } from './orchestration'
-import { NOTIFICATION_METHODS } from './notifications'
-import { STATS_METHODS } from './stats'
-import { DIAGNOSTICS_METHODS } from './diagnostics'
-import { TERMINAL_DAEMON_METHODS } from './terminal-daemon'
-import { ACCOUNT_METHODS } from './accounts'
-import { ANTIGRAVITY_ACCOUNT_METHODS } from './antigravity-accounts'
-import { USAGE_CREDENTIAL_METHODS } from './usage-credentials'
-import { PREFLIGHT_METHODS } from './preflight'
-import { COMPUTER_METHODS } from './computer'
-import { SESSION_TAB_METHODS } from './session-tabs'
-import { NATIVE_CHAT_METHODS } from './native-chat'
-import { FILE_METHODS } from './files'
-import { GIT_METHODS } from './git'
-import { GITHUB_METHODS } from './github'
-import { GITLAB_METHODS } from './gitlab'
-import { HOSTED_REVIEW_METHODS } from './hosted-review'
-import { LINEAR_METHODS } from './linear'
-import { LINEAR_AGENT_ACCESS_METHODS } from './linear-agent-access'
-import { JIRA_METHODS } from './jira'
-import { SSH_METHODS } from './ssh'
-import { MANAGED_SERVER_METHODS } from './managed-server'
-import { SPEECH_METHODS } from './speech'
-import { CLIENT_UI_METHODS } from './client-ui'
-import { CLIENT_EVENT_METHODS } from './client-events'
-import { WORKSPACE_PORT_METHODS } from './workspace-ports'
-import { PLUGIN_METHODS } from './plugins'
-import { SKILL_METHODS } from './skills'
-import { CLIPBOARD_METHODS } from './clipboard'
-import { HOST_CAPABILITY_METHODS } from './host-capabilities'
-import { MOBILE_WEB_BUNDLE_METHODS } from './mobile-web-bundle'
-import { RUNTIME_CLIENT_CAPABILITY_METHODS } from './runtime-client-capabilities'
-import { EMULATOR_METHODS } from './emulator'
-import { PAIRING_METHODS } from './pairing'
-import { MOBILE_RELAY_HOSTS_METHODS } from './mobile-relay-hosts'
-import { MOBILE_PROJECT_SECTIONS_METHODS } from './mobile-project-sections'
-import { UPDATER_METHODS } from './updater'
-import { AUTOMATIC_WORK_METHODS } from './automatic-work'
-import { AGENT_SESSION_METHODS } from './agent-session'
-import { STRUCTURED_AGENT_SESSION_METHODS } from './structured-agent-session'
-import { STRUCTURED_AGENT_SESSION_ATTACHMENT_METHODS } from './structured-agent-session-attachments'
-import { STRUCTURED_AGENT_SESSION_VISUAL_METHODS } from './structured-agent-session-visual'
-import { STRUCTURED_AGENT_SESSION_AGENTS_METHODS } from './structured-agent-session-agents'
-import { MANAGED_RUNTIME_INSTALL_METHODS } from './managed-runtime-install'
-import { ARTIFACT_METHODS } from './artifacts'
-import { AGENT_HOOK_METHODS } from './agent-hooks'
-import { AGENT_LAUNCH_METHODS } from './agent-launch'
-import { CONNECTOR_METHODS } from './connector'
-import {
-  LAYOUT_APPLY_METHODS,
-  LAYOUT_VIEW_REPORT_METHODS,
-  WORKSPACE_LAYOUT_METHODS
-} from './workspace-layout'
+import { lazyRpcMethods } from '../lazy-methods'
+import { RPC_METHOD_GROUP_LOADERS as loaders } from './method-loaders'
+import { RPC_METHOD_METADATA as metadata } from './method-metadata.generated'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 
 // Keep registration order and the full RPC/security surface visible in one manifest.
 export const ALL_RPC_METHODS = [
-  ...STATUS_METHODS,
-  ...ORCAD_TERMINAL_CENSUS_METHODS,
-  ...ORCAD_MIGRATION_METHODS,
-  ...AGENT_HOOK_METHODS,
-  ...AI_VAULT_METHODS,
-  ...ARTIFACT_METHODS,
-  ...AUTOMATION_METHODS,
-  ...REPO_METHODS,
-  ...WORKTREE_METHODS,
-  ...REFERENCE_METHODS,
-  ...AGENT_SESSION_METHODS,
-  ...STRUCTURED_AGENT_SESSION_METHODS,
-  ...STRUCTURED_AGENT_SESSION_ATTACHMENT_METHODS,
-  ...STRUCTURED_AGENT_SESSION_VISUAL_METHODS,
-  ...STRUCTURED_AGENT_SESSION_AGENTS_METHODS,
-  ...MANAGED_RUNTIME_INSTALL_METHODS,
-  ...AGENT_LAUNCH_METHODS,
-  ...CONNECTOR_METHODS,
-  ...TERMINAL_METHODS,
-  ...TERMINAL_ORPHAN_METHODS,
-  ...BROWSER_CORE_METHODS,
-  ...BROWSER_IDENTITY_METHODS,
-  ...BROWSER_SCREENCAST_METHODS,
-  ...BROWSER_EXTRA_METHODS,
-  ...BROWSER_CLIENT_HOST_METHODS,
-  ...DESKTOP_BROWSER_BRIDGE_RPC_METHODS,
-  ...BROWSER_CLIENT_FILE_CHANNEL_METHODS,
-  ...BROWSER_NETWORK_TUNNEL_METHODS,
-  ...ORCHESTRATION_METHODS,
-  ...NOTIFICATION_METHODS,
-  ...STATS_METHODS,
-  ...DIAGNOSTICS_METHODS,
-  ...TERMINAL_DAEMON_METHODS,
-  ...ACCOUNT_METHODS,
-  ...ANTIGRAVITY_ACCOUNT_METHODS,
-  ...USAGE_CREDENTIAL_METHODS,
-  ...PREFLIGHT_METHODS,
-  ...COMPUTER_METHODS,
-  ...SESSION_TAB_METHODS,
-  ...WORKSPACE_LAYOUT_METHODS,
+  ...lazyRpcMethods(metadata.STATUS_METHODS, loaders.STATUS_METHODS),
+  ...lazyRpcMethods(metadata.ORCAD_TERMINAL_CENSUS_METHODS, loaders.ORCAD_TERMINAL_CENSUS_METHODS),
+  ...lazyRpcMethods(metadata.ORCAD_MIGRATION_METHODS, loaders.ORCAD_MIGRATION_METHODS),
+  ...lazyRpcMethods(metadata.AGENT_HOOK_METHODS, loaders.AGENT_HOOK_METHODS),
+  ...lazyRpcMethods(metadata.AI_VAULT_METHODS, loaders.AI_VAULT_METHODS),
+  ...lazyRpcMethods(metadata.ARTIFACT_METHODS, loaders.ARTIFACT_METHODS),
+  ...lazyRpcMethods(metadata.AUTOMATION_METHODS, loaders.AUTOMATION_METHODS),
+  ...lazyRpcMethods(metadata.REPO_METHODS, loaders.REPO_METHODS),
+  ...lazyRpcMethods(metadata.WORKTREE_METHODS, loaders.WORKTREE_METHODS),
+  ...lazyRpcMethods(metadata.REFERENCE_METHODS, loaders.REFERENCE_METHODS),
+  ...lazyRpcMethods(metadata.AGENT_SESSION_METHODS, loaders.AGENT_SESSION_METHODS),
+  ...lazyRpcMethods(
+    metadata.STRUCTURED_AGENT_SESSION_METHODS,
+    loaders.STRUCTURED_AGENT_SESSION_METHODS
+  ),
+  ...lazyRpcMethods(
+    metadata.STRUCTURED_AGENT_SESSION_ATTACHMENT_METHODS,
+    loaders.STRUCTURED_AGENT_SESSION_ATTACHMENT_METHODS
+  ),
+  ...lazyRpcMethods(
+    metadata.STRUCTURED_AGENT_SESSION_VISUAL_METHODS,
+    loaders.STRUCTURED_AGENT_SESSION_VISUAL_METHODS
+  ),
+  ...lazyRpcMethods(
+    metadata.STRUCTURED_AGENT_SESSION_AGENTS_METHODS,
+    loaders.STRUCTURED_AGENT_SESSION_AGENTS_METHODS
+  ),
+  ...lazyRpcMethods(
+    metadata.MANAGED_RUNTIME_INSTALL_METHODS,
+    loaders.MANAGED_RUNTIME_INSTALL_METHODS
+  ),
+  ...lazyRpcMethods(metadata.AGENT_LAUNCH_METHODS, loaders.AGENT_LAUNCH_METHODS),
+  ...lazyRpcMethods(metadata.CONNECTOR_METHODS, loaders.CONNECTOR_METHODS),
+  ...lazyRpcMethods(metadata.TERMINAL_METHODS, loaders.TERMINAL_METHODS),
+  ...lazyRpcMethods(metadata.TERMINAL_ORPHAN_METHODS, loaders.TERMINAL_ORPHAN_METHODS),
+  ...lazyRpcMethods(metadata.BROWSER_CORE_METHODS, loaders.BROWSER_CORE_METHODS),
+  ...lazyRpcMethods(metadata.BROWSER_IDENTITY_METHODS, loaders.BROWSER_IDENTITY_METHODS),
+  ...lazyRpcMethods(metadata.BROWSER_SCREENCAST_METHODS, loaders.BROWSER_SCREENCAST_METHODS),
+  ...lazyRpcMethods(metadata.BROWSER_EXTRA_METHODS, loaders.BROWSER_EXTRA_METHODS),
+  ...lazyRpcMethods(metadata.BROWSER_CLIENT_HOST_METHODS, loaders.BROWSER_CLIENT_HOST_METHODS),
+  ...lazyRpcMethods(
+    metadata.DESKTOP_BROWSER_BRIDGE_RPC_METHODS,
+    loaders.DESKTOP_BROWSER_BRIDGE_RPC_METHODS
+  ),
+  ...lazyRpcMethods(
+    metadata.BROWSER_CLIENT_FILE_CHANNEL_METHODS,
+    loaders.BROWSER_CLIENT_FILE_CHANNEL_METHODS
+  ),
+  ...lazyRpcMethods(
+    metadata.BROWSER_NETWORK_TUNNEL_METHODS,
+    loaders.BROWSER_NETWORK_TUNNEL_METHODS
+  ),
+  ...lazyRpcMethods(metadata.ORCHESTRATION_METHODS, loaders.ORCHESTRATION_METHODS),
+  ...lazyRpcMethods(metadata.NOTIFICATION_METHODS, loaders.NOTIFICATION_METHODS),
+  ...lazyRpcMethods(metadata.STATS_METHODS, loaders.STATS_METHODS),
+  ...lazyRpcMethods(metadata.DIAGNOSTICS_METHODS, loaders.DIAGNOSTICS_METHODS),
+  ...lazyRpcMethods(metadata.TERMINAL_DAEMON_METHODS, loaders.TERMINAL_DAEMON_METHODS),
+  ...lazyRpcMethods(metadata.ACCOUNT_METHODS, loaders.ACCOUNT_METHODS),
+  ...lazyRpcMethods(metadata.ANTIGRAVITY_ACCOUNT_METHODS, loaders.ANTIGRAVITY_ACCOUNT_METHODS),
+  ...lazyRpcMethods(metadata.USAGE_CREDENTIAL_METHODS, loaders.USAGE_CREDENTIAL_METHODS),
+  ...lazyRpcMethods(metadata.PREFLIGHT_METHODS, loaders.PREFLIGHT_METHODS),
+  ...lazyRpcMethods(metadata.COMPUTER_METHODS, loaders.COMPUTER_METHODS),
+  ...lazyRpcMethods(metadata.SESSION_TAB_METHODS, loaders.SESSION_TAB_METHODS),
+  ...lazyRpcMethods(metadata.WORKSPACE_LAYOUT_METHODS, loaders.WORKSPACE_LAYOUT_METHODS),
   // Switch point: a window-owned build registers no layout command.
-  ...(ORCA_LAYOUT_OWNER_IS_MAIN ? [...LAYOUT_APPLY_METHODS, ...LAYOUT_VIEW_REPORT_METHODS] : []),
-  ...NATIVE_CHAT_METHODS,
-  ...FILE_METHODS,
-  ...GIT_METHODS,
-  ...GITHUB_METHODS,
-  ...GITLAB_METHODS,
-  ...HOSTED_REVIEW_METHODS,
-  ...LINEAR_METHODS,
-  ...LINEAR_AGENT_ACCESS_METHODS,
-  ...JIRA_METHODS,
-  ...SSH_METHODS,
-  ...MANAGED_SERVER_METHODS,
-  ...SPEECH_METHODS,
-  ...WORKSPACE_PORT_METHODS,
-  ...PLUGIN_METHODS,
-  ...SKILL_METHODS,
-  ...CLIPBOARD_METHODS,
-  ...HOST_CAPABILITY_METHODS,
-  ...MOBILE_WEB_BUNDLE_METHODS,
-  ...RUNTIME_CLIENT_CAPABILITY_METHODS,
-  ...CLIENT_EVENT_METHODS,
-  ...CLIENT_UI_METHODS,
-  ...EMULATOR_METHODS,
-  ...PAIRING_METHODS,
-  ...MOBILE_RELAY_HOSTS_METHODS,
-  ...MOBILE_PROJECT_SECTIONS_METHODS,
+  ...(ORCA_LAYOUT_OWNER_IS_MAIN
+    ? [
+        ...lazyRpcMethods(metadata.LAYOUT_APPLY_METHODS, loaders.LAYOUT_APPLY_METHODS),
+        ...lazyRpcMethods(metadata.LAYOUT_VIEW_REPORT_METHODS, loaders.LAYOUT_VIEW_REPORT_METHODS)
+      ]
+    : []),
+  ...lazyRpcMethods(metadata.NATIVE_CHAT_METHODS, loaders.NATIVE_CHAT_METHODS),
+  ...lazyRpcMethods(metadata.FILE_METHODS, loaders.FILE_METHODS),
+  ...lazyRpcMethods(metadata.GIT_METHODS, loaders.GIT_METHODS),
+  ...lazyRpcMethods(metadata.GITHUB_METHODS, loaders.GITHUB_METHODS),
+  ...lazyRpcMethods(metadata.GITLAB_METHODS, loaders.GITLAB_METHODS),
+  ...lazyRpcMethods(metadata.HOSTED_REVIEW_METHODS, loaders.HOSTED_REVIEW_METHODS),
+  ...lazyRpcMethods(metadata.LINEAR_METHODS, loaders.LINEAR_METHODS),
+  ...lazyRpcMethods(metadata.LINEAR_AGENT_ACCESS_METHODS, loaders.LINEAR_AGENT_ACCESS_METHODS),
+  ...lazyRpcMethods(metadata.JIRA_METHODS, loaders.JIRA_METHODS),
+  ...lazyRpcMethods(metadata.SSH_METHODS, loaders.SSH_METHODS),
+  ...lazyRpcMethods(metadata.MANAGED_SERVER_METHODS, loaders.MANAGED_SERVER_METHODS),
+  ...lazyRpcMethods(metadata.SPEECH_METHODS, loaders.SPEECH_METHODS),
+  ...lazyRpcMethods(metadata.WORKSPACE_PORT_METHODS, loaders.WORKSPACE_PORT_METHODS),
+  ...lazyRpcMethods(metadata.PLUGIN_METHODS, loaders.PLUGIN_METHODS),
+  ...lazyRpcMethods(metadata.SKILL_METHODS, loaders.SKILL_METHODS),
+  ...lazyRpcMethods(metadata.CLIPBOARD_METHODS, loaders.CLIPBOARD_METHODS),
+  ...lazyRpcMethods(metadata.HOST_CAPABILITY_METHODS, loaders.HOST_CAPABILITY_METHODS),
+  ...lazyRpcMethods(metadata.MOBILE_WEB_BUNDLE_METHODS, loaders.MOBILE_WEB_BUNDLE_METHODS),
+  ...lazyRpcMethods(
+    metadata.RUNTIME_CLIENT_CAPABILITY_METHODS,
+    loaders.RUNTIME_CLIENT_CAPABILITY_METHODS
+  ),
+  ...lazyRpcMethods(metadata.CLIENT_EVENT_METHODS, loaders.CLIENT_EVENT_METHODS),
+  ...lazyRpcMethods(metadata.CLIENT_UI_METHODS, loaders.CLIENT_UI_METHODS),
+  ...lazyRpcMethods(metadata.EMULATOR_METHODS, loaders.EMULATOR_METHODS),
+  ...lazyRpcMethods(metadata.PAIRING_METHODS, loaders.PAIRING_METHODS),
+  ...lazyRpcMethods(metadata.MOBILE_RELAY_HOSTS_METHODS, loaders.MOBILE_RELAY_HOSTS_METHODS),
+  ...lazyRpcMethods(
+    metadata.MOBILE_PROJECT_SECTIONS_METHODS,
+    loaders.MOBILE_PROJECT_SECTIONS_METHODS
+  ),
   // Switch point: a window-fed build publishes no sidebar input.
-  ...(ORCA_SIDEBAR_INPUTS_IS_MAIN ? SIDEBAR_INPUT_METHODS : []),
-  ...UPDATER_METHODS,
-  ...AUTOMATIC_WORK_METHODS
+  ...(ORCA_SIDEBAR_INPUTS_IS_MAIN
+    ? lazyRpcMethods(metadata.SIDEBAR_INPUT_METHODS, loaders.SIDEBAR_INPUT_METHODS)
+    : []),
+  ...lazyRpcMethods(metadata.UPDATER_METHODS, loaders.UPDATER_METHODS),
+  ...lazyRpcMethods(metadata.AUTOMATIC_WORK_METHODS, loaders.AUTOMATIC_WORK_METHODS)
 ]

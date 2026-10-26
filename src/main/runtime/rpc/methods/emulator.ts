@@ -1,6 +1,5 @@
 import { defineMethod } from '../core'
-import path from 'node:path'
-import { z } from 'zod'
+import { InstallParams } from './emulator-install-params'
 import {
   AttachParams,
   AxParams,
@@ -21,16 +20,6 @@ import {
   TapParams,
   TypeParams
 } from '../../../../shared/rpc-contract/emulator-params'
-
-const InstallParams = z.object({
-  path: z.string().refine((value) => path.isAbsolute(value), {
-    message: 'path must be absolute'
-  }),
-  reinstall: z.boolean().optional(),
-  device: z.string().optional(),
-  emulator: z.string().optional(),
-  worktree: z.string().optional()
-})
 
 export const EMULATOR_METHODS = [
   defineMethod({
