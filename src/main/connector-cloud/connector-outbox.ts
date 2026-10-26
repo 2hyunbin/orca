@@ -126,7 +126,7 @@ export type ConnectorBatchSender<T> = (
 
 /**
  * Drains an outbox one request at a time under the accepted hello, and does nothing without one. An answer
- * counts only if that hello is still accepted when it lands: the cloud answers an older hello's 204 too.
+ * counts only if that hello is still accepted when it lands, so a retired or superseded one consumes nothing.
  */
 export class ConnectorOutboxSender<T> {
   private sending = false
