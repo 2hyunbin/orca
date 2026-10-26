@@ -4,7 +4,8 @@ import {
   ConnectorHelloRequestSchema,
   type ConnectorHelloRequest
 } from '@orca-cloud/connector-contract'
-import type { SlackIdentity } from './slack-identities.js'
+import type { ConnectorSource } from './connector-adapter.js'
+import type { ConnectorIdentity } from './connector-identities.js'
 
 export type KnownHost = { hostId: string; hostName: string; hello: ConnectorHelloRequest }
 // A connector_hosts row with its latest hello; null when the stored hello no longer parses.
@@ -19,7 +20,7 @@ export type PlaceOption = { project: string; hostName: string }
 
 export type MachineChoice =
   | { kind: 'chosen'; hostId: string; hostName: string; placeId: string; agent: string }
-  // None of the person's machines runs an Orca that can take Slack work.
+  // None of the person's machines runs an Orca that can take this source's work.
   | { kind: 'no_machine' }
   | { kind: 'ask'; options: PlaceOption[] }
 
@@ -52,12 +53,13 @@ function messageWords(lower: string): Set<string> {
   return new Set([...words, ...links.map((match) => match[1] ?? '')])
 }
 
-// Decisions §2. The project first: named in the message → channel default → personal default; more
+// Decisions §2. The project first: named in the message → container default → personal default; more
 // than one → ask. Then, among that project's machines: named in the message → default → ask.
 export function chooseMachine(input: {
+  source: ConnectorSource
   hosts: KnownHost[]
-  identity: SlackIdentity
-  channelId: string
+  identity: ConnectorIdentity
+  containerId: string
   text: string
 }): MachineChoice {
   const lower = fold(input.text)
@@ -66,7 +68,7 @@ export function chooseMachine(input: {
 
   const capable = input.hosts.flatMap((host) => {
     const agent = host.hello.agents.find((name) => CONNECTOR_AGENTS.some((known) => known === name))
-    return agent && host.hello.sources.includes('slack') ? [{ ...host, agent }] : []
+    return agent && host.hello.sources.includes(input.source) ? [{ ...host, agent }] : []
   })
   if (capable.length === 0) {
     return { kind: 'no_machine' }
@@ -74,7 +76,8 @@ export function chooseMachine(input: {
   const places: Place[] = capable.flatMap((host) =>
     host.hello.projects.map((project) => ({ host, project }))
   )
-  const fallback = input.identity.channelProjects[input.channelId] ?? input.identity.defaultProject
+  const fallback =
+    input.identity.containerProjects[input.containerId] ?? input.identity.defaultProject
   const inMessage = places.filter((place) => projectNames(place.project).some(named))
   const referenced =
     inMessage.length > 0 || fallback === null
