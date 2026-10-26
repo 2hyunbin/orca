@@ -77,7 +77,7 @@ for (let run = 0; run < options.runs; run += 1) {
       },
       timeout: 120_000
     })
-    const owner = createLoadingProcessOwner(app.process().pid, profile)
+    const owner = createLoadingProcessOwner(app.process(), profile)
     if (process.env.ORCA_MAIN_LOADING_TRACE === '1') {
       app.process().stderr?.on('data', (data) => process.stderr.write(data))
     }

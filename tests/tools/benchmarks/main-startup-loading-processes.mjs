@@ -51,7 +51,8 @@ async function waitForExit(entries) {
   }
 }
 
-export function createLoadingProcessOwner(rootPid, profile) {
+export function createLoadingProcessOwner(childProcess, profile) {
+  const rootPid = childProcess.pid
   let root
   let captureError
   try {
@@ -61,6 +62,12 @@ export function createLoadingProcessOwner(rootPid, profile) {
   }
   const owned = new Map(root ? [[rootPid, root]] : [])
   const capture = () => {
+    if (!root && childProcess.exitCode === null && childProcess.signalCode === null) {
+      root = readIdentity(rootPid)
+      if (root) {
+        owned.set(rootPid, root)
+      }
+    }
     const rows = readProcessRows()
     const descendants = new Set(
       root && stillOwned(root) ? descendantsOf(rows, rootPid).map((row) => row.pid) : []
