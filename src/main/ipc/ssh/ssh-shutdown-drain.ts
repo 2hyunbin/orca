@@ -4,8 +4,6 @@ import {
   testConnectionProbes
 } from './ssh-connect-attempt-registry'
 import { connectionManager, portForwardManager } from './ssh-ipc-context'
-import { shutdownOrcadManagedTunnels } from '../../managed-server/lifecycle/orcad-managed-tunnel'
-import { closeAllPlainSshTerminals } from '../../ssh/plain-ssh-terminal/plain-ssh-terminal-sessions'
 
 // One absolute deadline bounds all phases, including connects stuck before their next cancellation checkpoint.
 export const SSH_SHUTDOWN_BUDGET_MS = 6_000
@@ -17,12 +15,19 @@ export type SshShutdownResult = {
   errors: readonly unknown[]
 }
 
-type SshShutdownTask = { targetId: string; promise: Promise<unknown> }
+export type SshShutdownTask = { targetId: string; promise: Promise<unknown> }
+
+let sessionShutdownTasks: () => SshShutdownTask[] = () => []
+
+export function setSshSessionShutdownTasks(tasks: () => SshShutdownTask[]): void {
+  sessionShutdownTasks = tasks
+}
 
 let sshShutdownDrain: Promise<SshShutdownResult> | null = null
 
 export function resetSshShutdownDrain(): void {
   sshShutdownDrain = null
+  sessionShutdownTasks = () => []
 }
 
 async function settleTasksWithinMs(
@@ -66,13 +71,9 @@ function sshShutdownTasks(): SshShutdownTask[] {
     {
       // Independent ssh -L children survive app exit and retain ports needed by the next launch.
       targetId: '*forwards',
-      promise: Promise.all([portForwardManager?.closeAll(), shutdownOrcadManagedTunnels()])
+      promise: portForwardManager?.closeAll() ?? Promise.resolve()
     },
-    {
-      // Plain SSH terminals have no restoration owner and must end with Orca.
-      targetId: '*plain-ssh',
-      promise: closeAllPlainSshTerminals()
-    }
+    ...sessionShutdownTasks()
   ]
 }
 

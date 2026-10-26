@@ -1,27 +1,14 @@
 import type { SshConnectionCallbacks } from '../../ssh/connection/ssh-connection-callbacks'
 import type { SshConnectionState } from '../../../shared/ssh-types'
 import { isSshHostCensusInFlight } from '../../ssh/connection/ssh-connection-attribution'
-import {
-  clearSshCredentialDeclined,
-  isSshCredentialDeclined
-} from '../../ssh/ssh-credential-decline'
-import {
-  connectInFlight,
-  credentialRequestedForTarget,
-  testingTargets
-} from './ssh-connect-attempt-registry'
-import { connectionManager, getCurrentMainWindow } from './ssh-ipc-context'
-import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry'
-import { recordSshSignInRequirement } from './ssh-sign-in-requirement'
+import { connectInFlight, testingTargets } from './ssh-connect-attempt-registry'
+import { getCurrentMainWindow } from './ssh-ipc-context'
 import { restoreManagedHostPortForwards } from './ssh-managed-port-forward-restore'
-import { requestCredential } from './ssh-passphrase'
 import { broadcastSshState } from './ssh-renderer-broadcast'
+import { createSshTransportCallbacks, recordSshTransportState } from './ssh-transport-callbacks'
 
 export function handleSshConnectionStateChange(targetId: string, state: SshConnectionState): void {
-  if (state.status === 'connected') {
-    clearSshCredentialDeclined(targetId)
-    recordSshSignInRequirement(targetId, getSshTargetRegistryStore(), connectionManager)
-  }
+  recordSshTransportState(targetId, state)
   if (testingTargets.has(targetId)) {
     return
   }
@@ -47,14 +34,7 @@ export function handleSshConnectionStateChange(targetId: string, state: SshConne
 
 export function createSshConnectionCallbacks(): SshConnectionCallbacks {
   return {
-    onCredentialRequest: (targetId, kind, detail, echo, signal) => {
-      // After Cancel, only explicit connects may prompt again.
-      if (isSshCredentialDeclined(targetId, signal)) {
-        return Promise.resolve(null)
-      }
-      credentialRequestedForTarget.add(targetId)
-      return requestCredential(getCurrentMainWindow, targetId, kind, detail, echo, signal)
-    },
+    ...createSshTransportCallbacks(),
     onStateChange: handleSshConnectionStateChange
   }
 }

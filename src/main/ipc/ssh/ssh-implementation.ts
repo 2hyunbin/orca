@@ -1,30 +1,15 @@
 import type { BrowserWindow } from 'electron'
 import { createSshIpcRegistration, type SshIpcRegistrar } from './ssh-ipc-registration'
 import type { Store } from '../../persistence'
-import { awaitSignInForCredentialHosts } from './ssh-sign-in-requirement'
-import { SshConnectionManager } from '../../ssh/connection/ssh-connection-manager'
+import { resetSshTransportStateForTests } from './ssh-transport'
+import { closeAllPlainSshTerminals } from '../../ssh/plain-ssh-terminal/plain-ssh-terminal-sessions'
 import { SshPortForwardManager } from '../../ssh/port-forwarding/ssh-port-forward'
-import {
-  getSshTargetRegistryStore,
-  setSshConnectionManagerResolver,
-  setSshTargetRegistryHandlers,
-  setSshTargetRegistryStore
-} from '../../ssh/targets/ssh-target-registry'
+import { setSshConnectionManagerResolver } from '../../ssh/targets/ssh-target-registry'
 
 import { registerSshBrowseHandler } from './ssh-browse'
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
-import { resetSshConnectionGenerations } from '../../ssh/connection/ssh-connection-generation'
-import { resetSshProviderAuthorities } from '../../ssh/ssh-provider-authority'
 import { installManagedOrcadStartStatus } from '../runtime-environments/runtime-environment-managed-tunnel'
-import {
-  connectInFlight,
-  credentialRequestedForTarget,
-  testConnectionProbes,
-  testingTargets
-} from './ssh-connect-attempt-registry'
 import { createSshConnectionCallbacks } from './ssh-connection-state-callbacks'
-import { resetSshCredentialDeclinesForTests } from '../../ssh/ssh-credential-decline'
-import { resetSshUserDisconnectsForTests } from '../../ssh/ssh-user-disconnect'
 import { registerSshConnectionHandlers } from './ssh-connection-handlers'
 import { registerPlainSshTerminalHandlers } from './plain-ssh-terminal-handlers'
 import {
@@ -35,10 +20,6 @@ import {
   connectionManager,
   getCurrentMainWindow,
   portForwardManager,
-  setConnectionManager,
-  setCurrentGetMainWindow,
-  setCurrentRuntime,
-  setPersistedStore,
   setPortForwardManager
 } from './ssh-ipc-context'
 import { registerSshPortForwardHandlers } from './ssh-port-forward-handlers'
@@ -48,9 +29,11 @@ import { restoreManagedHostPortForwards } from './ssh-managed-port-forward-resto
 import { setSshHostServedListener } from '../../ssh/ssh-host-server-status'
 import { broadcastPortForwards } from './ssh-renderer-broadcast'
 import { registerQuitTask } from '../../quit-task-registry'
-import { beginSshShutdown, resetSshShutdownDrain } from './ssh-shutdown-drain'
-import { targetLifecycleInFlight } from './ssh-target-lifecycle-queue'
-import { disposeOrcadManagedTunnels } from '../../managed-server/lifecycle/orcad-managed-tunnel'
+import { beginSshShutdown, setSshSessionShutdownTasks } from './ssh-shutdown-drain'
+import {
+  disposeOrcadManagedTunnels,
+  shutdownOrcadManagedTunnels
+} from '../../managed-server/lifecycle/orcad-managed-tunnel'
 import { retainUnretainedOrcadMigrationSources } from '../../ssh/orcad-migration-source-retention'
 import { reconcileManagedOrcadSshTargets } from '../../ssh/orcad-retained-source'
 import { installOrcadMigrationScrollbackRetention } from '../../ssh/orcad-migration-scrollback-retention-wiring'
@@ -62,6 +45,10 @@ import {
 
 export function initializeSshMigrationState(store: Store): void {
   registerQuitTask('ssh', 'ssh', beginSshShutdown)
+  setSshSessionShutdownTasks(() => [
+    { targetId: '*managed-tunnels', promise: shutdownOrcadManagedTunnels() },
+    { targetId: '*plain-ssh', promise: closeAllPlainSshTerminals() }
+  ])
   reconcileManagedOrcadSshTargets(getAppEnvironment().getPath('userData'), store)
   void retainUnretainedOrcadMigrationSources(getAppEnvironment().getPath('userData'), store)
   installOrcadMigrationScrollbackRetention(getAppEnvironment().getPath('userData'), store)
@@ -77,14 +64,7 @@ export function initializeSshSubsystem(
   const { ipc } = registration
   installManagedOrcadStartStatus()
 
-  const callbacks = createSshConnectionCallbacks()
-  if (connectionManager) {
-    connectionManager.setCallbacks(callbacks)
-  } else {
-    setConnectionManager(new SshConnectionManager(callbacks))
-    // Window re-registration must not re-gate hosts already signed in during this process.
-    awaitSignInForCredentialHosts(getSshTargetRegistryStore()!)
-  }
+  connectionManager!.setCallbacks(createSshConnectionCallbacks())
   setPortForwardManager(portForwardManager ?? new SshPortForwardManager())
   portForwardManager!.setCallbacks({
     onForwardClosed: (entry, reason) => {
@@ -145,27 +125,9 @@ export function initializeSshSubsystem(
 export async function resetSshHandlerStateForTests(): Promise<void> {
   unregisterPowerMonitorReconnect()
 
-  connectInFlight.clear()
-  targetLifecycleInFlight.clear()
-  resetSshConnectionGenerations()
-  resetSshProviderAuthorities()
-  testingTargets.clear()
-  testConnectionProbes.clear()
-  credentialRequestedForTarget.clear()
-  resetSshCredentialDeclinesForTests()
-  resetSshUserDisconnectsForTests()
-  resetSshShutdownDrain()
-
   disposeDesktopBrowserBridge()
-  await connectionManager?.disconnectAll()
+  await resetSshTransportStateForTests()
   disposeOrcadManagedTunnels()
   portForwardManager?.dispose()
-  setConnectionManager(null)
-  setSshConnectionManagerResolver(null)
   setPortForwardManager(null)
-  setSshTargetRegistryStore(null)
-  setPersistedStore(null)
-  setSshTargetRegistryHandlers({ connect: null, getState: null })
-  setCurrentGetMainWindow(() => null)
-  setCurrentRuntime(undefined)
 }

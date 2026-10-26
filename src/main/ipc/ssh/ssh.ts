@@ -24,6 +24,7 @@ import { PLAIN_SSH_TERMINAL_CHANNELS } from '../../../shared/plain-ssh-terminal'
 import { quitTeardownStartGate } from '../../quit-teardown-start-gate'
 import { createSshSubsystemLoader } from './ssh-subsystem-loader'
 import type * as SshImplementation from './ssh-implementation'
+import type * as SshTransport from './ssh-transport'
 import {
   connectionManager,
   currentRuntime,
@@ -64,9 +65,25 @@ const SSH_EVENT_CHANNELS = [
 ] as const
 
 let registration: { store: Store; runtime?: OrcaRuntimeService } | undefined
+let transport = createTransport()
 let subsystem = createSubsystem()
 let startupReady: Promise<void> | undefined
+let initializedTransport: typeof SshTransport | undefined
 let initializedModule: typeof SshImplementation | undefined
+
+function createTransport() {
+  const loader = createSshSubsystemLoader(
+    () => import('./ssh-transport'),
+    (implementation) => {
+      if (!registration || transport !== loader) {
+        throw new Error('SSH registration was replaced')
+      }
+      initializedTransport = implementation
+      return implementation.initializeSshTransport()
+    }
+  )
+  return loader
+}
 
 function createSubsystem() {
   const loader = createSshSubsystemLoader(
@@ -74,7 +91,8 @@ function createSubsystem() {
     () =>
       Promise.all([
         import('./ssh-implementation'),
-        import('../../ssh/legacy-relay/legacy-relay-bridge-ipc')
+        import('../../ssh/legacy-relay/legacy-relay-bridge-ipc'),
+        transport.load()
       ]),
     ([implementation, compatibility]) => {
       if (!registration || subsystem !== loader) {
@@ -156,7 +174,14 @@ export function registerSshHandlers(
     ipcMain.handle(channel, (event, ...args: unknown[]) => {
       if (!subsystem.loaded) {
         if (channel === 'ssh:getState') {
-          return undefined
+          const input = args[0]
+          return connectionManager &&
+            typeof input === 'object' &&
+            input !== null &&
+            'targetId' in input &&
+            typeof input.targetId === 'string'
+            ? getPublicSshState(input.targetId)
+            : undefined
         }
         if (
           channel === 'ssh:listPortForwards' ||
@@ -176,15 +201,27 @@ export function registerSshHandlers(
         }
         if (channel === 'ssh:needsPassphrasePrompt') {
           const input = args[0]
+          if (
+            typeof input !== 'object' ||
+            input === null ||
+            !('targetId' in input) ||
+            typeof input.targetId !== 'string'
+          ) {
+            return false
+          }
+          const target = sshStore.getTarget(input.targetId)
           return (
-            typeof input === 'object' &&
-            input !== null &&
-            'targetId' in input &&
-            typeof input.targetId === 'string' &&
-            (isSshCredentialDeclined(input.targetId) ||
-              sshStore.getTarget(input.targetId)?.lastRequiredPassphrase === true)
+            isSshCredentialDeclined(input.targetId) ||
+            (target?.lastRequiredPassphrase === true &&
+              !connectionManager?.hasCachedCredential(target))
           )
         }
+      }
+      if (channel === 'ssh:testConnection') {
+        const loaded = transport.loaded
+        return loaded
+          ? loaded.handlers.get(channel)!(event, ...args)
+          : transport.load().then(({ handlers }) => handlers.get(channel)!(event, ...args))
       }
       const loaded = subsystem.loaded
       if (loaded) {
@@ -215,10 +252,14 @@ export function registerSshHandlers(
 
 export async function resetSshHandlerStateForTests(): Promise<void> {
   resetLaunchReconnectOptOutsForTests()
-  await initializedModule?.resetSshHandlerStateForTests()
+  await (initializedModule
+    ? initializedModule.resetSshHandlerStateForTests()
+    : initializedTransport?.resetSshTransportStateForTests())
+  initializedTransport = undefined
   initializedModule = undefined
   registration = undefined
   startupReady = undefined
+  transport = createTransport()
   subsystem = createSubsystem()
   setSshTargetMutations(null)
   setSshConnectionManagerInitializer(null)
