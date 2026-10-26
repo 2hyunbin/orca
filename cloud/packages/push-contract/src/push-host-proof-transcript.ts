@@ -6,7 +6,7 @@ export const PUSH_HOST_CHALLENGE_BOX_ALGORITHM = 'Curve25519-XSalsa20-Poly1305'
 export const PUSH_HOST_PROOF_ALGORITHM = 'HMAC-SHA-256'
 
 // The layout is shared; the domains keep one service's proof from answering another's challenge.
-export interface HostProofDomains {
+export type HostProofDomains = {
   readonly transcript: string
   readonly challengePlaintext: string
 }
