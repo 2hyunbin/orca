@@ -17,6 +17,7 @@ export type DeliveryBody = ConnectorDelivery extends infer D
     : never
   : never
 
+export type ExpiredThread = { hostId: string; externalId: string }
 export type EnqueueResult = 'queued' | 'duplicate' | 'dropped'
 export type Unsettled = { deliveryId: string; conversation: { source: 'slack'; externalId: string } }
 
@@ -177,7 +178,10 @@ export class ConnectorInbox {
   }
 
   // Pending past its deadline, or leased and never received 30 s after it. Returns the threads hit.
-  async expireDue(): Promise<{ hostId: string; externalId: string }[]> {
+  // `effects` runs in the same transaction, so what the expiry owes Slack commits with it.
+  async expireDue(
+    effects?: (transaction: CloudDatabase, threads: ExpiredThread[]) => Promise<void>
+  ): Promise<ExpiredThread[]> {
     const now = this.now()
     return await this.database.transaction(async (transaction) => {
       const rows = await transaction.query(
@@ -186,7 +190,7 @@ export class ConnectorInbox {
          RETURNING host_id, external_id`,
         [now, now, now - CONNECTOR_LIMITS.leasedExpiryGraceMs]
       )
-      const threads = new Map<string, { hostId: string; externalId: string }>()
+      const threads = new Map<string, ExpiredThread>()
       for (const row of rows) {
         const thread = { hostId: String(row.host_id), externalId: String(row.external_id) }
         threads.set(`${thread.hostId}\0${thread.externalId}`, thread)
@@ -194,6 +198,7 @@ export class ConnectorInbox {
       for (const hostId of new Set([...threads.values()].map((thread) => thread.hostId))) {
         await this.wake(transaction, hostId)
       }
+      await effects?.(transaction, [...threads.values()])
       return [...threads.values()]
     })
   }

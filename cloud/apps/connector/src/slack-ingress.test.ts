@@ -191,7 +191,7 @@ describe('Slack event ingress', () => {
     const harness = await linkedOwner()
     await harness.message(mention())
     harness.advance(5 * 60_000 + 1)
-    await harness.edge.onExpired(await harness.runtime.inbox.expireDue())
+    await harness.runtime.inbox.expireDue(harness.edge.onExpired)
     const posts = await harness.posts()
     expect(posts.map((post) => [post.post_id, JSON.parse(String(post.body)).text])).toEqual(
       expect.arrayContaining([
@@ -251,9 +251,48 @@ describe('Slack event ingress', () => {
     harness.advance(60_000)
     await harness.message({ text: 'and this', ts: '1800000000.000200', thread_ts: THREAD })
     harness.advance(4 * 60_000 + 1)
-    await harness.edge.onExpired(await harness.runtime.inbox.expireDue())
+    await harness.runtime.inbox.expireDue(harness.edge.onExpired)
     expect((await harness.posts()).map((post) => post.post_id)).toContain(
       `offline:${EXTERNAL_ID}:${TEAM}:${CHANNEL}:${THREAD}`
     )
+  })
+
+  it('keeps a teammate’s messages as context even once they have their own conversation', async () => {
+    const harness = await linkedOwner()
+    await harness.operator('link', '--team', TEAM, '--user', TEAMMATE, '--account', 'user-2')
+    await harness.machineWith('user-2', [project('orca', 'pl_theirs')])
+    await harness.message(mention())
+    await harness.message({
+      user: TEAMMATE,
+      text: `<@${BOT}> orca: what about docs`,
+      ts: '1800000000.000200',
+      thread_ts: THREAD
+    })
+    await harness.message({
+      user: TEAMMATE,
+      text: 'also CI',
+      ts: '1800000000.000300',
+      thread_ts: THREAD
+    })
+    const context = await harness.database.query(
+      'SELECT external_id, text FROM connector_thread_context ORDER BY ts'
+    )
+    expect(context).toEqual([
+      { external_id: EXTERNAL_ID, text: 'orca: what about docs' },
+      { external_id: EXTERNAL_ID, text: 'also CI' }
+    ])
+  })
+
+  it('keeps nothing from a paused thread for later', async () => {
+    const harness = await linkedOwner()
+    await harness.message(mention())
+    await harness.operator('pause', '--team', TEAM)
+    await harness.message({
+      user: TEAMMATE,
+      text: 'psst',
+      ts: '1800000000.000200',
+      thread_ts: THREAD
+    })
+    expect(await harness.database.query('SELECT * FROM connector_thread_context')).toEqual([])
   })
 })

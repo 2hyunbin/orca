@@ -66,37 +66,39 @@ export async function routeSlackMessage(
     )
     const threads = await threadsIn(transaction, { teamId, channelId, threadTs })
     const own = threads.find((thread) => thread.ownerUserId === userId)
-    if (!own && !message.direct && !mentionsBot(message.text, install.botUserId)) {
-      for (const thread of threads) {
-        await transaction.query(
-          `INSERT INTO connector_thread_context
-           (external_id, ts, team_id, author_user_id, text, created_at)
-           VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (external_id, ts) DO NOTHING`,
-          [
-            thread.externalId,
-            ts,
-            teamId,
-            userId,
-            promptText(message.text, install.botUserId),
-            deps.now()
-          ]
+    const othersThreads = threads.filter((thread) => thread.ownerUserId !== userId)
+    const addressed = own || message.direct || mentionsBot(message.text, install.botUserId)
+    if (!addressed && othersThreads.length === 0) {
+      return
+    }
+    const place = { teamId, channelId, threadTs }
+    // Paused input is neither delivered nor kept for later.
+    if (deps.config.paused || install.paused) {
+      if (addressed) {
+        await reply(
+          deps,
+          transaction,
+          place,
+          `paused:${teamId}:${channelId}:${threadTs}`,
+          slackText.paused
         )
       }
       return
     }
-    const place = { teamId, channelId, threadTs }
-    if (deps.config.paused || install.paused) {
-      await reply(
-        deps,
-        transaction,
-        place,
-        `paused:${teamId}:${channelId}:${threadTs}`,
-        slackText.paused
-      )
-      return
-    }
     const text = promptText(message.text, install.botUserId)
     if (text.length === 0) {
+      return
+    }
+    // Context for every other owner's conversation here, whatever this message does for its author.
+    for (const thread of othersThreads) {
+      await transaction.query(
+        `INSERT INTO connector_thread_context
+         (external_id, ts, team_id, author_user_id, text, created_at)
+         VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (external_id, ts) DO NOTHING`,
+        [thread.externalId, ts, teamId, userId, text, deps.now()]
+      )
+    }
+    if (!addressed) {
       return
     }
     const route = { deps, transaction, message, messageKey, place, install, text }

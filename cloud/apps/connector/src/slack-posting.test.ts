@@ -51,7 +51,12 @@ async function startedThread() {
   }
   const reply = (replyId: string, text: string, by = machine) =>
     by.call(CONNECTOR_PATHS.replies, { v: 1, replyId, conversation, turnId: TURN, text })
-  return { ...harness, machine, start, events, status, reply }
+  // One worker pass, then past the channel's one-second spacing.
+  const pass = async () => {
+    await harness.edge.worker.sendDue()
+    harness.advance(1_000)
+  }
+  return { ...harness, machine, start, events, status, reply, pass }
 }
 
 const turnStarted = { kind: 'turn-started', conversation, paneKey: 'pane-1', at: TURN }
@@ -103,8 +108,8 @@ describe('Slack thread status and posts', () => {
     const stranger = await harness.machineWith('user-1', [])
     expect((await harness.reply('r2', 'hi', stranger)).status).toBe(403)
 
-    await harness.edge.worker.sendDue()
-    await harness.edge.worker.sendDue()
+    await harness.pass()
+    await harness.pass()
     expect(await (await harness.reply('r1', 'Here you go')).json()).toEqual({
       status: 'posted',
       messageTs: expect.any(String)
@@ -138,8 +143,8 @@ describe('Slack thread status and posts', () => {
   it('sends the reaction and status, then edits the status in place', async () => {
     const harness = await startedThread()
     // One post per channel per pass, in queue order.
-    await harness.edge.worker.sendDue()
-    await harness.edge.worker.sendDue()
+    await harness.pass()
+    await harness.pass()
     const sent = harness.fake.take()
     expect(sent).toEqual([
       { method: 'reactions.add', args: { channel: CHANNEL, name: 'eyes', timestamp: THREAD } },
@@ -154,7 +159,7 @@ describe('Slack thread status and posts', () => {
     })
 
     await harness.events(turnStarted)
-    await harness.edge.worker.sendDue()
+    await harness.pass()
     expect(harness.fake.take()).toEqual([
       {
         method: 'chat.update',
@@ -165,7 +170,7 @@ describe('Slack thread status and posts', () => {
 
   it('a status changed while it was sending gets one more edit', async () => {
     const harness = await startedThread()
-    await harness.edge.worker.sendDue()
+    await harness.pass()
     const posts = new SlackPosts(harness.database, harness.now)
     const [claimed] = await posts.claim()
     await harness.events(turnStarted)
@@ -183,24 +188,24 @@ describe('Slack thread status and posts', () => {
       'reactions.add',
       new Response(null, { status: 429, headers: { 'retry-after': '30' } })
     )
-    await harness.edge.worker.sendDue()
+    await harness.pass()
     expect(harness.fake.take().map((call) => call.method)).toEqual(['reactions.add'])
     await harness.reply('r1', 'later')
-    await harness.edge.worker.sendDue()
+    await harness.pass()
     expect(harness.fake.take()).toEqual([])
     harness.advance(30_000)
-    await harness.edge.worker.sendDue()
+    await harness.pass()
     expect(harness.fake.take().map((call) => call.method)).toEqual(['reactions.add'])
   })
 
   it('treats internal_error as maybe-posted and checks before sending again', async () => {
     const harness = await startedThread()
-    await harness.edge.worker.sendDue()
+    await harness.pass()
     harness.fake.respond('chat.postMessage', Response.json({ ok: false, error: 'internal_error' }))
-    await harness.edge.worker.sendDue()
+    await harness.pass()
     harness.advance(120_000)
     harness.fake.respond('conversations.replies', Response.json({ ok: true, messages: [] }))
-    await harness.edge.worker.sendDue()
+    await harness.pass()
     expect(harness.fake.take().map((call) => call.method)).toEqual([
       'reactions.add',
       'chat.postMessage',
@@ -213,8 +218,8 @@ describe('Slack thread status and posts', () => {
     const harness = await startedThread()
     harness.fake.respond('reactions.add', Response.json({ ok: false, error: 'already_reacted' }))
     harness.fake.respond('chat.postMessage', new Response(null, { status: 502 }))
-    await harness.edge.worker.sendDue()
-    await harness.edge.worker.sendDue()
+    await harness.pass()
+    await harness.pass()
     harness.fake.take()
     const states = async () =>
       Object.fromEntries((await harness.posts()).map((post) => [post.post_id, post.state]))
@@ -246,8 +251,8 @@ describe('Slack thread status and posts', () => {
         ]
       })
     )
-    await harness.edge.worker.sendDue()
-    await harness.edge.worker.sendDue()
+    await harness.pass()
+    await harness.pass()
     expect(harness.fake.take()).toEqual([
       expect.objectContaining({ method: 'conversations.replies' }),
       expect.objectContaining({
@@ -263,10 +268,10 @@ describe('Slack thread status and posts', () => {
 
     await harness.reply('r1', 'one')
     harness.fake.respond('chat.postMessage', new Response(null, { status: 502 }))
-    await harness.edge.worker.sendDue()
+    await harness.pass()
     harness.advance(120_000)
     harness.fake.respond('conversations.replies', Response.json({ ok: true, messages: [] }))
-    await harness.edge.worker.sendDue()
+    await harness.pass()
     expect(harness.fake.take().map((call) => call.method)).toEqual([
       'chat.postMessage',
       'conversations.replies',
@@ -275,7 +280,7 @@ describe('Slack thread status and posts', () => {
 
     await harness.reply('r2', 'two')
     harness.fake.respond('chat.postMessage', new Response(null, { status: 502 }))
-    await harness.edge.worker.sendDue()
+    await harness.pass()
     harness.advance(120_000)
     const morePages = () =>
       Response.json({
@@ -285,7 +290,7 @@ describe('Slack thread status and posts', () => {
         response_metadata: { next_cursor: 'n' }
       })
     harness.fake.respond('conversations.replies', morePages(), morePages(), morePages())
-    await harness.edge.worker.sendDue()
+    await harness.pass()
     expect((await states())[`reply:${harness.machine.hostId}:r2`]).toBe('uncertain')
   })
 
@@ -328,5 +333,41 @@ describe('Slack thread status and posts', () => {
     expect(
       (await harness.posts()).some((post) => String(post.post_id).startsWith('fallback:'))
     ).toBe(false)
+  })
+
+  it('spaces posts in one channel about a second apart', async () => {
+    const harness = await startedThread()
+    await harness.edge.worker.sendDue()
+    await harness.edge.worker.sendDue()
+    expect(harness.fake.take().map((call) => call.method)).toEqual(['reactions.add'])
+  })
+
+  it('an old claim can’t finish a newer claim of the same post, and sent text is dropped', async () => {
+    const harness = await startedThread()
+    const posts = new SlackPosts(harness.database, harness.now)
+    await harness.pass()
+    const [first] = await posts.claim()
+    harness.advance(120_000)
+    const [recovered] = await posts.claim()
+    if (!first || !recovered) {
+      throw new Error('expected claims')
+    }
+    await posts.found(recovered, '1800000100.000001')
+    harness.advance(1_000)
+    const [edit] = await posts.claim()
+    await posts.settle(first, 'failed')
+    expect((await harness.posts()).find((post) => post.post_id === edit?.postId)?.state).toBe(
+      'sending'
+    )
+    if (edit) {
+      await posts.posted(edit)
+    }
+
+    await harness.reply('r1', 'secret reply')
+    harness.advance(1_000)
+    await harness.pass()
+    await harness.pass()
+    const reply = (await harness.posts()).find((post) => String(post.post_id).startsWith('reply:'))
+    expect(reply).toMatchObject({ state: 'posted', body: '{}' })
   })
 })

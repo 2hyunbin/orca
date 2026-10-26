@@ -15,12 +15,16 @@ export type ClaimedPost = SlackPlace & {
   // Claimed back from a sender that never finished: it may already be in Slack.
   stale: boolean
   sentAt: number
+  // This claim's lease end; every finish names it, so a sender whose lease ran out changes nothing.
+  leaseUntil: number
 }
 
 const CLAIM_BATCH = 20
 // A post still sending after this was abandoned (crash or a lost reply) and is checked again. It
 // covers the worst send (a bounded history check plus the post), as a claimed batch goes in parallel.
 const SENDING_LEASE_MS = 120_000
+// About one post a second per channel, Slack's posting allowance.
+const CHANNEL_SPACING_MS = 1_000
 const MAX_ATTEMPTS = 5
 const RETRY_BASE_MS = 2_000
 const RETRY_MAX_MS = 60_000
@@ -113,7 +117,7 @@ export class SlackPosts {
   // A reply in a turn makes its fallback post unnecessary, if that hasn't gone out yet.
   async cancelQueued(transaction: CloudDatabase, postId: string): Promise<void> {
     await transaction.query(
-      `UPDATE connector_slack_posts SET state = 'cancelled', updated_at = ?
+      `UPDATE connector_slack_posts SET state = 'cancelled', body = '{}', updated_at = ?
        WHERE post_id = ? AND state = 'queued'`,
       [this.now(), postId]
     )
@@ -144,33 +148,40 @@ export class SlackPosts {
              WHERE ahead.channel_id = p.channel_id AND ahead.state IN ('queued', 'sending')
                AND (ahead.queued_at < p.queued_at
                  OR (ahead.queued_at = p.queued_at AND ahead.post_id < p.post_id)))
+           AND NOT EXISTS (SELECT 1 FROM connector_slack_posts sent
+             WHERE sent.channel_id = p.channel_id AND sent.state = 'posted' AND sent.updated_at > ?)
          ORDER BY p.next_at LIMIT ?`,
-        [now, CLAIM_BATCH]
+        [now, now - CHANNEL_SPACING_MS, CLAIM_BATCH]
       )
       const claimed: ClaimedPost[] = []
       for (const row of heads) {
         const stale = row.state === 'sending'
         const sentAt = stale ? Number(row.updated_at) : now
-        await transaction.query(
+        const leaseUntil = now + SENDING_LEASE_MS
+        // Only from the state it was read in: a reply's cancel since then stays final.
+        const [taken] = await transaction.query(
           `UPDATE connector_slack_posts SET state = 'sending', attempts = attempts + 1,
              next_at = ?, updated_at = ?
-           WHERE post_id = ?`,
-          [now + SENDING_LEASE_MS, sentAt, row.post_id]
+           WHERE post_id = ? AND state = ? AND next_at = ?`,
+          [leaseUntil, sentAt, row.post_id, row.state, row.next_at]
         )
-        claimed.push(claimedPost(row, stale, sentAt))
+        if (Number(taken?.changes ?? 0) > 0) {
+          claimed.push(claimedPost(row, { stale, sentAt, leaseUntil }))
+        }
       }
       return claimed
     })
   }
 
-  // Every finish names the claim it ends (attempts), so a sender whose lease ran out changes nothing.
+  // A sent one-off post keeps only its id and verdict; its text goes.
   async posted(post: ClaimedPost, slackTs?: string): Promise<void> {
     await this.database.query(
       `UPDATE connector_slack_posts
        SET state = CASE WHEN rev = ? THEN 'posted' ELSE 'queued' END, attempts = 0,
+         body = CASE WHEN kind = 'status' THEN body ELSE '{}' END,
          slack_ts = COALESCE(?, slack_ts), queued_at = ?, next_at = ?, updated_at = ?
-       WHERE post_id = ? AND state = 'sending' AND attempts = ?`,
-      [post.rev, slackTs ?? null, this.now(), this.now(), this.now(), post.postId, post.attempts]
+       WHERE post_id = ? AND state = 'sending' AND next_at = ?`,
+      [post.rev, slackTs ?? null, this.now(), this.now(), this.now(), post.postId, post.leaseUntil]
     )
   }
 
@@ -184,8 +195,8 @@ export class SlackPosts {
     await this.database.query(
       `UPDATE connector_slack_posts SET state = 'queued', attempts = 0, slack_ts = ?, next_at = ?,
          updated_at = ?
-       WHERE post_id = ? AND state = 'sending' AND attempts = ?`,
-      [slackTs, this.now(), this.now(), post.postId, post.attempts]
+       WHERE post_id = ? AND state = 'sending' AND next_at = ?`,
+      [slackTs, this.now(), this.now(), post.postId, post.leaseUntil]
     )
   }
 
@@ -200,17 +211,18 @@ export class SlackPosts {
       now + (afterMs ?? Math.min(RETRY_BASE_MS * 2 ** (post.attempts - 1), RETRY_MAX_MS))
     await this.database.query(
       `UPDATE connector_slack_posts SET state = 'queued', next_at = ?, updated_at = ?
-       WHERE post_id = ? AND state = 'sending' AND attempts = ?`,
-      [nextAt, now, post.postId, post.attempts]
+       WHERE post_id = ? AND state = 'sending' AND next_at = ?`,
+      [nextAt, now, post.postId, post.leaseUntil]
     )
   }
 
   // failed: Slack refused it. uncertain: it may have posted and we couldn't check, so no retry.
   async settle(post: ClaimedPost, state: 'failed' | 'uncertain'): Promise<void> {
     await this.database.query(
-      `UPDATE connector_slack_posts SET state = ?, updated_at = ?
-       WHERE post_id = ? AND state = 'sending' AND attempts = ?`,
-      [state, this.now(), post.postId, post.attempts]
+      `UPDATE connector_slack_posts SET state = ?, updated_at = ?,
+         body = CASE WHEN kind = 'status' THEN body ELSE '{}' END
+       WHERE post_id = ? AND state = 'sending' AND next_at = ?`,
+      [state, this.now(), post.postId, post.leaseUntil]
     )
   }
 
@@ -231,7 +243,10 @@ function nullableText(value: unknown): string | null {
   return value === null || value === undefined ? null : String(value)
 }
 
-function claimedPost(row: SqlRow, stale: boolean, sentAt: number): ClaimedPost {
+function claimedPost(
+  row: SqlRow,
+  claim: { stale: boolean; sentAt: number; leaseUntil: number }
+): ClaimedPost {
   const kind = String(row.kind)
   if (kind !== 'message' && kind !== 'status' && kind !== 'reaction') {
     throw new Error('unknown Slack post kind')
@@ -250,7 +265,6 @@ function claimedPost(row: SqlRow, stale: boolean, sentAt: number): ClaimedPost {
     rev: Number(row.rev),
     attempts: Number(row.attempts) + 1,
     slackTs: nullableText(row.slack_ts),
-    stale,
-    sentAt
+    ...claim
   }
 }

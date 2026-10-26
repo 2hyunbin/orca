@@ -1,3 +1,4 @@
+import type { ConnectorInbox } from './connector-inbox.js'
 import type { SlackEdge } from './slack-edge.js'
 
 // Chains each sweep after the previous one settles, so a slow database never stacks them.
@@ -37,17 +38,16 @@ const INBOX_RETENTION_MS = 7 * 24 * 60 * 60_000
 
 export function startConnectorBackground(runtime: {
   inbox: {
-    expireDue(): Promise<{ hostId: string; externalId: string }[]>
+    expireDue: ConnectorInbox['expireDue']
     pruneSettled(retentionMs: number): Promise<number>
   }
   slack?: Pick<SlackEdge, 'onExpired' | 'startBackground'>
 }): () => void {
   const stops = [
     every('inbox_expiry', EXPIRY_SWEEP_INTERVAL_MS, async () => {
-      const threads = await runtime.inbox.expireDue()
+      const threads = await runtime.inbox.expireDue(runtime.slack?.onExpired)
       if (threads.length > 0) {
         console.log(JSON.stringify({ event: 'orca_connector_deliveries_expired', threads: threads.length }))
-        await runtime.slack?.onExpired(threads)
       }
     }),
     every('inbox_retention', INBOX_PRUNE_INTERVAL_MS, () =>

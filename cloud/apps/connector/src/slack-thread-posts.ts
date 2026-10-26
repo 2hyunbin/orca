@@ -38,6 +38,8 @@ export async function refreshSlackStatus(
   hostId: string,
   externalId: string
 ): Promise<void> {
+  // Serialized per conversation, so a refresh that read older state can't land after a newer one.
+  await transaction.lockQuotaScope(`orca-connector-slack-status:${externalId}`)
   const thread = await boundThread(transaction, hostId, externalId)
   if (!thread) {
     return

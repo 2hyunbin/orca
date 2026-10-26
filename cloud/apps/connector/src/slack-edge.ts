@@ -8,6 +8,7 @@ import {
 import type { Hono, MiddlewareHandler } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { every } from './connector-background.js'
+import type { ExpiredThread } from './connector-inbox.js'
 import type { MachineEnv } from './machine-auth.js'
 import type { SlackConfig } from './slack-config.js'
 import { readSlackEnvelope } from './slack-events.js'
@@ -182,14 +183,12 @@ export function createSlackEdge(deps: {
         rows.map((row) => String(row.external_id))
       )
     },
-    // After the expiry sweep, with the threads it hit.
-    onExpired: async (threads: { hostId: string; externalId: string }[]) => {
-      await database.transaction(async (transaction) => {
-        for (const { hostId, externalId } of threads) {
-          await queueOfflineNotice(transaction, posts, hostId, externalId)
-          await refreshSlackStatus(transaction, posts, hostId, externalId)
-        }
-      })
+    // In the expiry sweep's transaction, with the threads it hit.
+    onExpired: async (transaction: CloudDatabase, threads: ExpiredThread[]) => {
+      for (const { hostId, externalId } of threads) {
+        await queueOfflineNotice(transaction, posts, hostId, externalId)
+        await refreshSlackStatus(transaction, posts, hostId, externalId)
+      }
     },
     startBackground: (): (() => void) => {
       worker.start()

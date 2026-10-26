@@ -194,9 +194,10 @@ export class SlackPostWorker {
       if (sent) {
         return sent.ts
       }
-      cursor = replies.data.response_metadata?.next_cursor
-      if (!replies.data.has_more || !cursor) {
-        return null
+      // next_cursor is Slack's continuation; "more" without one can't be searched to the end.
+      cursor = replies.data.response_metadata?.next_cursor || undefined
+      if (cursor === undefined) {
+        return replies.data.has_more ? undefined : null
       }
     }
     return undefined
