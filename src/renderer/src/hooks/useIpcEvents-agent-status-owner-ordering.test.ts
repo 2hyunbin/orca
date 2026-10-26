@@ -13,7 +13,7 @@ import {
   makeWorktree,
   TEST_REPO
 } from '../store/slices/store-test-helpers'
-import { classifyPaneKeyLiveness } from '../store/slices/agent-status-capacity-eviction'
+import { classifyPaneKeyLiveness } from '../store/slices/agent-status/agent-status-capacity-eviction'
 import {
   resetAgentPaneAuthorityAliasesForTests,
   resolveAgentPaneAuthorityKey

@@ -5,7 +5,7 @@ import { protectedConversationPaneKeys } from '@/lib/pending-conversation-surfac
 import {
   classifyPaneKeyLiveness,
   MAX_LIVE_AGENT_STATUSES
-} from './slices/agent-status-capacity-eviction'
+} from './slices/agent-status/agent-status-capacity-eviction'
 
 type Conversations = AppState['agentConversationsByPaneKey']
 

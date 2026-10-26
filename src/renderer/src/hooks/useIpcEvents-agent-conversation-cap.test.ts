@@ -22,7 +22,7 @@ import {
   transferAgentPaneAuthorityAlias,
   resetAgentPaneAuthorityAliasesForTests
 } from '../store/slices/agent-pane-authority'
-import * as capacity from '../store/slices/agent-status-capacity-eviction'
+import * as capacity from '../store/slices/agent-status/agent-status-capacity-eviction'
 import * as switches from '../lib/pending-conversation-surface-switches'
 
 const mocks = vi.hoisted(() => {

@@ -3,18 +3,18 @@ import type {
   DropAgentStatusByTabPrefixOptions,
   DropAgentStatusOptions,
   DropHibernatedAgentPaneOptions
-} from './agent-status-contract'
-import type { AgentStatusSlice } from './agent-status-slice-contract'
+} from './agent-status/agent-status-contract'
+import type { AgentStatusSlice } from './agent-status/agent-status-slice-contract'
 import type { AgentStatusRuntime } from './agent-status-runtime'
-import { buildAgentStatusTabPrefixDropPatch } from './agent-status-drop-reducer'
-import { pruneMigrationUnsupportedEntries } from './agent-status-migration-unsupported-entries'
+import { buildAgentStatusTabPrefixDropPatch } from './agent-status/agent-status-drop-reducer'
+import { pruneMigrationUnsupportedEntries } from './agent-status/agent-status-migration-unsupported-entries'
 import {
   retainedAgentEntryFromLive,
   shouldReplaceRetainedWithLive
 } from './agent-status-pane-key-tab-binding'
 import { retireAgentPaneAuthorityAliasesByOwnerTab } from './agent-pane-authority'
 import { agentTurnEndedOnPurpose } from '../../../../shared/agent-main-agent-verdict'
-import { removePaneKeys } from './agent-status-pane-keyed-records'
+import { removePaneKeys } from './agent-status/agent-status-pane-keyed-records'
 
 function removeAcknowledgement(
   acknowledgements: Record<string, number>,
