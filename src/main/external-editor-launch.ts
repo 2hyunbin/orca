@@ -4,14 +4,7 @@ import { spawnProcess } from '@orca/process-host'
 import { existsSync } from 'node:fs'
 import { posix, win32 } from 'node:path'
 import { parseWslUncPath } from '../shared/wsl-paths'
-import {
-  getRemoteSshEditorKind,
-  isVsCodeLauncherExecutable
-} from '../shared/remote-ssh-editor-launcher'
-import type { ShellOpenExternalEditorResult } from '../shared/shell-open-types'
-import type { SshTarget } from '../shared/ssh-types'
-import { resolveVsCodeSshAuthority } from './ssh/config/vscode-ssh-authority'
-import { resolveZedSshUrl } from './ssh/config/zed-ssh-url'
+import { isVsCodeLauncherExecutable } from '../shared/remote-ssh-editor-launcher'
 import { resolveCliCommand } from './codex-cli/command'
 import { envWithoutAppImageRuntime } from './pty/appimage-terminal-env'
 import {
@@ -224,54 +217,20 @@ export function resolveExternalEditorLaunchSpec(
   )
 }
 
-export function resolveRemoteSshEditorLaunchSpec(
+/** The executable a remote launch would spawn; null for compound shell commands, which carry no single launcher. */
+export function resolveExternalEditorExecutable(
   command: string | undefined,
-  pathValue: string,
-  target: SshTarget,
   options: { platform?: NodeJS.Platform; fileExists?: (path: string) => boolean } = {}
-):
-  | { ok: true; launchSpec: ExternalEditorLaunchSpec }
-  | Exclude<ShellOpenExternalEditorResult, { ok: true }> {
+): string | null {
   const platform = options.platform ?? process.platform
   const fileExists = options.fileExists ?? existsSync
   const trimmed = command?.trim() || EXTERNAL_EDITOR_CLI_COMMAND
-
-  let editorCommand: string
   if (isDirectExecutablePath(trimmed, platform, fileExists)) {
-    editorCommand = stripMatchingQuotes(trimmed)
-  } else {
-    if (isCompoundShellCommand(trimmed)) {
-      return { ok: false, reason: 'remote-editor-unsupported' }
-    }
-    editorCommand = resolveEditorCliCommand(trimmed, platform, fileExists)
+    return stripMatchingQuotes(trimmed)
   }
-
-  const editorKind = getRemoteSshEditorKind(editorCommand)
-  if (!editorKind) {
-    return { ok: false, reason: 'remote-editor-unsupported' }
-  }
-  let spawnArgs: string[]
-  if (editorKind === 'zed') {
-    const zedUrl = resolveZedSshUrl(target, pathValue)
-    if (!zedUrl.ok) {
-      return zedUrl
-    }
-    spawnArgs = [zedUrl.url]
-  } else {
-    const authority = resolveVsCodeSshAuthority(target)
-    if (!authority.ok) {
-      return authority
-    }
-    spawnArgs = ['--remote', `ssh-remote+${authority.authority}`, pathValue]
-    // Cursor may reuse the last workbench; a new window preserves this workspace target.
-    if (getLauncherBaseName(editorCommand) === 'cursor') {
-      spawnArgs.unshift('--new-window')
-    }
-  }
-  return {
-    ok: true,
-    launchSpec: { kind: 'executable', hideWindowsConsole: true, spawnCmd: editorCommand, spawnArgs }
-  }
+  return isCompoundShellCommand(trimmed)
+    ? null
+    : resolveEditorCliCommand(trimmed, platform, fileExists)
 }
 
 function startExternalEditorProcess(launchSpec: ExternalEditorLaunchSpec): ChildProcess {

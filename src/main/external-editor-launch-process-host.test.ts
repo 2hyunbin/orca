@@ -4,11 +4,8 @@ const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }))
 
 vi.mock('node:child_process', () => ({ spawn: spawnMock }))
 
-import {
-  launchExternalEditor,
-  resolveRemoteSshEditorLaunchSpec,
-  type ExternalEditorLaunchSpec
-} from './external-editor-launch'
+import { launchExternalEditor, type ExternalEditorLaunchSpec } from './external-editor-launch'
+import { resolveRemoteSshEditorLaunchSpec } from './remote-ssh-editor-launch'
 
 const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
 

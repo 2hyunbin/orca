@@ -10,10 +10,8 @@ vi.mock('./codex-cli/command', () => ({
 
 import type { SshTarget } from '../shared/ssh-types'
 import { getCmdExePath } from './win32-utils'
-import {
-  resolveExternalEditorLaunchSpec,
-  resolveRemoteSshEditorLaunchSpec
-} from './external-editor-launch'
+import { resolveExternalEditorLaunchSpec } from './external-editor-launch'
+import { resolveRemoteSshEditorLaunchSpec } from './remote-ssh-editor-launch'
 
 const BUILDER_ALIAS: SshTarget = {
   id: 'ssh-1',
@@ -551,7 +549,7 @@ describe('resolveRemoteSshEditorLaunchSpec', () => {
     const macCli = '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code'
 
     expect(
-      resolveVsCodeRemoteSshLaunchSpec('code', '/home/ada/project', 'user@host', {
+      remoteLaunchSpec('code', '/home/ada/project', {
         platform: 'darwin',
         fileExists: (candidate) => candidate === macCli
       })
@@ -559,7 +557,7 @@ describe('resolveRemoteSshEditorLaunchSpec', () => {
       kind: 'executable',
       hideWindowsConsole: true,
       spawnCmd: macCli,
-      spawnArgs: ['--remote', 'ssh-remote+user@host', '/home/ada/project']
+      spawnArgs: ['--remote', 'ssh-remote+builder', '/home/ada/project']
     })
   })
 
