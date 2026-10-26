@@ -27,7 +27,7 @@ function retryAfterMs(value: string | null): number | undefined {
   return value !== null && Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : undefined
 }
 
-// Plain HTTPS, as Paseo Hub does; GET methods take their arguments as a query string.
+// Plain HTTPS; GET methods take their arguments as a query string.
 export function createSlackWebApi(
   request: typeof fetch = (input, init) => fetch(input, init)
 ): SlackWebApi {
