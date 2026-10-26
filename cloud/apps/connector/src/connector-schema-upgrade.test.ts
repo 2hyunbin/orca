@@ -68,23 +68,11 @@ async function catalog(database: CloudDatabase): Promise<string[]> {
     )
     return rows.map((row) => String(row.entry))
   }
-  const entries: string[] = []
+  // SQLite rewrites a table's stored CREATE text on ADD COLUMN, so it compares like a fresh one.
   const objects = await database.query(
-    "SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name"
+    'SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type, name'
   )
-  for (const object of objects) {
-    // A table's stored SQL keeps its CREATE text after ALTERs, so compare its columns instead.
-    if (object.type !== 'table') {
-      entries.push(String(object.sql))
-      continue
-    }
-    for (const column of await database.query('SELECT * FROM pragma_table_xinfo(?)', [
-      object.name
-    ])) {
-      entries.push(`${object.name}.${JSON.stringify(column)}`)
-    }
-  }
-  return entries.toSorted()
+  return objects.map((object) => String(object.sql))
 }
 
 describe.each<Engine>(testDatabaseUrl ? ['sqlite', 'postgres'] : ['sqlite'])(
@@ -101,9 +89,12 @@ describe.each<Engine>(testDatabaseUrl ? ['sqlite', 'postgres'] : ['sqlite'])(
       expect(fresh.length).toBeGreaterThan(0)
     })
 
-    it('catches a column added inside a shipped CREATE TABLE', async () => {
+    it.each([
+      ['a column', ',\n  probe TEXT,'],
+      ['a constraint', ' UNIQUE,']
+    ])('catches %s added inside a shipped CREATE TABLE', async (_, edit) => {
       const edited = connectorBootStatements().map((statement) =>
-        statement.replace('host_name TEXT NOT NULL,', 'host_name TEXT NOT NULL,\n  probe TEXT,')
+        statement.replace('host_name TEXT NOT NULL,', `host_name TEXT NOT NULL${edit}`)
       )
       const fresh = await boot(await freshStore(engine), edited)
       const upgraded = await boot(await freshStore(engine), connectorSchemaBaseline(), edited)
