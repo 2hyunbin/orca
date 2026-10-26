@@ -399,7 +399,7 @@ describe('WSL move orchestrator wiring', () => {
         const index = sent.findIndex(
           (message) => message.channel === WSL_MOVE_ORCHESTRATOR_SLEPT_PANES_REQUEST_CHANNEL
         )
-        if (index >= 0) {
+        if (index !== -1) {
           const [message] = sent.splice(index, 1)
           await handlers.get('wslMoveOrchestrator:answerSleptPanes')?.(
             { sender: { id: MAIN_WINDOW_ID } },
