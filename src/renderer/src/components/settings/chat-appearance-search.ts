@@ -1,6 +1,7 @@
 import { translate } from '@/i18n/i18n'
 import { createLocalizedCatalog } from '@/i18n/localized-catalog'
 import type { SettingsSearchEntry } from './settings-search'
+import { translateSearchKeyword } from './settings-search-keywords'
 import { formatPrimaryShortcutLabel } from '@/hooks/useShortcutLabel'
 
 export function chatTerminalControlledHint(): string {
@@ -54,11 +55,11 @@ const getChatAppearanceCatalog = createLocalizedCatalog(
           'Font used for messages, activity, and the message box.'
         ),
         keywords: [
-          translate('settings.appearance.chat.title', 'Chat'),
-          translate('settings.appearance.chat.fontKeyword', 'font'),
-          translate('settings.appearance.chat.familyKeyword', 'family'),
-          translate('settings.appearance.chat.typefaceKeyword', 'typeface'),
-          translate('settings.appearance.chat.typographyKeyword', 'typography')
+          ...translateSearchKeyword('settings.appearance.chat.title', 'Chat'),
+          ...translateSearchKeyword('settings.appearance.chat.fontKeyword', 'font'),
+          ...translateSearchKeyword('settings.appearance.chat.familyKeyword', 'family'),
+          ...translateSearchKeyword('settings.appearance.chat.typefaceKeyword', 'typeface'),
+          ...translateSearchKeyword('settings.appearance.chat.typographyKeyword', 'typography')
         ]
       },
       textSize: {

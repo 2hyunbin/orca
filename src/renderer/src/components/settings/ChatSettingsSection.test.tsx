@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
+import { SUPPORTED_UI_LOCALES } from '../../../../shared/ui-locale'
 import { decodeAgentSessionAgentsResult } from '../../../../shared/agent-session/agent-session-registered-agents'
 import { ChatSettingsSection } from './ChatSettingsSection'
 import { NativeChatProvidersSetting } from './NativeChatProvidersSetting'
@@ -19,8 +20,9 @@ import { setLocalRuntimeCapabilitiesForTests } from '@/runtime/local-runtime-cap
 import { useStructuredAgentSessionHostQueuesMessages } from '@/runtime/structured-agent-session-host-capability'
 import type * as HostStructuredAgentsModule from '@/runtime/host-structured-agents'
 import { i18n } from '@/i18n/i18n'
+import enCatalog from '@/i18n/locales/en.json'
 import { buildSettingsNavigationMetadata } from '@/hooks/useSettingsNavigationMetadata'
-import { buildCmdJSettingsResults } from '../cmd-j/palette-results'
+import { buildCmdJSettingsResults, rankCmdJMiddleResults } from '../cmd-j/palette-results'
 import { isSettingsNavigationTarget } from '@/lib/settings-navigation-types'
 import { getSettingsSectionId, getSettingsScrollTarget } from './settings-navigation-foundations'
 import { getSettingsSectionSearchEntries, matchesSettingsSearch } from './settings-search'
@@ -465,6 +467,52 @@ describe('Chat settings page', () => {
     rerender(element())
     for (const entry of getChatAppearanceSearchEntries().filter((entry) => entry.targetSectionId)) {
       expect(getSettingsScrollTarget(entry.targetSectionId ?? '', container)).toBeTruthy()
+    }
+  })
+
+  it('keeps English and localized font queries working across language switches without saving', async () => {
+    i18n.addResourceBundle('en', 'translation', enCatalog, true, true)
+    for (const locale of [...SUPPORTED_UI_LOCALES, 'en']) {
+      await i18n.changeLanguage(locale)
+      const fontEntry = getChatAppearanceSearchEntries().find(
+        (entry) => entry.targetSectionId === 'chat-font-family'
+      )!
+      expect(fontEntry.title).toBe(i18n.t('settings.appearance.chat.fontFamily'))
+      const translated = ['font', 'family', 'typeface', 'typography'].map((term) =>
+        i18n.t(`settings.appearance.chat.${term}Keyword`)
+      )
+      if (locale !== 'en') {
+        expect(translated[2]).not.toBe('typeface')
+      }
+      const settingsResults = buildCmdJSettingsResults(
+        buildSettingsNavigationMetadata({
+          isMac: true,
+          isWindows: false,
+          isWebClient: false,
+          nativeChatEnabled: true,
+          repos: []
+        })
+      )
+      state.settingsSearchQuery = 'typeface'
+      const { container, element, rerender, updateSettings } = renderChat(true, true, false, {
+        nativeChatAppearance: { fontFamily: 'Georgia' }
+      })
+      for (const query of ['chat', 'font', 'family', 'typeface', 'typography', ...translated]) {
+        expect(matchesSettingsSearch(query, [fontEntry]), `${locale}: ${query}`).toBe(true)
+        state.settingsSearchQuery = query
+        rerender(element())
+        const control = screen.getByRole('combobox', { name: fontEntry.title })
+        expect(control.getAttribute('value')).toBe('Georgia')
+        expect(getSettingsScrollTarget('chat-font-family', container)?.contains(control)).toBe(true)
+        expect(
+          rankCmdJMiddleResults({ query, settingsResults, actionResults: [] }).map(
+            (result) => result.id
+          )
+        ).toContain('settings:chat:chat-font-family')
+      }
+      expect(updateSettings).not.toHaveBeenCalled()
+      expect(state.settings?.nativeChatAppearance).toEqual({ fontFamily: 'Georgia' })
+      cleanup()
     }
   })
 
