@@ -137,8 +137,9 @@ vi.mock('./native-chat/input/use-mobile-native-chat-answer-send', () => ({
 vi.mock('./native-chat/input/mobile-native-chat-permission-send', () => ({
   useMobileNativeChatPermissionSend: () => vi.fn()
 }))
+const terminalStop = vi.fn(async () => true)
 vi.mock('./use-mobile-native-chat-stop', () => ({
-  useMobileNativeChatStop: () => vi.fn()
+  useMobileNativeChatStop: () => terminalStop
 }))
 vi.mock('./native-chat/composer/use-mobile-native-chat-file-search', () => ({
   useMobileNativeChatFileSearch: () => ({ nativeChatFilePaths: [], loadNativeChatFiles: vi.fn() })
@@ -780,6 +781,12 @@ describe('useMobileNativeChatController terminal turn', () => {
 
     workingTab.agentStatus.stateStartedAt = turnStartedAt + 60_000
     rerender()
+    expect(controller?.nativeChatCanStop).toBe(true)
+  })
+
+  it('offers Stop again when the Escape definitely went nowhere', async () => {
+    terminalStop.mockResolvedValueOnce(false)
+    await act(async () => controller?.handleNativeChatStop())
     expect(controller?.nativeChatCanStop).toBe(true)
   })
 
