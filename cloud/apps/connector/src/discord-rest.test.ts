@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createDiscordRestApi, discordNonce, discordRoutes } from './discord-rest.js'
+import {
+  createDiscordRestApi,
+  discordNonce,
+  discordRoutes,
+  nonceStillDedupes
+} from './discord-rest.js'
 
 // Routes and bodies follow https://docs.discord.com/developers/resources/message (create with
 // nonce + enforce_nonce, message_reference, allowed_mentions, reactions, history),
@@ -90,6 +95,11 @@ describe('createDiscordRestApi', () => {
     expect(nonce).toHaveLength(25)
     expect(discordNonce(`reply:${'h'.repeat(40)}:r1`)).toBe(nonce)
     expect(discordNonce(`reply:${'h'.repeat(40)}:r2`)).not.toBe(nonce)
+  })
+
+  it('trusts the nonce for two minutes after the first send', () => {
+    expect(nonceStillDedupes(1_000_000, 1_000_000 + 119_999)).toBe(true)
+    expect(nonceStillDedupes(1_000_000, 1_000_000 + 120_000)).toBe(false)
   })
 
   it('turns a 429 into retry after retry_after, else the Retry-After header', async () => {

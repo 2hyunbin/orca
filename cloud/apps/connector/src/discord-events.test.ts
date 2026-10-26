@@ -41,18 +41,22 @@ describe('readDiscordMessage', () => {
 })
 
 describe('DiscordThreadParents', () => {
-  it('follows threads from guild state, creates, list syncs and deletes', () => {
+  it('follows threads from guild state, events and channel lookups; a plain channel has none', () => {
     const parents = new DiscordThreadParents()
     parents.apply('GUILD_CREATE', { id: 'G1', threads: [{ id: 'T1', parent_id: 'C1', type: 11 }] })
     parents.apply('THREAD_CREATE', { id: 'T2', parent_id: 'C2', type: 11 })
     parents.apply('THREAD_LIST_SYNC', { guild_id: 'G1', threads: [{ id: 'T3', parent_id: 'C1' }] })
     parents.apply('THREAD_DELETE', { id: 'T2', parent_id: 'C2', type: 11 })
     parents.apply('MESSAGE_CREATE', { id: 'T9', parent_id: 'C9' })
-    expect(['T1', 'T2', 'T3', 'T9'].map((id) => parents.parentOf(id))).toEqual([
+    parents.learnChannel({ id: 'T4', type: 12, parent_id: 'C4' })
+    parents.learnChannel({ id: 'C5', type: 0, parent_id: 'CAT1' })
+    expect(['T1', 'T2', 'T3', 'T9', 'T4', 'C5'].map((id) => parents.parentOf(id))).toEqual([
       'C1',
       undefined,
       'C1',
-      undefined
+      undefined,
+      'C4',
+      null
     ])
   })
 })

@@ -77,24 +77,23 @@ afterEach(async () => {
 })
 
 async function fakeDiscord() {
+  const requested: string[] = []
+  // Channel objects: https://docs.discord.com/developers/resources/channel
+  const channels: Record<string, unknown> = {
+    '/api/v10/channels/C1': { id: 'C1', type: 0, guild_id: 'G1' },
+    '/api/v10/channels/T7': { id: 'T7', type: 11, guild_id: 'G1', parent_id: 'C7' }
+  }
   const server = createServer((request, response) => {
+    const url = request.url ?? ''
+    requested.push(url)
     response.setHeader('content-type', 'application/json')
-    response.end(
-      JSON.stringify(
-        request.url === '/api/v10/users/@me'
-          ? { id: BOT, username: 'Orca', bot: true }
-          : {
-              url: origin,
-              shards: 1,
-              session_start_limit: {
-                total: 1000,
-                remaining: 1000,
-                reset_after: 0,
-                max_concurrency: 1
-              }
-            }
-      )
-    )
+    const gatewayBot = {
+      url: origin,
+      shards: 1,
+      session_start_limit: { total: 1000, remaining: 1000, reset_after: 0, max_concurrency: 1 }
+    }
+    const me = { id: BOT, username: 'Orca', bot: true }
+    response.end(JSON.stringify(url === '/api/v10/users/@me' ? me : (channels[url] ?? gatewayBot)))
   })
   http = server
   gateway = new WebSocketServer({ server })
@@ -118,7 +117,12 @@ async function fakeDiscord() {
   })
   const nextConnection = async () =>
     connections.shift() ?? (await new Promise<Connection>((resolve) => (arrived = resolve)))
-  return { origin, nextConnection, rest: new REST({ api: `http://127.0.0.1:${address.port}/api` }) }
+  return {
+    origin,
+    nextConnection,
+    requested,
+    rest: new REST({ api: `http://127.0.0.1:${address.port}/api` })
+  }
 }
 
 async function start(
@@ -225,6 +229,29 @@ describe('startDiscordGatewaySession', () => {
       },
       { ...base, channelId: 'T1', messageId: 'm5', content: 'also check CI', threadParentId: 'C1' },
       { ...base, channelId: 'T1', messageId: 'm10', content: 'last', threadParentId: 'C1' }
+    ])
+  })
+
+  it('looks up an unknown mention channel once, so a thread mention after a resume has its parent', async () => {
+    const { origin, nextConnection, messages, requested } = await start()
+    const connection = await nextConnection()
+    await connection.next()
+    connection.send(ready(origin))
+    const mention = { mentions: [{ id: BOT }] }
+    connection.send(messageCreate(2, { ...mention, channel_id: 'T7' }))
+    connection.send(messageCreate(3, { ...mention, channel_id: 'T7' }))
+    connection.send(messageCreate(4, mention))
+    connection.send(messageCreate(5, mention))
+    await until(() => messages.length === 4)
+    expect(messages.map((message) => message.threadParentId)).toEqual([
+      'C7',
+      'C7',
+      undefined,
+      undefined
+    ])
+    expect(requested.filter((url) => url.startsWith('/api/v10/channels/'))).toEqual([
+      '/api/v10/channels/T7',
+      '/api/v10/channels/C1'
     ])
   })
 

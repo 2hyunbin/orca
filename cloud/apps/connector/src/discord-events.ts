@@ -51,14 +51,21 @@ export function readDiscordMessage(payload: unknown, botUserId: string): Discord
 }
 
 const ThreadSchema = z.looseObject({ id: z.string().min(1), parent_id: z.string().min(1) })
+const ChannelSchema = z.looseObject({
+  id: z.string().min(1),
+  type: z.number().int(),
+  parent_id: z.string().nullable().optional()
+})
+// Announcement, public and private threads; https://docs.discord.com/developers/resources/channel
+const THREAD_TYPES = new Set([10, 11, 12])
 const ThreadsSchema = z.looseObject({ threads: z.array(z.unknown()).default([]) })
 const DeletedSchema = z.looseObject({ id: z.string().min(1) })
 const MAX_THREADS = 10_000
 
-// Which parent channel each thread the gateway has told us about sits in. Only threads active
-// since this process connected are known (a resumed session replays no guild state).
+// Which parent channel each thread sits in (null: the channel is not a thread). The gateway's
+// thread events fill it; a resumed session replays no guild state, so a miss is looked up once.
 export class DiscordThreadParents {
-  private readonly parents = new Map<string, string>()
+  private readonly parents = new Map<string, string | null>()
 
   apply(type: string, payload: unknown): void {
     if (type === 'THREAD_DELETE') {
@@ -80,18 +87,31 @@ export class DiscordThreadParents {
     }
   }
 
-  parentOf(channelId: string): string | undefined {
+  // undefined: not known yet.
+  parentOf(channelId: string): string | null | undefined {
     return this.parents.get(channelId)
+  }
+
+  // A channel object from GET /channels/{id}.
+  learnChannel(payload: unknown): void {
+    const channel = ChannelSchema.safeParse(payload)
+    if (channel.success) {
+      const { id, type, parent_id: parentId } = channel.data
+      this.set(id, THREAD_TYPES.has(type) && parentId ? parentId : null)
+    }
   }
 
   private remember(payload: unknown): void {
     const thread = ThreadSchema.safeParse(payload)
-    if (!thread.success) {
-      return
+    if (thread.success) {
+      this.set(thread.data.id, thread.data.parent_id)
     }
-    // Re-inserting keeps recency order, so the oldest thread is forgotten first.
-    this.parents.delete(thread.data.id)
-    this.parents.set(thread.data.id, thread.data.parent_id)
+  }
+
+  private set(channelId: string, parentId: string | null): void {
+    // Re-inserting keeps recency order, so the oldest channel is forgotten first.
+    this.parents.delete(channelId)
+    this.parents.set(channelId, parentId)
     if (this.parents.size > MAX_THREADS) {
       const oldest = this.parents.keys().next().value
       if (oldest !== undefined) {

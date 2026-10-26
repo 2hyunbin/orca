@@ -19,7 +19,8 @@ export type DiscordGatewaySessionStore = {
   save(session: SessionInfo | null): Promise<void>
 }
 
-// threadParentId: set when the gateway has seen the channel as a thread.
+// threadParentId: set when the channel is a thread. A mention's channel is looked up once if the
+// gateway hasn't described it; the mention is dropped if that lookup fails.
 export type DiscordGatewayMessage = DiscordMessage & { threadParentId?: string }
 
 export type DiscordGatewaySession = {
@@ -86,12 +87,16 @@ export async function startDiscordGatewaySession(deps: {
     }
     delivery = delivery
       .then(async () => {
-        if (message.mentioned || (await deps.ownsThread(message.channelId))) {
-          const threadParentId = parents.parentOf(message.channelId)
-          await deps.onMessage(
-            threadParentId === undefined ? message : { ...message, threadParentId }
-          )
+        if (!message.mentioned && !(await deps.ownsThread(message.channelId))) {
+          return
         }
+        if (message.mentioned && parents.parentOf(message.channelId) === undefined) {
+          parents.learnChannel(await rest.get(`/channels/${message.channelId}`))
+        }
+        const threadParentId = parents.parentOf(message.channelId)
+        await deps.onMessage(
+          typeof threadParentId === 'string' ? { ...message, threadParentId } : message
+        )
       })
       .catch(() => {
         console.warn(JSON.stringify({ event: 'orca_connector_discord_message_dropped' }))

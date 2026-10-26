@@ -5,6 +5,9 @@ import type { SlackResult } from './slack-web-api.js'
 const DISCORD_API_ORIGIN = 'https://discord.com/api/v10'
 const DISCORD_API_TIMEOUT_MS = 10_000
 const NONCE_LENGTH = 25
+// Discord checks a nonce "in the past few minutes" without saying how many; past this, a stale
+// send can't be deduplicated and is uncertain.
+const NONCE_WINDOW_MS = 2 * 60_000
 
 // Same outcome shape as Slack's client, so the post worker treats both alike.
 export type DiscordResult = SlackResult
@@ -31,6 +34,11 @@ function messageBody({ replyTo, ...message }: DiscordMessageBody): Record<string
 // Discord nonces are at most 25 characters; a post id can be longer.
 export function discordNonce(postId: string): string {
   return createHash('sha256').update(postId).digest('base64url').slice(0, NONCE_LENGTH)
+}
+
+// Whether a resend of a post first sent at sentAt still dedupes on its nonce.
+export function nonceStillDedupes(sentAt: number, now: number): boolean {
+  return now - sentAt < NONCE_WINDOW_MS
 }
 
 // https://docs.discord.com/developers/resources/message,
