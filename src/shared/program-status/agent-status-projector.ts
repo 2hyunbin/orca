@@ -46,6 +46,10 @@ function blockedState(record: ProgramStatusRecord): 'waiting' | 'blocked' {
   return isTurnScopedProgramStatusKind(record.kind) ? 'waiting' : 'blocked'
 }
 
+function isRowHoldingChild(child: AgentSubagentSnapshot): boolean {
+  return child.state === 'working' || child.state === 'waiting'
+}
+
 function subagentState(record: ProgramStatusRecord): AgentSubagentState | null {
   switch (record.state) {
     case 'working':
@@ -94,6 +98,8 @@ export function createProgramStatusProjector(now: () => number = Date.now): Prog
   let lastRoot: RootProjection | null = null
   let lastKey: string | null = null
   let rootStateStartedAt = 0
+  // Set once children hold this root's done open; that row and its all-clear share one completion stamp.
+  let rootDoneHeldOpen = false
   let lastFacet: ProgramStatusFacet | undefined
   // Set when the program ends; the next projection starts a new invocation.
   let invocationEnded = false
@@ -177,16 +183,23 @@ export function createProgramStatusProjector(now: () => number = Date.now): Prog
       projection.outcome !== lastRoot?.outcome
     ) {
       rootStateStartedAt = now()
+      rootDoneHeldOpen = false
       lastKey = null
     }
     lastRoot = projection
     const agentType = agentTypeForProgramStatusApp(root?.app)
     const msg = programStatusDisplayText(root?.msg)
     const subagents = snapshotChildren()
-    // Why: async children outlive the root's done (pi-subagents); the row stays live while mainAgent keeps the lead's verdict.
-    const row = foldMainAgentWithRowChildWork(projection.state, { payload: { subagents } })
+    // Why: async children outlive a finished turn (pi-subagents); failed/idle children and boundaries hold nothing.
+    const state =
+      projection.state === 'done' && projection.sessionBoundary !== true
+        ? foldMainAgentWithRowChildWork('done', {
+            payload: { subagents: subagents.filter(isRowHoldingChild) }
+          }).stateName
+        : projection.state
+    rootDoneHeldOpen ||= projection.state === 'done' && state !== 'done'
     const payload: ParsedAgentStatusPayload = {
-      state: row.stateName,
+      state,
       prompt: '',
       ...(agentType ? { agentType } : {}),
       // Live work names what it is doing or waiting on; a finished turn names its result.
@@ -196,6 +209,8 @@ export function createProgramStatusProjector(now: () => number = Date.now): Prog
         : {}),
       ...(projection.sessionBoundary ? { sessionBoundary: true } : {}),
       ...(subagents.length > 0 ? { subagents } : {}),
+      // Hook rows announce a held turn's own done now; the all-clear restates it so it is not announced twice.
+      ...(rootDoneHeldOpen ? { turnCompletedAt: rootStateStartedAt } : {}),
       mainAgent: {
         state: projection.state,
         ...(projection.outcome ? { outcome: projection.outcome } : {}),

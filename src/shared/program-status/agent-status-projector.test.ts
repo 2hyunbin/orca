@@ -120,22 +120,41 @@ describe('createProgramStatusProjector', () => {
     expect(cleared.subagents).toBeUndefined()
   })
 
-  it("keeps the row working while a child outlives the root's done, then settles to the lead's verdict", () => {
-    const { feed } = projector()
+  it("keeps a finished turn working while a child runs, stamping the turn's own end for both rows", () => {
+    const { feed, tick } = projector()
     feed(osc('state=working:app=pi') + osc('state=working:id=subagents/run1:app=pi-subagents'))
+    tick(10)
     expect(feed(osc('state=done:app=pi'))).toMatchObject([
       {
         state: 'working',
-        mainAgent: { state: 'done', outcome: 'success' },
+        turnCompletedAt: 1010,
+        mainAgent: { state: 'done', outcome: 'success', stateStartedAt: 1010 },
         subagents: [{ id: 'subagents/run1', state: 'working' }]
       }
     ])
+    tick(10)
     const [settled] = feed(osc('state=done:id=subagents/run1:app=pi-subagents'))
     expect(settled).toMatchObject({
       state: 'done',
-      mainAgent: { state: 'done', outcome: 'success' }
+      turnCompletedAt: 1010,
+      mainAgent: { state: 'done', outcome: 'success', stateStartedAt: 1010 }
     })
     expect(settled.subagents).toBeUndefined()
+  })
+
+  it('leaves live turns, failed children and an idle root as their root reports them', () => {
+    const { feed } = projector()
+    const last = (data: string) => feed(data).at(-1)
+    expect(
+      last(osc('state=working:app=claude-code') + osc('state=blocked:kind=question:id=task'))
+    ).toMatchObject({ state: 'working', subagents: [{ state: 'waiting' }] })
+    const failedChild = last(osc('state=blocked:id=task') + osc('state=done:app=claude-code'))
+    expect(failedChild).toMatchObject({ state: 'done', subagents: [{ state: 'blocked' }] })
+    expect(failedChild?.turnCompletedAt).toBeUndefined()
+    const resumed = projector()
+    expect(
+      resumed.feed(osc('state=idle:app=pi') + osc('state=working:id=subagents/run1')).at(-1)
+    ).toMatchObject({ state: 'done', sessionBoundary: true })
   })
 
   it('reads a clear during live work as the program leaving, not a cancelled turn', () => {
