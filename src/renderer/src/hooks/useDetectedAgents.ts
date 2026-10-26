@@ -208,6 +208,7 @@ export function useDetectedAgents(
     targetKind,
     targetId,
     remoteTargetKey,
+    recordKey,
     pairingRevision,
     runtimeContactEpoch,
     detectedIds,
