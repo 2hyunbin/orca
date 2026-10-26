@@ -181,6 +181,7 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
     const clearRecovery = (): void => {
       if (this.terminalPaneRecoveryByIdentity.get(recoveryKey) === recovery) {
         this.terminalPaneRecoveryByIdentity.delete(recoveryKey)
+        this.terminalInterfaces?.inventoryChanged()
       }
     }
     void recovery.then(clearRecovery, clearRecovery)

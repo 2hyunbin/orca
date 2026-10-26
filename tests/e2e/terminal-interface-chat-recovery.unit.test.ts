@@ -195,7 +195,7 @@ it('joins qualified producer recovery through queued successors to manual Chat a
       authority.snapshotEvent()
     })
     await advance(250)
-    await advance(1000)
+    await advance(925) // Even the latest 250ms-slot enqueue exceeds 1000ms with cached age.
     expect(inspect).toHaveBeenCalledTimes(before)
     pending = null
     capturedAgeMs = 100 // Cached sample; dispatch-age must not discard its pre-request age.

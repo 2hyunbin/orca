@@ -21,6 +21,8 @@ function hasInFlightOwners(stop: IntentionalStop): boolean {
 
 /** The one register of PTY stops main made on purpose, read by every exit path. */
 export class TerminalIntentionalStops {
+  constructor(private readonly changed: () => void = () => {}) {}
+
   private readonly stopsByPtyId = new Map<string, IntentionalStop>()
 
   /** Registers one owner's stop; call the result once with whether the stop landed. */
@@ -42,6 +44,7 @@ export class TerminalIntentionalStops {
     const owners = stop.ownersByKind.get(kind) ?? { inFlight: 0, stopped: false }
     owners.inFlight += 1
     stop.ownersByKind.set(kind, owners)
+    this.changed()
     const owned = stop
     let settled = false
     return (stopped) => {
@@ -55,6 +58,7 @@ export class TerminalIntentionalStops {
         owned.ownersByKind.delete(kind)
       }
       this.settleIfIdle(ptyId, owned)
+      this.changed()
     }
   }
 
@@ -95,6 +99,7 @@ export class TerminalIntentionalStops {
     if (stop && stop.incarnationId === null && !hasInFlightOwners(stop)) {
       clearTimeout(stop.expiryTimer)
       this.stopsByPtyId.delete(ptyId)
+      this.changed()
     }
   }
 
@@ -118,6 +123,7 @@ export class TerminalIntentionalStops {
     stop.expiryTimer = setTimeout(() => {
       if (this.stopsByPtyId.get(ptyId) === stop) {
         this.stopsByPtyId.delete(ptyId)
+        this.changed()
       }
     }, SYNTHETIC_KILL_EXIT_DUPLICATE_WINDOW_MS)
     stop.expiryTimer.unref?.()

@@ -111,12 +111,14 @@ function driver(
     },
     blocked: (next: () => boolean) => {
       blocked = next
+      authority.inventoryChanged()
     },
     result: (next: TerminalProcessInspection | null) => {
       result = next
     },
     inventory: (next: TerminalInterfaceTarget[]) => {
       inventory = next
+      authority.inventoryChanged()
     },
     pending: (next: Promise<TerminalProcessInspection | null> | null) => {
       pending = next
@@ -181,6 +183,7 @@ describe('execution-host terminal interface flow', () => {
     expect(host.getStatusSnapshot().some((row) => row.state === 'done')).toBe(true)
     deliverPrompt()
     await finish
+    host.terminalInterfaces.inventoryChanged()
     d.result(alive)
     await vi.advanceTimersByTimeAsync(1000)
     d.result(shell)

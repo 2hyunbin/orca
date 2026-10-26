@@ -18,7 +18,7 @@ const {
   TEST_WORKTREE_ID
 } = await import('./orca-runtime-test-fixtures.spec')
 
-async function population(size: number, allEligible = false) {
+async function population(size: number, allEligible = false, idle = false) {
   const bindings = Array.from({ length: size }, (_, index) => ({
     ptyId: `pty-${index}`,
     tabId: randomUUID(),
@@ -38,6 +38,9 @@ async function population(size: number, allEligible = false) {
   const runtime = new OrcaRuntimeService(store.runtimeStore, undefined, {
     terminalInterfaces: authority
   })
+  if (idle) {
+    await runtime.machineNameReady()
+  }
   let shell = false
   let unrecognized = false
   let completionStagger = 0
@@ -64,20 +67,28 @@ async function population(size: number, allEligible = false) {
     getForegroundProcess: async () => null,
     inspectProcess: inspect
   })
-  for (const [index, binding] of bindings.entries()) {
-    runtime.registerPty(
-      binding.ptyId,
-      binding.worktreeId,
-      null,
-      binding,
-      !allEligible && index !== 0
-    )
-    runtime['issuePtyHandle'](runtime['ptysById'].get(binding.ptyId)!)
+  const register = () => {
+    for (const [index, binding] of bindings.entries()) {
+      runtime.registerPty(
+        binding.ptyId,
+        binding.worktreeId,
+        null,
+        binding,
+        !allEligible && index !== 0
+      )
+      runtime['issuePtyHandle'](runtime['ptysById'].get(binding.ptyId)!)
+    }
+  }
+  if (!idle) {
+    register()
   }
   await vi.advanceTimersByTimeAsync(250)
   await vi.advanceTimersByTimeAsync(1)
-  expect(authority.snapshot()).toHaveLength(allEligible ? size : 1)
-  expect(authority.read('pty-0', 'birth-0')?.state).toBe('agent')
+  expect(authority.snapshot()).toHaveLength(idle ? 0 : allEligible ? size : 1)
+  if (!idle) {
+    expect(authority.read('pty-0', 'birth-0')?.state).toBe('agent')
+  }
+  let inventoryScans = 0
   let inventoryVisits = 0
   const ptys = runtime['ptysById']
   const values = ptys.values.bind(ptys)
@@ -86,6 +97,7 @@ async function population(size: number, allEligible = false) {
     undefined,
     unknown
   > {
+    inventoryScans += 1
     for (const pty of values()) {
       inventoryVisits += 1
       yield pty
@@ -101,6 +113,7 @@ async function population(size: number, allEligible = false) {
   const events: RuntimeClientEvent[] = []
   const offEvents = runtime.onClientEvent((event) => events.push(event))
   const measurements = () => ({
+    inventoryScans,
     inventoryVisits,
     paneQueries: paneQueries.mock.calls.length,
     inspections: inspect.mock.calls.length,
@@ -122,11 +135,13 @@ async function population(size: number, allEligible = false) {
     }
     store.runtimeStore.setWorkspaceSession.mockClear()
     events.length = 0
+    inventoryScans = 0
     inventoryVisits = 0
   }
   reset()
   return {
     runtime,
+    register,
     authority,
     bindings,
     events,
@@ -170,6 +185,28 @@ async function measure<T>(
 }
 
 type Measurements = ReturnType<Awaited<ReturnType<typeof population>>['measurements']>
+
+it('does no idle wake or inventory work, then discovers a new PTY through runtime registration', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] })
+  const fixture = await population(1, false, true)
+  try {
+    const schedule = vi.spyOn(globalThis, 'setTimeout')
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(schedule).not.toHaveBeenCalled()
+    expect(fixture.measurements().inventoryScans).toBe(0)
+    expect(fixture.measurements().inspections).toBe(0)
+    fixture.register()
+    await vi.advanceTimersByTimeAsync(250)
+    expect(fixture.measurements().inspections).toBe(1)
+    expect(fixture.authority.read('pty-0', 'birth-0')).toMatchObject({ state: 'agent' })
+  } finally {
+    fixture.stop()
+    vi.restoreAllMocks()
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  }
+})
 
 it('bounds unchanged 250ms inventory and one-terminal input work by observed terminals', async () => {
   const results: { size: number; tick: Measurements; input: Measurements }[] = []

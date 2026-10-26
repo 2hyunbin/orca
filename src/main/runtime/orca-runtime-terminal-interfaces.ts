@@ -24,6 +24,15 @@ export abstract class OrcaRuntimeWithTerminalInterfaces extends OrcaRuntimeSideb
       const offInput = this.terminalRunFacts.onObservationInput((ptyId, kind) =>
         authority.input(ptyId, kind)
       )
+      const offLayout = this.store?.onWorkspaceSessionWritten?.(() => authority.inventoryChanged())
+      const offSleep = this.onClientEvent(
+        (event) => {
+          if (event.type === 'worktreeTerminalSleepState') {
+            authority.inventoryChanged()
+          }
+        },
+        { consumesTerminalSideEffects: false }
+      )
       const changes = createKeyedTrailingEdgeCoalescer(
         () => this.emitClientEvent(authority.snapshotEvent()),
         { flushMs: 0, maxWaitMs: 250 }
@@ -31,6 +40,8 @@ export abstract class OrcaRuntimeWithTerminalInterfaces extends OrcaRuntimeSideb
       const stop = authority.install({
         dispose: () => {
           offInput()
+          offLayout?.()
+          offSleep()
           changes.flushAll()
           changes.dispose()
         },

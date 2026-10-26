@@ -34,6 +34,7 @@ export abstract class OrcaRuntimeWithBindPtyIncarnationHandle extends OrcaRuntim
       ptyGeneration: leaf.ptyGeneration
     })
     this.handleByLeafKey.set(leafKey, retained.handle)
+    this.terminalInterfaces?.inventoryChanged()
   }
 
   protected invalidatePtyIncarnationHandle(ptyId: string): void {
@@ -73,6 +74,7 @@ export abstract class OrcaRuntimeWithBindPtyIncarnationHandle extends OrcaRuntim
       retained.incarnationId = pty.incarnationId
       this.bindPtyIncarnationHandle(retained, leaves[0])
     }
+    this.terminalInterfaces?.inventoryChanged()
   }
 
   protected adoptPreAllocatedHandle(leaf: RuntimeLeafRecord): string | null {
@@ -95,6 +97,7 @@ export abstract class OrcaRuntimeWithBindPtyIncarnationHandle extends OrcaRuntim
       ptyGeneration: leaf.ptyGeneration
     })
     this.handleByLeafKey.set(leafKey, preAllocated)
+    this.terminalInterfaces?.inventoryChanged()
     return preAllocated
   }
 
@@ -106,6 +109,7 @@ export abstract class OrcaRuntimeWithBindPtyIncarnationHandle extends OrcaRuntim
     if (record && issuedForPaneKey && record.issuedForPaneKey !== issuedForPaneKey) {
       this.handles.set(handle, { ...record, issuedForPaneKey })
     }
+    this.terminalInterfaces?.inventoryChanged()
     return handle
   }
 

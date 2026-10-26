@@ -1,8 +1,12 @@
 import {
   captureTerminalInterfaceSampleCurrentness,
-  syncTerminalInterfaceInventory
+  syncTerminalInterfaceInventory,
+  publishTerminalInterfaceObservation
 } from './terminal-interface-inventory'
-import { TerminalInterfaceHookIngress } from './terminal-interface-hook-ingress'
+import {
+  bindTerminalInterfaceHookOwner,
+  TerminalInterfaceHookIngress
+} from './terminal-interface-hook-ingress'
 import { TerminalInterfaceProbe } from './terminal-interface-probe'
 import type {
   TerminalInterfaceOwner,
@@ -28,8 +32,9 @@ export class TerminalInterfaceAuthority {
   private readonly entries = new Map<string, Entry>()
   private lease: Lease | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
+  private nextTick = 0
   private lastTick = 0
-  private readonly probes = new TerminalInterfaceProbe()
+  private readonly probes = new TerminalInterfaceProbe(() => this.schedule(0))
   private readonly hooks = new TerminalInterfaceHookIngress(
     () => this.lease?.driver.inventory() ?? [],
     (paneKey, binding, owner) => this.acceptHook(paneKey, binding, owner)
@@ -50,7 +55,7 @@ export class TerminalInterfaceAuthority {
     this.hooks.reset()
     const lease: Lease = { driver, controller: new AbortController() }
     this.lease = lease
-    this.lastTick = performance.now()
+    this.nextTick = performance.now()
     this.tick(lease)
     return () => {
       if (this.lease === lease) {
@@ -78,12 +83,14 @@ export class TerminalInterfaceAuthority {
 
   read(ptyId: string, incarnationId: string): TerminalInterfaceObservation | null {
     this.syncInventory()
+    this.schedule()
     const entry = this.entries.get(ptyId)
     return entry?.target.binding.incarnationId === incarnationId ? entry.observation : null
   }
 
   snapshotEvent() {
     this.syncInventory()
+    this.schedule()
     return {
       type: 'terminalInterfaces' as const,
       epoch: this.epoch,
@@ -100,26 +107,14 @@ export class TerminalInterfaceAuthority {
 
   private acceptHook(paneKey: string, binding: HookBinding, owner: TerminalInterfaceOwner): void {
     this.syncInventory()
-    const entry = [...this.entries.values()].find(
-      (candidate) =>
-        candidate.target.binding.paneKey === paneKey &&
-        candidate.target.local &&
-        candidate.target.binding.terminalHandle === binding.terminalHandle &&
-        candidate.target.binding.incarnationId === binding.incarnationId &&
-        (binding.generation === undefined || candidate.target.generation === binding.generation)
-    )
-    if (!entry || !owner.current()) {
+    const entry = bindTerminalInterfaceHookOwner(this.entries.values(), paneKey, binding, owner)
+    if (!entry) {
       return
     }
-    entry.owner = owner
-    entry.actual = true
-    entry.executionLaunchToken = owner.launchToken ?? null
-    entry.fence += 1
-    entry.shellSince = entry.emptySince = null
-    entry.due = 0
     if (entry.qualified) {
       this.publish(entry, 'agent', 'hook')
     }
+    this.schedule(0)
   }
 
   input(ptyId: string, _kind: Exclude<TerminalInputKind, 'query-reply'>): void {
@@ -132,24 +127,46 @@ export class TerminalInterfaceAuthority {
     entry.discoverUntil = performance.now() + 8000
     entry.shellSince = entry.emptySince = null
     entry.due = 0
+    this.schedule(0)
   }
 
   activity(ptyId: string): void {
     const entry = this.entries.get(ptyId)
-    if (entry) {
-      entry.due = Math.min(entry.due, performance.now() + 750)
+    const due = performance.now() + 750
+    if (entry && due < entry.due) {
+      entry.due = due
+      this.schedule(due)
     }
   }
 
+  inventoryChanged(): void {
+    this.schedule(0)
+  }
+
+  private schedule(due?: number): void {
+    const lease = this.lease
+    if (!lease) {
+      return
+    }
+    const now = performance.now()
+    due = Math.max(now, due ?? this.probes.nextDue(this.entries.values()))
+    due = this.lastTick + Math.max(1, Math.ceil((due - this.lastTick) / 250)) * 250
+    if (!Number.isFinite(due) || (this.timer && this.nextTick <= due)) {
+      return
+    }
+    if (this.timer) {
+      clearTimeout(this.timer)
+    }
+    this.nextTick = due
+    this.timer = setTimeout(() => this.tick(lease), Math.max(0, due - now))
+    this.timer.unref?.()
+  }
+
   private syncInventory(): void {
-    if (
-      this.lease &&
-      syncTerminalInterfaceInventory(this.entries, this.lease, (entry, state, basis) =>
-        this.publish(entry, state, basis)
-      )
-    ) {
+    const lease = this.lease
+    if (lease && syncTerminalInterfaceInventory(this.entries, lease, this.publish.bind(this))) {
       this.version += 1
-      this.lease.driver.changed()
+      this.lease?.driver.changed()
     }
   }
 
@@ -157,27 +174,29 @@ export class TerminalInterfaceAuthority {
     if (this.lease !== lease) {
       return
     }
+    this.timer = null
     const now = performance.now()
+    this.lastTick = this.probes.consumeSlot(this.entries.values(), this.nextTick, now)
     this.syncInventory()
-    if (now - this.lastTick > 5000) {
-      for (const entry of this.entries.values()) {
-        entry.fence += 1
-        entry.shellSince = entry.emptySince = null
-      }
+    if (this.lease !== lease) {
+      return
     }
-    this.lastTick = now
     this.probes.sampleDue(
       this.entries.values(),
       now,
-      (entry, changed) => this.sample(lease, entry, changed),
-      () => {
-        if (this.lease === lease) {
+      (entry, changed) =>
+        this.sample(lease, entry, changed).then(() => {
+          if (this.lease === lease && this.entries.get(entry.target.binding.ptyId) === entry) {
+            this.schedule(this.probes.nextDue([entry]))
+          }
+        }),
+      (changed) => {
+        if (this.lease === lease && changed) {
           lease.driver.changed()
         }
       }
     )
-    this.timer = setTimeout(() => this.tick(lease), 250)
-    this.timer.unref?.()
+    this.schedule()
   }
 
   private async sample(lease: Lease, entry: Entry, changed: () => void): Promise<void> {
@@ -295,24 +314,6 @@ export class TerminalInterfaceAuthority {
     basis: TerminalInterfaceObservation['basis'],
     changed = () => this.lease?.driver.changed()
   ): void {
-    if (
-      entry.observation?.state === state &&
-      entry.observation.basis === basis &&
-      entry.observation.executionLaunchToken === entry.executionLaunchToken &&
-      entry.observation.owner === (entry.owner?.token ?? null)
-    ) {
-      return
-    }
-    entry.observation = {
-      ...entry.target.binding,
-      epoch: this.epoch,
-      revision: ++this.version,
-      inputRevision: entry.input,
-      executionLaunchToken: entry.executionLaunchToken,
-      owner: entry.owner?.token ?? null,
-      state,
-      basis
-    }
-    changed()
+    publishTerminalInterfaceObservation(this, entry, state, basis, changed)
   }
 }

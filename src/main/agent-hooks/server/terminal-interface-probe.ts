@@ -19,13 +19,38 @@ type InspectionEntry = {
 }
 
 export class TerminalInterfaceProbe {
+  constructor(private readonly available: () => void) {}
+
   running = 0
   private readonly inspections = new Map<string, InspectionEntry>()
+  nextDue(entries: Iterable<Entry>): number {
+    if (process.platform === 'win32' && this.running >= 2) {
+      return Infinity
+    }
+    let due = Infinity
+    for (const entry of entries) {
+      if (entry.target.local && !entry.target.blocked && !entry.pending) {
+        due = Math.min(due, entry.due)
+      }
+    }
+    return due
+  }
+
+  consumeSlot(entries: Iterable<Entry>, expected: number, now: number): number {
+    if (now - expected > 5000) {
+      for (const entry of entries) {
+        entry.fence += 1
+        entry.shellSince = entry.emptySince = null
+      }
+    }
+    return expected + Math.floor(Math.max(0, now - expected) / 250) * 250
+  }
+
   sampleDue(
     entries: Iterable<Entry>,
     now: number,
     sample: (entry: Entry, changed: () => void) => Promise<void>,
-    onChanged: () => void
+    onSettled: (changed: boolean) => void
   ): void {
     const due = [...entries]
       .filter(
@@ -41,11 +66,7 @@ export class TerminalInterfaceProbe {
       (process.platform === 'win32' ? due.slice(0, Math.max(0, 2 - this.running)) : due).map(
         (entry) => sample(entry, markChanged)
       )
-    ).then(() => {
-      if (changed) {
-        onChanged()
-      }
-    })
+    ).then(() => onSettled(changed))
   }
 
   /** Both provider waits and presence probes have a deadline; disposal also releases the lease. */
@@ -111,6 +132,9 @@ export class TerminalInterfaceProbe {
       if (!next) {
         if (this.inspections.get(key) === entry) {
           this.inspections.delete(key)
+        }
+        if (process.platform === 'win32') {
+          this.available()
         }
         return
       }

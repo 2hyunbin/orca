@@ -1,5 +1,6 @@
 import type {
   HookBinding,
+  Entry,
   TerminalInterfaceOwner,
   TerminalInterfaceTarget
 } from './terminal-interface-contracts'
@@ -112,4 +113,30 @@ export class TerminalInterfaceHookIngress {
       }
     }
   }
+}
+
+export function bindTerminalInterfaceHookOwner(
+  entries: Iterable<Entry>,
+  paneKey: string,
+  binding: HookBinding,
+  owner: TerminalInterfaceOwner
+): Entry | null {
+  const entry = [...entries].find(
+    (candidate) =>
+      candidate.target.binding.paneKey === paneKey &&
+      candidate.target.local &&
+      candidate.target.binding.terminalHandle === binding.terminalHandle &&
+      candidate.target.binding.incarnationId === binding.incarnationId &&
+      (binding.generation === undefined || candidate.target.generation === binding.generation)
+  )
+  if (!entry || !owner.current()) {
+    return null
+  }
+  entry.owner = owner
+  entry.actual = true
+  entry.executionLaunchToken = owner.launchToken ?? null
+  entry.fence += 1
+  entry.shellSince = entry.emptySince = null
+  entry.due = 0
+  return entry
 }

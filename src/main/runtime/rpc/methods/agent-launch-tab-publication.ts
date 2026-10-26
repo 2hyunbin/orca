@@ -190,7 +190,10 @@ export async function publishAgentLaunchTabEarly(
   return trackEarlyAgentLaunchTab({
     paneKey,
     publishing,
-    finishRunning: (verdict) => running.finish(verdict),
+    finishRunning: (verdict) => {
+      running.finish(verdict)
+      runtime.terminalInterfaces?.inventoryChanged()
+    },
     agentBound: () => running.agentBound(),
     paneIsLive: () => runtime.hasLiveTerminalForPaneKey(paneKey),
     closedByUser: () => running.closedByUser(),

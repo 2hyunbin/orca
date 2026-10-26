@@ -191,6 +191,7 @@ class OrcaRuntimeService extends OrcaRuntimeWithTerminalInterfaces {
     pane: AgentLaunchPaneAddress,
     verdict: AgentLaunchPaneVerdict
   ): void {
+    this.terminalInterfaces?.inventoryChanged()
     this.notifier?.agentLaunchPaneVerdict?.({ ...pane, verdict })
   }
 

@@ -125,6 +125,7 @@ export abstract class OrcaRuntimeWithInvalidateAllHandlesForPty extends OrcaRunt
     ptyId: string,
     connectionId?: string | null
   ): void {
+    this.terminalInterfaces?.inventoryChanged()
     const generation = ++this.ptyControllerInventorySequence
     const hostId = getPtyExecutionHost(ptyId)
     if (hostId === 'foreign' || (hostId && parseExecutionHostId(hostId)?.kind === 'runtime')) {

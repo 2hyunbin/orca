@@ -87,3 +87,31 @@ export function syncTerminalInterfaceInventory(
   }
   return changed
 }
+
+export function publishTerminalInterfaceObservation(
+  authority: { epoch: string; version: number },
+  entry: Entry,
+  state: TerminalInterfaceObservation['state'],
+  basis: TerminalInterfaceObservation['basis'],
+  changed: () => void
+): void {
+  if (
+    entry.observation?.state === state &&
+    entry.observation.basis === basis &&
+    entry.observation.executionLaunchToken === entry.executionLaunchToken &&
+    entry.observation.owner === (entry.owner?.token ?? null)
+  ) {
+    return
+  }
+  entry.observation = {
+    ...entry.target.binding,
+    epoch: authority.epoch,
+    revision: ++authority.version,
+    inputRevision: entry.input,
+    executionLaunchToken: entry.executionLaunchToken,
+    owner: entry.owner?.token ?? null,
+    state,
+    basis
+  }
+  changed()
+}
