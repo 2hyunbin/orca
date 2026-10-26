@@ -117,11 +117,11 @@ describe('scanAiVaultSessions with overlapping Pi and OMP roots', () => {
     { layout: 'the same folder', piRoot: sameFolder, scope: {} },
     // PI_CODING_AGENT_DIR=<dir>: Pi walks <dir>, OMP walks <dir>/sessions.
     { layout: 'a parent folder', piRoot: (dir: string) => join(dir, '..'), scope: {} },
-    // A one-row cap sends the rest through scope recovery: Pi's buckets and OMP's walk.
+    // Keep room for both OMP chats while the older chat still requires scope recovery.
     {
       layout: 'the same folder for a workspace',
       piRoot: sameFolder,
-      scope: { scopePaths: ['/repo/app'], limit: 1 }
+      scope: { scopePaths: ['/repo/app'], limit: 2 }
     }
   ])('lists each transcript once under its writer when Pi scans $layout', async (testCase) => {
     const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-pi-omp-shared-'))
