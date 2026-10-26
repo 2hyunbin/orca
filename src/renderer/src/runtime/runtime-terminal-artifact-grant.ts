@@ -39,6 +39,17 @@ export function isRenewableGrantError(error: unknown): boolean {
 
 export type RenewedTerminalArtifactGrant = { grantId: string; readOnly: boolean }
 
+/** A grant for a restored tab's host file, which never kept its grant; rejects when the host lacks it. */
+export async function renewRestoredHostFileGrant(
+  args: TerminalArtifactGrantTarget
+): Promise<string> {
+  const renewed = await renewTerminalArtifactGrant(args)
+  if (!renewed) {
+    throw new Error(`File not found on its host: ${args.absolutePath}`)
+  }
+  return renewed.grantId
+}
+
 /** A fresh grant for the same host path, or null when the host no longer has the file. */
 export async function renewTerminalArtifactGrant(
   args: TerminalArtifactGrantTarget
