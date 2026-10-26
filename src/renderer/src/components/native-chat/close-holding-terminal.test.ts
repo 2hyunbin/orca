@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { preparePendingSplitClose } from '../terminal-pane/pending-split-close-test-fixture'
 import { capturedPinnedTerminalCloseRequest } from '../../../../shared/__fixtures__/captured-pinned-terminal-close.test-fixture'
 import { TerminalClose } from '../../../../shared/rpc-contract/terminal-unary-params'
+import { createGlobalSettingsFixture } from '../../../../shared/global-settings-test-fixture'
 import type * as RuntimeEnvironmentRevisionModule from '@/runtime/runtime-environment-revision'
 import type * as AppStoreModule from '@/store'
 import type * as HoldingTerminalModule from './close-holding-terminal'
@@ -383,7 +384,10 @@ it.each([false, true])(
     vi.spyOn(manager, 'getPanes').mockReturnValue(manager.getPanes().slice(0, 1))
     const pin = vi.fn<(request: { onConfirm: () => void; onCancel?: () => void }) => void>()
     useAppStore.setState({
-      settings: { ...useAppStore.getState().settings, confirmClosePinnedTab: prompt },
+      settings: createGlobalSettingsFixture({
+        ...useAppStore.getState().settings,
+        confirmClosePinnedTab: prompt
+      }),
       requestPinnedTabCloseConfirm: pin
     })
     const unified = useAppStore
