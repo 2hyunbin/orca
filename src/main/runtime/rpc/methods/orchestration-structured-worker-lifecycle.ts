@@ -12,8 +12,9 @@ import {
 } from '../../orchestration/structured-worker-journal-archive'
 import { readStructuredLineageJournalPage } from '../../orchestration/structured-worker-journal-page'
 import {
-  pageStructuredJournal,
-  structuredJournalEntries
+  readStructuredJournalSince,
+  readStructuredJournalTail,
+  type StructuredJournalRead
 } from '../../orchestration/structured-worker-journal-cursor'
 import {
   createWorkerOutputSourceIdentity,
@@ -133,7 +134,7 @@ export async function readStructuredWorkerOutput(args: {
   })
 }
 
-/** Journal page in the shape `worker-read --source transcript` already serves; see `pageStructuredJournal`. */
+/** Journal page in the shape `worker-read --source transcript` already serves; see `structured-worker-journal-cursor`. */
 export async function readStructuredWorkerJournal(args: {
   identity: StructuredJournalSource
   dispatchId: string
@@ -144,28 +145,46 @@ export async function readStructuredWorkerJournal(args: {
   limit?: number
 }): Promise<OrchestrationWorkerReadTranscriptResult> {
   const running = requireRunningStructuredWorker(args.identity)
-  const page = await readStructuredLineageJournalPage(running.lineage)
-  if (!page) {
-    throw new OrchestrationError(
-      'transcript_required',
-      `The transcript for Dispatch ${args.dispatchId} could not be read; its session is not attached.`
-    )
-  }
   const sourceIdentity = createWorkerOutputSourceIdentity([
     'structured-journal',
     args.identity.processIncarnation,
     args.identity.paneKey
   ])
   const cursor = decodeWorkerOutputCursor(args.cursor, args.dispatchId)
-  if (cursor && (cursor.source !== 'transcript' || cursor.sourceIdentity !== sourceIdentity)) {
+  if (
+    cursor &&
+    (cursor.source !== 'transcript' ||
+      cursor.sourceIdentity !== sourceIdentity ||
+      !cursor.boundaryCheckpoint)
+  ) {
     throw sourceChanged()
   }
-  const read = pageStructuredJournal({
-    entries: structuredJournalEntries(args.identity.sessionId, page),
-    from: cursor ? { anchor: cursor.boundaryCheckpoint, revision: cursor.position } : null,
-    limit: clampWorkerTranscriptLimit(args.limit),
-    hasOlder: page.hasOlder
-  })
+  const limit = clampWorkerTranscriptLimit(args.limit)
+  let read: StructuredJournalRead
+  if (cursor?.boundaryCheckpoint) {
+    read = await readStructuredJournalSince(
+      running.sessionId,
+      { epoch: cursor.boundaryCheckpoint, sequence: cursor.position },
+      limit
+    )
+  } else {
+    const page = await readStructuredLineageJournalPage(running.lineage)
+    if (!page) {
+      throw new OrchestrationError(
+        'transcript_required',
+        `The transcript for Dispatch ${args.dispatchId} could not be read; its session is not attached.`
+      )
+    }
+    read = readStructuredJournalTail(page, limit)
+  }
+  // The transcript cursor's checkpoint carries the journal epoch and its position the write sequence.
+  const nextCursor = encodeWorkerOutputCursor(
+    args.dispatchId,
+    'transcript',
+    sourceIdentity,
+    read.next.sequence,
+    read.next.epoch
+  )
   return structuredTranscriptResult({
     dispatchId: args.dispatchId,
     workerState: args.workerState,
@@ -173,13 +192,7 @@ export async function readStructuredWorkerJournal(args: {
     liveness: args.liveness,
     sourceIdentity,
     messages: read.messages,
-    nextCursor: encodeWorkerOutputCursor(
-      args.dispatchId,
-      'transcript',
-      sourceIdentity,
-      read.next.revision,
-      read.next.anchor ?? undefined
-    ),
+    nextCursor,
     limited: read.clipping.length > 0,
     clipping: read.clipping,
     warnings: read.warnings,

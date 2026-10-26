@@ -1,73 +1,43 @@
-/** Page a live structured journal: newest messages first, then forward from the last message delivered.
- * Messages are revised in place while they stream, so a cursor names that message and its revision rather
- * than a position: a revised last message is sent again, and only losing it from the journal invalidates it. */
+/** Read a live structured journal for worker-read: the newest messages first, then the journal's own catch-up
+ * read from the last write the reader saw. Messages are revised in place while they stream, so catch-up returns
+ * every message written since, new or revised, and a reader replaces messages by id. */
 
+import type {
+  AgentJournalCursor,
+  AgentJournalRenderItem
+} from '../../../shared/agent-session-journal-types'
+import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
 import type { NativeChatMessage } from '../../../shared/native-chat-types'
-import { projectStructuredItemToNativeChat } from '../../../shared/structured-agent-session-projection'
+import { projectStructuredItemsToNativeChat } from '../../../shared/structured-agent-session-projection'
 import { OrchestrationError } from './orchestration-error'
-import type { StructuredLineageJournalPage } from './structured-worker-journal-page'
-import { createWorkerOutputSourceIdentity } from './worker-output-cursor'
+import {
+  readStructuredJournalChanges,
+  structuredJournalPage,
+  type StructuredJournalPage
+} from './structured-worker-journal-page'
 import { boundWorkerTranscriptMessages } from './worker-transcript-payload'
 
-export type StructuredJournalEntry = {
-  anchor: string
-  revision: number
-  message: NativeChatMessage
-}
-
-/** The last message a reader holds; a null anchor predates every message. */
-export type StructuredJournalAnchor = { anchor: string | null; revision: number }
-
-/** Projected messages keyed by item identity, which revisions keep. */
-export function structuredJournalEntries(
-  rootSessionId: string,
-  page: StructuredLineageJournalPage
-): StructuredJournalEntry[] {
-  return page.items.flatMap((item, index) => {
-    const message = projectStructuredItemToNativeChat(item)
-    if (!message) {
-      return []
-    }
-    // Namespace successor items by session because /clear copies drafts.
-    const sessionId = page.sessionIds[index]
-    const key =
-      sessionId === undefined || sessionId === rootSessionId
-        ? item.itemId
-        : `${sessionId}/${item.itemId}`
-    return [{ anchor: createWorkerOutputSourceIdentity([key]), revision: item.revision, message }]
-  })
-}
-
-export function pageStructuredJournal(input: {
-  entries: readonly StructuredJournalEntry[]
-  from: StructuredJournalAnchor | null
-  limit: number
-  hasOlder: boolean
-}): {
+export type StructuredJournalRead = {
   messages: NativeChatMessage[]
-  next: StructuredJournalAnchor
+  next: AgentJournalCursor
   clipping: string[]
   warnings: string[]
-} {
-  const { entries, from, limit } = input
-  const start = from ? resumeIndex(entries, from) : Math.max(0, entries.length - limit)
-  const candidates = entries.slice(start, start + limit)
-  const texts = candidates.map((entry) => entry.message)
-  // A first read bounds newest-first so the size limit drops the oldest candidates, never the latest progress.
-  const bounded = boundWorkerTranscriptMessages(from ? texts : texts.toReversed())
-  const first = start + (from ? 0 : candidates.length - bounded.messages.length)
-  const served = entries.slice(first, first + bounded.messages.length)
-  // Only a reader holding no message can have missed older ones.
-  const olderOmitted = !from?.anchor && (first > 0 || input.hasOlder)
-  const more = first + served.length < entries.length
-  const last = served.at(-1)
+}
+
+/** The newest messages, with a cursor at the journal's current write. */
+export function readStructuredJournalTail(
+  page: StructuredJournalPage,
+  limit: number
+): StructuredJournalRead {
+  const messages = projectStructuredItemsToNativeChat(page.items)
+  // Bound newest-first so the size limit drops the oldest candidates, never the latest progress.
+  const bounded = boundWorkerTranscriptMessages(messages.slice(-limit).toReversed())
+  const olderOmitted = bounded.messages.length < messages.length || page.hasOlder
   return {
-    messages: from ? bounded.messages : bounded.messages.toReversed(),
-    next: last
-      ? { anchor: last.anchor, revision: last.revision }
-      : (from ?? { anchor: null, revision: 0 }),
+    messages: bounded.messages.toReversed(),
+    next: page.liveCursor,
     clipping: [
-      ...(olderOmitted || more ? ['message_limit_or_scan_window'] : []),
+      ...(olderOmitted ? ['message_limit_or_scan_window'] : []),
       ...(bounded.limited ? ['transcript_payload'] : [])
     ],
     warnings: [
@@ -79,21 +49,57 @@ export function pageStructuredJournal(input: {
   }
 }
 
-/** First entry the reader has not seen at its current revision. */
-function resumeIndex(
-  entries: readonly StructuredJournalEntry[],
-  from: StructuredJournalAnchor
-): number {
-  if (!from.anchor) {
-    return 0
-  }
-  const at = entries.findIndex((entry) => entry.anchor === from.anchor)
-  if (at === -1) {
-    throw new OrchestrationError(
-      'source_changed',
-      'The worker transcript no longer holds the message this cursor follows. Read again without --cursor for the newest messages.'
+/** Messages written after `cursor`, in transcript order; `limit` bounds the journal writes one page covers. */
+export async function readStructuredJournalSince(
+  sessionId: string,
+  cursor: AgentJournalCursor,
+  limit: number
+): Promise<StructuredJournalRead> {
+  for (let writes = limit; ; writes = Math.ceil(writes / 2)) {
+    const result = await readStructuredJournalChanges(sessionId, cursor, writes)
+    if (!result) {
+      throw new OrchestrationError(
+        'transcript_required',
+        'The worker transcript could not be read; its session is not attached.'
+      )
+    }
+    if (!result.ok) {
+      // A rebuilt or /clear-replaced journal cannot continue the cursor; its reset page is the newest messages.
+      const tail = readStructuredJournalTail(structuredJournalPage(result.page), limit)
+      return {
+        ...tail,
+        warnings: [
+          'The transcript was rebuilt or cleared since this cursor; this page starts at its newest messages.',
+          ...tail.warnings
+        ]
+      }
+    }
+    const page = result.page
+    const messages = projectStructuredItemsToNativeChat(
+      page.items.filter(isRootAgentJournalItem).toSorted(byJournalPosition)
     )
+    const bounded = boundWorkerTranscriptMessages(messages)
+    // Cover fewer writes rather than advance the cursor past messages the size limit dropped.
+    if (bounded.messages.length < messages.length && writes > 1) {
+      continue
+    }
+    return {
+      messages: bounded.messages,
+      next: page.window.nextCursor,
+      clipping: [
+        ...(page.hasNewer ? ['message_limit_or_scan_window'] : []),
+        ...(bounded.limited ? ['transcript_payload'] : [])
+      ],
+      warnings: [
+        ...bounded.warnings,
+        ...(page.removedItemIds.length > 0
+          ? ['Messages read earlier were removed from the transcript.']
+          : [])
+      ]
+    }
   }
-  // Re-send a revised anchor, as a streaming reply or a tool call gaining its result is.
-  return entries[at]?.revision === from.revision ? at + 1 : at
+}
+
+function byJournalPosition(left: AgentJournalRenderItem, right: AgentJournalRenderItem): number {
+  return left.sequence - right.sequence || (left.sequenceIndex ?? 0) - (right.sequenceIndex ?? 0)
 }

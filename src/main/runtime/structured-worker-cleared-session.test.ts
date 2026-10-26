@@ -250,7 +250,7 @@ function installHost(): void {
       if (unreadable.has(sessionId)) {
         throw new Error(AGENT_SESSION_NOT_ATTACHED.code)
       }
-      // As the real history: reading opens a closed conversation, and it stays open.
+      // As the real history: reading opens a closed conversation, and it stays open. No `ok`: catch-up reads reset.
       open.add(sessionId)
       const items = journals.get(sessionId) ?? [
         message(
@@ -258,7 +258,8 @@ function installHost(): void {
           sessionId === MINTED ? 'PRE-CLEAR (dispatch work)' : 'POST-CLEAR (live work)'
         )
       ]
-      return { page: { items: items.slice(-limit), hasOlder: items.length > limit } }
+      const page = { items: items.slice(-limit), hasOlder: items.length > limit, epoch: sessionId }
+      return { page }
     }
   }
 }

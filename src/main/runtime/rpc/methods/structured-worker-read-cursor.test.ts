@@ -1,12 +1,27 @@
+/** Read a real journal between writes: messages revised in place, anywhere behind the cursor, must reach a polling reader exactly once per change. */
+
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { agentSessionConversationView } from '../../../../shared/agent-session-conversation-view'
+import {
+  AGENT_JOURNAL_THREAD_SCOPE,
+  type AgentJournalItemBody,
+  type AgentSessionJournalIdentity
+} from '../../../../shared/agent-session-journal-types'
 import {
   agentSessionLeaseFixture,
   agentSessionRecordFixture
 } from '../../../../shared/agent-session-record.test-fixture'
-import { agentSessionConversationView } from '../../../../shared/agent-session-conversation-view'
-/** Mutate journals between reads: streaming revisions, mid-array insertions and window slides must neither duplicate nor churn the cursor. */
-
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
+import { codexProviderHandle } from '../../../../shared/agent-session-provider-handle-encoding'
+import type { AgentSessionHistoryRequest } from '../../../../shared/agent-session-wire'
+import type { AgentSessionJournal } from '../../../native-chat/agent-session-journal/journal-store'
+import { createTrackedJournalOpener } from '../../../native-chat/agent-session-journal/journal-host-database-test-support'
+import {
+  readAgentSessionHistory,
+  type AgentSessionHistoryScope
+} from '../../../native-chat/agent-session-wire/agent-session-history-page'
 import type { StructuredWorkerIdentity } from '../../structured-worker-identity'
 
 const hostRef: { current: unknown } = { current: null }
@@ -20,40 +35,27 @@ const { readStructuredWorkerJournal } = await import('./orchestration-structured
 const IDENTITY: StructuredWorkerIdentity = {
   handle: 'structworker_1',
   sessionId: 'session-1',
-  agent: 'claude',
+  agent: 'codex',
   paneKey: 'structured-agent-session-session-1:11111111-1111-4111-a111-111111111111',
   processIncarnation: 'structured:session-1',
   worktreeId: 'wt_1',
   hostScope: { kind: 'local', hostId: 'local' }
 }
-
-function message(itemId: string, text: string, revision = 1): AgentJournalRenderItem {
-  return {
-    itemId,
-    revision,
-    sequence: Number(itemId.slice(1)),
-    observedAt: 1,
-    body: { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text }] }
-  } as unknown as AgentJournalRenderItem
+const JOURNAL_IDENTITY: AgentSessionJournalIdentity = {
+  sessionId: IDENTITY.sessionId,
+  workspaceId: 'wt_1',
+  hostId: 'local',
+  agent: 'codex',
+  providerHandle: codexProviderHandle('01a08cc2-f96e-76d0-bb74-88b9bc0b03fc')
 }
 
-/** Projects to null while pending, and to a system message once resolved — mid-array. */
-function approval(itemId: string, resolved: boolean, revision = 1): AgentJournalRenderItem {
-  return {
-    itemId,
-    revision,
-    sequence: Number(itemId.slice(1)),
-    observedAt: 1,
-    body: {
-      kind: 'approval',
-      title: 'run it?',
-      detail: null,
-      resolution: { state: resolved ? 'approved' : 'pending' }
-    }
-  } as unknown as AgentJournalRenderItem
-}
+const journals = createTrackedJournalOpener()
+let root: string
+let journal: AgentSessionJournal
 
-function installJournal(items: AgentJournalRenderItem[]): void {
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'orca-worker-read-cursor-'))
+  journal = await journals.open({ identity: JOURNAL_IDENTITY, stateDirectory: root })
   hostRef.current = {
     deps: {
       store: {
@@ -64,8 +66,29 @@ function installJournal(items: AgentJournalRenderItem[]): void {
       }
     },
     hasSession: () => true,
-    history: () => ({ page: { items, hasOlder: false } })
+    history: async (request: AgentSessionHistoryRequest, scope?: AgentSessionHistoryScope) =>
+      readAgentSessionHistory(journal, request, { scope })
   }
+})
+
+afterEach(async () => {
+  hostRef.current = null
+  await journals.closeAll()
+  await rm(root, { recursive: true, force: true })
+})
+
+const say = (text: string): AgentJournalItemBody => ({
+  kind: 'message',
+  role: 'assistant',
+  blocks: [{ type: 'text', text }]
+})
+
+/** Writing the same id again revises that message in place, as streaming and tool results do. */
+async function write(id: string, body: AgentJournalItemBody): Promise<void> {
+  await journal.appendItem({ provider: 'orca', clientMessageId: id }, body, {
+    fence: 1,
+    turnScope: AGENT_JOURNAL_THREAD_SCOPE
+  })
 }
 
 function read(cursor?: string, limit?: number) {
@@ -74,7 +97,7 @@ function read(cursor?: string, limit?: number) {
     dispatchId: 'd1',
     workerState: 'ready',
     liveness: 'live',
-    agent: 'claude',
+    agent: 'codex',
     ...(cursor === undefined ? {} : { cursor }),
     ...(limit === undefined ? {} : { limit })
   })
@@ -86,48 +109,40 @@ function textsOf(result: Awaited<ReturnType<typeof read>>): string[] {
   )
 }
 
-describe('the structured worker-read cursor over a mutating journal', () => {
-  beforeEach(() => {
-    hostRef.current = null
-  })
-
+describe('the structured worker-read cursor over a live journal', () => {
   it('starts at the newest messages and says older ones are not pageable', async () => {
-    installJournal([message('i1', 'a'), message('i2', 'b'), message('i3', 'c')])
+    await write('a', say('a'))
+    await write('b', say('b'))
+    await write('c', say('c'))
     const first = await read(undefined, 2)
     expect(textsOf(first)).toEqual(['b', 'c'])
-    expect(first.contentComplete).toBe(false)
     expect(first.clipping).toEqual(['message_limit_or_scan_window'])
-    expect(textsOf(await read(first.cursor))).toEqual([])
-  })
 
-  it('re-sends the last delivered message when it was revised while streaming', async () => {
-    // A tool call gaining its result revised a delivered item; the prefix-hash cursor refused every later read.
-    installJournal([message('i1', 'first'), message('i2', 'hel')])
-    const first = await read()
-    expect(textsOf(first)).toEqual(['first', 'hel'])
-
-    installJournal([message('i1', 'first'), message('i2', 'hello world', 2), message('i3', 'next')])
     const second = await read(first.cursor)
-    expect(textsOf(second)).toEqual(['hello world', 'next'])
+    expect(textsOf(second)).toEqual([])
+    expect(second.contentComplete).toBe(true)
+  })
+
+  it('re-sends any delivered message revised since, not just the last one', async () => {
+    // A tool call gaining its result behind a later message was lost by a last-message-only cursor.
+    await write('call', say('running…'))
+    await write('note', say('meanwhile'))
+    const first = await read()
+    expect(textsOf(first)).toEqual(['running…', 'meanwhile'])
+
+    await write('call', say('done: 42'))
+    await write('next', say('next'))
+    const second = await read(first.cursor)
+    expect(textsOf(second)).toEqual(['done: 42', 'next'])
+    expect(second.transcript.messages[0]?.id).toBe(first.transcript.messages[0]?.id)
     expect(second.sourceIdentity).toBe(first.sourceIdentity)
-
-    expect(textsOf(await read(second.cursor))).toEqual([])
   })
 
-  it('does not duplicate when a resolved prompt appears behind the cursor', async () => {
-    // Resolving an approval inserts a message mid-array; a position cursor re-sent a delivered message.
-    installJournal([message('i1', 'first'), approval('i2', false), message('i3', 'second')])
+  it('pages many writes forward exactly once', async () => {
+    await write('a', say('a'))
     const first = await read()
-    expect(textsOf(first)).toEqual(['first', 'second'])
-
-    installJournal([message('i1', 'first'), approval('i2', true, 2), message('i3', 'second')])
-    expect(textsOf(await read(first.cursor))).toEqual([])
-  })
-
-  it('pages new messages forward exactly once', async () => {
-    installJournal([message('i1', 'a')])
-    const first = await read()
-    installJournal([message('i1', 'a'), message('i2', 'b'), message('i3', 'c')])
+    await write('b', say('b'))
+    await write('c', say('c'))
     const second = await read(first.cursor, 1)
     expect(second.transcript.limited).toBe(true)
     const third = await read(second.cursor, 1)
@@ -135,15 +150,18 @@ describe('the structured worker-read cursor over a mutating journal', () => {
     expect([...textsOf(first), ...textsOf(second), ...textsOf(third)]).toEqual(['a', 'b', 'c'])
   })
 
-  it('follows the cursor while the window slides, and refuses once its message leaves', async () => {
-    installJournal([message('i1', 'a'), message('i2', 'b')])
+  it('refuses a cursor minted for another session of the lineage', async () => {
+    await write('a', say('a'))
     const first = await read()
-    installJournal([message('i2', 'b'), message('i3', 'c')])
-    const second = await read(first.cursor)
-    expect(textsOf(second)).toEqual(['c'])
-
-    installJournal([message('i4', 'd'), message('i5', 'e')])
-    await expect(read(second.cursor)).rejects.toThrow(/without --cursor/)
-    expect(textsOf(await read())).toEqual(['d', 'e'])
+    await expect(
+      readStructuredWorkerJournal({
+        identity: { ...IDENTITY, paneKey: 'structured-agent-session-other:x' },
+        dispatchId: 'd1',
+        workerState: 'ready',
+        liveness: 'live',
+        agent: 'codex',
+        cursor: first.cursor
+      })
+    ).rejects.toThrow(/source changed/i)
   })
 })
