@@ -157,7 +157,7 @@ it('shows an unknown model without sending or remembering a guess, then applies 
     expect(row.props.accessibilityState.checked).toBe(false)
     await act(async () => row.props.onPress())
     expect(options.sendSelection()).toEqual({ model: 'sonnet' })
-    expect(pill().props.accessibilityLabel).toBe('Model, Sonnet')
+    expect(pill().props.accessibilityLabel).toBe('Model, Sonnet Effort')
     await vi.waitFor(() =>
       expect(writes).toEqual([
         {
