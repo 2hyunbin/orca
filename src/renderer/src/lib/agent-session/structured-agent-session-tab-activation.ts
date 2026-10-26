@@ -49,16 +49,25 @@ export function activateStructuredAgentSessionTab(args: {
   state.activateTab(tab.id, { worktreeId: args.worktreeId })
   state.setActiveTabType('agent-session', args.worktreeId)
   requestNativeChatComposerFocus(tab.id)
-  const environmentId = runtimeEnvironmentIdOrLocalUnlessTwin(state, args.worktreeId)
+  activateStructuredAgentSessionTabOnOwner(args.worktreeId, tab.entityId, args.target)
+  return true
+}
+
+/** The chat's host keeps this client's tab selection; every local activation must reach it. */
+export function activateStructuredAgentSessionTabOnOwner(
+  worktreeId: string,
+  sessionId: string,
+  target?: RuntimeClientTarget
+): void {
+  const environmentId = runtimeEnvironmentIdOrLocalUnlessTwin(useAppStore.getState(), worktreeId)
   void callRuntimeRpc(
-    args.target ?? runtimeTargetForOwnerEnvironment(environmentId),
+    target ?? runtimeTargetForOwnerEnvironment(environmentId),
     'session.tabs.activate',
     {
-      worktree: toRuntimeWorktreeSelector(args.worktreeId),
-      tabId: `agent-session:${tab.entityId}`
+      worktree: toRuntimeWorktreeSelector(worktreeId),
+      tabId: `agent-session:${sessionId}`
     }
   )
-  return true
 }
 
 export function activateStructuredAgentSessionById(args: {

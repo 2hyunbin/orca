@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   getState: vi.fn(),
   navOrder: vi.fn(),
-  activateOnOwner: vi.fn(async () => true),
-  ownerEnvironmentId: vi.fn((): string | null => 'env-1')
+  activateOnOwner: vi.fn(async (_args: Record<string, unknown>) => true),
+  ownerEnvironmentId: vi.fn((): string | null => 'env-1'),
+  runtimeRpc: vi.fn(async () => ({}))
 }))
 
 vi.mock('../store', () => ({ useAppStore: { getState: mocks.getState } }))
@@ -21,6 +22,7 @@ vi.mock('@/lib/worktree-runtime-owner', () => ({
 vi.mock('@/runtime/remote-browser-tab-ownership', () => ({
   browserWorkspaceHasRemoteOwner: () => true
 }))
+vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.runtimeRpc }))
 
 import {
   handleSwitchRecentTab,
@@ -93,5 +95,32 @@ describe('keyboard tab switches in a server workspace', () => {
     mocks.getState.mockReturnValue(serverWorkspaceStore())
     expect(handleSwitchTabAcrossAllTypes(-1)).toBe(true)
     expect(mocks.activateOnOwner).not.toHaveBeenCalled()
+  })
+
+  it('tells the server about a browser tab it hosts, cancelable by later navigation', () => {
+    mocks.getState.mockReturnValue(serverWorkspaceStore())
+    mocks.navOrder.mockReturnValue([
+      { type: 'browser', id: 'browser-ws', tabId: 'browser-tab' },
+      { type: 'terminal', id: 'web-terminal-b', tabId: 'web-terminal-b' }
+    ])
+    expect(handleSwitchTabAcrossAllTypes(-1)).toBe(true)
+    expect(mocks.activateOnOwner).toHaveBeenCalledWith(
+      expect.objectContaining({ tabId: 'browser-tab', environmentId: 'env-1' })
+    )
+    expect(mocks.activateOnOwner.mock.calls[0]?.[0]).toHaveProperty('expectedCurrentLocalTabId')
+  })
+
+  it('tells the server about an agent chat switch', () => {
+    mocks.getState.mockReturnValue(serverWorkspaceStore())
+    mocks.navOrder.mockReturnValue([
+      { type: 'agent-session', id: 'session-1', tabId: 'agent-tab' },
+      { type: 'terminal', id: 'web-terminal-b', tabId: 'web-terminal-b' }
+    ])
+    expect(handleSwitchTabAcrossAllTypes(-1)).toBe(true)
+    expect(mocks.runtimeRpc).toHaveBeenCalledWith(
+      { kind: 'environment', environmentId: 'env-1' },
+      'session.tabs.activate',
+      expect.objectContaining({ tabId: 'agent-session:session-1' })
+    )
   })
 })

@@ -25,17 +25,6 @@ export function activateTerminalTabOnOwner(
   })
 }
 
-/** Keyboard switches must reach the owner like clicks, or a server workspace reopens on its stale pick. */
-export function activateTerminalTabAtActiveLeafOnOwner(
-  worktreeId: string | null,
-  tabId: string
-): void {
-  if (worktreeId) {
-    const leafId = useAppStore.getState().terminalLayoutsByTabId?.[tabId]?.activeLeafId ?? null
-    activateTerminalTabOnOwner(worktreeId, tabId, leafId)
-  }
-}
-
 /** A browser tab the owner hosts; its selection must follow local activation like a terminal's. */
 export function activateBrowserTabOnOwner(
   worktreeId: string,
@@ -51,5 +40,11 @@ export function activateBrowserTabOnOwner(
   ) {
     return
   }
-  void activateWebRuntimeSessionTab({ worktreeId, tabId: unifiedTabId, environmentId })
+  void activateWebRuntimeSessionTab({
+    worktreeId,
+    tabId: unifiedTabId,
+    environmentId,
+    // Later local navigation cancels this deferred focus, as for terminals.
+    expectedCurrentLocalTabId: resolveWebSessionVisibleTabId(state, worktreeId)
+  })
 }
