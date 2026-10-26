@@ -58,8 +58,7 @@ function register(): void {
     store: { getSettings: () => ({ activeRuntimeEnvironmentId: null }) } as never,
     getUserDataPath: () => '/user-data',
     invalidateTransport: vi.fn()
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The service is mocked; no other argument is read on this path.
-  } as never)
+  })
 }
 
 describe('WSL host IPC: the user Add and Remove (D3a)', () => {
