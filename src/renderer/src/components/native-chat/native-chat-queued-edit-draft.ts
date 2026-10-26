@@ -123,7 +123,8 @@ export function nativeChatQueuedEditDirty(edit: NativeChatQueuedEditDraft): bool
   return (
     draft.text !== edit.initial.text ||
     JSON.stringify(draft.images) !== JSON.stringify(edit.initial.images) ||
-    JSON.stringify(promptSkillRefs(draft.document)) !== JSON.stringify(edit.body.skills ?? []) ||
+    JSON.stringify(pickedSkillsInText(draft.text, promptSkillRefs(draft.document))) !==
+      JSON.stringify(pickedSkillsInText(edit.initial.text, edit.body.skills ?? [])) ||
     nativeChatPendingAttachmentSnapshot(edit.scopeKey).length > 0
   )
 }
@@ -157,7 +158,8 @@ export function handBackNativeChatQueuedEdit(edit: NativeChatQueuedEditDraft): b
   }
   const textChanged =
     draft.text !== edit.initial.text ||
-    JSON.stringify(promptSkillRefs(draft.document)) !== JSON.stringify(edit.body.skills ?? [])
+    JSON.stringify(pickedSkillsInText(draft.text, promptSkillRefs(draft.document))) !==
+      JSON.stringify(pickedSkillsInText(edit.initial.text, edit.body.skills ?? []))
   if (!textChanged) {
     text = ''
     document = undefined

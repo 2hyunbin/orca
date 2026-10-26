@@ -29,7 +29,8 @@ import {
   createNativeChatQueuedEditDraft,
   discardNativeChatQueuedEdit,
   handBackNativeChatQueuedEdit,
-  nativeChatQueuedEditInput
+  nativeChatQueuedEditInput,
+  nativeChatQueuedEditDirty
 } from './native-chat-queued-edit-draft'
 
 const skill = { name: 'review', path: '/remote/skills/review/SKILL.md' }
@@ -64,6 +65,14 @@ describe('queued edit draft ownership', () => {
     expect(nativeChatQueuedEditInput(edit, false, false)).toEqual({ text: '$review [Image #1]' })
     await nativeChatComposerDraftWritesSettled()
     expect(storage.drafts.has(edit.scopeKey)).toBe(false)
+    discardNativeChatQueuedEdit(edit)
+  })
+
+  it('normalizes repeated skill refs when deciding whether to hand a draft back', () => {
+    const repeated = { ...body, skills: [skill, skill] }
+    const edit = createNativeChatQueuedEditDraft(repeated, 'bottom')
+    expect(nativeChatQueuedEditDirty(edit)).toBe(false)
+    expect(handBackNativeChatQueuedEdit(edit)).toBe(false)
     discardNativeChatQueuedEdit(edit)
   })
 

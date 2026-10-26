@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { pickedSkillsInText } from '../../../../../src/shared/structured-agent-session-send-mutation'
 import type { AgentJournalSkillRef } from '../../../../../src/shared/agent-session-journal-types'
 import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
 import type { PendingNativeChatFile } from './mobile-native-chat-file-attachment'
@@ -92,4 +93,12 @@ export function resetMobileNativeChatDraftInputsForTests(): void {
   destinations.clear()
   textDestinations.clear()
   focusedScope = null
+}
+
+export function pruneMobileNativeChatDraftSkills(scope: string, text: string): void {
+  const current = readMobileNativeChatDraftInputs(scope)
+  const skills = pickedSkillsInText(text, current.skills)
+  if (skills.length !== current.skills.length) {
+    updateMobileNativeChatDraftInputs(scope, (current) => ({ ...current, skills }))
+  }
 }

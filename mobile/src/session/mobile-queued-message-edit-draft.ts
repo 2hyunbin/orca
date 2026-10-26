@@ -76,12 +76,18 @@ export function closeMobileQueuedEditDraft(
         queuedEditKeptImages(edit.body)
           .map(({ id }) => id)
           .join() ||
-      JSON.stringify(inputs.skills) !== JSON.stringify(edit.body.skills ?? [])
+      JSON.stringify(pickedSkillsInText(edit.text, inputs.skills)) !==
+        JSON.stringify(
+          pickedSkillsInText(queuedMessageEditableText(edit.body) ?? '', edit.body.skills ?? [])
+        )
     if (dirty) {
       edit.handedBack = true
       const textChanged =
         edit.text !== queuedMessageEditableText(edit.body) ||
-        JSON.stringify(inputs.skills) !== JSON.stringify(edit.body.skills ?? [])
+        JSON.stringify(pickedSkillsInText(edit.text, inputs.skills)) !==
+          JSON.stringify(
+            pickedSkillsInText(queuedMessageEditableText(edit.body) ?? '', edit.body.skills ?? [])
+          )
       const text = textChanged
         ? stripSentImagePromptMarkers(edit.text, queuedEditKeptImages(edit.body).length)
         : ''

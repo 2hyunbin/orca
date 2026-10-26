@@ -9,6 +9,11 @@ import {
   findByHostType
 } from '../../../test-support/react-test-renderer-host-nodes'
 
+import {
+  readMobileNativeChatDraftInputs,
+  updateMobileNativeChatDraftInputs
+} from './mobile-native-chat-draft-inputs'
+
 const getNoComposerEditGeneration = () => 0
 
 function MobileNativeChatComposer({
@@ -727,6 +732,31 @@ describe('MobileNativeChatComposer', () => {
     })
 
     expect(Keyboard.dismiss).not.toHaveBeenCalled()
+  })
+
+  it('forgets picked skill identity after its token is removed and retyped', async () => {
+    const scope = 'removed-skill'
+    updateMobileNativeChatDraftInputs(scope, () => ({
+      images: [],
+      files: [],
+      skills: [{ name: 'review', path: '/remote/SKILL.md' }]
+    }))
+    await act(async () => {
+      renderer = create(
+        createElement(MobileNativeChatComposer, {
+          draftScopeKey: scope,
+          value: '$review draft',
+          onChangeText: vi.fn(),
+          onSend: async () => false,
+          sendSurfaceId: scope,
+          getSendCompletionGeneration: getCurrentSendCompletionGeneration
+        })
+      )
+    })
+    const input = () => findByHostType(renderer!.root, 'TextInput')
+    await act(async () => input().props.onChangeText('draft'))
+    await act(async () => input().props.onChangeText('$review draft'))
+    expect(readMobileNativeChatDraftInputs(scope).skills).toEqual([])
   })
 
   it('does not dismiss after dictation mutates the controlled draft', async () => {

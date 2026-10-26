@@ -2,6 +2,7 @@ import { setMobileNativeChatDraftText } from './mobile-native-chat-draft-store'
 import { appendReturnedDraftText } from '../../../../../src/shared/returned-draft-text'
 import {
   focusMobileNativeChatTextDestination,
+  pruneMobileNativeChatDraftSkills,
   registerMobileNativeChatTextDestination
 } from './mobile-native-chat-draft-inputs'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -136,7 +137,12 @@ export function MobileNativeChatComposer({
   const files = structured?.files ?? NO_FILES
   const menu = useMobileNativeChatComposerMenu({
     value,
-    onChangeText,
+    onChangeText: (text) => {
+      if (draftScopeKey) {
+        pruneMobileNativeChatDraftSkills(draftScopeKey, text)
+      }
+      onChangeText(text)
+    },
     onPickSkill,
     refuseCommand: editSession?.refuseCommand,
     agent,
