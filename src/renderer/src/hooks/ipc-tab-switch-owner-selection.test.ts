@@ -14,7 +14,8 @@ vi.mock('@/runtime/web-runtime-session-tab-lifecycle', () => ({
   activateWebRuntimeSessionTab: mocks.activateOnOwner
 }))
 vi.mock('@/runtime/web-runtime-session-environment', () => ({
-  isWebRuntimeSessionActive: (environmentId: string | null) => environmentId === 'env-1'
+  isWebRuntimeSessionActive: (environmentId: string | null) =>
+    environmentId === 'env-1' || environmentId === 'env-2'
 }))
 vi.mock('@/lib/worktree-runtime-owner', () => ({
   runtimeEnvironmentIdOrLocalUnlessTwin: () => mocks.ownerEnvironmentId()
@@ -32,7 +33,17 @@ import {
 
 const WT = 'repo::/srv/app'
 
-function serverWorkspaceStore() {
+function agentTab(executionHostId: string) {
+  return {
+    id: 'agent-tab',
+    entityId: 'session-1',
+    worktreeId: WT,
+    contentType: 'agent-session',
+    executionHostId
+  }
+}
+
+function serverWorkspaceStore(unifiedTabs: unknown[] = []) {
   return {
     activeWorktreeId: WT,
     activeTabType: 'terminal',
@@ -51,7 +62,7 @@ function serverWorkspaceStore() {
       ]
     },
     tabsByWorktree: { [WT]: [{ id: 'web-terminal-a' }, { id: 'web-terminal-b' }] },
-    unifiedTabsByWorktree: {},
+    unifiedTabsByWorktree: { [WT]: unifiedTabs },
     terminalLayoutsByTabId: { 'web-terminal-a': { activeLeafId: 'leaf-a' } },
     setActiveTab: vi.fn(),
     setActiveFile: vi.fn(),
@@ -110,15 +121,18 @@ describe('keyboard tab switches in a server workspace', () => {
     expect(mocks.activateOnOwner.mock.calls[0]?.[0]).toHaveProperty('expectedCurrentLocalTabId')
   })
 
-  it('tells the server about an agent chat switch', () => {
-    mocks.getState.mockReturnValue(serverWorkspaceStore())
+  it.each([
+    ['the workspace server', 'runtime:env-1', 'env-1'],
+    ['another server whose chat this workspace shows', 'runtime:env-2', 'env-2']
+  ])('tells %s about an agent chat switch', (_name, executionHostId, environmentId) => {
+    mocks.getState.mockReturnValue(serverWorkspaceStore([agentTab(executionHostId)]))
     mocks.navOrder.mockReturnValue([
       { type: 'agent-session', id: 'session-1', tabId: 'agent-tab' },
       { type: 'terminal', id: 'web-terminal-b', tabId: 'web-terminal-b' }
     ])
     expect(handleSwitchTabAcrossAllTypes(-1)).toBe(true)
     expect(mocks.runtimeRpc).toHaveBeenCalledWith(
-      { kind: 'environment', environmentId: 'env-1' },
+      { kind: 'environment', environmentId },
       'session.tabs.activate',
       expect.objectContaining({
         tabId: 'agent-session:session-1',
@@ -128,9 +142,8 @@ describe('keyboard tab switches in a server workspace', () => {
     )
   })
 
-  it('keeps an agent chat switch local in a workspace no server owns', () => {
-    mocks.ownerEnvironmentId.mockReturnValue(null)
-    mocks.getState.mockReturnValue(serverWorkspaceStore())
+  it('keeps a switch to a chat this machine hosts local', () => {
+    mocks.getState.mockReturnValue(serverWorkspaceStore([agentTab('local')]))
     mocks.navOrder.mockReturnValue([
       { type: 'agent-session', id: 'session-1', tabId: 'agent-tab' },
       { type: 'terminal', id: 'web-terminal-b', tabId: 'web-terminal-b' }
