@@ -104,6 +104,8 @@ describe('Slack prompt cards', () => {
     ])
     const card = await harness.card()
     expect(card.text).toBe(`<@${OWNER}> answered: Deny.`)
+    // The status follows at once, before the machine confirms anything.
+    expect(await harness.status()).toBe('Working on build-box…')
     expect(card.blocks.map((block: { type: string }) => block.type)).toEqual(['section', 'context'])
     expect(await harness.ephemerals()).toEqual([
       [`moved-on:${CARD}:${OWNER}`, 'Already answered or moved on.']
@@ -159,7 +161,11 @@ describe('Slack prompt cards', () => {
 
   it('says a Stop that reached a finished turn in plain words', async () => {
     const harness = await asked()
-    await harness.click({ messageTs: await harness.statusTs(), actionId: 'stop', value: String(TURN) })
+    await harness.click({
+      messageTs: await harness.statusTs(),
+      actionId: 'stop',
+      value: String(TURN)
+    })
     const [stop] = await harness.deliveries()
     await harness.machine.ack([
       {
@@ -359,6 +365,7 @@ describe('Slack prompt cards', () => {
     await harness.events(approval())
     expect((await harness.card()).blocks).toHaveLength(2)
     expect((await harness.card()).text).toBe(`<@${OWNER}> answered: Allow once.`)
+    expect(await harness.status()).toBe('Waiting for your answer in Orca on build-box.')
     await harness.click({ messageTs: ts, value: 'allow_once' })
     expect(await harness.deliveries()).toEqual([])
   })
@@ -374,5 +381,24 @@ describe('Slack prompt cards', () => {
     expect(await harness.deliveries()).toEqual([
       expect.objectContaining({ kind: 'answer', promptId, optionId: 'allow_once' })
     ])
+  })
+
+  it('offers no Stop, and takes none, from a machine that doesn’t bind a cancel to its turn', async () => {
+    const harness = await asked()
+    await harness.database.query(
+      `UPDATE connector_hosts SET hello = REPLACE(hello, ',"turnCancel"', '')`
+    )
+    await harness.events(approval())
+    const [row] = await harness.database.query(
+      'SELECT body FROM connector_slack_posts WHERE post_id = ?',
+      [`status:${EXTERNAL_ID}`]
+    )
+    expect(JSON.parse(String(row?.body)).blocks).toHaveLength(1)
+    await harness.click({
+      messageTs: await harness.statusTs(),
+      actionId: 'stop',
+      value: String(TURN)
+    })
+    expect(await harness.deliveries()).toEqual([])
   })
 })
