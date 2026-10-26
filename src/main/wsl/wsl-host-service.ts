@@ -47,6 +47,8 @@ export type WslHostConnector = {
   isReachable(distro: string, environmentId: string): Promise<boolean>
   /** The same check, telling a confirmed-stopped distro from an unconfirmed one. */
   reachability(distro: string, environmentId: string): Promise<WslHostReachability>
+  /** Liveness is deciding whether the distro stopped; its running list may be stale. */
+  isSettling(distro: string): boolean
   disconnect(distro: string): Promise<void>
   /** Ends the host's terminals, orcad and its terminal daemon; never boots a stopped distro. */
   stopServer(distro: string, environmentId: string): Promise<WslHostServerStop>
@@ -258,8 +260,13 @@ export class WslHostService {
     if (this.parked.has(environmentId)) {
       throw new Error(wslHostStoppedMessage(record.distro))
     }
-    // Unconfirmed (running list unreadable) or not visible: refuse rather than risk a boot.
-    if (reachability !== 'unreachable' || !this.visible.has(environmentId)) {
+    // Unconfirmed (running list unreadable, or possibly stale right after an exit) or not
+    // visible: refuse rather than risk a boot; liveness publishes the verdict.
+    if (
+      reachability !== 'unreachable' ||
+      !this.visible.has(environmentId) ||
+      connector.isSettling(record.distro)
+    ) {
       throw new Error(wslHostNotConnectedMessage(record.distro))
     }
     await connector.connect(record.distro)

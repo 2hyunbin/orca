@@ -148,6 +148,7 @@ export function createWslHostConnector(options: {
     isReachable: async (distro, environmentId) =>
       options.runtime.isReady?.(environmentId) ||
       (await coldReachability(distro, environmentId)) === 'available',
+    isSettling: (distro) => liveness.isSettling(distro),
     reachability: async (distro, environmentId) =>
       options.runtime.isReady?.(environmentId)
         ? 'available'

@@ -191,6 +191,20 @@ describe('WslOrcadLivenessSupervisor', () => {
     expect(h.statuses.at(-1)).toEqual({ state: 'ready', census: CENSUS })
   })
 
+  it('reports settling right after an exit, while the running list may be stale (E9)', async () => {
+    const h = harness({ visible: true })
+    await h.supervisor.connect('Ubuntu')
+    expect(h.supervisor.isSettling('Ubuntu')).toBe(false)
+    // WSL still lists the stopping distro as running.
+    h.state.running = { status: 'confirmed', distros: ['Ubuntu'] }
+    h.lastWatch().exit(1)
+    expect(h.supervisor.isSettling('Ubuntu')).toBe(true)
+    h.state.running = { status: 'confirmed', distros: [] }
+    await h.advance(60_000)
+    expect(h.statuses.at(-1)).toMatchObject({ state: 'distro-stopped' })
+    expect(h.supervisor.isSettling('Ubuntu')).toBe(false)
+  })
+
   it('never boots a stopped distro for background work; the gate resumes it once running', async () => {
     const h = harness({ visible: false })
     await h.supervisor.connect('Ubuntu')

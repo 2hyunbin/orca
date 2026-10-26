@@ -18,6 +18,8 @@ import {
 } from './wsl-orcad-liveness-monitor'
 import {
   disarmSupervised,
+  isSupervisedSettling,
+  noteSupervisedExit,
   newSupervised,
   WSL_ORCAD_HEARTBEAT_MS,
   type Supervised,
@@ -106,6 +108,11 @@ export class WslOrcadLivenessSupervisor {
     await Promise.all([...this.supervised.values()].map((entry) => this.stop(entry.distro)))
   }
 
+  /** E9: a poll must wait for this distro's verdict rather than reconnect (see the helper). */
+  isSettling(distro: string): boolean {
+    return isSupervisedSettling(this.supervised.get(wslDistroHolderKey(distro)), this.now())
+  }
+
   private entryFor(distro: string): Supervised {
     const key = wslDistroHolderKey(distro)
     const existing = this.supervised.get(key)
@@ -186,6 +193,7 @@ export class WslOrcadLivenessSupervisor {
     if (this.supervised.get(entry.key) !== entry || (this.suspended && trigger === 'heartbeat')) {
       return
     }
+    noteSupervisedExit(entry, trigger, this.now())
     if (entry.busy) {
       // An exit or a re-verify outranks a heartbeat.
       if (entry.pending === null || trigger !== 'heartbeat') {

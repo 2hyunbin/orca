@@ -52,6 +52,7 @@ function makeConnector(distros: WslHostDistroCandidate[]) {
     get: vi.fn((distro: string) => active.get(distro.toLowerCase()) ?? null),
     forgetPairingFailures: vi.fn((_environmentId: string) => {}),
     isReachable: vi.fn(async (name: string) => active.has(name.toLowerCase())),
+    isSettling: vi.fn((_distro: string) => false),
     reachability: vi.fn(async (name: string, _environmentId: string) =>
       active.has(name.toLowerCase())
         ? ('available' as const)
@@ -475,6 +476,28 @@ describe('WslHostService', () => {
     await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toThrow('Ubuntu was stopped')
     // Running again (started some other way) is not enough while parked: still no boot from a poll.
     connector.distro.state = 'running'
+    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toThrow('Ubuntu was stopped')
+    expect(connector.connect).not.toHaveBeenCalled()
+  })
+
+  it('right after a shutdown, a stale running list cannot make a poll reboot the distro', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    service.setVisibleWork(['wsl:ubuntu'])
+    await connector.disconnect('Ubuntu')
+    connector.connect.mockClear()
+    // The watch just exited and WSL still lists the stopping distro as running.
+    connector.distro.state = 'running'
+    connector.isSettling.mockReturnValue(true)
+    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toThrow('isn’t connected')
+    // Liveness then confirms the stop: the host parks, and polls keep refusing.
+    service.handleConnectionChange('Ubuntu', null, {
+      state: 'distro-stopped',
+      terminals: 'exited',
+      recovering: false
+    })
+    connector.isSettling.mockReturnValue(false)
     await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toThrow('Ubuntu was stopped')
     expect(connector.connect).not.toHaveBeenCalled()
   })
