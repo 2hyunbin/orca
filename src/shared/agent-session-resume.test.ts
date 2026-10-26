@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { agentProviderSessionForEnsure } from './agent-provider-session-ensure'
 import {
   agentProviderSessionsEqual,
   extractAgentProviderSession,
@@ -65,6 +66,11 @@ describe('agent session resume metadata', () => {
 
   it.each([
     ['claude', { key: 'session_id', id: 's1' }, ['claude', '--resume', 's1']],
+    [
+      'claude',
+      { key: 'session_id', id: 's1', effort: 'max' },
+      ['claude', '--effort', 'max', '--resume', 's1']
+    ],
     ['codebuddy', { key: 'session_id', id: 's1' }, ['codebuddy', '--resume', 's1']],
     ['codex', { key: 'session_id', id: 's1' }, ['codex', 'resume', 's1']],
     ['gemini', { key: 'session_id', id: 's1' }, ['gemini', '--resume', 's1']],
@@ -167,6 +173,28 @@ describe('agent session resume metadata', () => {
         transcriptPath: '/tmp/bad\npath.jsonl'
       })
     ).toEqual({ key: 'session_id', id: 'ok' })
+  })
+
+  it('round-trips a Claude effort level and drops values unsafe for argv', () => {
+    expect(normalizeAgentProviderSession({ key: 'session_id', id: 'ok', effort: 'xhigh' })).toEqual(
+      { key: 'session_id', id: 'ok', effort: 'xhigh' }
+    )
+    for (const effort of ['--model', 'high; rm -rf /', 'HIGH', '', 3]) {
+      expect(normalizeAgentProviderSession({ key: 'session_id', id: 'ok', effort })).toEqual({
+        key: 'session_id',
+        id: 'ok'
+      })
+    }
+  })
+
+  it('sends effort only to hosts whose ensure schema accepts it', () => {
+    const session = { key: 'session_id', id: 'ok', cwd: '/repo', effort: 'low' } as const
+    expect(agentProviderSessionForEnsure(session)).toEqual({ key: 'session_id', id: 'ok' })
+    expect(agentProviderSessionForEnsure(session, true)).toEqual({
+      key: 'session_id',
+      id: 'ok',
+      effort: 'low'
+    })
   })
 })
 

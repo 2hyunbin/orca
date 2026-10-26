@@ -34,6 +34,7 @@ export function sleepingRecordsEquivalentIgnoringCaptureTime(
     existing.worktreeId === next.worktreeId &&
     existing.agent === next.agent &&
     agentProviderSessionsEqual(existing.agent, existing.providerSession, next.providerSession) &&
+    existing.providerSession.effort === next.providerSession.effort &&
     existing.prompt === next.prompt &&
     existing.state === next.state &&
     existing.updatedAt === next.updatedAt &&
@@ -61,6 +62,8 @@ export function recoveryRecordMatches(
     existing.state === next.state &&
     agentMainAgentVerdict(existing) === agentMainAgentVerdict(next) &&
     agentProviderSessionsEqual(existing.agent, existing.providerSession, next.providerSession) &&
+    // Why: effort is not session identity, but a stale level would resume at the wrong effort.
+    existing.providerSession.effort === next.providerSession.effort &&
     launchConfigsEqual(existing.launchConfig, next.launchConfig)
   )
 }

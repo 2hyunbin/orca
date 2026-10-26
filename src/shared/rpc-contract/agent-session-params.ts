@@ -5,6 +5,7 @@ import {
   getAgentResumeArgv,
   hasUnsafeProviderSessionIdChars
 } from '../agent-session-resume'
+import { readAgentEffortLevel } from '../agent-effort-level'
 import { parseAgentSessionOperationTimestamp } from '../agent-session-host-authority'
 import type {
   RuntimeCreateAgentSessionRequest,
@@ -110,6 +111,10 @@ export const ProviderSession = z
           Buffer.byteLength(value, 'utf8') <= MAX_TRANSCRIPT_PATH_BYTES,
         'Invalid transcript path'
       )
+      .optional(),
+    effort: z
+      .string()
+      .refine((value) => readAgentEffortLevel(value) !== undefined, 'Invalid effort level')
       .optional()
   })
   .strict()
