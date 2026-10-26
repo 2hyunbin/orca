@@ -158,12 +158,31 @@ describe('removing a project while its paired server is unreachable', () => {
     expect(hostCalls.filter((method) => method === 'repo.rm')).toEqual(['repo.rm'])
   })
 
-  it('keeps records across a disconnect or re-pair, dropping them only once the server is forgotten', async () => {
+  it('keeps a record across disconnect, reconnect and re-pair, then replays it', async () => {
     seedPendingRuntimeRepoRemovals([{ environmentId: 'env-1', repoId: 'app', requestedAt: 1 }])
+    const disconnected = { ...readySnapshot(), transport: 'disconnected' as const }
 
-    observeRuntimeHostStatusForPendingRemovals({ ...readySnapshot(), retired: true })
+    // Disconnect retires the status owner; a re-pair retires it again under a new revision.
+    observeRuntimeHostStatusForPendingRemovals(disconnected)
+    observeRuntimeHostStatusForPendingRemovals({ ...disconnected, retired: true })
+    observeRuntimeHostStatusForPendingRemovals({
+      ...disconnected,
+      pairingRevision: 2,
+      retired: true
+    })
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(listPendingRuntimeRepoRemovals('env-1')).toHaveLength(1)
+
+    reachable = true
+    observeRuntimeHostStatusForPendingRemovals({ ...readySnapshot(), pairingRevision: 2 })
+    await vi.waitFor(() => expect(listPendingRuntimeRepoRemovals('env-1')).toEqual([]), {
+      timeout: 20_000
+    })
+    expect(hostCalls.filter((method) => method === 'repo.rm')).toEqual(['repo.rm'])
+  })
+
+  it('drops records only once the server is forgotten', async () => {
+    seedPendingRuntimeRepoRemovals([{ environmentId: 'env-1', repoId: 'app', requestedAt: 1 }])
 
     vi.mocked(window.api.runtimeEnvironments.list).mockResolvedValue([])
     observeRuntimeHostStatusForPendingRemovals({ ...readySnapshot(), retired: true })

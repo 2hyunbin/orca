@@ -2,6 +2,7 @@ import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { readIpcErrorMessage } from '@/lib/ipc-error'
 import { ERROR_TOAST_DURATION } from './repo-state'
+import { hasRuntimeRpcErrorCode } from '../../../../shared/runtime-rpc-error-code'
 
 /** An unreachable paired server gets a local-removal action instead of a dead-end error. */
 export function toastProjectRemovalFailure(
@@ -11,12 +12,17 @@ export function toastProjectRemovalFailure(
   toast.error(
     translate('auto.store.slices.repos.removeProjectFailed', 'Failed to remove project'),
     {
-      description: options.hostUnreachable
-        ? translate(
-            'auto.store.slices.repos.removeProjectHostUnreachable',
-            'Its server can’t be reached. Remove it from this desktop now, and Orca removes it from the server when it reconnects.'
-          )
-        : (readIpcErrorMessage(error) ?? String(error)),
+      description: !options.hostUnreachable
+        ? (readIpcErrorMessage(error) ?? String(error))
+        : hasRuntimeRpcErrorCode(error, 'runtime_manually_disconnected')
+          ? translate(
+              'auto.store.slices.repos.removeProjectHostDisconnected',
+              'Its server is disconnected. Remove it from this desktop now, and Orca removes it from the server when you reconnect.'
+            )
+          : translate(
+              'auto.store.slices.repos.removeProjectHostUnreachable',
+              'Its server can’t be reached. Remove it from this desktop now, and Orca removes it from the server when it reconnects.'
+            ),
       duration: ERROR_TOAST_DURATION,
       ...(options.hostUnreachable
         ? {
