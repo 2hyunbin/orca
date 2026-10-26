@@ -60,7 +60,7 @@ export function makeConnector(distros: WslHostDistroCandidate[]) {
       })
     ),
     releaseHolder: vi.fn(async (_distro: string) => {}),
-    adoptHolders: vi.fn(async () => {}),
+    adoptHolders: vi.fn(async (_isWanted: (distro: string) => boolean) => {}),
     dispose: vi.fn(async () => {})
   } satisfies WslHostConnector
   return Object.assign(connector, { distro })

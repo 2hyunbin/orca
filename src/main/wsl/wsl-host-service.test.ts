@@ -739,15 +739,25 @@ describe('WslHostService', () => {
     expect(wakeRememberedWslHosts(userDataPath, vi.fn())).toEqual([])
   })
 
-  it('adopts holders at startup only when a WSL host exists', async () => {
+  it('keeps the startup holders of its hosts and releases orphans', async () => {
     const connector = makeConnector([UBUNTU])
     const service = makeService(connector)
-    await service.start()
-    expect(connector.adoptHolders).not.toHaveBeenCalled()
-
     await service.add({ distro: 'Ubuntu' })
     await service.start()
-    expect(connector.adoptHolders).toHaveBeenCalledTimes(1)
+    const [isWanted] = connector.adoptHolders.mock.calls[0]
+    expect(isWanted('ubuntu')).toBe(true)
+    // A failed add or remove left a holder for a distro that is no longer a host.
+    expect(isWanted('Debian')).toBe(false)
+  })
+
+  it('releases every startup holder while WSL hosts are off', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    enabled = false
+    await service.start()
+    const [isWanted] = connector.adoptHolders.mock.calls[0]
+    expect(isWanted('Ubuntu')).toBe(false)
   })
 
   it.each([
