@@ -116,7 +116,7 @@ export function createLoadingProcessOwner(childProcess, profile) {
       const survivors = entries.filter(stillOwned)
       if (survivors.length > 0) {
         throw new Error(
-          `Benchmark processes survived cleanup: ${survivors.map((entry) => entry.pid)}`
+          `Benchmark processes survived cleanup: ${survivors.map((entry) => entry.pid).join(', ')}`
         )
       }
       if (captureError) {
