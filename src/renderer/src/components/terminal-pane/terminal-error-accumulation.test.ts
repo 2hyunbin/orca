@@ -102,8 +102,10 @@ describe('pane terminal errors', () => {
     let errors = appendPaneTerminalError({}, 1, 'Pane one failed.')
     errors = appendPaneTerminalError(errors, 2, 'Pane two failed.')
 
-    expect(terminalErrorForPane('Paste failed.', errors, 1)).toBe('Paste failed.\nPane one failed.')
-    expect(terminalErrorForPane(null, errors, 2)).toBe('Pane two failed.')
+    expect(terminalErrorForPane('Paste failed.', errors, 1)?.error).toBe(
+      'Paste failed.\nPane one failed.'
+    )
+    expect(terminalErrorForPane(null, errors, 2)?.error).toBe('Pane two failed.')
     expect(terminalErrorForPane(null, errors, 3)).toBeNull()
   })
 
@@ -114,8 +116,8 @@ describe('pane terminal errors', () => {
 
     const cleared = clearPaneTerminalError(errors, 1, 'Remote terminal was closed.')
 
-    expect(terminalErrorForPane(null, cleared, 1)).toBe('Paste failed.')
-    expect(terminalErrorForPane(null, cleared, 2)).toBe('Remote terminal was closed.')
+    expect(terminalErrorForPane(null, cleared, 1)?.error).toBe('Paste failed.')
+    expect(terminalErrorForPane(null, cleared, 2)?.error).toBe('Remote terminal was closed.')
   })
 
   it('maps reconnect-owned lines without changing unrelated pane messages', () => {
@@ -125,8 +127,8 @@ describe('pane terminal errors', () => {
 
     const mapped = mapPaneTerminalErrors(errors, stripSshReconnectOwnedErrorLines)
 
-    expect(terminalErrorForPane(null, mapped, 1)).toBe(MULTILINE_ERROR)
-    expect(terminalErrorForPane(null, mapped, 2)).toBe('Paste failed.')
+    expect(terminalErrorForPane(null, mapped, 1)?.error).toBe(MULTILINE_ERROR)
+    expect(terminalErrorForPane(null, mapped, 2)?.error).toBe('Paste failed.')
   })
 
   it('bounds distinct errors retained for one pane', () => {
@@ -135,7 +137,7 @@ describe('pane terminal errors', () => {
       errors = appendPaneTerminalError(errors, 1, `Failure ${index}`)
     }
 
-    expect(terminalErrorForPane(null, errors, 1)?.split('\n')).toEqual(
+    expect(terminalErrorForPane(null, errors, 1)?.error.split('\n')).toEqual(
       Array.from({ length: 8 }, (_, index) => `Failure ${index + 12}`)
     )
   })
@@ -148,7 +150,7 @@ describe('pane terminal errors', () => {
     )
     errors = appendPaneTerminalError(errors, 1, 'y'.repeat(MAX_TERMINAL_ERROR_CHARS + 500))
 
-    const visible = terminalErrorForPane(null, errors, 1)
+    const visible = terminalErrorForPane(null, errors, 1)?.error
 
     expect(visible?.split('\n').length).toBeLessThanOrEqual(MAX_TERMINAL_ERROR_LINES)
     expect(visible?.length).toBeLessThanOrEqual(MAX_TERMINAL_ERROR_CHARS)

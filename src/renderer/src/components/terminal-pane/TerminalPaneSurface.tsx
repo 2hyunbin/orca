@@ -198,13 +198,14 @@ export function TerminalPaneSurface({
       {visibleTerminalError && isActive && !showSshReconnectOverlay && activePane
         ? createPortal(
             <TerminalErrorToast
-              error={visibleTerminalError}
+              error={visibleTerminalError.error}
+              resourceLimit={visibleTerminalError.resourceLimit}
               agentId={activeAgentId}
               paneOnClient={paneOnClient}
               onDismiss={dismissTerminalError}
               onRestartDaemon={() => daemonActions.setPending('restart')}
               onRetry={
-                isPaneOwnerRecoveryError(visibleTerminalError)
+                isPaneOwnerRecoveryError(visibleTerminalError.error)
                   ? () =>
                       Promise.resolve(
                         paneTransportsRef.current.get(activePane.id)?.retryRecovery?.() ?? false
