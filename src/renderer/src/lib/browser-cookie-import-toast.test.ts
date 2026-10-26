@@ -154,13 +154,13 @@ describe('emitBrowserCookieImportToast', () => {
         importedCookies: 0,
         totalCookies: 5,
         skippedCookies: 5,
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: simulate missing/future nested cause values from an unvalidated RPC peer.
         warning: {
           code: 'cookies-undecryptable',
           failedCookies: 3,
           reason: 'linux-keyring-unavailable',
           otherFailedCookies: 2,
           keyringFailure
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: simulate missing/future nested cause values from an unvalidated RPC peer.
         } as unknown as BrowserCookieImportSummary['warning']
       },
       'Imported 0 cookies.',
