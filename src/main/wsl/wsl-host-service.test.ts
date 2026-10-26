@@ -422,6 +422,46 @@ describe('WslHostService', () => {
     expect(connector.connect).not.toHaveBeenCalled()
   })
 
+  it('keeps a confirmed-stopped host down for polls until the user refocuses or reconnects it (E9)', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    service.setVisibleWork(['wsl:ubuntu'])
+    await connector.disconnect('Ubuntu')
+    service.handleConnectionChange('Ubuntu', null, {
+      state: 'distro-stopped',
+      terminals: 'exited',
+      recovering: false
+    })
+    connector.connect.mockClear()
+
+    // The focused host's background polls get a refusal, not a boot.
+    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toThrow('Ubuntu was stopped')
+    service.setVisibleWork(['wsl:ubuntu'])
+    expect(connector.connect).not.toHaveBeenCalled()
+
+    // Switching away and back is the user acting on it.
+    service.setVisibleWork([])
+    service.setVisibleWork(['wsl:ubuntu'])
+    await vi.waitFor(() => expect(connector.connect).toHaveBeenCalledTimes(1))
+  })
+
+  it('lifts a park on an explicit Connect', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    service.setVisibleWork(['wsl:ubuntu'])
+    await connector.disconnect('Ubuntu')
+    service.handleConnectionChange('Ubuntu', null, {
+      state: 'distro-stopped',
+      terminals: 'exited',
+      recovering: false
+    })
+    await service.connect('wsl:ubuntu')
+    await connector.disconnect('Ubuntu')
+    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).resolves.toBeUndefined()
+  })
+
   it('stops tracking a host before stopping its server, and never starts anything for it after', async () => {
     const connector = makeConnector([UBUNTU])
     const service = makeService(connector)

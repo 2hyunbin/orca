@@ -1,4 +1,8 @@
-/** C7: persist WSL hosts and connect for explicit Add/Connect or visible project/terminal demand. Never boot stopped distros for background work. */
+/**
+ * C7/E9: persist WSL hosts and connect them. A stopped distro boots only for an explicit
+ * Add/Connect, or when its host becomes visible (focused). After a confirmed stop the host is
+ * parked: polls and visible work keep it down until the user acts or the distro runs again.
+ */
 import { errorMessage } from '../../shared/error-message'
 import { removeWslHostEnvironment } from '../../shared/runtime-environment-wsl-host-store'
 import {
@@ -18,6 +22,7 @@ import { persistWslHostConnection, toWslHostStatus } from './wsl-host-connection
 import {
   sameWslDistro,
   wslHostNotConnectedMessage,
+  wslHostStoppedMessage,
   WSL_HOST_REMOVING_MESSAGE,
   wslHostRunRefusal
 } from './wsl-host-add-admission'
@@ -63,6 +68,7 @@ export class WslHostService {
   private readonly statuses = new Map<string, WslHostStatus>()
   private readonly adding = new Map<string, Promise<WslHostAddResult>>()
   private visible = new Set<string>()
+  private readonly parked = new Set<string>()
   private readonly removing = new Set<string>()
   // Invalidate in-flight Adds when disabled so they cannot later publish ready hosts.
   private disableGeneration = 0
@@ -94,6 +100,11 @@ export class WslHostService {
     }
     if (connection && persistWslHostConnection(this.deps.userDataPath(), record, connection)) {
       this.deps.pairingChanged(record.environmentId)
+    }
+    if (status.state === 'distro-stopped') {
+      this.parked.add(record.environmentId)
+    } else if (status.state === 'ready') {
+      this.parked.delete(record.environmentId)
     }
     this.setStatus(record, status, connection)
     if (status.state === 'ready' && connection) {
@@ -171,6 +182,7 @@ export class WslHostService {
       }
       removeWslHostEnvironment(this.deps.userDataPath(), environmentId)
       this.visible.delete(environmentId)
+      this.parked.delete(environmentId)
     } finally {
       // Failed removal must leave the host usable and allow another removal attempt.
       this.removing.delete(environmentId)
@@ -213,6 +225,7 @@ export class WslHostService {
       throw new Error(refusal?.message ?? WSL_HOST_REMOVING_MESSAGE)
     }
     this.wsl.forgetPairingFailures?.(environmentId)
+    this.parked.delete(environmentId)
     await this.wsl.connect(record.distro, options)
   }
 
@@ -230,7 +243,28 @@ export class WslHostService {
     if (!this.visible.has(environmentId)) {
       throw new Error(wslHostNotConnectedMessage(record.distro))
     }
+    if (this.parked.has(environmentId)) {
+      throw new Error(wslHostStoppedMessage(record.distro))
+    }
     await connector.connect(record.distro)
+  }
+
+  /** E9: an enabled automation came due with the host off; boots the distro once, lifting a park. */
+  async wakeForAutomation(environmentId: string): Promise<void> {
+    const record = this.recordForEnvironment(environmentId)
+    if (!record || !this.connector || !this.canRun() || this.removing.has(environmentId)) {
+      return
+    }
+    this.parked.delete(environmentId)
+    await this.connector.connect(record.distro)
+  }
+
+  /** Whether the host's server answers now; never starts a stopped distro. */
+  async isConnected(environmentId: string): Promise<boolean> {
+    const record = this.recordForEnvironment(environmentId)
+    return record && this.connector
+      ? this.connector.isReachable(record.distro, environmentId)
+      : false
   }
 
   /** Whether anything may still be started for this distro (spawn guard). */
@@ -246,6 +280,8 @@ export class WslHostService {
     for (const environmentId of this.visible) {
       const record = !previous.has(environmentId) && this.recordForEnvironment(environmentId)
       if (record) {
+        // Focusing the host is the user acting on it, which lifts a park.
+        this.parked.delete(environmentId)
         this.ensureForRuntimeCall(environmentId).catch((error: unknown) => {
           console.warn(`[wsl-hosts] Could not connect to ${record.distro}:`, error)
         })
