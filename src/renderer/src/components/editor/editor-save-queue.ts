@@ -178,7 +178,8 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
           if (discarded()) {
             throw new EditorSaveDiscardedError()
           }
-        }
+        },
+        liveFile.terminalArtifactGrantId
       )
     } catch (error) {
       // Clear failed-write stamps so they cannot suppress real external changes.

@@ -9,6 +9,7 @@ import type { FileWriteResult } from '../../../../shared/file-write-disk-precond
 import type { LocalFileAccess } from '../../../../shared/local-file-access'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
 import { writeRuntimeFile } from '@/runtime/runtime-file-mutation-client'
+import { writeRuntimeTerminalArtifactFile } from '@/runtime/runtime-terminal-artifact-write'
 
 /** Only overwrite grants disk-conflict consent; convert grants non-UTF-8 conversion consent. Other explicit saves remain guarded. */
 export type EditorSaveTrigger = 'autosave' | 'user' | 'convert' | 'restart' | 'overwrite'
@@ -113,22 +114,33 @@ export function writeEditorSave(
   content: string,
   access: LocalFileAccess | undefined,
   write: EditorSaveWrite,
-  beforeSend?: () => void
+  beforeSend?: () => void,
+  terminalArtifactGrantId?: string
 ): Promise<FileWriteResult> {
-  return writeRuntimeFile(
-    context,
-    filePath,
-    content,
-    access,
+  const precondition =
     write.kind === 'guarded'
       ? {
           expectedSignature: write.signature,
           allowMissing: write.allowMissing,
           ...(write.requireLosslessUtf8 ? { requireLosslessUtf8: true } : {})
         }
-      : undefined,
-    beforeSend
-  )
+      : undefined
+  if (terminalArtifactGrantId) {
+    // Why: a granted host file must never fall through to a write of this computer's same path.
+    if (context.target.kind !== 'environment' || !context.worktreeId) {
+      throw new Error('This file belongs to a host that is no longer this tab’s owner.')
+    }
+    return writeRuntimeTerminalArtifactFile({
+      target: context.target,
+      worktreeId: context.worktreeId,
+      absolutePath: filePath,
+      grantId: terminalArtifactGrantId,
+      content,
+      precondition,
+      beforeSend
+    })
+  }
+  return writeRuntimeFile(context, filePath, content, access, precondition, beforeSend)
 }
 
 // Release both markers when the pending Keep My Edits read settles.

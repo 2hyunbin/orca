@@ -79,6 +79,7 @@ export async function openQuickOpenFile(
     }
   }
   let terminalArtifactGrantId: string | undefined
+  let grantReadOnly = false
   if (target.kind === 'environment' && isAbsolute) {
     let literal: RuntimeTerminalPathResolution | undefined
     if (rawQuery && rawQuery.trim() !== selectedPath) {
@@ -104,6 +105,7 @@ export async function openQuickOpenFile(
     if (resolved.openTarget?.kind === 'absolute-file') {
       // Why: a host file outside its workspaces is readable only through the grant it issued.
       terminalArtifactGrantId = resolved.openTarget.grantId
+      grantReadOnly = resolved.openTarget.readOnly === true
       filePath = resolved.openTarget.absolutePath
       relativePath = filePath
     } else if (
@@ -142,7 +144,9 @@ export async function openQuickOpenFile(
     ...(route.connectionId && getRelativePathInsideRoot(filePath, root) === null
       ? { externalSshTargetId: route.connectionId }
       : {}),
-    ...(terminalArtifactGrantId ? { terminalArtifactGrantId, readOnly: true } : {}),
+    ...(terminalArtifactGrantId
+      ? { terminalArtifactGrantId, ...(grantReadOnly ? { readOnly: true } : {}) }
+      : {}),
     language: detectLanguage(filePath),
     mode: 'edit'
   })

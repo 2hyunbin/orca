@@ -29,7 +29,7 @@ installTerminalLinkTestEnvironment(doubles)
 
 const IMAGE = '/tmp/orca-preview.png'
 
-function hostGrants(): void {
+function hostGrants(readOnly?: true): void {
   runtimeEnvironmentCallMock.mockResolvedValue({
     id: 'rpc-1',
     ok: true,
@@ -39,7 +39,13 @@ function hostGrants(): void {
       absolutePath: IMAGE,
       exists: true,
       isDirectory: false,
-      openTarget: { kind: 'absolute-file', provider: 'local', absolutePath: IMAGE, grantId: 'g-1' }
+      openTarget: {
+        kind: 'absolute-file',
+        provider: 'local',
+        absolutePath: IMAGE,
+        grantId: 'g-1',
+        ...(readOnly ? { readOnly } : {})
+      }
     },
     _meta: { runtimeId: 'remote-runtime' }
   })
@@ -75,9 +81,7 @@ describe('a paired-server terminal path outside its workspace', () => {
     expect(window.api.shell.pathExists).not.toHaveBeenCalled()
   })
 
-  it('opens the linked file through its grant', async () => {
-    hostGrants()
-
+  async function clickLink(): Promise<void> {
     const links = await provideLinks()
     // Why a prototype-less object: node has no MouseEvent; activation reads only these fields.
     const click: MouseEvent = Object.assign(Object.create(null), {
@@ -88,15 +92,33 @@ describe('a paired-server terminal path outside its workspace', () => {
     })
     links[0]!.activate(click, IMAGE)
     await flushDoubleRaf()
+  }
+
+  // Why editable: the caller may already write this file through a terminal on the host.
+  it('opens the linked file editable through its grant', async () => {
+    hostGrants()
+
+    await clickLink()
 
     expect(statMock).not.toHaveBeenCalled()
     expect(openFileMock).toHaveBeenCalledWith(
       expect.objectContaining({
         filePath: IMAGE,
         runtimeEnvironmentId: 'env-1',
-        readOnly: true,
         terminalArtifactGrantId: 'g-1'
       }),
+      { forceContentReload: true }
+    )
+    expect(openFileMock.mock.calls[0]?.[0]).not.toHaveProperty('readOnly')
+  })
+
+  it('keeps a read-only grant from an older host read-only', async () => {
+    hostGrants(true)
+
+    await clickLink()
+
+    expect(openFileMock).toHaveBeenCalledWith(
+      expect.objectContaining({ terminalArtifactGrantId: 'g-1', readOnly: true }),
       { forceContentReload: true }
     )
   })
