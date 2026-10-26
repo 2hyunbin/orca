@@ -469,7 +469,7 @@ describe('updater', () => {
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
     // Defer startup checks to inspect initial state without racing an RC check.
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     const setupFeedUrlCalls = autoUpdaterMock.setFeedURL.mock.calls.length
     expect(autoUpdaterMock.allowPrerelease).not.toBe(true)
 
@@ -497,7 +497,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
 
     checkForUpdatesFromMenu({ includePerfPrerelease: true })
 
@@ -524,7 +524,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     const setupFeedUrlCalls = autoUpdaterMock.setFeedURL.mock.calls.length
 
     checkForUpdatesFromMenu({ includePerfPrerelease: true })
@@ -555,7 +555,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
 
     checkForUpdatesFromMenu({ includePerfPrerelease: true })
 
@@ -589,7 +589,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     checkForUpdatesFromMenu({ includePrerelease: true })
 
     await vi.waitFor(() => {
@@ -611,7 +611,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     const initialFeedUrlCalls = autoUpdaterMock.setFeedURL.mock.calls.length
 
     checkForUpdatesFromMenu()

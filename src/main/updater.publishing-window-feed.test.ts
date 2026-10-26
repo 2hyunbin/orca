@@ -42,7 +42,7 @@ describe('updater', () => {
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
     const mainWindow = updaterMainWindow(vi.fn())
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
 
     expect(autoUpdaterMock.setFeedURL).toHaveBeenLastCalledWith({
       provider: 'generic',
@@ -72,7 +72,7 @@ describe('updater', () => {
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
     const mainWindow = updaterMainWindow(vi.fn())
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
 
     checkForUpdatesFromMenu()
 
@@ -94,7 +94,7 @@ describe('updater', () => {
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
     const mainWindow = updaterMainWindow(vi.fn())
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
 
     checkForUpdatesFromMenu()
 
@@ -119,7 +119,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     const feedCallsBeforeCheck = autoUpdaterMock.setFeedURL.mock.calls.length
     checkForUpdatesFromMenu()
 
@@ -151,7 +151,7 @@ describe('updater', () => {
     const mainWindow = updaterMainWindow(sendMock)
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     checkForUpdatesFromMenu()
 
     await vi.waitFor(() => {
@@ -210,7 +210,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     const feedCallsBeforeCheck = autoUpdaterMock.setFeedURL.mock.calls.length
     checkForUpdatesFromMenu()
 
@@ -262,7 +262,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
 
     checkForUpdatesFromMenu()
 
@@ -301,7 +301,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => null,
       setLastUpdateCheckAt
     })
@@ -356,7 +356,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => null,
       setLastUpdateCheckAt
     })
@@ -399,7 +399,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => null,
       setLastUpdateCheckAt
     })
@@ -472,7 +472,7 @@ describe('updater', () => {
 
       const { setupAutoUpdater } = await loadUpdaterModule()
 
-      setupAutoUpdater(() => mainWindow as never, {
+      setupAutoUpdater(() => mainWindow, {
         getLastUpdateCheckAt: () => Date.now(),
         getPendingUpdateNudgeId: () => pendingNudgeId,
         getDismissedUpdateNudgeId: () => null,
@@ -541,7 +541,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => Date.now(),
       getPendingUpdateNudgeId: () => pendingNudgeId,
       getDismissedUpdateNudgeId: () => null,
@@ -608,7 +608,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, dismissNudge } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => Date.now(),
       getPendingUpdateNudgeId: () => pendingNudgeId,
       getDismissedUpdateNudgeId: () => null,

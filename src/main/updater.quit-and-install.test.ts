@@ -69,7 +69,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu, downloadUpdate } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     checkForUpdatesFromMenu()
 
     await vi.waitFor(() => {
@@ -107,7 +107,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu, downloadUpdate } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     checkForUpdatesFromMenu()
     await vi.waitFor(() => {
       expect(sendMock).toHaveBeenCalledWith('updater:status', {
@@ -148,7 +148,7 @@ describe('updater', () => {
     const mainWindow = updaterMainWindow(vi.fn())
     const { setupAutoUpdater, quitAndInstall } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never)
+    setupAutoUpdater(() => mainWindow)
     quitAndInstall()
 
     expect(autoUpdaterMock.quitAndInstall).not.toHaveBeenCalled()
@@ -171,7 +171,7 @@ describe('updater', () => {
     const mainWindow = updaterMainWindow(vi.fn())
     const { setupAutoUpdater, quitAndInstall } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { onBeforeQuit })
+    setupAutoUpdater(() => mainWindow, { onBeforeQuit })
     quitAndInstall()
 
     await vi.advanceTimersByTimeAsync(100)
@@ -191,7 +191,7 @@ describe('updater', () => {
     const mainWindow = updaterMainWindow(sendMock)
     const { setupAutoUpdater, quitAndInstall, isQuittingForUpdate } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       onBeforeQuit,
       onBeforeQuitFailure: 'abort'
     })
@@ -219,7 +219,7 @@ describe('updater', () => {
     const mainWindow = updaterMainWindow(vi.fn())
     const { setupAutoUpdater, quitAndInstall } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { onBeforeQuit })
+    setupAutoUpdater(() => mainWindow, { onBeforeQuit })
     quitAndInstall()
 
     await vi.advanceTimersByTimeAsync(100)
@@ -250,7 +250,7 @@ describe('updater', () => {
     const mainWindow = updaterMainWindow(sendMock)
     const { setupAutoUpdater, quitAndInstall, isQuittingForUpdate } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       onBeforeQuit,
       onBeforeQuitFailure: 'abort'
     })
@@ -280,7 +280,7 @@ describe('updater', () => {
     const mainWindow = updaterMainWindow(vi.fn())
     const { setupAutoUpdater, quitAndInstall } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never)
+    setupAutoUpdater(() => mainWindow)
     quitAndInstall()
     quitAndInstall()
 
@@ -302,7 +302,7 @@ describe('updater', () => {
     const mainWindow = updaterMainWindow(vi.fn())
     const { setupAutoUpdater, quitAndInstall } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { onBeforeQuit })
+    setupAutoUpdater(() => mainWindow, { onBeforeQuit })
     quitAndInstall()
 
     await vi.advanceTimersByTimeAsync(100)
@@ -333,7 +333,7 @@ describe('updater', () => {
     const mainWindow = updaterMainWindow(sendMock)
     const { setupAutoUpdater, quitAndInstall, isQuittingForUpdate } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never)
+    setupAutoUpdater(() => mainWindow)
     quitAndInstall()
 
     await vi.advanceTimersByTimeAsync(100)
@@ -366,7 +366,7 @@ describe('updater', () => {
     const { setupAutoUpdater, checkForUpdatesFromMenu, quitAndInstall, isQuittingForUpdate } =
       await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     checkForUpdatesFromMenu()
 
     await vi.waitFor(() => {
@@ -424,7 +424,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu, quitAndInstall } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     checkForUpdatesFromMenu()
 
     await vi.waitFor(() => {
@@ -468,7 +468,7 @@ describe('updater', () => {
     const mainWindow = updaterMainWindow(vi.fn())
     const { setupAutoUpdater, quitAndInstall, isQuittingForUpdate } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never)
+    setupAutoUpdater(() => mainWindow)
     quitAndInstall()
 
     await vi.advanceTimersByTimeAsync(100)
@@ -492,7 +492,7 @@ describe('updater', () => {
     const mainWindow = updaterMainWindow(sendMock)
     const { setupAutoUpdater, quitAndInstall, isQuittingForUpdate } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       onBeforeQuit,
       getLastUpdateCheckAt: () => Date.now()
     })

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { updaterMainWindow } from '../updater-test-main-window'
+import { SCHEMA_VERSION } from '../../shared/constants'
 import { LOCAL_BUILD_COMPATIBILITY_CONTRACT } from '../../shared/local-build-compatibility-contract'
 import type { LocalBuildCandidate } from './local-build-candidate'
 
@@ -25,9 +26,12 @@ describe('local build dialog parents', () => {
     showMessageBox.mockResolvedValue({ response: 0 })
   })
 
-  it.each(['headless', 'closed', 'successor'] as const)(
-    'resolves each dialog parent when manifest loading finishes: %s',
-    async (mode) => {
+  const cases = (['live', 'headless', 'closed', 'successor'] as const).flatMap((mode) =>
+    (['confirm', 'cancel', 'reject'] as const).map((outcome) => ({ mode, outcome }))
+  )
+  it.each(cases)(
+    'resolves each dialog parent and preserves $outcome result: $mode',
+    async ({ mode, outcome }) => {
       let destroyed = false
       const oldWindow = updaterMainWindow(vi.fn(), () => destroyed)
       const successor = updaterMainWindow(vi.fn())
@@ -61,19 +65,49 @@ describe('local build dialog parents', () => {
       )
       const selection = chooseLocalBuild(() => currentWindow)
       await vi.waitFor(() => expect(loadCandidate).toHaveBeenCalledOnce())
-      destroyed = true
+      destroyed = mode !== 'live'
       if (mode === 'successor') {
         currentWindow = successor
       }
+      const failure = new Error('Native confirmation failed')
+      if (outcome === 'reject') {
+        showMessageBox.mockRejectedValue(failure)
+      } else {
+        showMessageBox.mockResolvedValue({ response: outcome === 'confirm' ? 0 : 1 })
+      }
       finishLoading(candidate)
-      expect(await selection).toBe(candidate)
-      const options = expect.objectContaining({ title: 'Choose a Local Orca Build' })
+      if (outcome === 'reject') {
+        await expect(selection).rejects.toBe(failure)
+      } else {
+        expect(await selection).toBe(outcome === 'confirm' ? candidate : null)
+      }
+      expect(loadCandidate).toHaveBeenCalledExactlyOnceWith('/tmp/local-build.yml', process.arch)
+      expect(candidate.close).toHaveBeenCalledTimes(outcome === 'confirm' ? 0 : 1)
+      const options = {
+        title: 'Choose a Local Orca Build',
+        buttonLabel: 'Choose Build',
+        properties: ['openFile'],
+        filters: [{ name: 'Orca update manifest', extensions: ['yml'] }]
+      }
       expect(showOpenDialog).toHaveBeenCalledWith(
         ...(mode === 'headless' ? [options] : [oldWindow, options])
       )
-      const confirmation = expect.objectContaining({ title: 'Use Local Orca Build?' })
+      const confirmation = {
+        type: 'question',
+        title: 'Use Local Orca Build?',
+        message: '1.0.51 → 1.0.52',
+        detail: `No live terminals need to reconnect.\nWorkspace cards and settings are compatible with state schema ${SCHEMA_VERSION}.\n\nThe build must have the same valid code signature as Orca or installation will stop.`,
+        buttons: ['Use Local Build', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true
+      }
       expect(showMessageBox).toHaveBeenCalledWith(
-        ...(mode === 'successor' ? [successor, confirmation] : [confirmation])
+        ...(mode === 'successor'
+          ? [successor, confirmation]
+          : mode === 'live'
+            ? [oldWindow, confirmation]
+            : [confirmation])
       )
     }
   )

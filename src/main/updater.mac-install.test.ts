@@ -239,7 +239,7 @@ describe('updater mac install handoff', () => {
       getMacUpdateRunningInstancesMock.mockResolvedValue([9654])
       const { setupAutoUpdater, downloadUpdate } = await loadUpdaterModule()
 
-      setupAutoUpdater(() => mainWindow as never)
+      setupAutoUpdater(() => mainWindow)
       await vi.waitFor(() => {
         expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1)
       })
@@ -350,7 +350,7 @@ describe('updater mac install handoff', () => {
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       const { setupAutoUpdater, downloadUpdate, quitAndInstall } = await loadUpdaterModule()
 
-      setupAutoUpdater(() => mainWindow as never, { onBeforeQuit })
+      setupAutoUpdater(() => mainWindow, { onBeforeQuit })
       await vi.waitFor(() => {
         expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1)
       })
@@ -434,7 +434,7 @@ describe('updater mac install handoff', () => {
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       const { setupAutoUpdater, downloadUpdate } = await loadUpdaterModule()
 
-      setupAutoUpdater(() => mainWindow as never)
+      setupAutoUpdater(() => mainWindow)
       await vi.waitFor(() => {
         expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1)
       })

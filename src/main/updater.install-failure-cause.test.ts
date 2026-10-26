@@ -165,7 +165,7 @@ async function reachDownloaded(): Promise<typeof UpdaterModule> {
   tracer.setActiveSink(capturingSink())
   const updater = await loadUpdaterModule()
 
-  updater.setupAutoUpdater(() => mainWindow as never)
+  updater.setupAutoUpdater(() => mainWindow)
   await vi.advanceTimersByTimeAsync(0)
   await vi.waitFor(() => {
     expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1)

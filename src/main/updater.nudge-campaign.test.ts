@@ -67,7 +67,7 @@ describe('updater', () => {
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
     // Defer startup checks so they cannot block the nudge check.
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => Date.now()
     })
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -119,7 +119,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => null,
       getPendingUpdateNudgeId: () => 'campaign-1',
       getDismissedUpdateNudgeId: () => null
@@ -152,7 +152,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => null,
       setLastUpdateCheckAt: vi.fn()
     })
@@ -175,7 +175,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never)
+    setupAutoUpdater(() => mainWindow)
 
     await vi.advanceTimersByTimeAsync(0)
 
@@ -207,7 +207,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => Date.now(),
       setPendingUpdateNudgeId,
       getPendingUpdateNudgeId: () => null,
@@ -242,7 +242,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => Date.now(),
       setPendingUpdateNudgeId,
       getPendingUpdateNudgeId: () => pendingNudgeId,
@@ -278,7 +278,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => Date.now(),
       setPendingUpdateNudgeId,
       getPendingUpdateNudgeId: () => null,
@@ -314,7 +314,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => Date.now(),
       setPendingUpdateNudgeId,
       getPendingUpdateNudgeId: () => null,
@@ -344,7 +344,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, dismissNudge } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, {
+    setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => Date.now(),
       setPendingUpdateNudgeId,
       getPendingUpdateNudgeId: () => 'campaign-1',

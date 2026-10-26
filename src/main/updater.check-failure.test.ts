@@ -205,7 +205,7 @@ describe('updater check failure handling', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     checkForUpdatesFromMenu()
 
     await vi.advanceTimersByTimeAsync(0)
@@ -239,7 +239,7 @@ describe('updater check failure handling', () => {
 
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     checkForUpdatesFromMenu()
     await vi.waitFor(() => {
       const statuses = sendMock.mock.calls
@@ -281,7 +281,7 @@ describe('updater check failure handling', () => {
       const mainWindow = updaterMainWindow(sendMock)
       const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
-      setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+      setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
       checkForUpdatesFromMenu()
 
       await vi.waitFor(() => {
@@ -307,7 +307,7 @@ describe('updater check failure handling', () => {
 
     const { setupAutoUpdater, checkForUpdates } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     checkForUpdates()
 
     await vi.advanceTimersByTimeAsync(0)
@@ -339,7 +339,7 @@ describe('updater check failure handling', () => {
     const mainWindow = updaterMainWindow(sendMock)
     const { setupAutoUpdater, checkForUpdates, getUpdateStatus } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     checkForUpdates()
     await vi.waitFor(() => {
       expect(netFetchMock).toHaveBeenCalledTimes(2)
@@ -365,7 +365,7 @@ describe('updater check failure handling', () => {
 
     const { setupAutoUpdater, checkForUpdates } = await loadUpdaterModule()
 
-    setupAutoUpdater(() => mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
+    setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
     checkForUpdates()
     await vi.advanceTimersByTimeAsync(0)
     expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1)

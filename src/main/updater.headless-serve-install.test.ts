@@ -179,7 +179,7 @@ describe('headless serve update install handoff', () => {
     setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => Date.now(),
       installMode: 'unsupported-headless-serve'
-    } as never)
+    })
 
     checkForUpdatesFromMenu()
     await vi.advanceTimersByTimeAsync(0)
