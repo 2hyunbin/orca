@@ -1,15 +1,28 @@
 import { parseArgs } from 'node:util'
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
+import { z } from 'zod'
 import { describeAccountHosts } from './connector-hosts.js'
 import { LINK_OPTIONS, linkIdentity, required } from './operator-link.js'
+import { SlackApps } from './slack-apps.js'
 import { SlackInstalls } from './slack-installs.js'
 
 // Slack ids are upper-case letters and digits; anything else is a typo, and a bot user id ends up
 // in a pattern.
 const SLACK_ID = /^[A-Z0-9]+$/
+const CLIENT_ID = /^\d+\.\d+$/
+
+// Read from stdin as one JSON object, so no secret is ever a command-line argument.
+const AppSecretsSchema = z
+  .object({
+    clientSecret: z.string().min(1),
+    signingSecret: z.string().min(1),
+    botToken: z.string().startsWith('xoxb-')
+  })
+  .strict()
 
 export const SLACK_OPERATOR_USAGE = `Usage:
-  install --team <T…> --bot-user <U…>     bot token is read from stdin
+  register-app --app-id <A…> --client-id <id> --team <T…> --bot-user <U…>
+       stdin: {"clientSecret": "…", "signingSecret": "…", "botToken": "xoxb-…"}
   pause --team <T…> | resume --team <T…>
   link --team <T…> --user <U…> --account <orca account id>
        [--default-host <host id>] [--default-project <name or owner/name>]
@@ -23,8 +36,8 @@ function slackId(value: string | undefined, flag: string): string {
   return value
 }
 
-// Dogfood seeding (no OAuth install or Slack sign-in in v1): one workspace's bot token, and which
-// Orca account each Slack user is, with their machine-choice defaults.
+// Dogfood seeding (no OAuth install or Slack sign-in yet): an app Orca serves and the workspace it
+// is installed in, and which Orca account each Slack user is, with their machine-choice defaults.
 export async function runSlackOperator(
   argv: string[],
   deps: {
@@ -40,25 +53,47 @@ export async function runSlackOperator(
     options: {
       ...LINK_OPTIONS,
       team: { type: 'string' },
-      'bot-user': { type: 'string' }
+      'bot-user': { type: 'string' },
+      'app-id': { type: 'string' },
+      'client-id': { type: 'string' }
     }
   })
-  const installs = () => {
+  const tokenKey = () => {
     if (!deps.tokenKey) {
       throw new Error('ORCA_CONNECTOR_SLACK_TOKEN_KEY is required')
     }
-    return new SlackInstalls(deps.tokenKey)
+    return deps.tokenKey
   }
+  const installs = () => new SlackInstalls(tokenKey())
   switch (command) {
-    case 'install': {
+    case 'register-app': {
+      const appId = slackId(values['app-id'], 'app-id')
+      const clientId = values['client-id']
+      if (!clientId || !CLIENT_ID.test(clientId)) {
+        throw new Error('--client-id needs a Slack client id')
+      }
       const teamId = slackId(values.team, 'team')
       const botUserId = slackId(values['bot-user'], 'bot-user')
-      const botToken = (await deps.readSecret()).trim()
-      if (!botToken.startsWith('xoxb-')) {
-        throw new Error('stdin must be a bot token (xoxb-…)')
+      let secrets: z.infer<typeof AppSecretsSchema>
+      try {
+        secrets = AppSecretsSchema.parse(JSON.parse(await deps.readSecret()))
+      } catch {
+        // Never echo the parse error: it can quote the secrets.
+        throw new Error('stdin must be {"clientSecret", "signingSecret", "botToken": "xoxb-…"}')
       }
-      await installs().save(deps.database, { teamId, botUserId, botToken }, deps.now())
-      return `Saved the bot token for ${teamId}.`
+      const { clientSecret, signingSecret, botToken } = secrets
+      const now = deps.now()
+      await deps.database.transaction(async (transaction) => {
+        await new SlackApps(tokenKey()).save(
+          transaction,
+          { appId, clientId, clientSecret, signingSecret },
+          now
+        )
+        if (!(await installs().save(transaction, { teamId, appId, botUserId, botToken }, now))) {
+          throw new Error(`${teamId} already has another Orca app installed`)
+        }
+      })
+      return `Registered ${appId}, installed in ${teamId}.`
     }
     case 'pause':
     case 'resume': {

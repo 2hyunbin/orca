@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanupConnectorHarnesses } from './connector-server-harness.test-fixture.js'
 import { answerDeliveryId } from './owner-controls.js'
 import {
+  APP,
   CHANNEL,
   conversation,
   EXTERNAL_ID,
@@ -175,7 +176,7 @@ describe('Slack prompt cards', () => {
     expect(
       (await harness.click({ messageTs: '1800000999.000001', value: 'allow_once' })).status
     ).toBe(200)
-    const response = await harness.request('/slack/interactivity', {
+    const response = await harness.request(`/slack/apps/${APP}/interactivity`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: 'payload=%7B%7D'

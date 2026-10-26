@@ -279,6 +279,31 @@ describe('Slack thread status and posts', () => {
     expect((await states())[`reply:${harness.machine.hostId}:r2`]).toBe('uncertain')
   })
 
+  it('orders sends per channel within one workspace only', async () => {
+    const harness = await startedThread()
+    const posts = new ConnectorPosts(harness.database, harness.now, 'slack')
+    const place = { containerId: 'C9', threadId: '1800000000.000900' }
+    await harness.database.transaction(async (transaction) => {
+      await posts.queue(transaction, {
+        ...place,
+        workspaceId: 'T8',
+        postId: 'other-workspace',
+        kind: 'message',
+        body: { text: 'a' }
+      })
+      await posts.queue(transaction, {
+        ...place,
+        workspaceId: 'T9',
+        postId: 'this-workspace',
+        kind: 'message',
+        body: { text: 'b' }
+      })
+    })
+    // The same channel id in another workspace is another channel: neither waits on the other.
+    const claimed = (await posts.claim()).map((post) => post.postId)
+    expect(claimed).toEqual(expect.arrayContaining(['other-workspace', 'this-workspace']))
+  })
+
   it('a sender whose lease ran out changes nothing', async () => {
     const harness = await startedThread()
     const posts = new ConnectorPosts(harness.database, harness.now, 'slack')

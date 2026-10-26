@@ -1,7 +1,11 @@
+import { createHmac } from 'node:crypto'
 import { ConnectorPollResponseSchema } from '@orca-cloud/connector-contract'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanupConnectorHarnesses } from './connector-server-harness.test-fixture.js'
+import { SlackApps } from './slack-apps.js'
+import { SlackInstalls } from './slack-installs.js'
 import {
+  APP,
   BOT,
   CHANNEL,
   createSlackHarness,
@@ -50,7 +54,7 @@ describe('Slack event ingress', () => {
 
     const stale = await harness.signedPost('{}', Math.floor(harness.now() / 1000) - 301)
     expect(stale.status).toBe(401)
-    const forged = await harness.request('/slack/events', {
+    const forged = await harness.request(`/slack/apps/${APP}/events`, {
       method: 'POST',
       headers: {
         'x-slack-request-timestamp': String(Math.floor(harness.now() / 1000)),
@@ -60,6 +64,53 @@ describe('Slack event ingress', () => {
     })
     expect(forged.status).toBe(401)
     expect(SIGNING_SECRET).toBeTruthy()
+  })
+
+  it('verifies each app with its own secret, and acts only where that app is installed', async () => {
+    const harness = await linkedOwner()
+    const now = harness.now()
+    await new SlackApps(harness.tokenKey).save(
+      harness.database,
+      { appId: 'A2', clientId: '3.4', clientSecret: 'cs-2', signingSecret: 'secret-2' },
+      now
+    )
+    await new SlackInstalls(harness.tokenKey).save(
+      harness.database,
+      { teamId: 'T2', appId: 'A2', botUserId: 'UBOT2', botToken: 'xoxb-2' },
+      now
+    )
+    const signedBy = (secret: string, path: string, body: string) => {
+      const timestamp = String(Math.floor(now / 1000))
+      return harness.request(path, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-slack-request-timestamp': timestamp,
+          'x-slack-signature': `v0=${createHmac('sha256', secret).update(`v0:${timestamp}:${body}`).digest('hex')}`
+        },
+        body
+      })
+    }
+    const event = (appId: string, teamId: string) =>
+      JSON.stringify({
+        type: 'event_callback',
+        api_app_id: appId,
+        team_id: teamId,
+        event: { type: 'message', user: OWNER, channel: CHANNEL, channel_type: 'channel', ...mention() }
+      })
+
+    // The path only picks the key: app 2's secret doesn't open app 1's URL, nor does an unknown app.
+    expect((await signedBy('secret-2', `/slack/apps/${APP}/events`, event(APP, TEAM))).status).toBe(401)
+    expect((await signedBy('secret-2', '/slack/apps/A9/events', event('A9', TEAM))).status).toBe(401)
+    // Signed by app 2 but naming app 1, or app 2 speaking for app 1's workspace: acknowledged, ignored.
+    expect((await signedBy('secret-2', '/slack/apps/A2/events', event(APP, TEAM))).status).toBe(200)
+    expect((await signedBy('secret-2', '/slack/apps/A2/events', event('A2', TEAM))).status).toBe(200)
+    expect(await harness.poll()).toEqual([])
+    expect(await harness.posts()).toEqual([])
+
+    // App 1's own signed event in its own workspace starts the conversation.
+    expect((await harness.message(mention())).status).toBe(200)
+    expect(await harness.poll()).toEqual([expect.objectContaining({ kind: 'start' })])
   })
 
   it('starts the owner’s conversation once for the message and app_mention twins', async () => {

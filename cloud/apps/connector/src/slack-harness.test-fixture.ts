@@ -10,6 +10,7 @@ import type { SlackConfig } from './slack-config.js'
 import { runSlackOperator } from './slack-operator.js'
 
 export const SIGNING_SECRET = 'test-signing-secret'
+export const APP = 'A1'
 export const TEAM = 'T1'
 export const CHANNEL = 'C1'
 export const BOT = 'UBOT'
@@ -61,8 +62,6 @@ export async function createSlackHarness(slack: Partial<SlackConfig> = {}) {
   const tokenKey = randomBytes(32)
   const harness = await createConnectorHarness({
     slack: {
-      signingSecret: SIGNING_SECRET,
-      teamIds: new Set([TEAM]),
       paused: false,
       tokenKey,
       ...slack
@@ -76,15 +75,30 @@ export async function createSlackHarness(slack: Partial<SlackConfig> = {}) {
     runSlackOperator(argv, {
       database: harness.database,
       tokenKey,
-      readSecret: async () => 'xoxb-test-token',
+      readSecret: async () =>
+        JSON.stringify({
+          clientSecret: 'test-client-secret',
+          signingSecret: SIGNING_SECRET,
+          botToken: 'xoxb-test-token'
+        }),
       now: harness.now
     })
-  await operator('install', '--team', TEAM, '--bot-user', BOT)
+  await operator(
+    'register-app',
+    '--app-id',
+    APP,
+    '--client-id',
+    '1.2',
+    '--team',
+    TEAM,
+    '--bot-user',
+    BOT
+  )
 
   const signedPost = (
     body: string,
     timestamp = Math.floor(harness.now() / 1000),
-    path = '/slack/events',
+    path = `/slack/apps/${APP}/events`,
     contentType = 'application/json'
   ) =>
     harness.request(path, {
@@ -111,6 +125,7 @@ export async function createSlackHarness(slack: Partial<SlackConfig> = {}) {
     signedPost(
       JSON.stringify({
         type: 'event_callback',
+        api_app_id: APP,
         team_id: TEAM,
         event: {
           type: 'message',
@@ -129,6 +144,7 @@ export async function createSlackHarness(slack: Partial<SlackConfig> = {}) {
       new URLSearchParams({
         payload: JSON.stringify({
           type: 'block_actions',
+          api_app_id: APP,
           team: { id: TEAM },
           user: { id: fields.user ?? OWNER },
           channel: { id: CHANNEL },
@@ -137,7 +153,7 @@ export async function createSlackHarness(slack: Partial<SlackConfig> = {}) {
         })
       }).toString(),
       undefined,
-      '/slack/interactivity',
+      `/slack/apps/${APP}/interactivity`,
       'application/x-www-form-urlencoded'
     )
 
