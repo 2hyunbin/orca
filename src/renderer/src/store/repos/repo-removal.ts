@@ -33,6 +33,7 @@ import {
   recordPendingRuntimeRepoRemoval
 } from './pending-runtime-repo-removals'
 import { toastProjectRemovalFailure } from './repo-removal-failure-toast'
+import { replayPendingRuntimeRepoRemovalsIfReady } from './pending-runtime-repo-removal-replay'
 import { isRuntimeEnvironmentRegistered } from './runtime-environment-registration'
 
 export function worktreeBelongsToHost(worktree: { hostId?: string }, hostId: string): boolean {
@@ -168,6 +169,7 @@ export function createRepoRemovalActions(
         if (removeLocallyOnly && !vmServerDestroyed) {
           // Before the purge: a catalog refresh it triggers must already be fenced.
           recordPendingRuntimeRepoRemoval(target.environmentId, projectId)
+          replayPendingRuntimeRepoRemovalsIfReady(target.environmentId)
         }
         if (target.kind === 'environment') {
           // Explicit removal sweeps this desktop’s persisted host rows; startup never does (#17776). Paired web stores none and its bridge throws synchronously.

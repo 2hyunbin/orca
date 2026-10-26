@@ -15,11 +15,12 @@ let pending: readonly PendingRuntimeRepoRemoval[] = []
 // One chain per server: a replayed repo.rm and a re-add of the same project must never overlap.
 const environmentChains = new Map<string, Promise<unknown>>()
 
-/** A transport failure or timeout proves nothing about the server's catalog, unlike a refusal. */
+/** A transport failure, timeout or user disconnect proves nothing about the server's catalog, unlike a refusal. */
 export function isRuntimeHostUnreachableError(error: unknown): boolean {
   return (
     !hasRuntimeRpcErrorCode(error, 'repo_not_found') &&
-    isRecoverableRemoteRuntimeConnectionError(toRemoteRuntimeClientErrorLike(error))
+    (hasRuntimeRpcErrorCode(error, 'runtime_manually_disconnected') ||
+      isRecoverableRemoteRuntimeConnectionError(toRemoteRuntimeClientErrorLike(error)))
   )
 }
 
@@ -46,6 +47,14 @@ export function recordPendingRuntimeRepoRemoval(environmentId: string, repoId: s
   }
   pending = [...pending, { environmentId, repoId, requestedAt: Date.now() }]
   persist()
+}
+
+export function dropPendingRuntimeRepoRemovalsForEnvironment(environmentId: string): void {
+  const next = pending.filter((entry) => entry.environmentId !== environmentId)
+  if (next.length !== pending.length) {
+    pending = next
+    persist()
+  }
 }
 
 export function clearPendingRuntimeRepoRemoval(environmentId: string, repoId: string): void {

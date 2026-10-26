@@ -16,7 +16,8 @@ import {
   seedPendingRuntimeRepoRemovals
 } from '../repos/pending-runtime-repo-removals'
 import {
-  replayPendingRuntimeRepoRemovalsOnReady,
+  observeRuntimeHostStatusForPendingRemovals,
+  replayPendingRuntimeRepoRemovalsForReadyServers,
   resetPendingRuntimeRepoRemovalReplayForTests
 } from '../repos/pending-runtime-repo-removal-replay'
 import type { RuntimeHostStatusSnapshot } from '../../../../shared/runtime-host-status'
@@ -136,12 +137,25 @@ describe('removing a project while its paired server is unreachable', () => {
     expect(serverStillLists(store)).toEqual([])
 
     reachable = true
-    replayPendingRuntimeRepoRemovalsOnReady(readySnapshot())
+    observeRuntimeHostStatusForPendingRemovals(readySnapshot())
     await vi.waitFor(() => expect(listPendingRuntimeRepoRemovals('env-1')).toEqual([]), {
       timeout: 20_000
     })
     expect(hostCalls.filter((method) => method === 'repo.rm')).toEqual(['repo.rm'])
     expect(uiSet).toHaveBeenLastCalledWith({ pendingRuntimeRepoRemovals: [] })
+  })
+
+  it('replays records seeded after the server already reported ready', async () => {
+    reachable = true
+    observeRuntimeHostStatusForPendingRemovals(readySnapshot())
+
+    seedPendingRuntimeRepoRemovals([{ environmentId: 'env-1', repoId: 'app', requestedAt: 1 }])
+    replayPendingRuntimeRepoRemovalsForReadyServers()
+
+    await vi.waitFor(() => expect(listPendingRuntimeRepoRemovals('env-1')).toEqual([]), {
+      timeout: 20_000
+    })
+    expect(hostCalls.filter((method) => method === 'repo.rm')).toEqual(['repo.rm'])
   })
 
   it('keeps the record when the server is still unreachable at replay time', async () => {
@@ -189,7 +203,7 @@ describe('removing a project while its paired server is unreachable', () => {
       })
     const store = createTestStore()
 
-    replayPendingRuntimeRepoRemovalsOnReady(readySnapshot())
+    observeRuntimeHostStatusForPendingRemovals(readySnapshot())
     await vi.waitFor(() => expect(hostCalls).toContain('repo.rm'), { timeout: 20_000 })
     const added = store.getState().addRepoPath('/home/me/app', 'git', {
       runtimeEnvironmentId: 'env-1'
