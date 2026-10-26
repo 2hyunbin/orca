@@ -282,8 +282,6 @@ export function useResourceUsageStatusController() {
     setPopoverBodyNode,
     daemonActions,
     resourceSnapshot,
-    localGitMaintenance: memorySnapshotError ? undefined : resourceSnapshot?.gitMaintenance,
-    runtimeHostResources,
     runtimeHostNotices,
     spaceScanReady,
     recordFeatureInteraction,

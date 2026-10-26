@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { deflateSync } from 'node:zlib'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   OBJECT_PACK_COUNT_THRESHOLD,
   supportsPromisorGeometricRepack
@@ -14,12 +14,29 @@ import { maintainRepoObjects, probeRepoObjectStore } from './repo-object-mainten
 
 const BLOBS = OBJECT_PACK_COUNT_THRESHOLD + 10
 let root = ''
+const GIT_LOCATION_ENV = [
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_INDEX_FILE',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_COMMON_DIR'
+] as const
+
+function fixtureGitEnvironment(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  for (const name of GIT_LOCATION_ENV) {
+    delete env[name]
+  }
+  return env
+}
 
 function git(cwd: string, args: string[], input?: string): string {
   return execFileSync('git', ['-c', 'gc.auto=0', '-c', 'maintenance.auto=false', ...args], {
     cwd,
     encoding: 'utf8',
     input,
+    env: fixtureGitEnvironment(),
     stdio: ['pipe', 'pipe', 'pipe']
   }).trim()
 }
@@ -43,11 +60,20 @@ const supported = supportsPromisorGeometricRepack(
 )
 
 beforeAll(async () => {
+  for (const name of GIT_LOCATION_ENV) {
+    vi.stubEnv(name, undefined)
+  }
   root = await mkdtemp(join(tmpdir(), 'orca-object-maintenance-git-'))
 })
 
 afterAll(async () => {
-  await rm(root, { recursive: true, force: true })
+  try {
+    if (root) {
+      await rm(root, { recursive: true, force: true })
+    }
+  } finally {
+    vi.unstubAllEnvs()
+  }
 })
 
 describe('pack count trigger', () => {

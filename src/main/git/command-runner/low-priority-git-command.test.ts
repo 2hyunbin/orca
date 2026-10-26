@@ -1,8 +1,11 @@
-import { constants } from 'node:os'
+import { access, mkdtemp, rm, symlink } from 'node:fs/promises'
+import { constants, tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { execFileCapture } from './exec-file-capture'
 import { lowPriorityGitCommand } from './low-priority-git-command'
 import type { ResolvedCommand } from './wsl-command-resolution'
+import { resolveCommandOnLocalPath } from '../../ipc/command-path-resolver'
 
 const command: ResolvedCommand = {
   binary: '/git with spaces/git',
@@ -26,15 +29,7 @@ describe('low-priority Git execution', () => {
         wslMode
       })
       expect(result.binary).toBe('wsl.exe')
-      expect(result.args).toEqual([
-        '-d',
-        'Ubuntu',
-        '--exec',
-        '/usr/bin/nice',
-        '-n',
-        '10',
-        ...guestArgs
-      ])
+      expect(result.args).toEqual(['-d', 'Ubuntu', '--exec', 'nice', '-n', '10', ...guestArgs])
       expect(result.cwd).toBe(command.cwd)
     }
   )
@@ -63,5 +58,51 @@ describe('low-priority Git execution', () => {
       timeout: 5000
     })
     expect(Number(result.stdout)).toBeGreaterThanOrEqual(constants.priority.PRIORITY_BELOW_NORMAL)
+  })
+
+  it.skipIf(process.platform === 'win32')('resolves nice from the native child PATH', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'orca-nice-path-'))
+    try {
+      const nice = await resolveCommandOnLocalPath('nice')
+      if (!nice) {
+        throw new Error('The priority test requires nice on PATH')
+      }
+      await symlink(nice, join(directory, 'nice'))
+      const launch = lowPriorityGitCommand({
+        ...command,
+        binary: process.execPath,
+        args: ['-e', 'process.stdout.write(String(require("node:os").getPriority(0)))']
+      })
+      expect(launch.binary).toBe('nice')
+      const result = await execFileCapture(launch.binary, launch.args, {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: directory },
+        timeout: 5000
+      })
+      expect(Number(result.stdout)).toBeGreaterThanOrEqual(constants.priority.PRIORITY_BELOW_NORMAL)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it.skipIf(process.platform === 'win32')('does not run the child if nice is missing', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'orca-nice-missing-'))
+    const marker = join(directory, 'child-started')
+    try {
+      const launch = lowPriorityGitCommand({
+        ...command,
+        binary: process.execPath,
+        args: ['-e', 'require("node:fs").writeFileSync(process.argv[1], "started")', marker]
+      })
+      await expect(
+        execFileCapture(launch.binary, launch.args, {
+          env: { ...process.env, PATH: directory },
+          timeout: 5000
+        })
+      ).rejects.toMatchObject({ code: 'ENOENT' })
+      await expect(access(marker)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
   })
 })

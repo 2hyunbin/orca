@@ -22,7 +22,6 @@ import {
 } from './resource-usage-popover-body'
 import { renderResourceUsageKillDialog } from './resource-usage-kill-dialog'
 import { WorkspaceSpaceCompactPanel } from './WorkspaceSpaceCompactPanel'
-import { ResourceGitMaintenanceStatus } from './ResourceGitMaintenanceStatus'
 
 export { SessionRow, WorktreeRow } from './resource-usage-session-rows'
 
@@ -167,10 +166,6 @@ export function ResourceUsageStatusSegment({
                 commitToneClass,
                 orphanCount
               })}
-            <ResourceGitMaintenanceStatus
-              local={controller.localGitMaintenance}
-              hosts={controller.runtimeHostResources}
-            />
             {renderResourceUsagePopoverBody({
               setPopoverBodyNode,
               unifiedRepos,

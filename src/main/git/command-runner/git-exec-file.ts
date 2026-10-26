@@ -1,4 +1,3 @@
-import { observeGitMaintenanceChild } from '../git-maintenance-activity'
 import { execFileSync, type SpawnOptions } from 'node:child_process'
 import { withGitSpan } from '../../observability/instrumentation'
 import { recordSubprocessSpawn } from '../../diagnostics/main-thread-churn-probe'
@@ -80,7 +79,9 @@ async function gitExecFileAsyncUnlocked(
           })
       span?.setAttribute('git.queue_wait_ms', grant.queueWaitMs)
       const timeoutMs = gitCommandTimeoutMs(args, options.timeout, options.timeoutMsForTest)
-      const capture = (command: ResolvedCommand) => {
+      const capture = (
+        command: ResolvedCommand
+      ): Promise<{ stdout: string | Buffer; stderr: string | Buffer }> => {
         const launch = options.lowPriority ? lowPriorityGitCommand(command, options) : command
         let reportTerminated: () => void = () => {}
         terminationState.current = new Promise<void>((resolve) => {
@@ -99,7 +100,6 @@ async function gitExecFileAsyncUnlocked(
           spawnOnWorkerThread: options.spawnOnWorkerThread,
           lowPriority: options.lowPriority && !command.wsl,
           onChildTerminated: reportTerminated,
-          ...observeGitMaintenanceChild(options.cwd, options.maintenancePhase, reportTerminated),
           ...(options.onStderr ? { onStderr: options.onStderr } : {}),
           ...(timeoutMs === undefined
             ? {}

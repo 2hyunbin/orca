@@ -77,7 +77,6 @@ describe('idle pack index maintenance', () => {
       cwd: '/repo',
       admissionTier: 'background',
       timeout: PACK_INDEX_TIMEOUT_MS,
-      maintenancePhase: 'pack-index',
       admissionSignal: options.signal,
       canStart: options.canWrite
     })

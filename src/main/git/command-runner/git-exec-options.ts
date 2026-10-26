@@ -1,4 +1,3 @@
-import type { GitMaintenanceActivity } from '../../../shared/process-stats-types'
 // Bound output to avoid V8 string overflow; match the relay's MAX_GIT_BUFFER.
 export const DEFAULT_GIT_MAX_BUFFER = 10 * 1024 * 1024
 
@@ -22,8 +21,6 @@ export type GitExecOptions = {
   canStart?: () => boolean
   /** Lower CPU priority on the execution host; buffered capture without a worker/barrier only. */
   lowPriority?: boolean
-  /** Report only Orca-owned maintenance writers in the resource snapshot. */
-  maintenancePhase?: GitMaintenanceActivity['phase']
   wslDistro?: string
   preferWslDirectGit?: boolean
   useConfiguredSshCommandForNetwork?: boolean

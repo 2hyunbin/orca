@@ -109,7 +109,6 @@ export async function maintainRepoObjects(
       ...gitOptions,
       admissionSignal: signal,
       lowPriority: true,
-      maintenancePhase: 'objects',
       canStart: () => (started = args.canWrite())
     })
     span.setAttribute('git.object_maintenance_ms', Date.now() - startedAt)

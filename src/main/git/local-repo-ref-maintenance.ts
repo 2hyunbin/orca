@@ -269,7 +269,6 @@ export function createLocalRepoRefMaintenanceTarget(
           ...gitOptions,
           admissionTier: 'background',
           timeout: PACK_REFS_TIMEOUT_MS,
-          maintenancePhase: 'refs',
           admissionSignal,
           canStart
         })

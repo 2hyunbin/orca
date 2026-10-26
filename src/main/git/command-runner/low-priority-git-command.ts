@@ -18,7 +18,7 @@ export function lowPriorityGitCommand(
       ...command,
       args: [
         ...command.args.slice(0, execIndex + 1),
-        '/usr/bin/nice',
+        'nice',
         '-n',
         '10',
         ...command.args.slice(execIndex + 1)
@@ -30,7 +30,7 @@ export function lowPriorityGitCommand(
   }
   return {
     ...command,
-    binary: '/usr/bin/nice',
+    binary: 'nice',
     args: ['-n', '10', command.binary, ...command.args]
   }
 }
