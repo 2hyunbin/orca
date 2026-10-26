@@ -44,9 +44,9 @@ async function population(size: number, allEligible = false) {
   const inspect = vi.fn(async (ptyId: string) => {
     const capturedAt = performance.now()
     if (completionStagger) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, Number(ptyId.slice('pty-'.length)) * completionStagger)
-      )
+      const completion = Promise.withResolvers<void>()
+      setTimeout(completion.resolve, Number(ptyId.slice('pty-'.length)) * completionStagger)
+      await completion.promise
     }
     return {
       foregroundProcess: unrecognized ? 'vim' : shell ? 'bash' : 'codex',

@@ -15,6 +15,7 @@ import { useTerminalPaneProjection } from './use-terminal-pane-projection'
 export const LEFT = '11111111-1111-4111-8111-111111111111'
 export const RIGHT = '22222222-2222-4222-8222-222222222222'
 type ViewMode = NonNullable<Tab['viewMode']>
+type ChatController = Parameters<typeof useTerminalPaneChatState>[0]
 const mocks = vi.hoisted(() => {
   const layouts: Record<string, TerminalLayoutSnapshot> = {}
   const foreground: Record<string, PaneForegroundAgentEntry> = {}
@@ -122,12 +123,12 @@ export function makeFixture(paneIds = [1, 2], remotePusher?: RemotePaneLayoutPus
     managerRef: { current: manager },
     containerRef: { current: container },
     nativeChatTranscriptIsLocalReadable: true,
-    onAgentExitedRef: { current: vi.fn() },
+    onAgentExitedRef: { current: vi.fn<ChatController['onAgentExitedRef']['current']>() },
     paneCount: 2,
     tabId: 'tab',
     worktreeId: 'wt',
     tabWideAgentHintLeafId: null,
-    setTabWideAgentHintLeafId: vi.fn(),
+    setTabWideAgentHintLeafId: vi.fn<ChatController['setTabWideAgentHintLeafId']>(),
     clearedScrollbackLeafIdsRef: { current: new Set<string>() },
     expandedPaneIdRef: { current: null },
     paneTitles: {},
@@ -135,7 +136,7 @@ export function makeFixture(paneIds = [1, 2], remotePusher?: RemotePaneLayoutPus
     paneTransportsRef: { current: new Map() },
     remotePaneLayoutPusherRef: { current: remotePusher ?? null },
     removedTitleLeafIdsRef: { current: new Set<string>() },
-    setPaneTitles: vi.fn()
+    setPaneTitles: vi.fn<ChatController['setPaneTitles']>()
   }
 }
 export function useFixture(fixture: ReturnType<typeof makeFixture>, initialOwner: string | null) {

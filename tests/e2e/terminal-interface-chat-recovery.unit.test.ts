@@ -86,7 +86,9 @@ it('joins qualified producer recovery through queued successors to manual Chat a
       capturedAgeMs
     })
     if (tailMs) {
-      await new Promise<void>((resolve) => setTimeout(resolve, tailMs))
+      const completion = Promise.withResolvers<void>()
+      setTimeout(completion.resolve, tailMs)
+      await completion.promise
     }
     const result = {
       foregroundProcess: evidence.verdict === 'live' ? evidence.processName : null,
