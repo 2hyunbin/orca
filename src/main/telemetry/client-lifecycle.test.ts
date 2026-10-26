@@ -66,12 +66,17 @@ describe('setOptIn()', () => {
     )
   })
 
-  it('does not capture opt-out if quit starts while its transport import is pending', async () => {
+  it('finishes an admitted opt-out before quit drains the SDK', async () => {
     const optingOut = setOptIn('settings', false)
     await shutdownTelemetry()
     await optingOut
-    expect(mock.capture).not.toHaveBeenCalled()
+    expect(mock.capture.mock.calls.map(([capture]) => capture.event)).toEqual([
+      'telemetry_opted_out'
+    ])
     expect(mock.optOut).toHaveBeenCalledTimes(1)
+    expect(mock.optOut.mock.invocationCallOrder[0]).toBeLessThan(
+      mock.shutdown.mock.invocationCallOrder[0] ?? 0
+    )
   })
 
   it('drops telemetry_opted_in silently in non-official builds', async () => {

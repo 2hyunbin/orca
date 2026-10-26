@@ -246,51 +246,33 @@ export async function setOptIn(via: OptInVia, optedIn: boolean): Promise<void> {
     track('telemetry_opted_in', { via })
   } else {
     transport.discardPending()
-    let client = transport.client
     // Enqueue opt-out directly before disabling SDK; track would reject it under the newly stored preference.
-    try {
-      if (
-        captureOptOut &&
-        !shuttingDown &&
-        commonProps &&
-        consumeBurstToken('telemetry_opted_out')
-      ) {
-        const validated = validate('telemetry_opted_out', { via })
-        if (validated.ok) {
-          client ??= await transport.startForOptOut()
-          if (!client) {
-            return
-          }
-          const uuid = randomUUID()
-          const { waitForCaptureEnqueue } = await import('./posthog-transport')
-          const consent = resolveConsent(storeRef.getSettings())
-          if (
-            shuttingDown ||
-            (consent.effective === 'disabled' && consent.reason !== 'user_opt_out')
-          ) {
-            return
-          }
-          const enqueued = waitForCaptureEnqueue(client, 'telemetry_opted_out', uuid)
-          client.capture({
+    if (captureOptOut && !shuttingDown && commonProps && consumeBurstToken('telemetry_opted_out')) {
+      const validated = validate('telemetry_opted_out', { via })
+      if (validated.ok) {
+        await transport.captureOptOut(
+          {
             distinctId: commonProps.install_id,
             event: 'telemetry_opted_out',
-            uuid,
+            uuid: randomUUID(),
             properties: {
               ...commonProps,
               ...validated.props,
               $process_person_profile: false
             }
-          })
-          if (!(await enqueued)) {
-            console.warn('[telemetry] telemetry_opted_out did not enqueue before SDK opt-out')
+          },
+          () => {
+            if (!storeRef) {
+              return false
+            }
+            const consent = resolveConsent(storeRef.getSettings())
+            return consent.effective !== 'disabled' || consent.reason === 'user_opt_out'
           }
-        }
+        )
+        return
       }
-    } catch (err) {
-      console.warn('[telemetry] telemetry_opted_out capture failed before SDK opt-out:', err)
-    } finally {
-      await client?.optOut()
     }
+    await transport.client?.optOut()
   }
 }
 

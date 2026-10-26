@@ -357,15 +357,45 @@ describe('deferred telemetry transport', () => {
     }
   )
 
-  it('does not construct for an explicit opt-out after quit fences its pending import', async () => {
+  it.each(['pending banner', 'enabled'] as const)(
+    'finishes an admitted %s opt-out inside the shared quit budget',
+    async (consent) => {
+      vi.useFakeTimers()
+      settings.telemetry!.optedIn = consent === 'pending banner' ? null : true
+      client.trackAppOpenedOnce()
+      let releaseImport = (): void => {}
+      moduleGate = new Promise((resolve) => {
+        releaseImport = resolve
+      })
+      const optingOut = client.setOptIn(
+        consent === 'pending banner' ? 'first_launch_banner' : 'settings',
+        false
+      )
+      const closing = client.shutdownTelemetry()
+      expect(settings.telemetry?.optedIn).toBe(false)
+      expect(client.track('app_opened', {})).toBe(false)
+      await vi.advanceTimersByTimeAsync(500)
+      releaseImport()
+      await Promise.all([optingOut, closing])
+      expect(createClient).toHaveBeenCalledTimes(1)
+      expect(sdk.capture.mock.calls.map(([capture]) => capture.event)).toEqual([
+        'telemetry_opted_out'
+      ])
+      expect(sdk.optOut).toHaveBeenCalledTimes(1)
+      expect(sdk.shutdown).toHaveBeenCalledWith(1_500)
+    }
+  )
+
+  it('does not construct for an explicit opt-out after its shared quit budget expires', async () => {
     vi.useFakeTimers()
     let releaseImport = (): void => {}
     moduleGate = new Promise((resolve) => {
       releaseImport = resolve
     })
     const optingOut = client.setOptIn('settings', false)
-    await client.shutdownTelemetry()
+    const closing = client.shutdownTelemetry()
     await vi.advanceTimersByTimeAsync(2_001)
+    await closing
     releaseImport()
     await optingOut
     expect(createClient).not.toHaveBeenCalled()

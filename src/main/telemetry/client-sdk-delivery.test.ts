@@ -179,6 +179,25 @@ describe('real PostHog SDK delivery with intercepted HTTP', () => {
     }
   )
 
+  it.each(['pending banner', 'enabled'] as const)(
+    'delivers the admitted %s opt-out when quit races cold SDK startup',
+    async (consent) => {
+      settings.telemetry!.optedIn = consent === 'pending banner' ? null : true
+      client.initTelemetry(store)
+      client.trackAppOpenedOnce()
+      const optingOut = client.setOptIn(
+        consent === 'pending banner' ? 'first_launch_banner' : 'settings',
+        false
+      )
+      const closing = client.shutdownTelemetry()
+      expect(settings.telemetry?.optedIn).toBe(false)
+      expect(client.track('app_opened', {})).toBe(false)
+      await Promise.all([optingOut, closing])
+      expect(deliveredEvents()).toEqual(['telemetry_opted_out'])
+      expect(requests).toHaveLength(1)
+    }
+  )
+
   it('enqueues opt-out before SDK optOut and delivers it during shutdown', async () => {
     await client.startTelemetryTransport()
     await client.setOptIn('settings', false)

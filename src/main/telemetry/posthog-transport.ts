@@ -9,7 +9,8 @@ const OPT_OUT_CAPTURE_ENQUEUE_TIMEOUT_MS = 1_000
 export function waitForCaptureEnqueue(
   client: PostHog,
   event: EventName,
-  uuid: string
+  uuid: string,
+  timeoutMs = OPT_OUT_CAPTURE_ENQUEUE_TIMEOUT_MS
 ): Promise<boolean> {
   return new Promise((resolve) => {
     let settled = false
@@ -43,7 +44,10 @@ export function waitForCaptureEnqueue(
       }
     })
 
-    timeout = setTimeout(() => settle(false), OPT_OUT_CAPTURE_ENQUEUE_TIMEOUT_MS)
+    timeout = setTimeout(
+      () => settle(false),
+      Math.min(OPT_OUT_CAPTURE_ENQUEUE_TIMEOUT_MS, Math.max(0, timeoutMs))
+    )
   })
 }
 

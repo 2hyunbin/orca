@@ -3,6 +3,7 @@ import type { ConsentState } from './consent'
 import { MAX_QUEUED_CAPTURES } from './capture-queue-limit'
 
 type Capture = Parameters<PostHog['capture']>[0]
+type OptOutCapture = Capture & { event: 'telemetry_opted_out'; uuid: string }
 type TransportOptions = { writeKey: string; consent: ConsentState }
 const SHUTDOWN_TIMEOUT_MS = 2_000
 
@@ -14,7 +15,7 @@ export class DeferredTelemetryTransport {
   private shutdownDeadline: number | null = null
   private stopped = false
   private readonly pending: Capture[] = []
-  private readonly optOutStarts = new Set<symbol>()
+  private readonly optOutCaptures = new Set<Promise<void>>()
 
   constructor(
     private readonly readOptions: () => TransportOptions | null,
@@ -32,7 +33,7 @@ export class DeferredTelemetryTransport {
     this.shutdownDeadline = null
     this.client = null
     this.stopped = false
-    this.optOutStarts.clear()
+    this.optOutCaptures.clear()
     this.discardPending()
   }
 
@@ -57,26 +58,61 @@ export class DeferredTelemetryTransport {
     return this.stopped ? Promise.resolve() : this.load()
   }
 
-  async startForOptOut(): Promise<PostHog | null> {
+  captureOptOut(capture: OptOutCapture, canCapture: () => boolean): Promise<void> {
     if (this.stopped) {
-      return null
+      return Promise.resolve()
     }
     const generation = this.generation
-    const request = Symbol()
-    this.optOutStarts.add(request)
-    try {
-      await this.load()
-      return this.stopped || generation !== this.generation ? null : this.client
-    } finally {
-      this.optOutStarts.delete(request)
-    }
+    const operation = Promise.resolve().then(async () => {
+      let client = this.client
+      try {
+        if (!this.withinShutdownBudget(generation) || !canCapture()) {
+          return
+        }
+        await this.load()
+        if (generation !== this.generation) {
+          return
+        }
+        client = this.client
+        if (!client) {
+          return
+        }
+        const { waitForCaptureEnqueue } = await import('./posthog-transport')
+        if (!this.withinShutdownBudget(generation) || !canCapture()) {
+          return
+        }
+        const remaining =
+          this.shutdownDeadline === null ? undefined : this.shutdownDeadline - Date.now()
+        const enqueued = waitForCaptureEnqueue(client, capture.event, capture.uuid, remaining)
+        client.capture(capture)
+        if (!(await enqueued)) {
+          console.warn('[telemetry] telemetry_opted_out did not enqueue before SDK opt-out')
+        }
+      } catch (err) {
+        console.warn('[telemetry] telemetry_opted_out capture failed before SDK opt-out:', err)
+      } finally {
+        await client?.optOut()
+      }
+    })
+    // Register before yielding so quit joins an already authorized consent action.
+    this.optOutCaptures.add(operation)
+    return operation.finally(() => {
+      this.optOutCaptures.delete(operation)
+    })
+  }
+
+  private withinShutdownBudget(generation: number): boolean {
+    return (
+      generation === this.generation &&
+      (this.shutdownDeadline === null || Date.now() < this.shutdownDeadline)
+    )
   }
 
   private canLoad(options: TransportOptions | null): options is TransportOptions {
     return (
       options !== null &&
       (options.consent.effective !== 'disabled' ||
-        (options.consent.reason === 'user_opt_out' && this.optOutStarts.size > 0))
+        (options.consent.reason === 'user_opt_out' && this.optOutCaptures.size > 0))
     )
   }
 
@@ -137,15 +173,22 @@ export class DeferredTelemetryTransport {
     this.shutdownDeadline = deadline
     const drainPending =
       this.pending.length > 0 && this.readOptions()?.consent.effective === 'enabled'
+    const optOutCaptures = [...this.optOutCaptures]
     if (!drainPending) {
-      this.generation += 1
       this.discardPending()
+      if (optOutCaptures.length === 0) {
+        this.generation += 1
+      }
     }
     const generation = this.generation
     let timeout: ReturnType<typeof setTimeout> | undefined
     const drain = async (): Promise<void> => {
       if (drainPending) {
         await this.load()
+      }
+      await Promise.allSettled(optOutCaptures)
+      if (!this.withinShutdownBudget(generation)) {
+        return
       }
       await this.client?.shutdown(Math.max(0, deadline - Date.now()))
     }
@@ -164,6 +207,7 @@ export class DeferredTelemetryTransport {
           // Imports cannot be canceled; retire their generation when the quit budget expires.
           this.generation += 1
           this.discardPending()
+          this.optOutCaptures.clear()
         }
       })
     return this.closing
