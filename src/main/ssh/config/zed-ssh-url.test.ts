@@ -39,7 +39,16 @@ describe('resolveZedSshUrl', () => {
       )
     ).toEqual({
       ok: true,
-      url: 'ssh://ada%40corp@[2001:db8::1]/home/Ada%20Lovelace/a%23b%3Fc%25d'
+      url: 'ssh://ada%40corp@[2001:db8::1]:22/home/Ada%20Lovelace/a%23b%3Fc%25d'
+    })
+  })
+
+  it('asks for an ssh config alias when a manual host needs settings the URL cannot carry', () => {
+    expect(
+      resolveZedSshUrl(createTarget({ identityFile: '~/.ssh/builder', port: 2222 }), '/srv')
+    ).toEqual({ ok: false, reason: 'ssh-alias-required', host: 'builder.example.com', port: 2222 })
+    expect(resolveZedSshUrl(createTarget({ jumpHost: 'bastion' }), '/srv')).toMatchObject({
+      reason: 'ssh-alias-required'
     })
   })
 
@@ -47,6 +56,9 @@ describe('resolveZedSshUrl', () => {
     expect(
       resolveZedSshUrl(createTarget({ source: 'ssh-config', configHost: 'team devbox' }), '/srv')
     ).toEqual({ ok: false, reason: 'remote-editor-unsupported' })
+    expect(resolveZedSshUrl(createTarget({ host: '-oProxyCommand=x' }), '/srv')).toMatchObject({
+      reason: 'ssh-alias-required'
+    })
     expect(resolveZedSshUrl(createTarget(), 'C:\\Users\\ada\\project')).toEqual({
       ok: false,
       reason: 'remote-editor-unsupported'

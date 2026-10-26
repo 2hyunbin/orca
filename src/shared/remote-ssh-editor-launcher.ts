@@ -28,7 +28,8 @@ export function getRemoteSshEditorKind(executable: string): RemoteSshEditorKind 
   if (VSCODE_LAUNCHER_NAMES.has(name) || name === 'cursor') {
     return 'vscode-remote'
   }
-  return name === 'zed' ? 'zed' : null
+  // Arch and Fedora package the Zed CLI as zeditor.
+  return name === 'zed' || name === 'zeditor' ? 'zed' : null
 }
 
 export function isRemoteSshEditorCommand(command: string | undefined): boolean {

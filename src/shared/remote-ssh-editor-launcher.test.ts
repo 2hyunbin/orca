@@ -9,7 +9,7 @@ describe('remote SSH editor launcher capability', () => {
     'zed',
     '/usr/local/bin/code',
     '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
-    '/Applications/Zed.app/Contents/MacOS/cli/zed',
+    '/usr/bin/zeditor',
     'C:\\Program Files\\Microsoft VS Code\\Code.exe',
     'C:\\Program Files\\Microsoft VS Code Insiders\\Code - Insiders.exe',
     'C:\\Tools\\CODE.CMD',
