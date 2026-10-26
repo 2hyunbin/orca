@@ -3,6 +3,7 @@ import { getAppEnvironment } from '../../shared/app-environment'
 import { admitConnectorAgent, CONNECTOR_AGENTS } from '../external-conversations/connector-agents'
 import { runtimeConversationHost } from '../external-conversations/external-conversation-seam'
 import { getOrcaCloudAuthConfig } from '../orca-profiles/profile-cloud-auth-config'
+import { ensureActiveOrcaProfile } from '../orca-profiles/profile-index-store'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import type { RuntimeStore } from '../runtime/runtime-store-contract'
 import { ConnectorCloud } from './connector-cloud'
@@ -24,11 +25,13 @@ export function createDesktopConnectorCloud(
     return null
   }
   const environment = getAppEnvironment()
+  // The runtime, store and seam all belong to the profile this process launched with.
+  const profileId = ensureActiveOrcaProfile(userDataPath).profile.id
   return new ConnectorCloud({
     userDataPath,
     origin: resolveConnectorOrigin(process.env, environment.isPackaged()),
-    account: () => connectorAccount(userDataPath),
-    mintFor: (account) => desktopConnectorTokenMint(auth.config, userDataPath, account),
+    account: () => connectorAccount(userDataPath, profileId),
+    mintFor: (account) => desktopConnectorTokenMint(auth.config, userDataPath, profileId, account),
     machine: {
       runtime: 'desktop',
       orcaVersion: environment.getVersion(),

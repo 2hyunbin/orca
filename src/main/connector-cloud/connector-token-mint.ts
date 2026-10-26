@@ -23,23 +23,28 @@ const SIGNED_OUT: ConnectorFailure = {
   retryAfterMs: null
 }
 
-/** The account the connector serves: null while signed out of Orca. */
-export function connectorAccount(userDataPath: string): string | null {
-  return ensureActiveOrcaProfile(userDataPath).profile.cloud?.userId ?? null
+/**
+ * The account the connector serves: the cloud account of the profile this process launched with.
+ * Null while signed out, and once another profile is active (switching relaunches into it).
+ */
+export function connectorAccount(userDataPath: string, profileId: string): string | null {
+  const { profile } = ensureActiveOrcaProfile(userDataPath)
+  return profile.id === profileId ? (profile.cloud?.userId ?? null) : null
 }
 
 /** Mints only for `account`; after a switch or sign-out the old client gets no token for the new one. */
 export function desktopConnectorTokenMint(
   authConfig: OrcaCloudAuthConfig,
   userDataPath: string,
+  profileId: string,
   account: string,
   fetchImpl: typeof globalThis.fetch = globalThis.fetch
 ): ConnectorTokenMint {
   return async () => {
-    const active = ensureActiveOrcaProfile(userDataPath)
-    if (active.profile.cloud?.userId !== account) {
+    if (connectorAccount(userDataPath, profileId) !== account) {
       return SIGNED_OUT
     }
+    const active = ensureActiveOrcaProfile(userDataPath)
     try {
       // The per-install id the host descriptor already keeps; the cloud keys this machine on it.
       const machineId = await loadOrCreateHostInstallationId(userDataPath)
@@ -64,7 +69,7 @@ export function desktopConnectorTokenMint(
           return answer
         }
       )
-      return minted.status === 'ok' && connectorAccount(userDataPath) === account
+      return minted.status === 'ok' && connectorAccount(userDataPath, profileId) === account
         ? minted.value
         : SIGNED_OUT
     } catch (error) {

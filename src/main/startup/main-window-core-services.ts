@@ -106,8 +106,9 @@ export function attachMainWindowCoreServices(
       onBeforeOrcaProfileSignOut: () => {
         state.desktopRelayInstaller?.suspend()
         state.desktopRelayService?.fenceAndCloseNow(RELAY_HOST_CLOSE_REASON.SIGNED_OUT)
-        state.connectorCloud?.signingOut()
-      }
+        state.connectorCloud?.signOutStarted()
+      },
+      onAfterOrcaProfileSignOut: () => state.connectorCloud?.signOutFinished()
     },
     state.pluginService ?? undefined,
     state.pluginMarketplaceService && state.pluginMarketplaceInstaller

@@ -98,6 +98,8 @@ export class ConnectorPollClient {
       once: true,
       signal: this.stopped.signal
     })
+    // Turn ends that finish before the first hello still reach the outbox; only sending waits for it.
+    this.watch()
     this.acks.attach(this.sendAcks)
     void this.run()
   }
@@ -207,17 +209,17 @@ export class ConnectorPollClient {
     }
     this.helloRev = helloRev
     this.helloSaid = JSON.stringify(said)
-    this.watchAgain()
+    // A fresh watch's first event is the snapshot, which opens this hello's numbered events.
+    this.watch()
+    this.options.events.attach(this.sendEvents)
     return null
   }
 
-  /** A fresh watch's first event is the snapshot, which opens this hello's numbered events. */
-  private watchAgain(): void {
+  private watch(): void {
     const { events } = this.options
     const previous = this.releaseWatch
     this.releaseWatch = this.seam.watch(this.host, (event) => events.observe(event))
     previous?.()
-    events.attach(this.sendEvents)
   }
 
   private deliver(raw: unknown, msLeft: (expiresAt: number) => number): void {

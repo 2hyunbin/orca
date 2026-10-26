@@ -20,8 +20,8 @@ export class ConnectorCloud {
   private client: ConnectorPollClient | null = null
   // The signed-in account's outbox: one owner per process, replaced only when another account signs in.
   private events: ConnectorTurnEvents | null = null
-  // From sign-out until the next sign-in, so nothing restarts while the old session is still readable.
-  private suspended = false
+  // While a sign-out runs: the account it removes is still readable, and a refresh may even renew it.
+  private signingOut = false
 
   constructor(private readonly options: ConnectorCloudOptions) {}
 
@@ -37,13 +37,12 @@ export class ConnectorCloud {
 
   /** The desktop signed in, switched accounts or refreshed its sign-in. */
   accountChanged(): void {
-    this.suspended = false
     this.reconcile()
   }
 
   /** Just before the desktop signs out: stop now, and drop turn ends no other account can report. */
-  signingOut(): void {
-    this.suspended = true
+  signOutStarted(): void {
+    this.signingOut = true
     this.stopClient()
     if (this.events) {
       this.events.clear()
@@ -53,11 +52,17 @@ export class ConnectorCloud {
     }
   }
 
+  /** The sign-out ended, either way; a sign-in that finished meanwhile resumes here. */
+  signOutFinished(): void {
+    this.signingOut = false
+    this.reconcile()
+  }
+
   private reconcile(): void {
     if (!this.connected) {
       return
     }
-    const account = this.suspended ? null : this.options.account()
+    const account = this.signingOut ? null : this.options.account()
     const seam = this.options.machine.seam()
     if (account && this.events?.account !== account) {
       this.stopClient()

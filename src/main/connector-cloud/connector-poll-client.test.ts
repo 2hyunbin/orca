@@ -491,6 +491,26 @@ describe('ConnectorPollClient', () => {
     expect(calls.send).not.toHaveBeenCalled()
     client.stop()
   })
+
+  it('keeps turn ends that finish before the first hello, and sends them after its snapshot', async () => {
+    fake.online = false
+    const { client, emit } = startClient()
+    await settle()
+    emit({
+      kind: 'turn-ended',
+      conversation,
+      worktreeId: 'wt',
+      paneKey: 'tab:1',
+      turnId: 4,
+      stopReason: 'success',
+      at: 9
+    })
+    expect(existsSync(join(userDataPath, 'connector-turn-outbox.json'))).toBe(true)
+    fake.online = true
+    await settle(30_000)
+    expect(fake.events).toMatchObject([{ kind: 'snapshot' }, { kind: 'turn-ended', turnId: 4 }])
+    client.stop()
+  })
 })
 
 function isRecord(value: unknown): value is Record<string, unknown> {
