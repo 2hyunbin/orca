@@ -103,6 +103,32 @@ function outline(rows: readonly HostSectionRow[]): string[] {
   })
 }
 
+it('retains an empty project header for a suppressed discovery suggestion after filters hide its workspaces', () => {
+  const project = repo('r')
+  const workspaces = buildWorkspaceRows({
+    worktrees: [worktree('r::/main', { isMainWorktree: true })],
+    folderWorkspaces: [],
+    repos: [project],
+    lineageById: {}
+  })
+  const input = domains({ workspaces })
+  const index = indexSidebarFeed(input, [project])
+  const selectedView = view({
+    groupBy: 'repo',
+    filters: { ...NO_WORKSPACE_ROW_FILTERS, hideDefaultBranchWorkspace: true }
+  })
+  const planned = planSidebarFeedRows(
+    input,
+    index,
+    catalog([project]),
+    selectedView,
+    rankSidebarFeedWorktrees(index, 'recent'),
+    { additionalPlaceholderRepoIds: new Set([project.id]) }
+  )
+  const rendered = renderSidebarFeedRows(planned, selectedView, new Set())
+  expect(rendered.rows).toMatchObject([{ type: 'header', repo: { id: project.id } }])
+})
+
 describe('buildSidebarFeedRows keeps same-id workspaces on two hosts apart', () => {
   // The same repo registered locally and on an SSH box: `r::/w/same` names two workspaces.
   const repos = [repo('r'), repo('r', { connectionId: 'box' })]

@@ -1,6 +1,11 @@
 import { useCallback } from 'react'
 import type { AppState } from '@/store/types'
-import { findRepoForHost, getRepoHostIdentity } from '@/store/slices/repo-host-identity'
+import type { Repo } from '../../../../shared/repo-types'
+import {
+  findRepoForHost,
+  getRepoHostIdentity,
+  repoMatchesHostIdentity
+} from '@/store/slices/repo-host-identity'
 import {
   getWorktreeExecutionHostId,
   parseExecutionHostId,
@@ -19,6 +24,25 @@ export function resolveWorktreeVisibilityHostTarget(
     hostId: requestedHostId,
     settings: state.settings
   })
+  return worktreeVisibilityTarget(state, repoId, repo, requestedHostId)
+}
+
+export function resolveWorktreeVisibilityHostTargetForHost(
+  state: Pick<AppState, 'repos' | 'detectedWorktreesByRepo'>,
+  repoId: string,
+  hostId: ExecutionHostId
+) {
+  const repo =
+    state.repos.find((candidate) => repoMatchesHostIdentity(candidate, repoId, hostId)) ?? null
+  return worktreeVisibilityTarget(state, repoId, repo, hostId)
+}
+
+function worktreeVisibilityTarget(
+  state: Pick<AppState, 'detectedWorktreesByRepo'>,
+  repoId: string,
+  repo: Repo | null,
+  requestedHostId?: ExecutionHostId
+) {
   const detectedForRepo = repoId ? selectDetectedWorktreesByRepo(state)[repoId] : undefined
   const detected =
     detectedForRepo && repo && requestedHostId

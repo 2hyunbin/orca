@@ -6,7 +6,6 @@ import { PendingWorktreeRow } from '../../PendingWorktreeRow'
 import ImportedWorktreesVisibilityLine from '../../ImportedWorktreesVisibilityLine'
 import { useAppStore } from '@/store'
 import { getRepoHostIdentity } from '@/store/slices/repo-host-identity'
-import { getRepoExecutionHostId } from '../../../../../../shared/execution-host'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { ImportedWorktreeCardActionState } from '../../imported-worktrees-card-actions'
 
@@ -14,7 +13,7 @@ export function canKeepImportedWorktreesHidden(
   row: Extract<Row, { type: 'imported-worktrees-card' }>,
   actionState: ImportedWorktreeCardActionState | undefined
 ): boolean {
-  return !row.managing && actionState?.forceVisible !== true
+  return row.placement === 'repo-group' && actionState?.forceVisible !== true
 }
 
 type NoticeRowFrameProps = {
@@ -61,10 +60,15 @@ export function renderImportedWorktreesVirtualRow(args: {
   vItem: VirtualItem
   measureVirtualRowElement: (element: HTMLDivElement | null) => void
   actionState: ImportedWorktreeCardActionState | undefined
-  onShow: (repo: Repo, paths: readonly string[]) => Promise<boolean>
+  onReview: (repo: Repo) => void
   onKeepHidden: (repo: Repo) => Promise<boolean>
 }): React.JSX.Element {
   const { row, actionState } = args
+  const telemetry = useAppStore.getState().settings?.telemetry
+  const telemetryEnabled =
+    telemetry?.optedIn === true &&
+    (telemetry.workspaceDiscoveryCohort === 'control' ||
+      telemetry.workspaceDiscoveryCohort === 'treatment')
   return (
     <NoticeRowFrame
       key={args.vItem.key}
@@ -77,27 +81,16 @@ export function renderImportedWorktreesVirtualRow(args: {
         hostContextHostId={row.hostContextHostId}
         hiddenWorktrees={row.hiddenWorktrees}
         placement={row.placement}
-        managing={row.managing}
+        telemetryEnabled={telemetryEnabled}
         pending={actionState?.pending ?? false}
         error={actionState?.error ?? null}
-        onShow={(paths) => args.onShow(row.repo, paths)}
+        onReview={() => args.onReview(row.repo)}
         onKeepHidden={
           canKeepImportedWorktreesHidden(row, actionState)
             ? () => args.onKeepHidden(row.repo)
             : undefined
         }
         onFocusRecovery={() => focusProjectMenu(row.repo)}
-        onClose={() => {
-          const state = useAppStore.getState()
-          if (
-            state.activeModal === 'worktree-visibility' &&
-            state.modalData.inline === true &&
-            state.modalData.repoId === row.repo.id &&
-            state.modalData.hostId === getRepoExecutionHostId(row.repo)
-          ) {
-            state.closeModal()
-          }
-        }}
       />
     </NoticeRowFrame>
   )
@@ -108,7 +101,7 @@ export function renderNewExternalWorktreesInboxVirtualRow(args: {
   vItem: VirtualItem
   measureVirtualRowElement: (element: HTMLDivElement | null) => void
   actionState: ImportedWorktreeCardActionState | undefined
-  onShow: (repo: Repo, paths: readonly string[]) => Promise<boolean>
+  onReview: (repo: Repo) => void
   onKeepHidden: (repo: Repo) => Promise<boolean>
 }): React.JSX.Element {
   return renderImportedWorktreesVirtualRow({

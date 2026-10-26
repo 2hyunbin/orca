@@ -97,6 +97,9 @@ export class LoadedCohortMigrationOperations {
         telemetry: {
           ...existing,
           ...(onboardingLanguageCohort ? { onboardingLanguageCohort } : {}),
+          ...(!fileExistedOnLoad && !existing?.workspaceDiscoveryCohort
+            ? { workspaceDiscoveryCohort: randomInt(10) === 0 ? 'control' : 'treatment' }
+            : {}),
           existedBeforeTelemetryRelease: resolvedExistedBefore,
           // Preserve explicit true, false and null; only absence uses the cohort default.
           optedIn:

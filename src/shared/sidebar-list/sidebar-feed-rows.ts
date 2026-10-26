@@ -42,8 +42,7 @@ import {
   type HostSectionRow
 } from './host-section-rows'
 import type {
-  ImportedWorktreesCardCandidate,
-  NewExternalWorktreesInboxCandidate,
+  SidebarFeedWindowExtras,
   PinnedWorktreeDisplayPolicy,
   Row,
   WorktreeGroupBy
@@ -90,12 +89,7 @@ export type SidebarFeedRows = {
   activeRowKeys: ReadonlySet<string>
 }
 
-/** What only the desktop window adds over the inputs: transient reveals and its own cards. */
-export type SidebarFeedWindowExtras = {
-  forcedVisibleWorktreeIds?: readonly string[]
-  importedWorktreesByRepo?: ReadonlyMap<string, ImportedWorktreesCardCandidate>
-  newExternalWorktreesInboxByRepo?: ReadonlyMap<string, NewExternalWorktreesInboxCandidate>
-}
+export type { SidebarFeedWindowExtras } from './row-types'
 
 export type SidebarFeedPlan = {
   visibleWorktrees: Worktree[]
@@ -225,6 +219,9 @@ export function planSidebarFeedRows(
   })
   // The catalog's order, not the feed's repoOrder: only it places a paired server's projects.
   const repoOrder = getLogicalRepoOrderRankById(repos.map((repo) => repo.id))
+  for (const repoId of extras.additionalPlaceholderRepoIds ?? []) {
+    placeholderRepoIds.add(repoId)
+  }
   const plan = planSidebarRows({
     groupBy,
     worktrees: visibleWorktrees,

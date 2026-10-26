@@ -10,6 +10,7 @@ import { getCohortAtEmit } from './cohort-classifier'
 import { resolveConsent } from './consent'
 import { buildCommonProps, createPostHogClient, waitForCaptureEnqueue } from './posthog-transport'
 import { commonPropsSchema, validate } from './validator'
+import { workspaceDiscoveryObservationKey } from './workspace-discovery-observation'
 
 export { shouldOptOutSdkAtInit } from './posthog-transport'
 
@@ -42,6 +43,7 @@ let testTransportEnabled = false
 // Banner resolution gates first app_opened; mark and emit atomically.
 let appOpenedTrackedThisSession = false
 const trackedDashboardActiveDays = new Map<AgentDashboardSurface, number>()
+const trackedWorkspaceDiscoveryObservations = new Set<string>()
 
 export function initTelemetry(store: Store): void {
   // Retain Store even for contributor builds so opt-out persists.
@@ -51,6 +53,7 @@ export function initTelemetry(store: Store): void {
   // Reset banner/app-open gating each launch, not once per install.
   appOpenedTrackedThisSession = false
   trackedDashboardActiveDays.clear()
+  trackedWorkspaceDiscoveryObservations.clear()
 
   if (!TELEMETRY_ENABLED || !IS_OFFICIAL_BUILD || BUILD_IDENTITY === null || WRITE_KEY === null) {
     return
@@ -70,6 +73,10 @@ export function initTelemetry(store: Store): void {
   const languageCohort = settings.telemetry?.onboardingLanguageCohort
   if (languageCohort === 'control' || languageCohort === 'treatment') {
     commonProps.onboarding_language_v1 = languageCohort
+  }
+  const discoveryCohort = settings.telemetry?.workspaceDiscoveryCohort
+  if (discoveryCohort === 'control' || discoveryCohort === 'treatment') {
+    commonProps.workspace_discovery_v1 = discoveryCohort
   }
 
   // Validate singleton common properties once; invalid identity would collapse installs into one subject.
@@ -106,6 +113,10 @@ export function hasTrackedAgentDashboardActiveToday(props: unknown): boolean {
   )
 }
 
+export function hasTrackedWorkspaceDiscoveryEligibility(): boolean {
+  return trackedWorkspaceDiscoveryObservations.has('workspace_discovery_eligible')
+}
+
 export function track<N extends EventName>(name: N, props: EventProps<N>): boolean {
   if (!testTransportEnabled && (!IS_OFFICIAL_BUILD || !TELEMETRY_ENABLED)) {
     return false
@@ -116,6 +127,19 @@ export function track<N extends EventName>(name: N, props: EventProps<N>): boole
     return false
   }
   if (!posthog || !commonProps || !storeRef || posthog.optedOut) {
+    return false
+  }
+
+  const discoveryEvent =
+    name === 'workspace_discovery_eligible' ||
+    name === 'workspace_discovery_shown' ||
+    name === 'workspace_discovery_action'
+  if (discoveryEvent && !commonProps.workspace_discovery_v1) {
+    return false
+  }
+  const discoveryKey = discoveryEvent ? workspaceDiscoveryObservationKey(name, props) : null
+  // At most nine observations per session, shared across windows and virtual-row remounts.
+  if (discoveryKey && trackedWorkspaceDiscoveryObservations.has(discoveryKey)) {
     return false
   }
 
@@ -181,6 +205,9 @@ export function track<N extends EventName>(name: N, props: EventProps<N>): boole
       $process_person_profile: false
     }
   })
+  if (discoveryKey) {
+    trackedWorkspaceDiscoveryObservations.add(discoveryKey)
+  }
   if (dashboardActiveSurface && settings.telemetry) {
     trackedDashboardActiveDays.set(dashboardActiveSurface, dashboardActiveDay)
     try {

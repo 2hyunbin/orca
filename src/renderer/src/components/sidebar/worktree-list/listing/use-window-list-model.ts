@@ -56,6 +56,7 @@ export function useWindowSidebarListModel(args: SidebarListModelArgs): SidebarLi
     visibleFolderWorkspacesForRows: visibleScope.visibleFolderWorkspacesForRows,
     importedWorktreesByRepo: externalWorktreeCards.importedWorktreesByRepo,
     newExternalWorktreesInboxByRepo: externalWorktreeCards.newExternalWorktreesInboxByRepo,
+    additionalPlaceholderRepoIds: externalWorktreeCards.discoveryPlaceholderRepoIds,
     filterRepoIds: filterState.filterRepoIds,
     visibleWorkspaceHostIds: filterState.visibleWorkspaceHostIds,
     workspaceHostScope: filterState.workspaceHostScope

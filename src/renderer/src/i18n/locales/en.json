@@ -21347,5 +21347,33 @@
   },
   "browserTab": {
     "agentDriving": "An agent is using this page"
+  },
+  "workspaceDiscovery": {
+    "visibilitySettings": "Visibility settings",
+    "selectScope": "Select {{name}} at {{path}}",
+    "addError": "Could not add workspaces. Try again.",
+    "dismissError": "Could not hide suggestions. Try again.",
+    "hiddenCount": "{{count}} hidden workspaces",
+    "hiddenOne": "1 hidden workspace",
+    "oneFound": "1 other workspace found",
+    "found": "{{count}} other workspaces found",
+    "reviewScope": "Review hidden workspaces for {{scope}}",
+    "review": "Review",
+    "dismissScope": "Hide workspace suggestions for {{scope}}",
+    "dismiss": "Hide suggestions for this project.",
+    "recovery": "Find these later in the project menu → Manage workspaces.",
+    "description": "These working copies already exist. Select any you want to add to the sidebar.",
+    "adding": "Adding…",
+    "addCount": "Add {{count}} to sidebar",
+    "add": "Add to sidebar",
+    "search": "Find a workspace",
+    "searchPlaceholder": "Find a workspace…",
+    "available": "Workspaces available to add",
+    "checking": "Checking workspaces…",
+    "noMatches": "No matching workspaces.",
+    "noneHidden": "No hidden workspaces.",
+    "scanError": "Could not check workspaces. Reopen Manage workspaces to try again.",
+    "updateError": "Could not save workspace visibility. Try again.",
+    "manage": "Manage workspaces"
   }
 }

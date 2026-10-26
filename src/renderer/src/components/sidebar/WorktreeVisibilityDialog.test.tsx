@@ -176,6 +176,10 @@ async function renderDialog(): Promise<void> {
   await act(async () => {
     root.render(<WorktreeVisibilityDialog />)
   })
+  const settings = document.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')
+  if (settings?.getAttribute('data-state') === 'closed') {
+    await click(settings)
+  }
 }
 
 function deferred<T>() {
@@ -242,27 +246,11 @@ async function setInputValue(input: HTMLInputElement, value: string): Promise<vo
 }
 
 describe('WorktreeVisibilityDialog', () => {
-  it('links directly to the global visibility defaults', async () => {
-    await renderDialog()
-
-    const manageGlobalSettings = buttonWithText('Manage in Global Settings')
-    expect(manageGlobalSettings.querySelector('.lucide-settings')).not.toBeNull()
-    await click(manageGlobalSettings)
-
-    expect(mocks.state.closeModal).toHaveBeenCalledOnce()
-    expect(mocks.state.openSettingsTarget).toHaveBeenCalledWith({
-      pane: 'general',
-      repoId: null,
-      sectionId: 'general-global-worktree-visibility'
-    })
-    expect(mocks.state.openSettingsPage).toHaveBeenCalledOnce()
-  })
-
   it('lists a hidden agent worktree with a repo-relative path', async () => {
     await renderDialog()
 
     expect(document.body.textContent).toContain('Hidden worktrees (1)')
-    expect(document.body.textContent).toContain('Show one without enabling its source.')
+    expect(document.body.textContent).toContain('Select any you want to add to the sidebar.')
     expect(document.body.textContent).toContain('scratch-1')
     expect(document.body.textContent).toContain('.claude/worktrees/scratch-1')
     expect(document.body.textContent).not.toContain('/repo/.claude')

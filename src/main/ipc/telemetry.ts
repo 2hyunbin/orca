@@ -4,6 +4,7 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { consumeConsentMutationToken } from '../telemetry/burst-cap'
 import {
   hasTrackedAgentDashboardActiveToday,
+  hasTrackedWorkspaceDiscoveryEligibility,
   persistBannerAcknowledgeWithoutEmitting,
   setOptIn,
   track
@@ -84,7 +85,8 @@ export function registerTelemetryHandlers(store: Store): void {
     return (
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: track validates this IPC payload against its event schema before capture.
       track(eventName, finalProps as EventProps<EventName>) ||
-      (eventName === 'agent_dashboard_active' && hasTrackedAgentDashboardActiveToday(finalProps))
+      (eventName === 'agent_dashboard_active' && hasTrackedAgentDashboardActiveToday(finalProps)) ||
+      (eventName === 'workspace_discovery_eligible' && hasTrackedWorkspaceDiscoveryEligibility())
     )
   })
 

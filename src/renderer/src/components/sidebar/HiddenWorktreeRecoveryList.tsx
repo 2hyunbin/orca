@@ -3,6 +3,7 @@ import { FolderMinus, Search } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { translate } from '@/i18n/i18n'
 import type { Repo } from '../../../../shared/repo-types'
 import type { DetectedWorktreeListResult } from '../../../../shared/worktree/types'
@@ -19,6 +20,7 @@ type Props = {
   busyPath: string | null
   toggling: boolean
   onShow: (worktreePath: string) => Promise<void>
+  onShowSelected: (paths: readonly string[]) => Promise<boolean>
 }
 
 export default function HiddenWorktreeRecoveryList({
@@ -27,12 +29,19 @@ export default function HiddenWorktreeRecoveryList({
   listState,
   busyPath,
   toggling,
-  onShow
+  onShow,
+  onShowSelected
 }: Props): React.JSX.Element | null {
   const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [submitting, setSubmitting] = useState(false)
   const headingId = useId()
   const listRef = useRef<HTMLDivElement>(null)
   const hidden = getHiddenImportableExternalWorktrees(detected)
+  const selectedPaths = hidden
+    .filter((worktree) => selected.has(worktree.path))
+    .map((worktree) => worktree.path)
+  const disabled = submitting || busyPath !== null || toggling || listState === 'checking'
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const filtered = normalizedQuery
     ? hidden.filter(
@@ -68,12 +77,12 @@ export default function HiddenWorktreeRecoveryList({
           </h3>
           <p className="text-xs text-muted-foreground">
             {translate(
-              'auto.components.sidebar.HiddenWorktreeRecoveryList.64e6f53f05',
-              'Show one without enabling its source.'
+              'workspaceDiscovery.description',
+              'These working copies already exist. Select any you want to add to the sidebar.'
             )}
           </p>
         </div>
-        {hidden.length >= 10 ? (
+        {hidden.length >= 10 || query ? (
           <div className="relative w-48 shrink-0">
             <Search className="pointer-events-none absolute left-2.5 top-2 size-3.5 text-muted-foreground" />
             <Input
@@ -121,6 +130,26 @@ export default function HiddenWorktreeRecoveryList({
                   aria-setsize={filtered.length}
                 >
                   <div className="flex min-w-0 items-center gap-3 rounded-md border border-border px-3 py-2 hover:bg-accent/50">
+                    <Checkbox
+                      checked={selected.has(worktree.path)}
+                      disabled={disabled}
+                      aria-label={translate(
+                        'workspaceDiscovery.selectScope',
+                        'Select {{name}} at {{path}}',
+                        { name: worktree.displayName, path: displayPath }
+                      )}
+                      onCheckedChange={(checked) => {
+                        setSelected((current) => {
+                          const next = new Set(current)
+                          if (checked === true) {
+                            next.add(worktree.path)
+                          } else {
+                            next.delete(worktree.path)
+                          }
+                          return next
+                        })
+                      }}
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm">{worktree.displayName}</div>
                       <div className="truncate font-mono text-xs text-muted-foreground">
@@ -131,7 +160,7 @@ export default function HiddenWorktreeRecoveryList({
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={busyPath !== null || toggling || listState === 'checking'}
+                      disabled={disabled}
                       aria-label={translate(
                         'auto.components.sidebar.HiddenWorktreeRecoveryList.showWorktree',
                         'Show {{value0}} at {{value1}}',
@@ -195,6 +224,32 @@ export default function HiddenWorktreeRecoveryList({
             </div>
           </div>
         </div>
+      ) : null}
+      {hidden.length > 0 ? (
+        <Button
+          type="button"
+          size="sm"
+          className="justify-self-end"
+          disabled={disabled || selectedPaths.length === 0}
+          onClick={async () => {
+            setSubmitting(true)
+            try {
+              if (await onShowSelected(selectedPaths)) {
+                setSelected(new Set())
+              }
+            } finally {
+              setSubmitting(false)
+            }
+          }}
+        >
+          {submitting
+            ? translate('workspaceDiscovery.adding', 'Adding…')
+            : selectedPaths.length > 0
+              ? translate('workspaceDiscovery.addCount', 'Add {{count}} to sidebar', {
+                  count: selectedPaths.length
+                })
+              : translate('workspaceDiscovery.add', 'Add to sidebar')}
+        </Button>
       ) : null}
     </section>
   )

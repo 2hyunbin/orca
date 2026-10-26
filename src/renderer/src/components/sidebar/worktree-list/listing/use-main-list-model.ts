@@ -175,7 +175,8 @@ export function useMainSidebarListModel(args: SidebarListModelArgs): SidebarList
           ? [args.agentSendTargetWorktreeId]
           : undefined,
         importedWorktreesByRepo,
-        newExternalWorktreesInboxByRepo
+        newExternalWorktreesInboxByRepo,
+        additionalPlaceholderRepoIds: externalWorktreeCards.discoveryPlaceholderRepoIds
       }),
     [
       domains,
@@ -185,7 +186,8 @@ export function useMainSidebarListModel(args: SidebarListModelArgs): SidebarList
       rankedIds,
       args.agentSendTargetWorktreeId,
       importedWorktreesByRepo,
-      newExternalWorktreesInboxByRepo
+      newExternalWorktreesInboxByRepo,
+      externalWorktreeCards.discoveryPlaceholderRepoIds
     ]
   )
 

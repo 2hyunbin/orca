@@ -17,6 +17,8 @@ This page describes the anonymous product-usage telemetry we collect in packaged
 
 Alongside each event we include basic build and platform information: the Orca version, your operating system (e.g. `darwin` / `win32` / `linux`), CPU architecture, coarse OS release string, release channel (`stable` or `rc`), and the anonymous local ID described above. No hostname, no username, no IP.
 
+Some fresh installs receive a locally saved experiment group. For workspace discovery, 90% see automatic sidebar suggestions and 10% do not; both groups can manage workspaces from the project menu. Events include the anonymous group so we can compare usage. For enrolled installs, we record when suggestions become available, when the suggestion or management view renders, and whether you review, successfully import, or dismiss suggestions, with workspace counts capped at 50. Each view and action per surface is recorded at most once per app session across all windows, for a maximum of nine discovery events. No workspace names, paths, or host identifiers are included.
+
 The categories of behavior we observe:
 
 - **Lifecycle** — when the app opens, including whether Agent Dashboard is currently enabled. Used to estimate daily, weekly, and monthly active users and feature adoption, including users who enabled the dashboard before measurement began.

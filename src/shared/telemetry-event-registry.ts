@@ -104,6 +104,11 @@ import {
   workspaceCreateFailedSchema
 } from './telemetry-repository-event-schemas'
 import { sshRemoteRuntimeResolvedSchema } from './telemetry-ssh-runtime-event-schemas'
+import {
+  workspaceDiscoveryActionSchema,
+  workspaceDiscoveryEligibleSchema,
+  workspaceDiscoveryShownSchema
+} from './telemetry-workspace-discovery-event-schemas'
 import { wslUsageSnapshotSchema } from './telemetry-wsl-usage-event-schemas'
 import {
   sshHostServerConversionSchema,
@@ -132,6 +137,9 @@ export const eventSchemas = {
   add_repo_nested_import_result: addRepoNestedImportResultSchema,
   workspace_created: workspaceCreatedSchema,
   workspace_create_failed: workspaceCreateFailedSchema,
+  workspace_discovery_eligible: workspaceDiscoveryEligibleSchema,
+  workspace_discovery_shown: workspaceDiscoveryShownSchema,
+  workspace_discovery_action: workspaceDiscoveryActionSchema,
   setup_script_prompt_shown: setupScriptPromptShownSchema,
   setup_script_prompt_action: setupScriptPromptActionSchema,
 

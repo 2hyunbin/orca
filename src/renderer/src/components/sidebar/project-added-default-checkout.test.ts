@@ -273,49 +273,63 @@ describe('finishProjectAddWithDefaultCheckout', () => {
     expect(mocks.activateAndRevealWorktree).toHaveBeenCalledWith('repo-1::/repo')
   })
 
-  it('shows a hidden detected default checkout before activating it', async () => {
-    const defaultCheckout = makeWorktree()
-    mocks.state.detectedWorktreesByRepo = {
-      'repo-1': {
+  it.each(['local', 'ssh:legacy-target'] as const)(
+    'preserves existing imports when revealing a checkout from an older %s snapshot',
+    async (executionHostId) => {
+      const defaultCheckout = makeWorktree()
+      mocks.state.repos = [
+        {
+          id: 'repo-1',
+          path: '/repo',
+          displayName: 'orca',
+          badgeColor: '#000000',
+          addedAt: 0,
+          executionHostId,
+          importedExternalWorktreePaths: ['/already-imported']
+        }
+      ]
+      mocks.state.detectedWorktreesByRepo = {
+        'repo-1': {
+          repoId: 'repo-1',
+          authoritative: true,
+          source: 'git',
+          worktrees: [
+            {
+              ...defaultCheckout,
+              ownership: 'external',
+              selectedCheckout: false,
+              visible: false
+            }
+          ]
+        }
+      }
+      mocks.state.fetchWorktrees.mockImplementation(async () => {
+        mocks.state.worktreesByRepo = {
+          'repo-1': [defaultCheckout]
+        }
+        return true
+      })
+
+      await openProjectDefaultCheckout({
         repoId: 'repo-1',
-        authoritative: true,
-        source: 'git',
-        worktrees: [
-          {
-            ...defaultCheckout,
-            ownership: 'external',
-            selectedCheckout: false,
-            visible: false
-          }
-        ]
-      }
+        source: 'local_folder_picker',
+        setHideDefaultBranchWorkspace: vi.fn()
+      })
+
+      expect(mocks.state.updateRepo).toHaveBeenCalledWith('repo-1', {
+        importedExternalWorktreePaths: ['/already-imported', '/repo']
+      })
+      expect(mocks.state.fetchWorktrees).toHaveBeenCalledWith('repo-1', {
+        requireAuthoritative: true
+      })
+      expect(mocks.track).toHaveBeenCalledWith('add_repo_default_checkout_handoff', {
+        source: 'local_folder_picker',
+        result: 'opened_default_checkout',
+        reason: 'detected_default_checkout'
+      })
+      expect(mocks.activateAndRevealWorktree).toHaveBeenCalledWith('repo-1::/repo')
     }
-    mocks.state.fetchWorktrees.mockImplementation(async () => {
-      mocks.state.worktreesByRepo = {
-        'repo-1': [defaultCheckout]
-      }
-      return true
-    })
-
-    await openProjectDefaultCheckout({
-      repoId: 'repo-1',
-      source: 'local_folder_picker',
-      setHideDefaultBranchWorkspace: vi.fn()
-    })
-
-    expect(mocks.state.updateRepo).toHaveBeenCalledWith('repo-1', {
-      importedExternalWorktreePaths: ['/repo']
-    })
-    expect(mocks.state.fetchWorktrees).toHaveBeenCalledWith('repo-1', {
-      requireAuthoritative: true
-    })
-    expect(mocks.track).toHaveBeenCalledWith('add_repo_default_checkout_handoff', {
-      source: 'local_folder_picker',
-      result: 'opened_default_checkout',
-      reason: 'detected_default_checkout'
-    })
-    expect(mocks.activateAndRevealWorktree).toHaveBeenCalledWith('repo-1::/repo')
-  })
+  )
 
   it('opens the checkout without revealing detected sibling worktrees', async () => {
     const defaultCheckout = makeWorktree()

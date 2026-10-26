@@ -26,7 +26,9 @@ describe('onboarding language experiment', () => {
       expect(runtime.loadNeedsSave).toBe(true)
       const reopened = migration.migrateTelemetry(JSON.parse(JSON.stringify(fresh)), true)
       expect(reopened).toEqual(fresh)
-      expect(crypto.randomInt).toHaveBeenCalledExactlyOnceWith(2)
+      expect(crypto.randomInt).toHaveBeenCalledWith(2)
+      expect(crypto.randomInt).toHaveBeenCalledWith(10)
+      expect(crypto.randomInt).toHaveBeenCalledTimes(2)
     }
   )
 
@@ -40,4 +42,22 @@ describe('onboarding language experiment', () => {
     expect(crypto.randomInt).not.toHaveBeenCalled()
     expect(migration.migrateTelemetry(upgraded, true)).toEqual(upgraded)
   })
+})
+
+describe('workspace discovery experiment', () => {
+  it.each(Array.from({ length: 10 }, (_, draw) => draw))(
+    'freezes discovery draw %i independently of the language experiment',
+    (draw) => {
+      vi.mocked(crypto.randomInt).mockImplementation((max) => (max === 10 ? draw : 1))
+      const migration = new LoadedCohortMigrationOperations({ loadNeedsSave: false })
+      const fresh = migration.migrateTelemetry(getDefaultPersistedState('/test'), false)
+      expect(fresh.settings.telemetry?.workspaceDiscoveryCohort).toBe(
+        draw === 0 ? 'control' : 'treatment'
+      )
+      expect(fresh.settings.telemetry?.onboardingLanguageCohort).toBe('treatment')
+      vi.mocked(crypto.randomInt).mockClear()
+      expect(migration.migrateTelemetry(JSON.parse(JSON.stringify(fresh)), true)).toEqual(fresh)
+      expect(crypto.randomInt).not.toHaveBeenCalled()
+    }
+  )
 })

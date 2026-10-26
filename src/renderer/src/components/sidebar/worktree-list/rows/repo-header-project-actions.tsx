@@ -187,7 +187,6 @@ export function RepoHeaderCreateWorkspaceButton({
               REPO_HEADER_ACTION_REVEAL_CLASS
             )}
             data-repo-header-action=""
-            data-workspace-project-menu={getRepoHostIdentity(repo)}
             tabIndex={0}
             aria-label={createState.ariaLabel}
             onKeyDown={stopRepoHeaderKeyboardToggle}
@@ -212,7 +211,6 @@ export function RepoHeaderCreateWorkspaceButton({
             size="icon-xs"
             className={REPO_HEADER_ACTION_BUTTON_CLASS}
             data-repo-header-action=""
-            data-workspace-project-menu={getRepoHostIdentity(repo)}
             aria-label={createState?.ariaLabel ?? fallbackLabel}
             onKeyDown={stopRepoHeaderKeyboardToggle}
             onPointerDown={handleRepoHeaderActionPointerDown}

@@ -2,6 +2,10 @@ import type {
   GlobalSettings,
   WorktreeVisibilityDefaults
 } from '../../../../shared/global-settings-types'
+import {
+  getRepoExecutionHostId,
+  getWorktreeExecutionHostId
+} from '../../../../shared/execution-host'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { getRepoOwnerWorktreeVisibilityDefaults } from '../../store/worktree-visibility-defaults-by-host'
 import type { Repo } from '../../../../shared/repo-types'
@@ -42,8 +46,11 @@ export function buildNewExternalWorktreesInboxCandidates(args: {
         args.visibilityDefaultsByHost ?? {}
       )
     )
-    if (inboxWorktrees.length > 0) {
-      candidates.set(repo.id, { repo, inboxWorktrees })
+    const ownerWorktrees = inboxWorktrees.filter(
+      (worktree) => getWorktreeExecutionHostId(worktree, repo) === getRepoExecutionHostId(repo)
+    )
+    if (ownerWorktrees.length > 0) {
+      candidates.set(repo.id, { repo, inboxWorktrees: ownerWorktrees })
     }
   }
   return candidates

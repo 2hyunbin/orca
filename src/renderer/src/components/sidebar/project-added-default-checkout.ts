@@ -6,12 +6,16 @@ import type {
   EventProps
 } from '../../../../shared/telemetry-events'
 import type { DetectedWorktreeListResult, Worktree } from '../../../../shared/worktree/types'
-import { findRepoForHost } from '@/store/slices/repo-host-identity'
+import { repoMatchesHostIdentity } from '@/store/slices/repo-host-identity'
 import { mergeExternalWorktreeInboxPaths } from '../../../../shared/external-worktree-inbox'
 import { relativePathInsideRoot } from '../../../../shared/cross-platform-path'
 import { markOnboardingProjectAdded } from '@/lib/onboarding-project-checklist'
 import { finalizeImportedRepoAfterSkip } from './add-repo-skip-finalization'
-import { parseExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
+import {
+  getWorktreeExecutionHostId,
+  parseExecutionHostId,
+  type ExecutionHostId
+} from '../../../../shared/execution-host'
 import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
@@ -107,10 +111,13 @@ async function findDetectedDefaultCheckout(
     }
   }
   if (!detectedDefaultCheckout.visible) {
-    const repo = findRepoForHost(state.repos, repoId, {
-      hostId: executionHostId,
-      settings: state.settings
-    })
+    const ownerHostId =
+      executionHostId ?? getWorktreeExecutionHostId(detectedDefaultCheckout, undefined)
+    const matchingRepos = state.repos.filter((candidate) => candidate.id === repoId)
+    const repo =
+      !executionHostId && matchingRepos.length === 1
+        ? matchingRepos[0]
+        : matchingRepos.find((candidate) => repoMatchesHostIdentity(candidate, repoId, ownerHostId))
     const updates = {
       importedExternalWorktreePaths: mergeExternalWorktreeInboxPaths(
         repo?.importedExternalWorktreePaths,

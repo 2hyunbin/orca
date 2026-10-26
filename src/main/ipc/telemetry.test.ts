@@ -12,6 +12,7 @@ const {
   getCohortAtEmitMock,
   getOnboardingCohortAtEmitMock,
   hasTrackedAgentDashboardActiveTodayMock,
+  hasTrackedWorkspaceDiscoveryEligibilityMock,
   fromWebContentsMock
 } = vi.hoisted(() => ({
   handleMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
   getCohortAtEmitMock: vi.fn(),
   getOnboardingCohortAtEmitMock: vi.fn(),
   hasTrackedAgentDashboardActiveTodayMock: vi.fn(),
+  hasTrackedWorkspaceDiscoveryEligibilityMock: vi.fn(),
   fromWebContentsMock: vi.fn()
 }))
 
@@ -32,6 +34,7 @@ vi.mock('electron', () => ({
 vi.mock('../telemetry/client', () => ({
   track: trackMock,
   hasTrackedAgentDashboardActiveToday: hasTrackedAgentDashboardActiveTodayMock,
+  hasTrackedWorkspaceDiscoveryEligibility: hasTrackedWorkspaceDiscoveryEligibilityMock,
   setOptIn: setOptInMock,
   persistBannerAcknowledgeWithoutEmitting: persistBannerAcknowledgeMock
 }))
@@ -94,6 +97,7 @@ describe('telemetry IPC handlers', () => {
     getOnboardingCohortAtEmitMock.mockReset()
     getOnboardingCohortAtEmitMock.mockReturnValue({ cohort: undefined })
     hasTrackedAgentDashboardActiveTodayMock.mockReset().mockReturnValue(false)
+    hasTrackedWorkspaceDiscoveryEligibilityMock.mockReset().mockReturnValue(false)
     fromWebContentsMock.mockReset().mockReturnValue({
       isDestroyed: () => false,
       isVisible: () => true,
@@ -115,6 +119,18 @@ describe('telemetry IPC handlers', () => {
     expect(handlers.has('telemetry:setOptIn')).toBe(true)
     expect(handlers.has('telemetry:acknowledgeBanner')).toBe(true)
     expect(handlers.has('telemetry:getConsentState')).toBe(true)
+  })
+
+  it('acknowledges eligibility already observed by another sidebar mount without sending it again', () => {
+    registerWith({ installId: 'x', existedBeforeTelemetryRelease: false, optedIn: true })
+    const handler = handlers.get('telemetry:track')
+    if (!handler) {
+      throw new Error('Telemetry handler missing')
+    }
+    trackMock.mockReturnValue(false)
+    expect(handler({}, 'workspace_discovery_eligible', {})).toBe(false)
+    hasTrackedWorkspaceDiscoveryEligibilityMock.mockReturnValue(true)
+    expect(handler({}, 'workspace_discovery_eligible', {})).toBe(true)
   })
 
   it('forwards a well-typed track call to track() and injects cohort for COHORT_EXTENDED events', () => {

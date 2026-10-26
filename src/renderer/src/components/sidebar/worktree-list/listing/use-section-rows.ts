@@ -62,6 +62,7 @@ type SectionRowsArgs = {
   visibleFolderWorkspacesForRows: readonly FolderWorkspace[]
   importedWorktreesByRepo: ReadonlyMap<string, ImportedWorktreesCardCandidate>
   newExternalWorktreesInboxByRepo: ReadonlyMap<string, NewExternalWorktreesInboxCandidate>
+  additionalPlaceholderRepoIds?: ReadonlySet<string>
   filterRepoIds: readonly string[]
   visibleWorkspaceHostIds: readonly ExecutionHostId[] | null
   workspaceHostScope: AppState['workspaceHostScope']
@@ -85,17 +86,26 @@ export function useSidebarSectionRows(args: SectionRowsArgs) {
     [repos]
   )
   const allRepoIds = useMemo(() => repos.map((r) => r.id), [repos])
-  const placeholderRepoIds = useMemo(
-    () =>
-      getEmptyProjectPlaceholderRepoIds({
-        groupBy: args.groupBy,
-        repos: args.visibleReposForRows,
-        worktreesByRepo,
-        visibleWorktrees: worktrees,
-        filterRepoIds: args.filterRepoIds
-      }),
-    [args.filterRepoIds, args.groupBy, args.visibleReposForRows, worktrees, worktreesByRepo]
-  )
+  const placeholderRepoIds = useMemo(() => {
+    const placeholders = getEmptyProjectPlaceholderRepoIds({
+      groupBy: args.groupBy,
+      repos: args.visibleReposForRows,
+      worktreesByRepo,
+      visibleWorktrees: worktrees,
+      filterRepoIds: args.filterRepoIds
+    })
+    for (const repoId of args.additionalPlaceholderRepoIds ?? []) {
+      placeholders.add(repoId)
+    }
+    return placeholders
+  }, [
+    args.additionalPlaceholderRepoIds,
+    args.filterRepoIds,
+    args.groupBy,
+    args.visibleReposForRows,
+    worktrees,
+    worktreesByRepo
+  ])
 
   // Why: subscribe on a flat key array (useShallow) so progress ticks don't rebuild the whole row model.
   const pendingCreationKeys = useAppStore(

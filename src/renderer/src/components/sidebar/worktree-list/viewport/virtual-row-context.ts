@@ -67,7 +67,6 @@ export function buildWorktreeVirtualRowContext(args: BuildArgs): WorktreeVirtual
     hostDrag: headerDrag.hostDrag,
     toggleGroupWithScrollAnchor: args.toggleGroupWithScrollAnchor,
     importedWorktreeCardActionState: props.importedWorktreeCardActionState,
-    onShowImportedWorktrees: props.handleShowImportedWorktrees,
     onKeepImportedWorktreesHidden: props.handleKeepImportedWorktreesHidden,
     onOpenWorktreeVisibility: props.handleOpenWorktreeVisibility,
     onWorkspaceStatusDragOver: statusDrag.handleWorkspaceStatusDragOver,

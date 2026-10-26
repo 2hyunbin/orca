@@ -5,13 +5,17 @@ import ImportedWorktreesVisibilityLine, {
   type ImportedWorktreesVisibilityLineProps
 } from './ImportedWorktreesVisibilityLine'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { track } from '@/lib/telemetry'
+
+vi.mock('@/lib/telemetry', () => ({ track: vi.fn() }))
 
 const hiddenWorktrees = [
-  { displayName: 'openusage', path: '/worktrees/one', branch: 'refs/heads/feature-one' },
-  { displayName: 'openusage', path: '/worktrees/two', branch: 'refs/heads/feature-two' }
+  { displayName: 'workspace-one', path: '/worktrees/one' },
+  { displayName: 'workspace-two', path: '/worktrees/two' }
 ]
+
 function renderLine(overrides: Partial<ImportedWorktreesVisibilityLineProps> = {}) {
-  const onShow = vi.fn().mockResolvedValue(true)
+  const onReview = vi.fn()
   const onKeepHidden = vi.fn().mockResolvedValue(true)
   const props = {
     repoDisplayName: 'orca',
@@ -19,7 +23,8 @@ function renderLine(overrides: Partial<ImportedWorktreesVisibilityLineProps> = {
     placement: 'repo-group' as const,
     pending: false,
     error: null,
-    onShow,
+    telemetryEnabled: true,
+    onReview,
     onKeepHidden,
     ...overrides
   }
@@ -28,90 +33,107 @@ function renderLine(overrides: Partial<ImportedWorktreesVisibilityLineProps> = {
       <ImportedWorktreesVisibilityLine {...props} />
     </TooltipProvider>
   )
-  return { ...view, onShow, onKeepHidden }
+  return { ...view, onReview, onKeepHidden }
 }
-afterEach(cleanup)
 
-describe('workspace discovery', () => {
-  it('starts collapsed and adds only the selected path, with names and paths visible', async () => {
-    const { onShow } = renderLine()
+afterEach(() => {
+  cleanup()
+  vi.clearAllMocks()
+})
+
+describe('workspace discovery hint', () => {
+  it('hands review to the manager without rendering workspace editors in the sidebar', () => {
+    const { onReview } = renderLine()
+    expect(screen.getByText('2 other workspaces found')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Review hidden workspaces for orca' }))
+    expect(onReview).toHaveBeenCalledOnce()
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
-    fireEvent.click(screen.getByRole('button', { name: 'Review hidden workspaces for orca' }))
-    expect(screen.getByText('/worktrees/two')).toBeTruthy()
-    fireEvent.click(screen.getAllByRole('checkbox')[1])
-    fireEvent.click(screen.getByRole('button', { name: 'Add 1 to sidebar' }))
-    await waitFor(() => expect(onShow).toHaveBeenCalledWith(['/worktrees/two']))
-    await waitFor(() => expect(screen.queryAllByRole('checkbox')).toHaveLength(0))
+    expect(screen.queryByText('/worktrees/one')).toBeNull()
+    expect(vi.mocked(track).mock.calls).toEqual([
+      ['workspace_discovery_shown', { surface: 'suggestion', workspace_count: 2 }],
+      [
+        'workspace_discovery_action',
+        { action: 'reviewed', surface: 'suggestion', workspace_count: 2 }
+      ]
+    ])
   })
 
-  it('retains selection when adding fails and retries it', async () => {
-    const onShow = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
-    renderLine({ onShow })
-    fireEvent.click(screen.getByRole('button', { name: 'Review hidden workspaces for orca' }))
-    fireEvent.click(screen.getAllByRole('checkbox')[0])
-    fireEvent.click(screen.getByRole('button', { name: 'Add 1 to sidebar' }))
-    await waitFor(() =>
-      expect(
-        screen.getByRole('button', { name: 'Add 1 to sidebar' }).hasAttribute('disabled')
-      ).toBe(false)
-    )
-    expect(screen.getAllByRole('checkbox')[0].getAttribute('aria-checked')).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: 'Add 1 to sidebar' }))
-    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(2))
-    expect(onShow).toHaveBeenLastCalledWith(['/worktrees/one'])
+  it('dismisses suggestions and recovers focus only after saving succeeds', async () => {
+    const onFocusRecovery = vi.fn()
+    const { onKeepHidden } = renderLine({ onFocusRecovery })
+    fireEvent.click(screen.getByRole('button', { name: 'Hide workspace suggestions for orca' }))
+    await waitFor(() => expect(onFocusRecovery).toHaveBeenCalledOnce())
+    expect(onKeepHidden).toHaveBeenCalledOnce()
+    expect(track).toHaveBeenCalledWith('workspace_discovery_action', {
+      action: 'dismissed',
+      surface: 'suggestion',
+      workspace_count: 2
+    })
   })
 
-  it('locks dismissal and selection while saving', async () => {
+  it('keeps dismissal retryable and review disabled while a dismissal is in flight', async () => {
     let finish: (value: boolean) => void = () => undefined
-    const onShow = vi.fn(
-      () =>
-        new Promise<boolean>((resolve) => {
-          finish = resolve
-        })
-    )
-    renderLine({ onShow })
-    fireEvent.click(screen.getByRole('button', { name: 'Review hidden workspaces for orca' }))
-    fireEvent.click(screen.getAllByRole('checkbox')[0])
-    fireEvent.click(screen.getByRole('button', { name: 'Add 1 to sidebar' }))
+    const onKeepHidden = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            finish = resolve
+          })
+      )
+      .mockResolvedValue(true)
+    const onFocusRecovery = vi.fn()
+    renderLine({ onKeepHidden, onFocusRecovery })
+    fireEvent.click(screen.getByRole('button', { name: 'Hide workspace suggestions for orca' }))
     expect(
       screen
-        .getByRole('button', { name: 'Hide workspace suggestions for orca' })
+        .getByRole('button', { name: 'Review hidden workspaces for orca' })
         .hasAttribute('disabled')
     ).toBe(true)
-    expect(screen.getAllByRole('checkbox')[0].hasAttribute('disabled')).toBe(true)
-    await act(async () => finish(true))
-  })
-
-  it('preserves checked workspaces through search', async () => {
-    const worktrees = Array.from({ length: 25 }, (_, i) => ({
-      displayName: `workspace-${i}`,
-      path: `/worktrees/${i}`
-    }))
-    const onShow = vi.fn().mockResolvedValue(true)
-    renderLine({ hiddenWorktrees: worktrees, onShow })
-    fireEvent.click(screen.getByRole('button', { name: 'Review hidden workspaces for orca' }))
-    fireEvent.click(screen.getAllByRole('checkbox')[0])
-    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'workspace-24' } })
-    expect(screen.getAllByRole('checkbox')).toHaveLength(1)
-    fireEvent.click(screen.getAllByRole('checkbox')[0])
-    fireEvent.click(screen.getByRole('button', { name: 'Add 2 to sidebar' }))
-    await waitFor(() => expect(onShow).toHaveBeenCalledWith(['/worktrees/0', '/worktrees/24']))
-  })
-
-  it('opens management without another dismiss action and closes it with Escape', () => {
-    const onClose = vi.fn()
-    renderLine({ managing: true, onClose })
-    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
-    expect(screen.queryByRole('button', { name: 'Hide workspace suggestions for orca' })).toBeNull()
-    fireEvent.keyDown(screen.getAllByRole('checkbox')[0], { key: 'Escape' })
-    expect(onClose).toHaveBeenCalledTimes(1)
-  })
-
-  it('dismisses suggestions directly without a confirmation or secondary button', async () => {
-    const { onKeepHidden } = renderLine()
+    await act(async () => finish(false))
+    expect(screen.getByRole('alert').textContent).toContain('Could not hide suggestions')
+    expect(onFocusRecovery).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Hide workspace suggestions for orca' }))
-    await waitFor(() => expect(onKeepHidden).toHaveBeenCalledTimes(1))
-    expect(screen.queryByRole('dialog')).toBeNull()
-    expect(screen.queryByText('Keep hidden')).toBeNull()
+    await waitFor(() => expect(onFocusRecovery).toHaveBeenCalledOnce())
+  })
+
+  it('omits empty hints and keeps actions working outside telemetry enrollment', async () => {
+    const { rerender, onReview, onKeepHidden } = renderLine({ telemetryEnabled: false })
+    fireEvent.click(screen.getByRole('button', { name: 'Review hidden workspaces for orca' }))
+    expect(onReview).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: 'Hide workspace suggestions for orca' }))
+    await waitFor(() => expect(onKeepHidden).toHaveBeenCalledOnce())
+    expect(track).not.toHaveBeenCalled()
+    rerender(
+      <ImportedWorktreesVisibilityLine
+        repoDisplayName="orca"
+        hiddenWorktrees={[]}
+        placement="repo-group"
+        pending={false}
+        error={null}
+        onReview={onReview}
+      />
+    )
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
+  })
+
+  it('caps telemetry counts without transmitting workspace or host details', () => {
+    renderLine({
+      hostContextLabel: 'private-host',
+      hiddenWorktrees: Array.from({ length: 100 }, (_, i) => ({
+        displayName: `private-${i}`,
+        path: `/private/${i}`
+      }))
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Review hidden workspaces for orca on private-host' })
+    )
+    expect(vi.mocked(track).mock.calls).toEqual([
+      ['workspace_discovery_shown', { surface: 'suggestion', workspace_count: 50 }],
+      [
+        'workspace_discovery_action',
+        { action: 'reviewed', surface: 'suggestion', workspace_count: 50 }
+      ]
+    ])
   })
 })

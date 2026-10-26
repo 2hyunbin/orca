@@ -42,9 +42,11 @@ describe('persisted onboarding language cohorts', () => {
       throw new Error('Fresh profile has no telemetry settings')
     }
     expect(telemetry.onboardingLanguageCohort).toBe(cohort)
+    expect(telemetry.workspaceDiscoveryCohort).toBe(cohort)
     expect(store.getSettings().uiLanguage).toBe('system')
     store.flush()
     expect(readDataFile()).toHaveProperty('settings.telemetry.onboardingLanguageCohort', cohort)
+    expect(readDataFile()).toHaveProperty('settings.telemetry.workspaceDiscoveryCohort', cohort)
     expect(readDataFile()).toHaveProperty('settings.uiLanguage', 'system')
 
     store.updateSettings({ uiLanguage: 'fr' })
@@ -55,7 +57,9 @@ describe('persisted onboarding language cohorts', () => {
     const reopened = createStore()
     expect(reopened.getSettings().telemetry).toEqual({ ...telemetry, optedIn: false })
     expect(reopened.getSettings().uiLanguage).toBe('fr')
-    expect(crypto.randomInt).toHaveBeenCalledExactlyOnceWith(2)
+    expect(crypto.randomInt).toHaveBeenCalledWith(2)
+    expect(crypto.randomInt).toHaveBeenCalledWith(10)
+    expect(crypto.randomInt).toHaveBeenCalledTimes(2)
   })
 
   it('keeps a previously migrated profile excluded through restart', async () => {
@@ -74,6 +78,7 @@ describe('persisted onboarding language cohorts', () => {
     await closeTestStores()
     const reopened = createStore()
     expect(reopened.getSettings().telemetry?.onboardingLanguageCohort).toBeUndefined()
+    expect(reopened.getSettings().telemetry?.workspaceDiscoveryCohort).toBeUndefined()
     expect(reopened.getSettings().telemetry?.optedIn).toBe(false)
     expect(reopened.getSettings().uiLanguage).toBe('ja')
     expect(crypto.randomInt).not.toHaveBeenCalled()

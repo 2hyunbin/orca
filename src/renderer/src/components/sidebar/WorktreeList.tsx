@@ -179,8 +179,7 @@ const WorktreeList = React.memo(function WorktreeList({
     (repo: Repo) => {
       openModal('worktree-visibility', {
         repoId: repo.id,
-        hostId: getRepoExecutionHostId(repo),
-        inline: true
+        hostId: getRepoExecutionHostId(repo)
       })
     },
     [openModal]
@@ -258,7 +257,6 @@ const WorktreeList = React.memo(function WorktreeList({
         handleCreateForRepo={handleCreateForRepo}
         handleOpenRepoSettings={handleOpenRepoSettings}
         handleOpenWorktreeVisibility={handleOpenWorktreeVisibility}
-        handleShowImportedWorktrees={externalWorktreeCards.handleShowImportedWorktrees}
         handleKeepImportedWorktreesHidden={externalWorktreeCards.handleKeepImportedWorktreesHidden}
         importedWorktreeCardActionState={externalWorktreeCards.importedWorktreeCardActionState}
         handleRemoveProject={handleRemoveProject}

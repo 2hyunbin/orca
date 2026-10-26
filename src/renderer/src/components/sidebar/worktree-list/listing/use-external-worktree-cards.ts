@@ -1,19 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import type { Repo } from '../../../../../../shared/repo-types'
+import type {
+  ImportedWorktreesCardCandidate,
+  NewExternalWorktreesInboxCandidate
+} from '../../../../../../shared/sidebar-list/row-types'
 import { getRepoExecutionHostId } from '../../../../../../shared/execution-host'
 import { getHiddenImportableExternalWorktrees } from '../../../../../../shared/external-worktree-inbox'
 import { translate } from '@/i18n/i18n'
+import { trackWithResult } from '@/lib/telemetry'
 import { getRepoHostIdentity } from '@/store/slices/repo-host-identity'
+import { selectDetectedWorktreesByRepo } from '@/store/workspace-record-selectors'
 import {
   keepImportedWorktreesHiddenCard,
   type ImportedWorktreeCardActionState
 } from '../../imported-worktrees-card-actions'
 import { buildImportedWorktreesCardCandidates } from '../../imported-worktrees-card-candidates'
-import { importNewExternalWorktreeInboxPaths } from '../../new-external-worktrees-inbox-actions'
 import { buildNewExternalWorktreesInboxCandidates } from '../../new-external-worktrees-inbox-candidates'
-import { resolveWorktreeVisibilityHostTarget } from '../../worktree-visibility-host-target'
+import { resolveWorktreeVisibilityHostTargetForHost } from '../../worktree-visibility-host-target'
 import {
   getActiveVisibilityMutation,
   startVisibilityMutation,
@@ -21,38 +26,31 @@ import {
   type ActiveVisibilityMutation
 } from '../../worktree-visibility-mutation-fence'
 
+const NO_IMPORTED_WORKTREES: ReadonlyMap<string, ImportedWorktreesCardCandidate> = new Map()
+const NO_NEW_EXTERNAL_WORKTREES: ReadonlyMap<string, NewExternalWorktreesInboxCandidate> = new Map()
+const NO_DISCOVERY_PLACEHOLDERS: ReadonlySet<string> = new Set()
+
 export function useSidebarExternalWorktreeCards(args: {
   repos: readonly Repo[]
   visibleReposForRows: readonly Repo[]
   detectedWorktreesByRepo: AppState['detectedWorktreesByRepo']
   filterRepoIds: readonly string[]
 }) {
+  const detectedWorktreesByRepo = selectDetectedWorktreesByRepo(args)
   const updateRepo = useAppStore((s) => s.updateRepo)
   const fetchWorktrees = useAppStore((s) => s.fetchWorktrees)
   const settings = useAppStore((s) => s.settings)
-  const activeModal = useAppStore((s) => s.activeModal)
-  const modalData = useAppStore((s) => s.modalData)
   const visibilityDefaultsByHost = useAppStore((s) => s.worktreeVisibilityDefaultsByHost)
+  const discoveryCohort = settings?.telemetry?.workspaceDiscoveryCohort
+  const telemetryEnabled =
+    settings?.telemetry?.optedIn === true &&
+    (discoveryCohort === 'control' || discoveryCohort === 'treatment')
+  const hideSuggestions = !settings || discoveryCohort === 'control'
+  const trackedEligibility = useRef(false)
+  const eligibilityPending = useRef<Promise<boolean | void> | null>(null)
   const [importedWorktreeCardActionState, setActionStates] = useState<
     Map<string, ImportedWorktreeCardActionState>
   >(new Map())
-  const managedRepo =
-    activeModal === 'worktree-visibility' &&
-    modalData.inline === true &&
-    typeof modalData.repoId === 'string'
-      ? resolveWorktreeVisibilityHostTarget(
-          {
-            repos: [...args.repos],
-            settings,
-            detectedWorktreesByRepo: args.detectedWorktreesByRepo
-          },
-          modalData.repoId,
-          modalData.hostId
-        ).repo
-      : undefined
-  const managedScope = managedRepo ? getRepoHostIdentity(managedRepo) : null
-  const managedRepoId = managedRepo?.id
-  const managedHostId = managedRepo ? getRepoExecutionHostId(managedRepo) : undefined
   const setActionState = useCallback(
     (scope: string, state: ImportedWorktreeCardActionState | null) => {
       setActionStates((current) => {
@@ -68,64 +66,27 @@ export function useSidebarExternalWorktreeCards(args: {
     []
   )
 
-  useEffect(() => {
-    if (
-      !managedRepoId ||
-      !managedHostId ||
-      !managedScope ||
-      getActiveVisibilityMutation(managedScope)
-    ) {
-      return
-    }
-    let cancelled = false
-    setActionState(managedScope, { pending: true, error: null })
-    void fetchWorktrees(managedRepoId, {
-      requireAuthoritative: true,
-      executionHostId: managedHostId
-    }).then((refreshed) => {
-      if (!cancelled) {
-        setActionState(
-          managedScope,
-          refreshed
-            ? null
-            : {
-                pending: false,
-                error: translate(
-                  'workspaceDiscovery.scanError',
-                  'Could not check workspaces. Reopen Manage workspaces to try again.'
-                )
-              }
-        )
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [managedScope, managedRepoId, managedHostId, fetchWorktrees, setActionState])
-
   const importedWorktreesByRepo = useMemo(
     () =>
       buildImportedWorktreesCardCandidates({
         repos: args.visibleReposForRows,
-        detectedWorktreesByRepo: args.detectedWorktreesByRepo,
+        detectedWorktreesByRepo,
         filterRepoIds: args.filterRepoIds,
         settings,
-        visibilityDefaultsByHost,
-        managedRepo: managedRepo ?? undefined
+        visibilityDefaultsByHost
       }),
     [
       args.visibleReposForRows,
-      args.detectedWorktreesByRepo,
+      detectedWorktreesByRepo,
       args.filterRepoIds,
       settings,
-      visibilityDefaultsByHost,
-      managedRepo
+      visibilityDefaultsByHost
     ]
   )
   const newExternalWorktreesInboxByRepo = useMemo(() => {
     const candidates = buildNewExternalWorktreesInboxCandidates({
       repos: args.visibleReposForRows,
-      detectedWorktreesByRepo: args.detectedWorktreesByRepo,
+      detectedWorktreesByRepo,
       filterRepoIds: args.filterRepoIds,
       settings,
       visibilityDefaultsByHost
@@ -136,15 +97,57 @@ export function useSidebarExternalWorktreeCards(args: {
     return candidates
   }, [
     args.visibleReposForRows,
-    args.detectedWorktreesByRepo,
+    detectedWorktreesByRepo,
     args.filterRepoIds,
     settings,
     visibilityDefaultsByHost,
     importedWorktreesByRepo
   ])
 
-  const commit = useCallback(
-    async (repo: Repo, paths?: readonly string[]): Promise<boolean> => {
+  useEffect(() => {
+    if (!telemetryEnabled || trackedEligibility.current) {
+      return
+    }
+    if (newExternalWorktreesInboxByRepo.size === 0 && !importedWorktreesByRepo.size) {
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      await eligibilityPending.current
+      if (cancelled || trackedEligibility.current) {
+        return
+      }
+      const observation = trackWithResult('workspace_discovery_eligible', {})
+      eligibilityPending.current = observation
+      const accepted = await observation
+      if (accepted !== false) {
+        trackedEligibility.current = true
+      }
+      eligibilityPending.current = null
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [telemetryEnabled, importedWorktreesByRepo, newExternalWorktreesInboxByRepo])
+
+  const visibleImportedWorktreesByRepo = hideSuggestions
+    ? NO_IMPORTED_WORKTREES
+    : importedWorktreesByRepo
+  const visibleNewExternalWorktreesInboxByRepo = useMemo(
+    () => (hideSuggestions ? NO_NEW_EXTERNAL_WORKTREES : newExternalWorktreesInboxByRepo),
+    [hideSuggestions, newExternalWorktreesInboxByRepo]
+  )
+  const discoveryPlaceholderRepoIds = useMemo(
+    () =>
+      hideSuggestions &&
+      (importedWorktreesByRepo.size > 0 || newExternalWorktreesInboxByRepo.size > 0)
+        ? new Set([...importedWorktreesByRepo.keys(), ...newExternalWorktreesInboxByRepo.keys()])
+        : NO_DISCOVERY_PLACEHOLDERS,
+    [hideSuggestions, importedWorktreesByRepo, newExternalWorktreesInboxByRepo]
+  )
+
+  const handleKeepImportedWorktreesHidden = useCallback(
+    async (repo: Repo): Promise<boolean> => {
       const scope = getRepoHostIdentity(repo)
       if (getActiveVisibilityMutation(scope)) {
         return false
@@ -161,30 +164,13 @@ export function useSidebarExternalWorktreeCards(args: {
         if (!(await refreshTargetRepo(repo.id, { requireAuthoritative: true }))) {
           throw new Error('workspace scan failed')
         }
-        const { repo: latestRepo, detected } = resolveWorktreeVisibilityHostTarget(
+        const { repo: latestRepo, detected } = resolveWorktreeVisibilityHostTargetForHost(
           useAppStore.getState(),
           repo.id,
           hostId
         )
         if (!latestRepo || detected?.authoritative !== true) {
           throw new Error('workspace scope unavailable')
-        }
-        if (paths) {
-          const hiddenPaths = new Set(
-            getHiddenImportableExternalWorktrees(detected).map((worktree) => worktree.path)
-          )
-          const selectedPaths = [...new Set(paths)].filter((path) => hiddenPaths.has(path))
-          if (!selectedPaths.length) {
-            throw new Error('selected workspaces unavailable')
-          }
-          return await importNewExternalWorktreeInboxPaths({
-            projectId: repo.id,
-            repo: latestRepo,
-            worktreePaths: selectedPaths,
-            updateRepo: updateTargetRepo,
-            fetchWorktrees: refreshTargetRepo,
-            setInboxState: (_id, state) => setActionState(scope, state)
-          })
         }
         let accepted = false
         await keepImportedWorktreesHiddenCard({
@@ -216,16 +202,11 @@ export function useSidebarExternalWorktreeCards(args: {
     [fetchWorktrees, setActionState, updateRepo]
   )
 
-  const handleShowImportedWorktrees = useCallback(
-    (repo: Repo, paths: readonly string[]) => commit(repo, paths),
-    [commit]
-  )
-  const handleKeepImportedWorktreesHidden = useCallback((repo: Repo) => commit(repo), [commit])
   return {
     importedWorktreeCardActionState,
-    importedWorktreesByRepo,
-    newExternalWorktreesInboxByRepo,
-    handleShowImportedWorktrees,
+    discoveryPlaceholderRepoIds,
+    importedWorktreesByRepo: visibleImportedWorktreesByRepo,
+    newExternalWorktreesInboxByRepo: visibleNewExternalWorktreesInboxByRepo,
     handleKeepImportedWorktreesHidden
   }
 }

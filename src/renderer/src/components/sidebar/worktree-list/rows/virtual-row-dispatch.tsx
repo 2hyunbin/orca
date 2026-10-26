@@ -49,7 +49,6 @@ export type WorktreeVirtualRowContext = {
   item: WorktreeItemRowContext
   folderWorkspace: FolderWorkspaceRowContext
   importedWorktreeCardActionState: ReadonlyMap<string, ImportedWorktreeCardActionState>
-  onShowImportedWorktrees: (repo: Repo, paths: readonly string[]) => Promise<boolean>
   onKeepImportedWorktreesHidden: (repo: Repo) => Promise<boolean>
   onOpenWorktreeVisibility: (
     repo: Parameters<SectionHeaderRowContext['projectActions']['onOpenWorktreeVisibility']>[0]
@@ -180,7 +179,7 @@ export function renderWorktreeVirtualRow(
       vItem,
       measureVirtualRowElement: ctx.measureVirtualRowElement,
       actionState: ctx.importedWorktreeCardActionState.get(getRepoHostIdentity(row.repo)),
-      onShow: ctx.onShowImportedWorktrees,
+      onReview: ctx.onOpenWorktreeVisibility,
       onKeepHidden: ctx.onKeepImportedWorktreesHidden
     })
   }
@@ -191,7 +190,7 @@ export function renderWorktreeVirtualRow(
       vItem,
       measureVirtualRowElement: ctx.measureVirtualRowElement,
       actionState: ctx.importedWorktreeCardActionState.get(getRepoHostIdentity(row.repo)),
-      onShow: ctx.onShowImportedWorktrees,
+      onReview: ctx.onOpenWorktreeVisibility,
       onKeepHidden: ctx.onKeepImportedWorktreesHidden
     })
   }

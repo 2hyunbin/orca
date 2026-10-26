@@ -65,7 +65,6 @@ export type WorktreeRow = {
 export type ImportedWorktreesCardCandidate = {
   repo: Repo
   hiddenWorktrees: DetectedWorktree[]
-  managing?: boolean
 }
 
 export type ImportedWorktreesCardRow = {
@@ -73,7 +72,6 @@ export type ImportedWorktreesCardRow = {
   key: string
   repo: Repo
   hiddenWorktrees: DetectedWorktree[]
-  managing?: boolean
   placement: 'repo-group' | 'pinned-fallback'
   /** Set only when the row's project is checked out on more than one host. */
   hostContextLabel?: string
@@ -83,6 +81,14 @@ export type ImportedWorktreesCardRow = {
 export type NewExternalWorktreesInboxCandidate = {
   repo: Repo
   inboxWorktrees: DetectedWorktree[]
+}
+
+/** Desktop-only inputs added to the shared sidebar feed plan. */
+export type SidebarFeedWindowExtras = {
+  forcedVisibleWorktreeIds?: readonly string[]
+  importedWorktreesByRepo?: ReadonlyMap<string, ImportedWorktreesCardCandidate>
+  newExternalWorktreesInboxByRepo?: ReadonlyMap<string, NewExternalWorktreesInboxCandidate>
+  additionalPlaceholderRepoIds?: ReadonlySet<string>
 }
 
 export type NewExternalWorktreesInboxRow = {

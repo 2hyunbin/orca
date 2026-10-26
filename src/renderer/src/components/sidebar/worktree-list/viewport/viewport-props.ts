@@ -49,7 +49,6 @@ export type VirtualizedWorktreeViewportProps = {
   handleCreateForRepo: (projectId: string) => void
   handleOpenRepoSettings: (projectId: string, sectionId?: string) => void
   handleOpenWorktreeVisibility: (repo: Repo) => void
-  handleShowImportedWorktrees: (repo: Repo, paths: readonly string[]) => Promise<boolean>
   handleKeepImportedWorktreesHidden: (repo: Repo) => Promise<boolean>
   importedWorktreeCardActionState: ReadonlyMap<string, ImportedWorktreeCardActionState>
   handleRemoveProject: (repo: Repo) => void

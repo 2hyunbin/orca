@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { useAppStore } from '@/store'
 import {
   Dialog,
@@ -9,12 +10,10 @@ import {
 } from '@/components/ui/dialog'
 import { isGitRepoKind } from '../../../../shared/repo-kind'
 import { translate } from '@/i18n/i18n'
-import {
-  importNewExternalWorktreeInboxPaths,
-  type NewExternalWorktreesInboxActionState
-} from './new-external-worktrees-inbox-actions'
+import { track } from '@/lib/telemetry'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import type { NewExternalWorktreesInboxActionState } from './new-external-worktrees-inbox-actions'
 import WorktreeVisibilityHelpPopover from './WorktreeVisibilityHelpPopover'
-import { getRepoHostIdentity } from '@/store/slices/repo-host-identity'
 import {
   resolveWorktreeVisibilityHostTarget,
   useWorktreeVisibilityHostActions
@@ -58,6 +57,8 @@ import {
 import { createWorktreeVisibilitySourceMutation } from './worktree-visibility-source-mutation'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { selectDetectedWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { getHiddenImportableExternalWorktrees } from '../../../../shared/external-worktree-inbox'
+import { useWorktreeVisibilityImport } from './use-worktree-visibility-import'
 
 export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
   const activeModal = useAppStore((s) => s.activeModal)
@@ -73,7 +74,7 @@ export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
   const [isToggling, setIsToggling] = useState(false)
   const [listState, setListState] = useState<'checking' | 'ready' | 'failed'>('checking')
 
-  const isOpen = activeModal === 'worktree-visibility' && modalData.inline !== true
+  const isOpen = activeModal === 'worktree-visibility'
   const repoId = typeof modalData.repoId === 'string' ? modalData.repoId : ''
   const {
     detected,
@@ -92,6 +93,28 @@ export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
   const effectivelyToggling = isToggling || activeMutation?.kind === 'toggle'
   const visibilityDefaults = useRepoOwnerVisibilityDefaults(repo)
   const removableSourceIds = useMemo(() => getRepoCustomWorktreeVisibilitySourceIds(repo), [repo])
+  const telemetry = settings?.telemetry
+  const telemetryEnabled =
+    telemetry?.optedIn === true &&
+    (telemetry.workspaceDiscoveryCohort === 'control' ||
+      telemetry.workspaceDiscoveryCohort === 'treatment')
+  const trackedScope = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!isOpen) {
+      trackedScope.current = null
+    } else if (
+      telemetryEnabled &&
+      listState === 'ready' &&
+      trackedScope.current !== mutationScope
+    ) {
+      trackedScope.current = mutationScope
+      track('workspace_discovery_shown', {
+        surface: 'manage',
+        workspace_count: Math.min(getHiddenImportableExternalWorktrees(detected).length, 50)
+      })
+    }
+  }, [isOpen, listState, mutationScope, telemetryEnabled, detected])
 
   useLayoutEffect(() => {
     currentMutationScopeRef.current = mutationScope
@@ -125,11 +148,18 @@ export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
     }
     let cancelled = false
     setListState('checking')
-    void refreshTargetRepo(repoId, { requireAuthoritative: true }).then((refreshed) => {
-      if (!cancelled) {
-        setListState(refreshed ? 'ready' : 'failed')
+    void refreshTargetRepo(repoId, { requireAuthoritative: true }).then(
+      (refreshed) => {
+        if (!cancelled) {
+          setListState(refreshed ? 'ready' : 'failed')
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setListState('failed')
+        }
       }
-    })
+    )
     return () => {
       cancelled = true
     }
@@ -146,42 +176,18 @@ export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
     }
   }, [mutationScope, refreshTargetRepo, repoId])
 
-  const handleShowWorktree = useCallback(
-    async (worktreePath: string) => {
-      if (!repo) {
-        return
-      }
-      const mutation: ActiveVisibilityMutation = { kind: 'row', path: worktreePath }
-      const targetMutationScope = getRepoHostIdentity(repo)
-      startVisibilityMutation(targetMutationScope, mutation)
-      setBusyPath(worktreePath)
-      try {
-        await importNewExternalWorktreeInboxPaths({
-          projectId: repo.id,
-          repo,
-          worktreePaths: [worktreePath],
-          updateRepo: updateTargetRepo,
-          fetchWorktrees: refreshTargetRepo,
-          setInboxState: (_projectId, state) => {
-            if (currentMutationScopeRef.current !== targetMutationScope) {
-              return
-            }
-            setActionState(state)
-            // Null action state proves an authoritative refetch succeeded, superseding the earlier failed scan.
-            if (state === null) {
-              setListState('ready')
-            }
-          }
-        })
-      } finally {
-        finishVisibilityMutation(targetMutationScope, mutation)
-        if (currentMutationScopeRef.current === targetMutationScope) {
-          setBusyPath(null)
-        }
-      }
-    },
-    [refreshTargetRepo, repo, updateTargetRepo]
-  )
+  const handleShowWorktrees = useWorktreeVisibilityImport({
+    repo,
+    mutationScope,
+    currentMutationScopeRef,
+    updateTargetRepo,
+    refreshTargetRepo,
+    setActionState,
+    setBusyPath,
+    setIsToggling,
+    setListState,
+    telemetryEnabled
+  })
 
   const commitSourceUpdate = useCallback(
     async (
@@ -343,30 +349,11 @@ export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
       <DialogContent className="scrollbar-sleek max-h-[calc(100vh-6rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <div className="flex items-center gap-1.5">
-            <DialogTitle>
-              {translate(
-                'auto.components.sidebar.WorktreeVisibilityDialog.83a5ba8dd1',
-                'Non-Orca worktrees'
-              )}
-            </DialogTitle>
+            <DialogTitle>{translate('workspaceDiscovery.manage', 'Manage workspaces')}</DialogTitle>
             <WorktreeVisibilityHelpPopover />
           </div>
           <DialogDescription>{repo.displayName}</DialogDescription>
         </DialogHeader>
-
-        <WorktreeVisibilitySourceList
-          repo={repo}
-          worktrees={detected?.authoritative ? detected.worktrees : []}
-          visibilityDefaults={visibilityDefaults}
-          removableSourceIds={removableSourceIds}
-          disabled={effectiveBusyPath !== null || effectivelyToggling || listState === 'checking'}
-          onAdd={handleAddSource}
-          onRemove={handleRemoveSource}
-          onToggle={handleSourceToggle}
-          onUseDefault={handleUseDefault}
-        />
-
-        <WorktreeVisibilityGlobalSettingsLink repo={repo} visibilityDefaults={visibilityDefaults} />
 
         <WorktreeVisibilityScanStatus
           state={listState}
@@ -375,12 +362,16 @@ export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
         />
 
         <HiddenWorktreeRecoveryList
+          key={`workspaces:${mutationScope}`}
           repo={repo}
           detected={detected}
           listState={listState}
           busyPath={effectiveBusyPath}
           toggling={effectivelyToggling}
-          onShow={handleShowWorktree}
+          onShow={async (path) => {
+            await handleShowWorktrees([path])
+          }}
+          onShowSelected={handleShowWorktrees}
         />
 
         {actionState?.error ? (
@@ -388,6 +379,33 @@ export default function WorktreeVisibilityDialog(): React.JSX.Element | null {
             {actionState.error}
           </p>
         ) : null}
+        <Collapsible key={`settings:${mutationScope}`}>
+          <CollapsibleTrigger variant="row">
+            {translate('workspaceDiscovery.visibilitySettings', 'Visibility settings')}
+            <ChevronDown className="size-4 transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="grid gap-4 pt-2">
+              <WorktreeVisibilitySourceList
+                repo={repo}
+                worktrees={detected?.authoritative ? detected.worktrees : []}
+                visibilityDefaults={visibilityDefaults}
+                removableSourceIds={removableSourceIds}
+                disabled={
+                  effectiveBusyPath !== null || effectivelyToggling || listState === 'checking'
+                }
+                onAdd={handleAddSource}
+                onRemove={handleRemoveSource}
+                onToggle={handleSourceToggle}
+                onUseDefault={handleUseDefault}
+              />
+              <WorktreeVisibilityGlobalSettingsLink
+                repo={repo}
+                visibilityDefaults={visibilityDefaults}
+              />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </DialogContent>
     </Dialog>
   )
