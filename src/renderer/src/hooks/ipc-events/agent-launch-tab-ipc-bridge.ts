@@ -3,6 +3,9 @@ import { publishAgentLaunchTab } from '@/lib/agent-launch-tab-publication'
 import { applyAgentLaunchPaneVerdict } from '@/lib/agent-launch-pane-verdict-application'
 import { keepAgentLaunchTabMainWrote } from '@/lib/agent-launch-tab-main-written'
 import { afterLayoutFrame } from '@/runtime/layout-frame-position'
+import { useAppStore } from '@/store'
+import type { PaneAgentLaunchConfig } from '../../../../shared/sleeping-agent-launch-config'
+import { tryMakePaneKey } from './agent-status-routing'
 
 function replyToPublish(request: AgentLaunchTabPublishRequest): void {
   try {
@@ -20,6 +23,18 @@ function replyToPublish(request: AgentLaunchTabPublishRequest): void {
   }
 }
 
+function rememberAgentLaunchConfig(event: PaneAgentLaunchConfig): void {
+  const paneKey = tryMakePaneKey(event.tabId, event.leafId)
+  if (paneKey) {
+    useAppStore.getState().registerAgentLaunchConfig(paneKey, event.launchConfig, {
+      ...(event.launchAgent ? { agentType: event.launchAgent } : {}),
+      ...(event.launchToken ? { launchToken: event.launchToken } : {}),
+      tabId: event.tabId,
+      leafId: event.leafId
+    })
+  }
+}
+
 export function registerAgentLaunchTabIpcBridge(unsubs: (() => void)[]): void {
   unsubs.push(
     window.api.ui.onPublishAgentLaunchTab((request) =>
@@ -28,6 +43,7 @@ export function registerAgentLaunchTabIpcBridge(unsubs: (() => void)[]): void {
         ? afterLayoutFrame(request.shownByMain.frameSeq, () => replyToPublish(request))
         : replyToPublish(request)
     ),
-    window.api.ui.onAgentLaunchPaneVerdict(applyAgentLaunchPaneVerdict)
+    window.api.ui.onAgentLaunchPaneVerdict(applyAgentLaunchPaneVerdict),
+    window.api.ui.onAgentLaunchConfig(rememberAgentLaunchConfig)
   )
 }

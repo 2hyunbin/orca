@@ -34,6 +34,18 @@ export function revealCreatedTerminal(args: {
     leafId
   } = args
   const reveal = notifier?.revealTerminalSession?.bind(notifier)
+  const rememberLaunchConfig = (): void => {
+    if (effectiveLaunchConfig) {
+      notifier?.rememberAgentLaunchConfig?.({
+        worktreeId: workspace.id,
+        tabId,
+        leafId,
+        launchConfig: effectiveLaunchConfig,
+        ...(launchToken ? { launchToken } : {}),
+        ...(launchOpts.launchAgent ? { launchAgent: launchOpts.launchAgent } : {})
+      })
+    }
+  }
   if (presentation !== 'background' && reveal) {
     return (async () => {
       try {
@@ -54,6 +66,7 @@ export function revealCreatedTerminal(args: {
         return { surface: 'visible' as const }
       } catch (err) {
         console.warn(`[terminal-create] failed to create inactive tab for ${ptyId}:`, err)
+        rememberLaunchConfig()
         return {
           surface: 'background' as const,
           warning: dependencies.createTerminalRevealWarning(handle, err)
@@ -61,6 +74,7 @@ export function revealCreatedTerminal(args: {
       }
     })()
   }
+  rememberLaunchConfig()
   return {
     surface: 'background',
     warning:

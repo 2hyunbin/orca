@@ -4,6 +4,7 @@ import type {
 } from '../../shared/runtime-file-contracts'
 import type { AgentLaunchPaneVerdictEvent } from '../../shared/agent-launch-pane-verdict'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
+import type { PaneAgentLaunchConfig } from '../../shared/sleeping-agent-launch-config'
 import type {
   AgentLaunchTabPublished,
   AgentLaunchTabViewerRule,
@@ -102,6 +103,8 @@ export type RuntimeNotifier = {
   ): Promise<AgentLaunchTabPublished>
   /** A launch pane's fate, for the window to keep on its tab or act on. */
   agentLaunchPaneVerdict?(event: AgentLaunchPaneVerdictEvent): void
+  /** A background launch's recipe, which a reveal would otherwise carry. */
+  rememberAgentLaunchConfig?(event: PaneAgentLaunchConfig): void
   resolveLegacyWorkerTerminalRecovery?(
     paneKey: string,
     resolution: 'adopted' | 'exited' | 'rolled_back',
