@@ -52,5 +52,4 @@ describe('partial escape scanning between sequences', () => {
     }
     expect(extractPartialEscapeTail(`\x1b]2;title\x1b[32m${text}\x1b[1;`)).toBe('\x1b[1;')
   })
-
 })

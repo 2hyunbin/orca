@@ -15,5 +15,4 @@ describe('resolveProviderChildEnv', () => {
     expect(baseEnv).toEqual({ PATH: '/bin', AGENT_HOME: '/inherited', PARENT_AGENT: 'parent' })
     expect(overlay.PARENT_AGENT).toBe('overlay')
   })
-
 })

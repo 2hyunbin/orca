@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { C5_PAGE_CLOSURE } from './c5-page-closure'
-import {
-  pageClosureDrift,
-  type PageClosureObservation
-} from './page-closure'
+import { pageClosureDrift, type PageClosureObservation } from './page-closure'
 
 function asPinned(): Map<string, PageClosureObservation> {
   const run = new Map<string, PageClosureObservation>()
@@ -16,7 +13,6 @@ function asPinned(): Map<string, PageClosureObservation> {
 }
 
 describe('reading a run against the C5 pin', () => {
-
   it('names a closure golden that changed verdict', () => {
     const run = asPinned()
     const found = [...run].find(([, seen]) => seen.verdict !== 'params-undefined')

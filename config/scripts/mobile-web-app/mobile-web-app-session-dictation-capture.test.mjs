@@ -6,9 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { mobileWebAppRouteClosure } from '../build-mobile-web-app-bundle.mjs'
 import { mobileWebAppDependenciesPresent } from './mobile-web-app-bundle-dependencies.mjs'
 import { MOBILE_WEB_PAGE_ROUTES } from '../mobile-web-page-routes.mjs'
-import {
-  PAGE_ROUTE_MODULES
-} from './mobile-web-app-page-route-modules.mjs'
+import { PAGE_ROUTE_MODULES } from './mobile-web-app-page-route-modules.mjs'
 import { MobileWebBundleRouteSchema } from '../../../src/shared/mobile-web-bundle/manifest-contract.ts'
 
 // Gate mobile transforms too: nearest tsconfig extends Expo package absent from root-only shards.
@@ -112,4 +110,3 @@ describeClosure(
   },
   240_000
 )
-

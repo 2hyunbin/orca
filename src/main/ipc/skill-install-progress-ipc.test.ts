@@ -9,7 +9,6 @@ function event(destroyed = false): IpcMainInvokeEvent {
 }
 
 describe('skill install progress IPC', () => {
-
   it('does not publish after the invoking renderer is destroyed', () => {
     const target = event(true)
     sendSkillInstallProgress(target, { operationId: 'operation_1', phase: 'authorizing' })

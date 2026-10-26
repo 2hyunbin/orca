@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { MOBILE_RPC_METHOD_ROUTES } from './runtime-rpc-mobile-method-routing'
 
 describe('mobile RPC method routing census', () => {
-
   it.each([
     'jira.status',
     'jira.listIssues',

@@ -19,5 +19,4 @@ describe('terminal tail wait state', () => {
     expect(blocked.fromTail).toBe(true)
     expect(blocked.signal?.reason).toBe('agent-update-prompt')
   })
-
 })

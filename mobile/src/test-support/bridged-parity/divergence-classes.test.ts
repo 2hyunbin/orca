@@ -213,5 +213,4 @@ describe('what the pin still admits', () => {
       `identical: pinned ${tally.identical}, ran ${tally.identical - 1}`
     ])
   })
-
 })

@@ -78,5 +78,4 @@ describe('a simulator tab a window drew', () => {
     ).model
     expect(closed.workspaces[WS]?.groups.map((group) => group.id)).toEqual([besideGroupId])
   })
-
 })

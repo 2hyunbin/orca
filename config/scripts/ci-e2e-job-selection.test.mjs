@@ -105,4 +105,3 @@ it('publishes conservative hints for malformed evidence and refuses a malformed 
     'e2e_run_changed=true\ne2e_needs_build=true\ne2e_ssh_shards=["1/2","2/2"]\n'
   )
 })
-

@@ -21,5 +21,4 @@ describe('node:sqlite reader admission', () => {
     expect(hasNodeSqliteReaderApi(sqlite)).toBe(admitted)
     expect(probe(sqlite)).toBe(admitted)
   })
-
 })

@@ -35,5 +35,4 @@ describe('synthetic agent titles', () => {
     expect(shouldDriveSyntheticAgentTitleFromHook('opencode', 'done')).toBe(false)
     expect(shouldDriveSyntheticAgentTitleFromHook('opencode', 'waiting')).toBe(false)
   })
-
 })

@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MARINE_CREATURES } from './marine-creatures'
-import {
-  selectSuggestedCreatureName,
-  suggestionPathBasename
-} from './worktree-name-suggestion'
+import { selectSuggestedCreatureName, suggestionPathBasename } from './worktree-name-suggestion'
 
 const pickFirst = () => 0
 const lower = (index: number) => MARINE_CREATURES[index].toLowerCase()
@@ -52,5 +49,4 @@ describe('selectSuggestedCreatureName', () => {
   it('ignores a nonsense watermark rather than skipping the pool', () => {
     expect(selectSuggestedCreatureName([], pickFirst, -4)).toBe(lower(0))
   })
-
 })

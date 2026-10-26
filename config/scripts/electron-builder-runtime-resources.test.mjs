@@ -533,7 +533,6 @@ async function seedBundledRipgrep(resourcesDir) {
 }
 
 describe('lazily required packages reach Resources/node_modules', () => {
-
   it('resolves the copied emoji dataset the way the packaged main bundle does', async () => {
     const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-lazy-require-'))
     try {

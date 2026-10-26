@@ -61,5 +61,4 @@ describe('placeCreatedSessionTab', () => {
       )
     ).toEqual(['a', 'b', 'new'])
   })
-
 })

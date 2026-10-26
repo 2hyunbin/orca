@@ -95,5 +95,4 @@ describe('locked audit tool execution', () => {
     expect(() => runAuditTool('../arbitrary-package', [], { run })).toThrow('Unknown audit tool')
     expect(run).not.toHaveBeenCalled()
   })
-
 })

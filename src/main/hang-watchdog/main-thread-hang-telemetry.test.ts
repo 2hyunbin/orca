@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { eventSchemas } from '../../shared/telemetry-events'
 
 describe('main_thread_hang_detected telemetry schema', () => {
-
   // Strict schema excludes paths, PIDs and window titles from telemetry.
   it('rejects unknown fields and non-integer durations', () => {
     expect(

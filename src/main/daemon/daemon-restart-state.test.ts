@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { runCoalescedDaemonRestart, settledDaemonRestart } from './daemon-restart-state'
 
 describe('settledDaemonRestart', () => {
-
   it('holds until the running restart settles, whether it succeeds or fails', async () => {
     for (const outcome of ['resolve', 'reject'] as const) {
       let finish!: () => void

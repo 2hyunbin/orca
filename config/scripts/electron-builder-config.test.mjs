@@ -13,7 +13,6 @@ const electronBuilderConfig = require('../electron-builder.config.cjs')
 const { copyFiles, FileMatcher } = require('app-builder-lib/out/fileMatcher')
 
 describe('electron-builder config', () => {
-
   it('excludes repo-only source trees from app.asar', () => {
     const matcher = new FileMatcher('/app', '/dest', (value) => value, electronBuilderConfig.files)
     matcher.prependPattern('**/*')
@@ -376,7 +375,6 @@ describe('electron-builder config', () => {
       require('../electron-builder.config.cjs')
     }
   })
-
 })
 
 describe('arch-aware packaging guard', () => {

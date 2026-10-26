@@ -14,5 +14,4 @@ describe('speech model download response contracts', () => {
     expect(parseRetryAfterMs(String(Number.MAX_SAFE_INTEGER))).toBeUndefined()
     expect(parseRetryAfterMs('invalid')).toBeUndefined()
   })
-
 })

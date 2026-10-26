@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { parseClaudeUsageRecord } from './transcript-record-parser'
 
 describe('assistant-record prefilter', () => {
-
   it('rejects a non-assistant record that happens to contain the word assistant', () => {
     const userLine = JSON.stringify({
       type: 'user',

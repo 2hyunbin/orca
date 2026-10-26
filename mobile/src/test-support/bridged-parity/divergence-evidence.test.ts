@@ -366,7 +366,6 @@ describe('the fields that diverged', () => {
       })
     ).toEqual(['checkpoints'])
   })
-
 })
 
 describe('reading the scenario', () => {

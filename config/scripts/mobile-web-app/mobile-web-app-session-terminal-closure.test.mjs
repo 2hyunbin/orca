@@ -106,7 +106,6 @@ describeClosure(
       // Require route chunk in walk so empty static download cannot pass.
       expect(download.staticChunks).toContain(download.routeChunk)
     }, 600_000)
-
   },
   900_000
 )

@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  buildWorkspaceReviewFacts,
-  readWorkspaceReviewFact
-} from './workspace-review-facts'
+import { buildWorkspaceReviewFacts, readWorkspaceReviewFact } from './workspace-review-facts'
 
 const repo = { id: 'repo-1', path: '/r', connectionId: null, executionHostId: null }
 const row = { id: 'repo-1::/r/a', repoId: 'repo-1', branch: 'refs/heads/a', linkedPR: null }

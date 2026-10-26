@@ -17,7 +17,6 @@ describe('gitCommandTimeoutMs', () => {
     expect(gitCommandTimeoutMs(['status'], 7)).toBe(7)
     expect(gitCommandTimeoutMs(['fetch'], 7)).toBe(7)
   })
-
 })
 
 describe('GitCommandTimeoutError', () => {

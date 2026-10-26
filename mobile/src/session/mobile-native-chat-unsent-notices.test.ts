@@ -48,7 +48,6 @@ const startRow: AgentJournalRenderItem = {
 }
 
 describe("the phone's line under a not-sent message", () => {
-
   it("words each rejected message as the desktop does, naming the chat's agent", () => {
     const notices = mobileNativeChatUnsentNotices(
       {

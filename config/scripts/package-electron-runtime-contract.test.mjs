@@ -8,7 +8,6 @@ const projectDir = resolve(import.meta.dirname, '../..')
 const readProject = (file) => readFileSync(join(projectDir, file), 'utf8')
 
 describe('Electron runtime package contract', () => {
-
   it('qualifies macOS after failed sibling builds and publishes only complete successful builds', () => {
     const { jobs } = parse(readProject('.github/workflows/release-cut.yml'))
     const evaluate = (source, needs, cancelled) =>
