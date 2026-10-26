@@ -182,7 +182,7 @@ function envelope(method: string, fields: Record<string, unknown>, fence: number
 function attachParams(fence: number | null) {
   const params = {
     location: {
-      executionHostId: 'local',
+      executionHostId: 'local' as const,
       wslDistro: null,
       workspaceId: WORKSPACE,
       workspaceKind: 'git-worktree' as const
@@ -197,7 +197,7 @@ function attachParams(fence: number | null) {
   mutation.payloadFingerprint = computeAgentSessionPayloadFingerprint({
     method: 'agentSession.attach',
     sessionId: SESSION,
-    fields: attachFingerprintFields({ ...params, envelope: mutation } as never)
+    fields: attachFingerprintFields({ ...params, envelope: mutation })
   })
   return { ...params, envelope: mutation }
 }
