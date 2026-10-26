@@ -42,7 +42,7 @@ internal class OrcaMobileWebShellView(
     bridgeEnabled = value
   }
 
-  /** Props arrive in no defined order, so neither setter starts anything; this does, once all are in. */
+  /** Apply unordered props together, once all are in. */
   fun propsDidUpdate() {
     val current = page ?: hostPage().also { page = it }
     current.apply(generationDirectory, sessionId, bridgeEnabled)

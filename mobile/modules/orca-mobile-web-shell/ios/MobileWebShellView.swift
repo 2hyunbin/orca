@@ -24,7 +24,7 @@ final class OrcaMobileWebShellView: ExpoView, MobileWebShellPageSink {
     bridgeEnabled = value
   }
 
-  /// Props arrive in no defined order, so no setter starts anything; this does, once all are in.
+  /// Apply unordered props together, once all are in.
   func propsDidUpdate() {
     let current = page ?? hostPage()
     page = current
