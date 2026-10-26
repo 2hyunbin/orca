@@ -14,7 +14,6 @@ function host(
     hostName,
     hello: {
       v: 1,
-      helloRev: 1,
       contract: 1,
       hostName,
       platform: 'darwin',

@@ -152,7 +152,6 @@ export async function createSlackHarness(slack: Partial<SlackConfig> = {}) {
       CONNECTOR_PATHS.hello,
       {
         v: 1,
-        helloRev: 1,
         contract: 1,
         hostName,
         platform: 'darwin',
@@ -165,7 +164,7 @@ export async function createSlackHarness(slack: Partial<SlackConfig> = {}) {
       },
       'PUT'
     )
-    if (response.status !== 204) {
+    if (response.status !== 200) {
       throw new Error(`hello failed: ${response.status}`)
     }
     return machine
