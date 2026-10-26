@@ -1,22 +1,19 @@
-import type { AppState } from '../types'
+import type { AppState } from '../../types'
 import type {
-  AgentStateHistoryEntry,
   AgentStatusEntry,
   AgentStatusOrchestrationContext,
   AgentType,
-  MigrationUnsupportedPtyEntry,
   ParsedAgentStatusPayload,
   TurnEndDisposition
-} from '../../../../shared/agent-status-types'
-import type { AgentStatusObservation } from '../../../../shared/agent-status-observation'
-import type { ProgramStatusFacet } from '../../../../shared/program-status/facet'
+} from '../../../../../shared/agent-status-types'
+import type { AgentStatusObservation } from '../../../../../shared/agent-status-observation'
+import type { ProgramStatusFacet } from '../../../../../shared/program-status/facet'
 import type {
   AgentProviderSessionMetadata,
   ResumableTuiAgent,
-  SleepingAgentLaunchConfig,
-  SleepingAgentSessionRecord
-} from '../../../../shared/agent-session-resume'
-import type { TerminalTab } from '../../../../shared/terminal-tab-types'
+  SleepingAgentLaunchConfig
+} from '../../../../../shared/agent-session-resume'
+import type { TerminalTab } from '../../../../../shared/terminal-tab-types'
 
 export type RetainedAgentEntry = {
   entry: AgentStatusEntry
@@ -162,17 +159,4 @@ export type AgentStatusBatchTransaction = {
   getState: () => AppState
   apply: (update: AgentStatusBatchUpdate) => boolean
   afterCommit: (effect: () => void) => void
-}
-
-export type {
-  AgentStateHistoryEntry,
-  AgentStatusEntry,
-  AgentStatusOrchestrationContext,
-  AgentType,
-  MigrationUnsupportedPtyEntry,
-  ParsedAgentStatusPayload,
-  AgentProviderSessionMetadata,
-  ResumableTuiAgent,
-  SleepingAgentLaunchConfig,
-  SleepingAgentSessionRecord
 }

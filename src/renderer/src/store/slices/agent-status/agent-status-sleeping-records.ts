@@ -1,13 +1,13 @@
-import type { AppState } from '../types'
-import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
-import { agentTurnEndedUncleanly } from '../../../../shared/agent-main-agent-verdict'
+import type { AppState } from '../../types'
+import type { AgentStatusEntry } from '../../../../../shared/agent-status-types'
+import { agentTurnEndedUncleanly } from '../../../../../shared/agent-main-agent-verdict'
 import type {
   SleepingAgentLaunchConfig,
   SleepingAgentSessionRecord
-} from '../../../../shared/agent-session-resume'
-import { resumeRecordFromStatus } from '../../../../shared/agent-resume-record-from-status'
-import type { TerminalTab } from '../../../../shared/terminal-tab-types'
-import { findTabForAgentEntry } from './agent-status-pane-key-tab-binding'
+} from '../../../../../shared/agent-session-resume'
+import { resumeRecordFromStatus } from '../../../../../shared/agent-resume-record-from-status'
+import type { TerminalTab } from '../../../../../shared/terminal-tab-types'
+import { findTabForAgentEntry } from '../agent-status-pane-key-tab-binding'
 
 export function sleepingRecordFromEntry(args: {
   state: AppState

@@ -1,5 +1,5 @@
-import type { AppState } from '../types'
-import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
+import type { AppState } from '../../types'
+import type { AgentStatusEntry } from '../../../../../shared/agent-status-types'
 import {
   capLiveAgentStatusesInPlace,
   classifyPaneKeyLiveness,
@@ -8,8 +8,8 @@ import {
 } from './agent-status-capacity-eviction'
 import { removePaneKeys } from './agent-status-pane-keyed-records'
 import type { AgentStatusLiveEntryBuild } from './agent-status-live-entry-builder'
-import { agentProviderSessionsEqual } from '../../../../shared/agent-session-resume'
-import { liveResumeRecordChange } from '../../../../shared/agent-resume-record-from-status'
+import { agentProviderSessionsEqual } from '../../../../../shared/agent-session-resume'
+import { liveResumeRecordChange } from '../../../../../shared/agent-resume-record-from-status'
 
 export type AgentStatusLiveUpdateReduction = {
   patch: Partial<AppState>

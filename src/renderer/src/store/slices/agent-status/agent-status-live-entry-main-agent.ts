@@ -1,9 +1,10 @@
+import '../../../../../shared/agent-status-types'
 import {
   mainAgentStatusEqual,
-  type AgentMainAgentStatus,
-  type AgentStatusEntry
-} from '../../../../shared/agent-status-types'
-import type { AgentStatusObservationOrigin } from '../../../../shared/agent-status-observation'
+  type AgentMainAgentStatus
+} from '../../../../../shared/main-agent-status'
+import type { AgentStatusEntry } from '../../../../../shared/agent-status-types'
+import type { AgentStatusObservationOrigin } from '../../../../../shared/agent-status-observation'
 import type { AgentStatusPayload } from './agent-status-contract'
 
 /** Byte/launch writers omit mainAgent; hook omission authoritatively clears it for mobile/CLI parity. */
