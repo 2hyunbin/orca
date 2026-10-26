@@ -99,13 +99,16 @@ it('keeps the draft, chip and picked model/options across hiding and showing Arg
   expect(screen.getByRole('button', { name: 'Claude permissions' }).textContent).toContain(
     'Full access'
   )
+  expect(screen.getByRole('button', { name: 'Claude permissions' }).getAttribute('data-size')).toBe(
+    'sm'
+  )
   act(() => configure({ experimentalNativeChat: false }))
   expect(screen.getByRole('textbox', { name: 'Arguments' })).toHaveProperty('value', '--draft')
   expect(
     screen.getByRole('button', { name: /Remove --dangerously-skip-permissions/ })
   ).toBeDefined()
-  expect(screen.getByRole('combobox', { name: 'Sonnet' })).toBeDefined()
-  expect(screen.getByRole('combobox', { name: 'High' })).toBeDefined()
+  expect(screen.getByRole('combobox', { name: 'Sonnet' }).getAttribute('data-size')).toBe('sm')
+  expect(screen.getByRole('combobox', { name: 'High' }).getAttribute('data-size')).toBe('sm')
   expect(unused).not.toHaveBeenCalled()
 })
 

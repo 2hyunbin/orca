@@ -177,6 +177,7 @@ export function AgentPermissionMenu({
   permission,
   inheritLabel,
   disabled,
+  size = 'xs',
   layout = 'inline'
 }: {
   agentId: string
@@ -184,6 +185,7 @@ export function AgentPermissionMenu({
   permission: AgentPermissionChoiceRow
   inheritLabel?: string
   disabled?: boolean
+  size?: 'xs' | 'sm'
   layout?: 'inline' | 'stacked'
 }): React.JSX.Element {
   const followAll =
@@ -211,7 +213,7 @@ export function AgentPermissionMenu({
           <Button
             type="button"
             variant="outline"
-            size="xs"
+            size={size}
             aria-label={translate('settings.agents.rowPermissionsLabel', '{{agent}} permissions', {
               agent: label
             })}
