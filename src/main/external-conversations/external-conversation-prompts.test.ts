@@ -321,6 +321,9 @@ describe('ExternalConversationSeam watch', () => {
     paneChange(observed)
     expect(seen.map((event) => event.kind === 'turn-started' && event.at)).toEqual([100, 200])
     expect(seam.replyTarget(PANE)).toEqual({ key: KEY, turnId: 200 })
+    // A session boundary clears the stamp; the start seen before the first stamp doesn't come back.
+    hookRows.set(PANE, hookRow({ state: 'done', stateStartedAt: 300, sessionBoundary: true }))
+    expect(seam.replyTarget(PANE)).toEqual({ key: KEY, turnId: null })
   })
 
   it('tells a watcher of a conversation linked while it watches', async () => {
