@@ -20,7 +20,6 @@ src/main/browser/agent-browser-bridge-raw-process.ts
 src/main/browser/agent-browser-bridge-state.ts
 src/main/browser/agent-browser-bridge-types.ts
 src/main/browser/browser-route-egress-electron-launch.ts
-src/main/browser/browser-route-persisted-worker-electron-process.ts
 src/main/codex-accounts/legacy-wsl-runtime-auth-drain-recovery-script-harness.ts
 src/main/codex-accounts/legacy-wsl-runtime-auth-drain-script-harness.ts
 src/main/codex-accounts/service.ts
@@ -54,7 +53,6 @@ src/main/git/wsl-git-read-environment.ts
 src/main/github/gh-utils.ts
 src/main/hooks.ts
 src/main/ipc/developer-permissions.ts
-src/main/ipc/filesystem-list-files.ts
 src/main/ipc/filesystem/filesystem-handler-context.ts
 src/main/ipc/filesystem/watcher-process/parcel-watcher-cancellation-restart.ts
 src/main/ipc/filesystem/watcher-process/parcel-watcher-cancellation-tracker.ts

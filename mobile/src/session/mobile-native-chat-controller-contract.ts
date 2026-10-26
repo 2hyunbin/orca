@@ -14,14 +14,15 @@ import type {
 } from '../../../src/shared/native-chat-turn-status'
 import type { NativeChatTurnJournal } from '../../../src/shared/native-chat-turn-membership'
 import type { NativeChatResolvedPrompt } from '../../../src/shared/native-chat-resolution-receipt'
-import type { MobileNativeChatSendOutcome } from './mobile-native-chat-send'
-import type { MobileNativeChatCommandRefusalCauses } from './use-mobile-native-chat-send-error'
+import type { MobileNativeChatSendOutcome } from './native-chat/mobile-native-chat-send'
+import type { MobileNativeChatCommandRefusalCauses } from './native-chat/use-mobile-native-chat-send-error'
 import type { MobileStructuredQueuedMessageControls } from './use-mobile-structured-queued-message-controls'
 import type { MobileStructuredBackgroundTasks } from './use-mobile-structured-background-tasks'
-import type { MobileNativeChatPendingMessage } from './use-mobile-native-chat-drafts'
+import type { MobileNativeChatPendingMessage } from './native-chat/mobile-native-chat-pending-echo'
 import type { useMobileNativeChatSession } from './use-mobile-native-chat-session'
 import type { MobileNativeChatSessionOptionPickersProps } from './MobileNativeChatSessionOptionPickers'
 import type { MobileNativeChatVisualSource } from './mobile-native-chat-visual-read'
+import type { useMobileStructuredSessionCommands } from './use-mobile-structured-session-commands'
 
 export type MobileNativeChatController = {
   sessionViewReady: boolean
@@ -93,5 +94,6 @@ export type MobileNativeChatController = {
   // Read parked TUI launch text to clear one line per Ctrl+U before pasting images.
   readSeededLaunchDraft: () => string | null
   nativeChatSessionOptions: MobileNativeChatSessionOptionPickersProps | null
+  nativeChatSessionCommands: ReturnType<typeof useMobileStructuredSessionCommands>
   nativeChatAcceptsImages: boolean
 }
