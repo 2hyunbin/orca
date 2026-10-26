@@ -54,7 +54,9 @@ export class HostSessionStore {
       // One active session per desktop bounds rows even for self-minted hosts that flood proofs.
       await transaction.lockQuotaScope(hostSessionLockKey(this.config.lockScope, hostFingerprint))
       const refused = guard ? await guard(transaction) : null
-      if (refused !== null) return refused
+      if (refused !== null) {
+        return refused
+      }
       await transaction.query(`DELETE FROM ${this.config.table} WHERE host_fingerprint = ?`, [
         hostFingerprint
       ])

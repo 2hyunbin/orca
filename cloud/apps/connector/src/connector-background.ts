@@ -3,7 +3,9 @@ export function every(label: string, intervalMs: number, run: () => Promise<unkn
   let timer: NodeJS.Timeout | undefined
   let stopped = false
   const schedule = (): void => {
-    if (stopped) return
+    if (stopped) {
+      return
+    }
     timer = setTimeout(() => {
       void run()
         .catch((error: unknown) => {
@@ -44,6 +46,8 @@ export function startConnectorBackground(runtime: {
     )
   ]
   return () => {
-    for (const stop of stops) stop()
+    for (const stop of stops) {
+      stop()
+    }
   }
 }

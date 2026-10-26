@@ -33,7 +33,9 @@ function sha256(value: string): string {
 
 function newUserCode(): string {
   let code = ''
-  for (let i = 0; i < USER_CODE_LENGTH; i++) code += USER_CODE_ALPHABET[randomInt(32)]
+  for (let i = 0; i < USER_CODE_LENGTH; i++) {
+    code += USER_CODE_ALPHABET[randomInt(32)]
+  }
   return code
 }
 
@@ -71,7 +73,9 @@ export class ConnectorSignInRequests {
     { deviceCode: string; userCode: string; expiresAt: number } | 'invalid_key' | 'rate_limited'
   > {
     // Approval derives the host id from this key, so refuse one it could never accept.
-    if (!decodeCanonicalBase64(request.hostPublicKeyB64, 32)) return 'invalid_key'
+    if (!decodeCanonicalBase64(request.hostPublicKeyB64, 32)) {
+      return 'invalid_key'
+    }
     const now = this.now()
     const deviceCode = randomBytes(32).toString('base64url')
     const expiresAt = now + CONNECTOR_LIMITS.signInTtlMs
@@ -116,7 +120,9 @@ export class ConnectorSignInRequests {
             expiresAt
           ]
         )
-        if (Number(inserted?.changes ?? 0) === 1) return { deviceCode, userCode, expiresAt }
+        if (Number(inserted?.changes ?? 0) === 1) {
+          return { deviceCode, userCode, expiresAt }
+        }
       }
     })
   }
@@ -143,10 +149,14 @@ export class ConnectorSignInRequests {
          WHERE device_code_hash = ?`,
         [interval, now + interval * 1000, deviceCodeHash]
       )
-      if (early) return { status: 'slow_down', interval }
+      if (early) {
+        return { status: 'slow_down', interval }
+      }
       if (row.status === 'approved') {
         const hostKey = decodeCanonicalBase64(String(row.host_public_key), 32)
-        if (!hostKey) throw new Error('stored_host_key_invalid')
+        if (!hostKey) {
+          throw new Error('stored_host_key_invalid')
+        }
         return {
           status: 'authorized',
           interval,
@@ -183,11 +193,17 @@ export class ConnectorSignInRequests {
          RETURNING host_public_key, host_name, platform, runtime, orca_version`,
         [allow ? 'approved' : 'denied', allow ? account.email : null, userCodeHash, now]
       )
-      if (!claimed) return 'not_found'
-      if (!allow) return 'denied'
+      if (!claimed) {
+        return 'not_found'
+      }
+      if (!allow) {
+        return 'denied'
+      }
       const publicKey = String(claimed.host_public_key)
       const hostKey = decodeCanonicalBase64(publicKey, 32)
-      if (!hostKey) throw new Error('stored_host_key_invalid')
+      if (!hostKey) {
+        throw new Error('stored_host_key_invalid')
+      }
       const hostId = deriveHostFingerprint(hostKey)
       await lockConnectorHost(transaction, hostId)
       const [existing] = await transaction.query(

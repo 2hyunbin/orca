@@ -65,7 +65,9 @@ export class ConnectorWebSignIn {
   session(context: Context): WebSession | null {
     const value = getCookie(context, SESSION_COOKIE)
     const session = this.cookies.open(SESSION_COOKIE, value, SessionSchema)
-    if (!session || !value) return null
+    if (!session || !value) {
+      return null
+    }
     return {
       account: { id: session.accountId, email: session.email },
       csrf: this.cookies.csrfToken(value)
@@ -148,7 +150,9 @@ export class ConnectorWebSignIn {
 
   private async revoke(refreshToken: string): Promise<boolean> {
     for (let attempt = 0; attempt < LOGOUT_ATTEMPTS; attempt++) {
-      if ((await this.authRequest('/v1/desktop/auth/logout', { refreshToken })) !== null) return true
+      if ((await this.authRequest('/v1/desktop/auth/logout', { refreshToken })) !== null) {
+        return true
+      }
     }
     return false
   }

@@ -35,7 +35,9 @@ export function registerWebRoutes<E extends Env>(
     form?: Record<string, string>
   ): Promise<WebSession | Response> => {
     const session = web.session(context)
-    if (!session) return web.begin(context, returnTo)
+    if (!session) {
+      return web.begin(context, returnTo)
+    }
     if (form && !web.csrfMatches(context, form.csrf ?? '')) {
       return context.html(messagePage('Request expired', 'Reload the page and try again.'), 403)
     }
@@ -46,14 +48,18 @@ export function registerWebRoutes<E extends Env>(
 
   app.get('/host-login', limitUnauthenticated, async (context) => {
     const session = await browserSession(context, '/host-login')
-    if (session instanceof Response) return session
+    if (session instanceof Response) {
+      return session
+    }
     return context.html(codeEntryPage({ email: session.account.email, csrf: session.csrf }))
   })
 
   app.post('/host-login', limitUnauthenticated, limitBody, async (context) => {
     const form = await readForm(context)
     const session = await browserSession(context, '/host-login', form)
-    if (session instanceof Response) return session
+    if (session instanceof Response) {
+      return session
+    }
     const page = { email: session.account.email, csrf: session.csrf }
     if (!codeAttempts.allow(session.account.id)) {
       return context.html(codeEntryPage({ ...page, error: TOO_MANY_ATTEMPTS }), 429)
@@ -72,7 +78,9 @@ export function registerWebRoutes<E extends Env>(
   app.post('/host-login/decision', limitUnauthenticated, limitBody, async (context) => {
     const form = await readForm(context)
     const session = await browserSession(context, '/host-login', form)
-    if (session instanceof Response) return session
+    if (session instanceof Response) {
+      return session
+    }
     // Every code-taking form spends from one budget, so the preview step cannot be skipped to guess.
     if (!codeAttempts.allow(session.account.id)) {
       return context.html(messagePage('Not connected', TOO_MANY_ATTEMPTS), 429)
@@ -105,7 +113,9 @@ export function registerWebRoutes<E extends Env>(
 
   app.get('/machines', limitUnauthenticated, async (context) => {
     const session = await browserSession(context, '/machines')
-    if (session instanceof Response) return session
+    if (session instanceof Response) {
+      return session
+    }
     return context.html(
       machinesPage({
         email: session.account.email,
@@ -118,7 +128,9 @@ export function registerWebRoutes<E extends Env>(
   app.post('/v1/account/hosts/:hostId/revoke', limitUnauthenticated, limitBody, async (context) => {
     const form = await readForm(context)
     const session = await browserSession(context, '/machines', form)
-    if (session instanceof Response) return session
+    if (session instanceof Response) {
+      return session
+    }
     await hostLinks.revoke(session.account.id, context.req.param('hostId'))
     return context.redirect('/machines', 303)
   })

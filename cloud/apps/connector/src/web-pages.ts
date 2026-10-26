@@ -22,7 +22,9 @@ table{border-collapse:collapse}td{padding:.2rem .8rem .2rem 0;vertical-align:top
 
 function ago(ms: number): string {
   const minutes = Math.floor(ms / 60_000)
-  if (minutes < 1) return 'just now'
+  if (minutes < 1) {
+    return 'just now'
+  }
   return minutes === 1 ? '1 minute ago' : `${minutes} minutes ago`
 }
 
