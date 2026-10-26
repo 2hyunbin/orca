@@ -115,7 +115,7 @@ describe.each(['pane-issued', 'preallocated'] as const)('a %s handle across a re
 
   async function rendererTerminal() {
     const runtime = new OrcaRuntimeService(null)
-    const write = vi.fn(() => true)
+    const write = vi.fn((_ptyId: string, _data: string) => true)
     runtime.setPtyController({
       write,
       writeWithSettlement: settledWriteStub(write),
