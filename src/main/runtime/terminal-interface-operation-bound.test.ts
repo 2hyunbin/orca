@@ -200,6 +200,48 @@ it('does no idle wake or inventory work, then discovers a new PTY through runtim
     await vi.advanceTimersByTimeAsync(250)
     expect(fixture.measurements().inspections).toBe(1)
     expect(fixture.authority.read('pty-0', 'birth-0')).toMatchObject({ state: 'agent' })
+
+    const pty = fixture.runtime['ptysById'].get('pty-0')!
+    const handle = fixture.runtime['handleByPtyId'].get('pty-0')
+    expect(handle).toBeDefined()
+    fixture.reset()
+    fixture.runtime['setPtyConnected'](pty, false)
+    await vi.advanceTimersByTimeAsync(251)
+    expect(fixture.runtime['ptysById'].get('pty-0')).toBe(pty)
+    expect(fixture.runtime['handleByPtyId'].get('pty-0')).toBe(handle)
+    expect(pty.connected).toBe(false)
+    expect(fixture.events).toContainEqual(
+      expect.objectContaining({ type: 'terminalInterfaces', observations: [] })
+    )
+    expect(vi.getTimerCount()).toBe(0)
+
+    fixture.reset()
+    const connectionChanges = vi.spyOn(fixture.authority, 'inventoryChanged')
+    const reconnectedAt = Date.now()
+    fixture.runtime.onPtyData('pty-0', 'reconnected output\n', reconnectedAt)
+    expect(pty.connected).toBe(true)
+    expect(pty.disconnectedAt).toBeNull()
+    expect(pty.lastOutputAt).toBe(reconnectedAt)
+    expect(connectionChanges).toHaveBeenCalledTimes(1)
+    expect(fixture.measurements().inventoryScans).toBe(0)
+    expect(fixture.measurements().inspections).toBe(0)
+    await vi.advanceTimersByTimeAsync(250)
+    expect(fixture.measurements().inspections).toBe(1)
+    expect(fixture.events).toContainEqual(
+      expect.objectContaining({
+        type: 'terminalInterfaces',
+        observations: [expect.objectContaining({ ptyId: 'pty-0', state: 'agent' })]
+      })
+    )
+
+    fixture.reset()
+    connectionChanges.mockClear()
+    fixture.runtime.onPtyData('pty-0', 'ordinary connected output\n', Date.now())
+    fixture.runtime.onPtyData('pty-0', 'more connected output\n', Date.now())
+    await vi.advanceTimersByTimeAsync(1)
+    expect(connectionChanges).not.toHaveBeenCalled()
+    expect(fixture.measurements().inventoryScans).toBe(0)
+    expect(fixture.measurements().inspections).toBe(0)
   } finally {
     fixture.stop()
     vi.restoreAllMocks()

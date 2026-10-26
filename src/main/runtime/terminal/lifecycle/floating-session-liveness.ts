@@ -57,14 +57,12 @@ export abstract class OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness extends
           })
         }
         if (pty) {
-          pty.connected = true
-          pty.disconnectedAt = null
+          this.setPtyConnected(pty, true)
           this.markPtyLivenessLive(ptyId)
           this.refreshPtyForegroundAgent(ptyId)
         }
       } else if (pty && !this.leafExistsForPty(ptyId)) {
-        pty.connected = false
-        pty.disconnectedAt ??= Date.now()
+        this.setPtyConnected(pty, false)
       }
     }
     this.pruneDisconnectedPtyRecords()

@@ -94,6 +94,7 @@ it.each([undefined, 'Keep this editable'])(
       expect(project()).toMatchObject({ status: 'pending-handle', terminal: null })
       bound = true
       host.ptysById = new Map([[binding.ptyId, pty]])
+      authority.inventoryChanged()
       await vi.advanceTimersByTimeAsync(3000)
       expect(project()).toMatchObject({
         status: 'ready',
