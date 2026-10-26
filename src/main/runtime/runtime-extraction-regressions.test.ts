@@ -50,6 +50,12 @@ describe('runtime extraction regressions', () => {
     }
   })
 
+  it('advertises the terminal-history migration blob, which is what makes a mover send it', () => {
+    expect(new OrcaRuntimeService().getStatus().capabilities).toContain(
+      'orcad.migration-blob.terminal-history.v1'
+    )
+  })
+
   it('reads a machine rename the same way status publishes it', () => {
     const settings = { machineName: 'Build server' }
     const runtime = new OrcaRuntimeService(partialRuntimeStore({ getSettings: () => settings }))
