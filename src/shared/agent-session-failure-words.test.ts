@@ -31,8 +31,7 @@ const LEGACY_MARKER_KINDS: ReadonlySet<SubmissionRejectionKind> = new Set([
   'queueFull'
 ])
 
-/** Every fact shape a kind can carry: bare, with a person or a log detail, with a refusal, and
- *  for an attachment each reason with and without its limit. */
+/** Cover every fact shape, with person/log/refusal details and every attachment reason with/without a limit. */
 function factsFor(kind: AgentSessionFailureKind): AgentSessionFailureFact[] {
   const facts: AgentSessionFailureFact[] = [
     { kind },
@@ -375,4 +374,20 @@ describe('an attachment problem as a reader meets it', () => {
       })
     ).toEqual({ kind: 'attachmentInvalid' })
   })
+})
+
+it('keeps an unsettled ordinary send on the existing working and wait wording', () => {
+  expect(
+    agentSessionFailureSentence(
+      {
+        kind: 'restartFailed',
+        refusal: {
+          code: 'agent_session_operation_invalid',
+          details: { reason: 'messagesUnsettled' }
+        }
+      },
+      'rejection',
+      { agentName: 'Claude' }
+    )
+  ).toBe('The agent is still working. Wait for the agent to finish responding, or stop it.')
 })
