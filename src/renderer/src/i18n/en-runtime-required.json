@@ -2915,6 +2915,7 @@
         "nativeDropTempCopyFailed_other": "Orca couldn't copy {{count}} dropped files."
       },
       "useIpcEvents": {
+        "56d3ec4203": "Failed to create untitled markdown file.",
         "60428567b4": "Local terminal reveal is unavailable while a remote runtime is active",
         "f6300deb8b": "New Browser Tab"
       },
@@ -3463,6 +3464,7 @@
     "agents": {
       "loadingHost": "Loading agent settings…",
       "permissionChoiceDescription": "Applies where each agent supports this mode. Change one agent below.",
+      "permissionEachOwnDescription": "Orca adds nothing; each CLI uses its own config",
       "permissionResetsOwnChoices": "Choosing a mode here resets the agents marked as set separately."
     },
     "browser": {

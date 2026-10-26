@@ -163,6 +163,7 @@
   },
   "settings": {
     "chat": {
+      "permissionsAgentsLink": "Paramètres → Agents",
       "permissionsTitle": "Autorisations pour les nouveaux chats",
       "permissionsDescription": "Uniquement pour les nouveaux chats. Les paramètres par défaut propres à chaque agent se trouvent dans Paramètres → Agents.",
       "description": "Choisissez l’apparence et le comportement des chats.",
@@ -19564,6 +19565,10 @@
           "editors": "Fermer tous les onglets de l’éditeur ?",
           "description": "Les onglets sélectionnés seront fermés. Les onglets épinglés resteront ouverts.",
           "confirm": "Fermer les onglets"
+        },
+        "chatRename": {
+          "empty": "Le nom du chat ne peut pas être vide",
+          "failed": "Impossible de renommer ce chat"
         }
       }
     },
