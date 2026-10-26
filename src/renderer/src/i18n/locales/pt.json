@@ -8617,7 +8617,9 @@
           "nodeDownloadBlockedNoMirror": "Nem este computador nem este host conseguiram baixar o Node.js, necessário para o servidor Orca. Verifique a rede ou o proxy nas duas máquinas e conecte novamente.",
           "nodeDownloadBlockedMirrorTried": "Nem este computador nem este host conseguiram baixar o Node.js, nem mesmo pelo espelho de downloads do Node.js. Verifique a configuração do espelho e conecte novamente.",
           "reassurance": "É executado em {{host}}, acessado pela sua própria conexão SSH. Seu código e seus arquivos permanecem onde estão. Apenas a lista de projetos, abas e terminais do Orca é movida para {{host}}.",
-          "refusedBlockedReason": "O Orca ainda não está configurado neste host. {{reason}}"
+          "refusedBlockedReason": "O Orca ainda não está configurado neste host. {{reason}}",
+          "refusedLeaveBehind": "Alguns itens salvos deste host não podem ser movidos para o servidor do Orca: {{items}}. “Mover mesmo assim” conecta o host e os mantém neste computador.",
+          "refusedLeaveBehindUnnamed": "Alguns itens salvos deste host não podem ser movidos para o servidor do Orca. “Mover mesmo assim” conecta o host e os mantém neste computador."
         },
         "ZcodeCliSetupSection": {
           "title": "Usar GLM com ZCode",

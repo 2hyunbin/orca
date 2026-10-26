@@ -12996,6 +12996,8 @@
           "behindMigrating": "Exécute le serveur Orca, qui se mettra à jour une fois le déplacement de ses projets terminé.",
           "behindCheckFailed": "Exécute le serveur Orca ; Orca n’a pas pu vérifier s’il est en retard sur cette app.",
           "refusedBlockedReason": "Orca n’est pas encore configuré sur cet hôte. {{reason}}",
+          "refusedLeaveBehind": "Certains éléments enregistrés pour cet hôte ne peuvent pas être déplacés vers son serveur Orca : {{items}}. « Déplacer quand même » connecte l’hôte et les conserve sur cet ordinateur.",
+          "refusedLeaveBehindUnnamed": "Certains éléments enregistrés pour cet hôte ne peuvent pas être déplacés vers son serveur Orca. « Déplacer quand même » connecte l’hôte et les conserve sur cet ordinateur.",
           "runtimeNoexec": "Cet hôte n'autorise pas l'exécution de programmes à partir de ~/.orca-remote, donc Orca ne peut pas y démarrer son serveur. Cela signifie généralement que le dossier personnel est monté avec noexec. Demandez à l’administrateur de l’hôte d’autoriser l’exécution de programmes là-bas, puis reconnectez-vous.",
           "setupContactLost": "Orca a perdu le contact avec cet hôte lors de la configuration de son serveur. Rien sur l'hôte n'a été arrêté. Reconnectez-vous pour continuer."
         },

@@ -12850,6 +12850,8 @@
           "behindMigrating": "运行 Orca 服务器，它会在项目迁移完成后更新。",
           "behindCheckFailed": "运行 Orca 服务器；Orca 无法检查它是否落后于此应用。",
           "refusedBlockedReason": "此主机尚未设置 Orca。{{reason}}",
+          "refusedLeaveBehind": "此主机的部分已保存项目无法移到其 Orca 服务器：{{items}}。“仍要迁移”会连接此主机，并将这些项目保留在这台电脑上。",
+          "refusedLeaveBehindUnnamed": "此主机的部分已保存项目无法移到其 Orca 服务器。“仍要迁移”会连接此主机，并将这些项目保留在这台电脑上。",
           "runtimeNoexec": "此主机不允许执行 ~/.orca-remote 中的程序，因此 Orca 无法在那里启动服务器。这通常是因为主目录以 noexec 选项挂载。请联系主机管理员，允许在该目录中执行程序，然后重新连接。",
           "setupContactLost": "Orca 在设置服务器时失去了与此主机的联系。主机上没有任何进程被停止。请重新连接以继续。"
         },

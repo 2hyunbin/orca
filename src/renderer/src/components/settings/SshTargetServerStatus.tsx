@@ -58,7 +58,7 @@ export function SshTargetServerStatusLine({
         <Button
           type="button"
           size="xs"
-          variant="outline"
+          variant="default"
           // A connect in flight may clear the refusal; a click would start a second one.
           disabled={state ? isSshTargetConnecting(state.status) : false}
           onClick={() => onOpenDialog('move-anyway')}
