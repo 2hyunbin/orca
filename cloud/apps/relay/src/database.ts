@@ -1347,6 +1347,7 @@ export class PostgresDatabase implements RelayDatabase {
   // Destroys the client on an error, or when it has turned slow, so the pool dials a fresh one.
   private release(client: pg.PoolClient, error: Error | undefined): void {
     if (error) {
+      this.slowConnections.forget(client)
       client.release(error)
       return
     }
