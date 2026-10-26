@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -240,6 +240,16 @@ describe('host identity file', () => {
 })
 
 describe('ConnectorCloud connection', () => {
+  it('deletes the turn outbox on a logout that runs before polling starts', async () => {
+    fake.signInAnswers = [{ status: 'authorized', email: 'ada@example.com' }]
+    const cloud = connectorCloud()
+    expect(await finish(cloud, await cloud.beginSignIn())).toMatchObject({ ok: true })
+    const outbox = join(userDataPath, 'connector-turn-outbox.json')
+    writeFileSync(outbox, '[]')
+    expect(await cloud.signOut()).toEqual({ signedOut: true })
+    expect(existsSync(outbox)).toBe(false)
+  })
+
   async function signedIn(cloud: ConnectorCloud): Promise<void> {
     fake.signInAnswers = [{ status: 'authorized', email: 'ada@example.com' }]
     expect(await finish(cloud, await cloud.beginSignIn())).toMatchObject({ ok: true })

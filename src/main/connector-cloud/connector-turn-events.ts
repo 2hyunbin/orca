@@ -159,6 +159,11 @@ export class ConnectorTurnEvents {
     this.queue.retain(() => false)
   }
 
+  /** The same, before any owner exists in this process. */
+  static clearStored(userDataPath: string): void {
+    rmSync(join(userDataPath, TURN_OUTBOX_FILE), { force: true })
+  }
+
   private readStored(): TurnEnded[] {
     let raw: string
     try {

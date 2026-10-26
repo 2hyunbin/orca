@@ -43,7 +43,11 @@ export class ConnectorSendQueue<T> {
     this.items = options.initial ?? []
   }
 
+  /** Re-attaching the same sender keeps its pending retry. */
   attach(sender: ConnectorBatchSender<T>): void {
+    if (this.sender === sender) {
+      return
+    }
     this.sender = sender
     this.failures = 0
     this.cancelRetry()
@@ -91,6 +95,10 @@ export class ConnectorSendQueue<T> {
       }
     } finally {
       this.sending = false
+      // A sender attached while a retired one was mid-request takes over here.
+      if (this.sender && this.sender !== sender && !this.retry) {
+        void this.flush()
+      }
     }
   }
 

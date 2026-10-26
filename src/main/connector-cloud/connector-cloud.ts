@@ -134,7 +134,11 @@ export class ConnectorCloud {
     this.client?.stop()
     this.client = null
     deleteConnectorHostIdentity(this.options.userDataPath)
-    this.events?.clear()
+    if (this.events) {
+      this.events.clear()
+    } else {
+      ConnectorTurnEvents.clearStored(this.options.userDataPath)
+    }
     this.revoked = revoked
   }
 
