@@ -4,7 +4,10 @@ import type { SlackInstalls } from './slack-installs.js'
 import type { ClaimedPost, SlackPostKind, SlackPosts } from './slack-posts.js'
 import type { SlackResult, SlackWebApi } from './slack-web-api.js'
 
-const TextBodySchema = z.object({ text: z.string().min(1) })
+const TextBodySchema = z.object({
+  text: z.string().min(1),
+  blocks: z.array(z.looseObject({ type: z.string() })).optional()
+})
 const ReactionBodySchema = z.object({ name: z.string().min(1), timestamp: z.string().min(1) })
 const EphemeralBodySchema = z.object({
   text: z.string().min(1),
@@ -102,12 +105,13 @@ export class SlackPostWorker {
       await this.finish(post, result, 'retry')
       return
     }
-    const { text } = TextBodySchema.parse(post.body)
+    const { text, blocks } = TextBodySchema.parse(post.body)
     if (post.kind === 'status' && post.slackTs !== null) {
       const result = await api(token, 'chat.update', {
         channel: post.channelId,
         ts: post.slackTs,
-        text
+        text,
+        ...(blocks ? { blocks } : {})
       })
       await this.finish(post, result, 'retry')
       return
@@ -129,6 +133,7 @@ export class SlackPostWorker {
       channel: post.channelId,
       thread_ts: post.threadTs,
       text,
+      ...(blocks ? { blocks } : {}),
       unfurl_links: false,
       unfurl_media: false,
       metadata: { event_type: POST_METADATA_TYPE, event_payload: { post_id: post.postId } }
