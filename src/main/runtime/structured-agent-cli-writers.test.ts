@@ -95,6 +95,64 @@ function writerLayoutStore(): RuntimeStore {
 
 beforeEach(() => vi.clearAllMocks())
 describe('execution-host conversation writer inspection', () => {
+  it.each(['source', 'row', 'link', 'saved', 'final'] as const)(
+    'names the actual %s blocker, leaving a final proof failure unnamed',
+    async (kind) => {
+      const check = inspection('unverifiable')
+      const blocker = { paneKey: 'blocker:leaf', worktreeId: 'workspace' }
+      check.host.rows = () => []
+      if (kind === 'source') {
+        check.host.shellAlone = async () => false
+      }
+      if (kind === 'row') {
+        check.host.rows = () => [{ ...row, ...blocker }]
+      }
+      if (kind === 'link') {
+        check.host.links = () => [
+          { ...blocker, agent: 'codex', id: 'conversation', paneOwned: false, terminal: () => null }
+        ]
+      }
+      if (kind === 'saved') {
+        check.host.saved = () => [
+          {
+            ...blocker,
+            agent: 'opencode',
+            providerSession: { key: 'session_id', id: 'conversation' },
+            prompt: '',
+            state: 'done',
+            origin: 'live',
+            capturedAt: 1,
+            updatedAt: 1
+          }
+        ]
+      }
+      if (kind === 'final') {
+        let calls = 0
+        check.host.rows = () => [{ ...row }]
+        check.host.observation = () => ({
+          topology: 'pane-owned',
+          presence: async () => 'exited',
+          current: () => ++calls < 4
+        })
+      }
+      const run = assertCliConversationWritersExited(
+        check.host,
+        kind === 'saved' ? 'opencode' : 'codex',
+        'conversation',
+        kind === 'source' ? blocker : undefined
+      )
+      await expect(run).rejects.toMatchObject({
+        refusal: {
+          details:
+            kind === 'final' ? { reason: 'conversationHeldElsewhere' } : { terminal: blocker }
+        }
+      })
+      if (kind === 'final') {
+        await expect(run).rejects.not.toHaveProperty('refusal.details.terminal')
+      }
+    }
+  )
+
   it('accepts exact exited or unchanged shell-only proof, never loss of evidence', async () => {
     await expect(inspection('unverifiable').run()).rejects.toMatchObject(refusal)
     for (const cause of ['missing-row', 'sleeping', 'failed-scan', 'unknown-topology'] as const) {

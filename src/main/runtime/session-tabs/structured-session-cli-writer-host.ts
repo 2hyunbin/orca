@@ -155,6 +155,7 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
             })
             return [...conversations.byKey.values()].map((conversation) => ({
               ...conversation,
+              paneKey: this.paneOfPty(pty).paneKey,
               worktreeId: pty.worktreeId,
               terminal
             }))

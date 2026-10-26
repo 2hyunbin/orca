@@ -1,4 +1,10 @@
 import {
+  agentSessionVisibleFailureFacts,
+  agentSessionFailureStatedByRow
+} from '../../../shared/agent-session-visible-failures'
+import { readWholeAgentSessionFailureFact } from '../../../shared/agent-session-failure'
+import { structuredAgentSessionStatusBlock } from '../../../shared/structured-agent-session-status-block'
+import {
   assertCliConversationWritersExited,
   posixCliWriterShellAlone
 } from '../../runtime/structured-agent-cli-writers'
@@ -70,7 +76,8 @@ const closeSession = vi.fn<NonNullable<StructuredAgentSessionAdapter['closeSessi
 const assertNoTerminalWriter = vi.fn(async (_record: AgentSessionRecord) => {
   if (terminalWriting) {
     throw agentSessionRefusalError('agent_session_conflict', {
-      reason: 'conversationHeldElsewhere'
+      reason: 'conversationHeldElsewhere',
+      terminal: { paneKey: 'tab:leaf', worktreeId: 'workspace' }
     })
   }
 })
@@ -86,7 +93,8 @@ beforeEach(async () => {
   assertNoTerminalWriter.mockReset().mockImplementation(async () => {
     if (terminalWriting) {
       throw agentSessionRefusalError('agent_session_conflict', {
-        reason: 'conversationHeldElsewhere'
+        reason: 'conversationHeldElsewhere',
+        terminal: { paneKey: 'tab:leaf', worktreeId: 'workspace' }
       })
     }
   })
@@ -168,7 +176,30 @@ it('refuses the chat agent start while a terminal writes its conversation, once 
   assertNoTerminalWriter.mockClear()
 
   const first = await rejection(await send('first'))
-  expect(first?.rejection).toMatchObject({ kind: 'conversationOpenInTerminal' })
+  const snapshot = await host.journalSnapshot(SESSION)
+  const status = snapshot.items.find(
+    (item) => item.body.kind === 'status' && item.body.heldByTerminal
+  )
+  expect(status?.body).toMatchObject({
+    heldByTerminal: { paneKey: 'tab:leaf', worktreeId: 'workspace' }
+  })
+  if (status?.body.kind !== 'status') {
+    throw new Error('Missing failure row')
+  }
+  expect(JSON.stringify(status.body.failure)).toBe(
+    JSON.stringify({ kind: 'conversationOpenInTerminal' })
+  )
+  expect(readWholeAgentSessionFailureFact(status.body.failure)).toEqual(first?.rejection)
+  expect(
+    agentSessionFailureStatedByRow(
+      first?.rejection,
+      agentSessionVisibleFailureFacts(snapshot.items)
+    )
+  ).toBe(true)
+  expect(structuredAgentSessionStatusBlock(status.body)).toMatchObject({
+    failure: first?.rejection,
+    heldByTerminal: status.body.heldByTerminal
+  })
   expect(first?.reason).toBe(
     'Codex is already running this conversation in another terminal. Quit Codex there or close that terminal to continue here.'
   )

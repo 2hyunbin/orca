@@ -245,6 +245,9 @@ const KnownItemBody = z.discriminatedUnion('kind', [
     providerFrame: ProviderFrame.optional(),
     threadGoal: AgentJournalThreadGoalStateSchema.optional(),
     failure: AgentSessionFailureFactSchema.optional(),
+    heldByTerminal: z
+      .object({ paneKey: z.string().min(1), worktreeId: z.string().min(1) })
+      .optional(),
     orcaStop: z.object({ cause: z.string().min(1) }).optional()
   }),
   z.object({
