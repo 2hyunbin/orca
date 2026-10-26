@@ -7,18 +7,22 @@ import type { WslMoveOrchestratorRecord } from '../../../shared/wsl-move/wsl-mov
 import {
   applyWslMovedDistroVerdict,
   applyWslMoveOutcome,
+  applyWslMoveReleasedByUser,
   applyWslMoveUserAction,
   classifyWslMoveOutcome,
   mayStartWslMove,
   newWslMoveOrchestratorRecord,
+  sameWslMoveOrchestratorRecord,
   settleWslMoveOrchestratorRecord,
   WSL_MOVE_ORCHESTRATOR_BACKOFF_MS,
+  WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS,
   WSL_MOVE_ORCHESTRATOR_MAX_ATTEMPTS,
-  WSL_MOVE_ORCHESTRATOR_NOT_NOW_MS
+  WSL_MOVE_ORCHESTRATOR_NOT_NOW_MS,
+  wslMoveOrchestratorTimerDelay
 } from './wsl-move-orchestrator-transitions'
 
 const NOW = 1_000_000
-const context = { now: NOW, appVersion: '1.0.0' }
+const context = { now: NOW, appVersion: '1.0.0', trigger: 'connect' as const }
 const blocker: WslMoveBlocker = {
   kind: 'agent-working',
   ids: ['tab:leaf'],
@@ -232,10 +236,109 @@ describe('R38 verdicts and user actions', () => {
   })
 
   it('reads a move left running by an earlier process as pending', () => {
-    expect(settleWslMoveOrchestratorRecord(record({ kind: 'moving' }), NOW).state).toEqual({
+    expect(settleWslMoveOrchestratorRecord(record({ kind: 'moving' }), NOW, true).state).toEqual({
       kind: 'pending'
     })
-    const deferred = record({ kind: 'deferred', blockers: [blocker] })
-    expect(settleWslMoveOrchestratorRecord(deferred, NOW)).toBe(deferred)
+    const deferred = record({ kind: 'deferred', blockers: [blocker], rechecks: 0 })
+    expect(settleWslMoveOrchestratorRecord(deferred, NOW, false)).toBe(deferred)
+  })
+})
+
+describe('review fixes (#33802)', () => {
+  // 1: a clean preview marks the run; a start another run already owns must not keep it marked.
+  it('puts a run refused as already running back to pending', () => {
+    const next = applyWslMoveOutcome(record({ kind: 'moving' }), { next: 'stay' }, context)
+    expect(next.state).toEqual({ kind: 'pending' })
+    const idle = record({ kind: 'idle' })
+    expect(applyWslMoveOutcome(idle, { next: 'stay' }, context)).toBe(idle)
+  })
+
+  // 2: "Use on this computer again" is a deliberate no, with no expiry.
+  it('parks a distro the user brought back until Retry', () => {
+    const declined = applyWslMoveReleasedByUser(record({ kind: 'done', migrationId: 'm1' }), NOW)
+    expect(declined.state).toEqual({ kind: 'parked', reason: 'declined' })
+    expect(mayStartWslMove(declined, 'project-opened', NOW + 365 * 86_400_000, '9.0.0')).toBe(false)
+    expect(mayStartWslMove(declined, 'user', NOW, '1.0.0')).toBe(true)
+  })
+
+  // 4: deferred re-checks back off 1 m, 5 m, 30 m, then only a wake or the user re-checks.
+  it('spends the deferred re-check series on timers only, and a wake restarts it', () => {
+    let current = record({ kind: 'pending' })
+    const delays: (number | null)[] = []
+    current = applyWslMoveOutcome(current, { next: 'deferred', blockers: [blocker] }, context)
+    for (let check = 0; check < 4; check++) {
+      delays.push(wslMoveOrchestratorTimerDelay(current, NOW))
+      current = applyWslMoveOutcome(
+        current,
+        { next: 'deferred', blockers: [blocker] },
+        { ...context, trigger: 'timer' }
+      )
+    }
+    expect(delays).toEqual([...WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS, null])
+    const woken = applyWslMoveOutcome(current, { next: 'deferred', blockers: [blocker] }, context)
+    expect(wslMoveOrchestratorTimerDelay(woken, NOW)).toBe(
+      WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS[0]
+    )
+  })
+
+  // 6: once the host-catalog check reports `present`, an offered Restore is withdrawn.
+  it('clears an offered Restore when the distro reads present', () => {
+    expect(
+      applyWslMovedDistroVerdict(record({ kind: 'restore-offered' }), 'present', NOW).state
+    ).toEqual({ kind: 'pending' })
+  })
+
+  // 7: failing to ask the window says nothing about the move.
+  it('retries a window that could not be asked without spending an attempt', () => {
+    const next = applyWslMoveOutcome(
+      record({ kind: 'pending' }, 2),
+      { next: 'transient', reason: 'wsl_move_window_unavailable' },
+      context
+    )
+    expect(next.attempts).toBe(2)
+    expect(next.state).toMatchObject({ kind: 'backoff', reason: 'wsl_move_window_unavailable' })
+  })
+
+  // 8: the 6 h step runs; the attempt after it parks.
+  it('waits 6 h after the fifth failure and parks on the sixth', () => {
+    const fifth = applyWslMoveOutcome(
+      record({ kind: 'backoff', nextAttemptAt: 0, reason: 'x' }, 4),
+      { next: 'transient', reason: 'x' },
+      context
+    )
+    expect(fifth.state).toEqual({
+      kind: 'backoff',
+      nextAttemptAt: NOW + 6 * 60 * 60_000,
+      reason: 'x'
+    })
+    const sixth = applyWslMoveOutcome(fifth, { next: 'transient', reason: 'x' }, context)
+    expect(sixth.state).toEqual({ kind: 'parked', reason: 'attempts-exhausted' })
+  })
+
+  // 8: a host that needed an update gets one retry per new build, then waits again.
+  it('retries a host that needed an update once on a new build', () => {
+    const parked = record({ kind: 'parked', reason: 'host-update-required' }, 2)
+    expect(mayStartWslMove(parked, 'connect', NOW, '1.0.0')).toBe(false)
+    expect(mayStartWslMove(parked, 'connect', NOW, '1.1.0')).toBe(true)
+    const again = applyWslMoveOutcome(
+      parked,
+      { next: 'transient', reason: 'wsl_move_host_update_required' },
+      { ...context, appVersion: '1.1.0' }
+    )
+    expect(again.state).toEqual({ kind: 'parked', reason: 'host-update-required' })
+    expect(mayStartWslMove(again, 'connect', NOW, '1.1.0')).toBe(false)
+  })
+
+  // 9: a Restore whose release finished before the app quit has nothing left to offer.
+  it('reads an offered Restore with no finished move left as pending', () => {
+    const offered = record({ kind: 'restore-offered' })
+    expect(settleWslMoveOrchestratorRecord(offered, NOW, false).state).toEqual({ kind: 'pending' })
+    expect(settleWslMoveOrchestratorRecord(offered, NOW, true)).toBe(offered)
+  })
+
+  it('treats records that differ only in their write time as the same', () => {
+    const a = record({ kind: 'deferred', blockers: [blocker], rechecks: 1 })
+    expect(sameWslMoveOrchestratorRecord(a, { ...a, updatedAt: a.updatedAt + 1 })).toBe(true)
+    expect(sameWslMoveOrchestratorRecord(a, { ...a, attempts: 1 })).toBe(false)
   })
 })

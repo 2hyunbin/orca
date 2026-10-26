@@ -20,8 +20,9 @@ describe('wslMovedDistroVerdict (R38)', () => {
     )
   })
 
-  it('calls a distro registered again under its name replaced', () => {
-    expect(wslMovedDistroVerdict([{ ...ubuntu, id: 'cccc' }], 'Ubuntu', 'aaaa')).toBe('replaced')
+  // An export and re-import under the same name gets a new GUID and keeps every file.
+  it('concludes nothing from a new GUID under the same name', () => {
+    expect(wslMovedDistroVerdict([{ ...ubuntu, id: 'cccc' }], 'Ubuntu', 'aaaa')).toBe('unknown')
   })
 
   it('cannot tell a re-register without a recorded GUID', () => {

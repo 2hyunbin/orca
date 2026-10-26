@@ -47,11 +47,12 @@ describe('wslMoveOrchestratorEventProps', () => {
     const states: WslMoveOrchestratorRecord['state'][] = [
       { kind: 'idle' },
       { kind: 'pending' },
-      { kind: 'deferred', blockers: [] },
+      { kind: 'deferred', blockers: [], rechecks: 0 },
       { kind: 'moving' },
       { kind: 'waiting-for-host', migrationId: 'm' },
       { kind: 'backoff', nextAttemptAt: 0, reason: 'x' },
       { kind: 'parked', reason: 'not-now', until: 1 },
+      { kind: 'parked', reason: 'declined' },
       { kind: 'done', migrationId: 'm' },
       { kind: 'distro-gone' },
       { kind: 'restore-offered' }

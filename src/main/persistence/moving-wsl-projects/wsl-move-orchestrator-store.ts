@@ -29,7 +29,11 @@ const blockerSchema = z.object({
 const stateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('idle') }),
   z.object({ kind: z.literal('pending') }),
-  z.object({ kind: z.literal('deferred'), blockers: z.array(blockerSchema) }),
+  z.object({
+    kind: z.literal('deferred'),
+    blockers: z.array(blockerSchema),
+    rechecks: z.number().int().nonnegative().default(0)
+  }),
   z.object({ kind: z.literal('moving') }),
   z.object({ kind: z.literal('waiting-for-host'), migrationId: z.string() }),
   z.object({ kind: z.literal('backoff'), nextAttemptAt: z.number(), reason: z.string() }),
@@ -40,7 +44,8 @@ const stateSchema = z.discriminatedUnion('kind', [
       'manifest-too-large',
       'host-update-required',
       'attempts-exhausted',
-      'not-now'
+      'not-now',
+      'declined'
     ]),
     until: z.number().optional()
   }),

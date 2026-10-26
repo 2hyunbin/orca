@@ -57,6 +57,7 @@ function fakePorts(overrides: Partial<WslMoveOrchestratorPorts> = {}): Fake {
     appVersion: '1.0.0',
     autoMoveEnabled: () => true,
     prepareHost: vi.fn(async () => 'ready' as const),
+    isHostReady: vi.fn(() => true),
     preview: vi.fn(async (distro: string) => ready(distro)),
     start: vi.fn(async () => moved),
     finishedMove: () => null,
@@ -119,7 +120,11 @@ describe('WslMoveOrchestrator', () => {
       orchestrator.trigger('Debian', 'connect')
     ])
     expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
-    expect(stateOf(orchestrator, 'Debian')).toEqual({ kind: 'deferred', blockers: [blocker] })
+    expect(stateOf(orchestrator, 'Debian')).toEqual({
+      kind: 'deferred',
+      blockers: [blocker],
+      rechecks: 0
+    })
     expect(ports.start).toHaveBeenCalledTimes(1)
     expect(ports.start).toHaveBeenCalledWith('Ubuntu')
     expect(ports.saved.get(wslMoveJournalKey('Debian'))?.state.kind).toBe('deferred')
@@ -239,7 +244,7 @@ describe('WslMoveOrchestrator', () => {
     await orchestrator.trigger('Ubuntu', 'connect')
     expect(stateOf(orchestrator, 'Ubuntu')?.kind).toBe('deferred')
     busy = false
-    await ports.advance(WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS)
+    await ports.advance(WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS[0])
     expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
   })
 
@@ -272,7 +277,7 @@ describe('WslMoveOrchestrator', () => {
     })
   })
 
-  it('absorbs a trigger that arrives while the distro is already being handled', async () => {
+  it('absorbs a timer that fires while the distro is already being handled', async () => {
     let release: () => void = () => {}
     const ports = fakePorts({
       preview: vi.fn(
@@ -285,7 +290,7 @@ describe('WslMoveOrchestrator', () => {
     const orchestrator = new WslMoveOrchestrator(ports)
     const first = orchestrator.trigger('Ubuntu', 'connect')
     await vi.waitFor(() => expect(ports.preview).toHaveBeenCalled())
-    await orchestrator.trigger('ubuntu', 'project-opened')
+    await orchestrator.trigger('ubuntu', 'timer')
     release()
     await first
     expect(ports.preview).toHaveBeenCalledTimes(1)
@@ -297,8 +302,8 @@ describe('WslMoveOrchestrator', () => {
     })
     const orchestrator = new WslMoveOrchestrator(ports)
     await orchestrator.trigger('Ubuntu', 'connect')
-    await ports.advance(WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS)
-    await ports.advance(WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS)
+    await ports.advance(WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS[0])
+    await ports.advance(WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS[0])
     expect(vi.mocked(ports.track).mock.calls.map(([, record]) => record.state.kind)).toEqual([
       'deferred'
     ])
@@ -410,7 +415,153 @@ describe('WslMoveOrchestrator', () => {
     const orchestrator = new WslMoveOrchestrator(ports)
     await orchestrator.trigger('Ubuntu', 'connect')
     orchestrator.dispose()
-    await ports.advance(WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS)
+    await ports.advance(WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS[0])
     expect(ports.preview).toHaveBeenCalledTimes(1)
+  })
+
+  describe('review fixes (#33802)', () => {
+    // 1: a clean preview, then a start this process already runs, must not strand the record.
+    it('goes back to pending when the start is already running elsewhere', async () => {
+      const ports = fakePorts({
+        start: vi.fn(async () => ({
+          outcome: 'refused' as const,
+          code: 'wsl_move_already_running' as const
+        }))
+      })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.trigger('Ubuntu', 'connect')
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'pending' })
+      await orchestrator.trigger('Ubuntu', 'connect')
+      expect(ports.start).toHaveBeenCalledTimes(2)
+    })
+
+    // 2: after "Use on this computer again", opening the project must not move it again.
+    it('never moves a distro the user brought back until Retry', async () => {
+      const ports = fakePorts()
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.trigger('Ubuntu', 'connect')
+      orchestrator.releasedByUser('Ubuntu')
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'parked', reason: 'declined' })
+      ports.clock.now += 30 * 86_400_000
+      await orchestrator.trigger('Ubuntu', 'project-opened')
+      await orchestrator.trigger('Ubuntu', 'connect')
+      expect(ports.start).toHaveBeenCalledTimes(1)
+      await orchestrator.userAction('Ubuntu', 'retry')
+      expect(ports.start).toHaveBeenCalledTimes(2)
+    })
+
+    // 3: a timer step never connects or adds a host, which could hold the distro up.
+    it('runs a timer step only on a host that is already ready, without readying one', async () => {
+      const start = vi
+        .fn<WslMoveOrchestratorPorts['start']>()
+        .mockResolvedValueOnce({ outcome: 'reset', migrationId: 'm0', detail: 'ECONNRESET' })
+        .mockResolvedValueOnce(moved)
+      let hostReady = false
+      const ports = fakePorts({ start, isHostReady: vi.fn(() => hostReady) })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.trigger('Ubuntu', 'connect')
+      expect(ports.prepareHost).toHaveBeenCalledTimes(1)
+      await ports.advance(WSL_MOVE_ORCHESTRATOR_BACKOFF_MS[0])
+      expect(ports.prepareHost).toHaveBeenCalledTimes(1)
+      expect(start).toHaveBeenCalledTimes(1)
+      hostReady = true
+      await orchestrator.trigger('Ubuntu', 'timer')
+      expect(ports.prepareHost).toHaveBeenCalledTimes(1)
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
+    })
+
+    // 4: deferred re-checks stop after 1 m, 5 m and 30 m; an unchanged state is not rewritten.
+    it('stops re-checking a deferred move after the series and writes nothing unchanged', async () => {
+      const ports = fakePorts({
+        preview: vi.fn(async (distro: string) => ready(distro, [blocker]))
+      })
+      const save = vi.spyOn(ports, 'save')
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.trigger('Ubuntu', 'connect')
+      for (const delay of WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS) {
+        await ports.advance(delay)
+      }
+      expect(ports.preview).toHaveBeenCalledTimes(4)
+      await ports.advance(24 * 60 * 60_000)
+      expect(ports.preview).toHaveBeenCalledTimes(4)
+      const writes = save.mock.calls.length
+      // A wake previews again, and the same blockers at the same re-check count write nothing.
+      await orchestrator.trigger('Ubuntu', 'connect')
+      await orchestrator.trigger('Ubuntu', 'connect')
+      expect(ports.preview).toHaveBeenCalledTimes(6)
+      expect(save.mock.calls.length).toBe(writes + 1)
+    })
+
+    // 7: no window to ask is not a failed move.
+    it('spends no attempt when the window cannot be asked', async () => {
+      const ports = fakePorts({
+        preview: vi.fn(async () => {
+          throw new Error('wsl_move_window_unavailable')
+        })
+      })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.trigger('Ubuntu', 'connect')
+      expect(orchestrator.list()[0]?.attempts).toBe(0)
+    })
+
+    // 8: each failed attempt of a backoff series is reported, not only the first.
+    it('reports every backoff transition, also backoff to backoff', async () => {
+      const ports = fakePorts({
+        preview: vi.fn(async () => ({
+          outcome: 'refused' as const,
+          code: 'wsl_move_host_unavailable' as const
+        }))
+      })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      await orchestrator.trigger('Ubuntu', 'connect')
+      await ports.advance(WSL_MOVE_ORCHESTRATOR_BACKOFF_MS[0])
+      const backoffs = vi
+        .mocked(ports.track)
+        .mock.calls.filter(([, record]) => record.state.kind === 'backoff')
+        .map(([, record]) => record.attempts)
+      expect(backoffs).toEqual([1, 2])
+    })
+
+    // 9: a Restore whose release finished before the app quit is not offered again.
+    it('reads an offered Restore with no finished move left as pending at start', () => {
+      const loaded = new Map<string, WslMoveOrchestratorRecord>([
+        [
+          wslMoveJournalKey('Ubuntu'),
+          {
+            distro: 'Ubuntu',
+            state: { kind: 'restore-offered' },
+            attempts: 0,
+            appVersion: '1.0.0',
+            updatedAt: 0
+          }
+        ]
+      ])
+      const orchestrator = new WslMoveOrchestrator(fakePorts({ load: () => loaded }))
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'pending' })
+    })
+
+    // 10: a project opened while the distro is busy is run after, not dropped.
+    it('runs a project opened mid-step once the step ends', async () => {
+      let release: () => void = () => {}
+      const preview = vi
+        .fn<WslMoveOrchestratorPorts['preview']>()
+        .mockImplementationOnce(
+          () =>
+            new Promise<WslMovePreview>((resolve) => {
+              release = () => resolve(ready('Ubuntu', [blocker]))
+            })
+        )
+        .mockImplementation(async (distro) => ready(distro))
+      const ports = fakePorts({ preview })
+      const orchestrator = new WslMoveOrchestrator(ports)
+      const first = orchestrator.trigger('Ubuntu', 'connect')
+      await vi.waitFor(() => expect(preview).toHaveBeenCalled())
+      await orchestrator.trigger('Ubuntu', 'project-opened')
+      await orchestrator.trigger('Ubuntu', 'project-opened')
+      release()
+      await first
+      expect(preview).toHaveBeenCalledTimes(2)
+      expect(stateOf(orchestrator, 'Ubuntu')).toEqual({ kind: 'done', migrationId: 'm1' })
+    })
   })
 })

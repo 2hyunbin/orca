@@ -1,7 +1,7 @@
 /**
- * R38: whether a finished move's distro is still the one it moved into. A rename keeps the GUID,
- * so it is the same distro; a re-register under the old name gets a new GUID, and its fresh host
- * has none of the moved state.
+ * R38: whether a finished move's distro is still registered. A rename keeps the GUID, so it is the
+ * same distro. A new GUID under the old name is either a reinstall or a re-import of the same
+ * files, which the registry cannot tell apart.
  */
 import type { WslDistroRegistration } from '../../wsl/wsl-distro-registry-id'
 import type { WslMovedDistroVerdict } from './wsl-move-orchestrator-transitions'
@@ -21,6 +21,7 @@ export function wslMovedDistroVerdict(
   if (!byName && !byGuid) {
     return 'gone'
   }
-  // A move recorded without a GUID cannot tell a re-register from the original.
-  return byName && guid && !byGuid ? 'replaced' : 'present'
+  // A new GUID under the old name is also an export and re-import with the same files; only the
+  // host's catalog can tell a wiped distro apart, so until that check exists it proves nothing.
+  return byName && guid && !byGuid ? 'unknown' : 'present'
 }

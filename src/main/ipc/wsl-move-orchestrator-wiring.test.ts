@@ -26,14 +26,16 @@ vi.mock('./ui', () => {
   }
 })
 type Status = { distro: string; state: string; environmentId: string; detail: null }
-const host = vi.hoisted(() => ({
-  statuses: new Array<Status>(),
-  listeners: new Set<() => void>(),
-  running: { status: 'confirmed', distros: ['Ubuntu'] } as
-    | { status: 'confirmed'; distros: string[] }
-    | { status: 'unavailable' },
-  added: new Array<string>()
-}))
+type RunningRead = { status: 'confirmed'; distros: string[] } | { status: 'unavailable' }
+const host = vi.hoisted(() => {
+  const initial = (): RunningRead => ({ status: 'confirmed', distros: ['Ubuntu'] })
+  return {
+    statuses: new Array<Status>(),
+    listeners: new Set<() => void>(),
+    running: initial(),
+    added: new Array<string>()
+  }
+})
 vi.mock('../wsl/wsl-distro-registry-id', () => ({ readWslDistroRegistrations: async () => null }))
 vi.mock('../wsl/wsl-orcad-deploy', () => ({
   defaultWslOrcadEnvironmentId: (distro: string) => `wsl:${distro}`
@@ -88,7 +90,14 @@ vi.mock('../persistence/moving-wsl-projects/wsl-move-orchestrator-store', () => 
   },
   writeWslMoveOrchestratorRecords: () => {}
 }))
-vi.mock('./wsl-move-handlers', () => ({ releaseWslMovedProjectHere: vi.fn() }))
+const releases = vi.hoisted(() => ({ listeners: new Array<(distro: string) => void>() }))
+vi.mock('./wsl-move-release-here', () => ({
+  releaseWslMoveChainHere: vi.fn(),
+  onWslMoveReleasedByUser: (listener: (distro: string) => void) => {
+    releases.listeners.push(listener)
+    return () => {}
+  }
+}))
 vi.mock('./wsl-move-undo-wiring', () => ({ createWslMoveUndoPorts: vi.fn() }))
 vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
 
@@ -133,6 +142,7 @@ beforeEach(() => {
   host.listeners.clear()
   host.running = { status: 'confirmed', distros: ['Ubuntu'] }
   host.added = []
+  releases.listeners.length = 0
   store.reads = 0
   driver.previewWslMove.mockClear()
   driver.moveProjectsToWslHost.mockClear()
@@ -253,5 +263,18 @@ describe('WSL move orchestrator wiring', () => {
     await register()
     await answerWindow()
     expect(driver.previewWslMove).not.toHaveBeenCalled()
+  })
+
+  // Review #2: "Use on this computer again" parks the distro, so opening it again moves nothing.
+  it('parks a distro the user brought back', async () => {
+    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
+    await register()
+    for (const listener of releases.listeners) {
+      listener('Ubuntu')
+    }
+    const records = await handlers.get('wslMoveOrchestrator:list')?.({})
+    expect(records).toEqual([
+      expect.objectContaining({ distro: 'Ubuntu', state: { kind: 'parked', reason: 'declined' } })
+    ])
   })
 })

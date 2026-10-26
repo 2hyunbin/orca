@@ -47,6 +47,8 @@ function parkReason(reason: WslMoveOrchestratorParkReason): Props['park_reason']
       return 'attempts_exhausted'
     case 'not-now':
       return 'not_now'
+    case 'declined':
+      return 'declined'
   }
 }
 

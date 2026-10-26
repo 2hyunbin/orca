@@ -16,12 +16,14 @@ import type {
 import {
   applyWslMoveOutcome,
   applyWslMovedDistroVerdict,
+  applyWslMoveReleasedByUser,
   applyWslMoveUserAction,
   classifyWslMoveOutcome,
   mayStartWslMove,
   newWslMoveOrchestratorRecord,
+  sameWslMoveOrchestratorRecord,
   settleWslMoveOrchestratorRecord,
-  WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS,
+  wslMoveOrchestratorTimerDelay,
   type WslMovedDistroVerdict,
   type WslMoveOutcome
 } from './wsl-move-orchestrator-transitions'
@@ -45,14 +47,16 @@ export type WslMoveOrchestratorPorts = {
    * `unverifiable`, never `not-running`: losing contact is no evidence either way.
    */
   prepareHost: (distro: string) => Promise<WslMoveHostReadiness>
+  /** Whether the distro's host connection is ready now; never connects. Gates timer steps. */
+  isHostReady: (distro: string) => boolean
   preview: (distro: string) => Promise<WslMovePreview>
   start: (distro: string) => Promise<WslMoveResult>
   finishedMove: (distro: string) => WslMoveFinishedMove | null
   /** R38: reads the registry and, when ready, the host's catalog; never boots the distro. */
   checkMovedDistro: (distro: string, move: WslMoveFinishedMove) => Promise<WslMovedDistroVerdict>
   /**
-   * R38 restore, step one: drop the finished move so its retained rows can move again. The window
-   * reloads after a release, so the move itself waits for the next trigger.
+   * R38 restore, step one: drop every finished move of the distro, newest first, so its retained
+   * rows can move again. The window reloads after a release; the move waits for the next trigger.
    */
   releaseFinishedMove: (
     distro: string,
@@ -76,12 +80,20 @@ export class WslMoveOrchestrator {
   private readonly busy = new Set<string>()
   private readonly timers = new Map<string, () => void>()
   private readonly projectOpenedAt = new Map<string, number>()
+  /** A wake that arrived while the distro was busy, run once the current step ends. */
+  private readonly queued = new Map<
+    string,
+    { distro: string; trigger: WslMoveOrchestratorTrigger }
+  >()
   private disposed = false
 
   constructor(private readonly ports: WslMoveOrchestratorPorts) {
     const now = ports.now()
     this.records = new Map(
-      [...ports.load()].map(([key, record]) => [key, settleWslMoveOrchestratorRecord(record, now)])
+      [...ports.load()].map(([key, record]) => [
+        key,
+        settleWslMoveOrchestratorRecord(record, now, ports.finishedMove(record.distro) !== null)
+      ])
     )
     for (const [key, record] of this.records) {
       this.scheduleFor(key, record)
@@ -92,13 +104,19 @@ export class WslMoveOrchestrator {
     return [...this.records.values()]
   }
 
-  /** Runs the distro's next step for a trigger; a run already under way absorbs it. */
+  /**
+   * Runs the distro's next step for a trigger. A wake that arrives mid-step runs once after it;
+   * a timer or user trigger then is absorbed (the step it would repeat is under way).
+   */
   async trigger(distro: string, trigger: WslMoveOrchestratorTrigger): Promise<void> {
     const key = wslMoveJournalKey(distro)
-    if (this.disposed || this.busy.has(key)) {
+    if (this.disposed || (trigger !== 'user' && !this.ports.autoMoveEnabled())) {
       return
     }
-    if (trigger !== 'user' && !this.ports.autoMoveEnabled()) {
+    if (this.busy.has(key)) {
+      if (trigger === 'project-opened' || trigger === 'connect') {
+        this.queued.set(key, { distro, trigger })
+      }
       return
     }
     if (trigger === 'project-opened') {
@@ -109,12 +127,35 @@ export class WslMoveOrchestrator {
       }
       this.projectOpenedAt.set(key, now)
     }
+    await this.run(key, distro, trigger)
+  }
+
+  private async run(
+    key: string,
+    distro: string,
+    trigger: WslMoveOrchestratorTrigger
+  ): Promise<void> {
     this.busy.add(key)
     try {
       await this.step(key, distro, trigger)
     } finally {
       this.busy.delete(key)
     }
+    const queued = this.queued.get(key)
+    if (queued && !this.disposed) {
+      this.queued.delete(key)
+      await this.run(key, queued.distro, queued.trigger)
+    }
+  }
+
+  /** "Use on this computer again" ran for the distro: park it until the user asks again. */
+  releasedByUser(distro: string): void {
+    const key = wslMoveJournalKey(distro)
+    this.commit(
+      key,
+      'user',
+      applyWslMoveReleasedByUser(this.recordFor(key, distro), this.ports.now())
+    )
   }
 
   async userAction(
@@ -200,7 +241,12 @@ export class WslMoveOrchestrator {
       return
     }
     // A1: only an explicit user action may wake a distro; every other step needs it running.
-    if (trigger !== 'user') {
+    // A timer step never connects either: connecting can hold a running distro up.
+    if (trigger === 'timer') {
+      if (!this.ports.isHostReady(distro)) {
+        return
+      }
+    } else if (trigger !== 'user') {
       const readiness = await this.ports
         .prepareHost(distro)
         .catch((): WslMoveHostReadiness => 'unverifiable')
@@ -209,12 +255,12 @@ export class WslMoveOrchestrator {
       }
     }
     const preview = await this.settle(() => this.ports.preview(distro))
-    record = this.commit(key, trigger, this.apply(record, preview), preview)
+    record = this.commit(key, trigger, this.apply(record, preview, trigger), preview)
     if (record.state.kind !== 'moving') {
       return
     }
     const result = await this.settle(() => this.ports.start(distro))
-    this.commit(key, trigger, this.apply(record, result), result)
+    this.commit(key, trigger, this.apply(record, result, trigger), result)
   }
 
   /** A port that throws is a transient failure, never a lost record. */
@@ -234,12 +280,14 @@ export class WslMoveOrchestrator {
 
   private apply(
     record: WslMoveOrchestratorRecord,
-    cause: WslMovePreview | WslMoveResult
+    cause: WslMovePreview | WslMoveResult,
+    trigger: WslMoveOrchestratorTrigger
   ): WslMoveOrchestratorRecord {
     const outcome: WslMoveOutcome = classifyWslMoveOutcome(cause)
     return applyWslMoveOutcome(record, outcome, {
       now: this.ports.now(),
-      appVersion: this.ports.appVersion
+      appVersion: this.ports.appVersion,
+      trigger
     })
   }
 
@@ -251,12 +299,13 @@ export class WslMoveOrchestrator {
     cause?: WslMovePreview | WslMoveResult
   ): WslMoveOrchestratorRecord {
     const previous = this.records.get(key)
-    if (previous === next) {
-      return next
+    if (previous === next || sameWslMoveOrchestratorRecord(previous, next)) {
+      return previous ?? next
     }
     this.records.set(key, next)
     this.ports.save(this.records)
-    if (previous?.state.kind !== next.state.kind) {
+    // Every new attempt is reported too, so a backoff series shows each failure.
+    if (previous?.state.kind !== next.state.kind || previous.attempts !== next.attempts) {
       this.ports.track(trigger, next, cause)
     }
     this.ports.publish(this.list())
@@ -267,12 +316,7 @@ export class WslMoveOrchestrator {
   private scheduleFor(key: string, record: WslMoveOrchestratorRecord): void {
     this.timers.get(key)?.()
     this.timers.delete(key)
-    const delay =
-      record.state.kind === 'backoff'
-        ? Math.max(0, record.state.nextAttemptAt - this.ports.now())
-        : record.state.kind === 'deferred'
-          ? WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS
-          : null
+    const delay = wslMoveOrchestratorTimerDelay(record, this.ports.now())
     if (delay === null || this.disposed) {
       return
     }

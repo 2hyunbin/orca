@@ -24,8 +24,10 @@ export type WslMoveOrchestratorParkReason =
   | 'manifest-too-large'
   | 'host-update-required'
   | 'attempts-exhausted'
-  /** The user cancelled a move or chose "Not now". */
+  /** The user cancelled a move or chose "Not now"; it lapses after a week. */
   | 'not-now'
+  /** The user brought the projects back with "Use on this computer again"; only Retry undoes it. */
+  | 'declined'
 
 export type WslMoveOrchestratorState =
   /** Nothing of the distro left to move. */
@@ -33,7 +35,8 @@ export type WslMoveOrchestratorState =
   /** Waiting for a trigger. */
   | { kind: 'pending' }
   /** "Finishing your move": the move waits on busy terminals, automations or dispatches. */
-  | { kind: 'deferred'; blockers: WslMoveBlocker[] }
+  /** `rechecks` counts timer re-checks; after the last one, only a user action or wake re-checks. */
+  | { kind: 'deferred'; blockers: WslMoveBlocker[]; rechecks: number }
   | { kind: 'moving' }
   /** The move may have reached the host; it resumes when the host answers. */
   | { kind: 'waiting-for-host'; migrationId: string }

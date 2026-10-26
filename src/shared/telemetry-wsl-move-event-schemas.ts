@@ -97,7 +97,8 @@ export const WSL_MOVE_ORCHESTRATOR_PARK_REASON_VALUES = [
   'manifest_too_large',
   'host_update_required',
   'attempts_exhausted',
-  'not_now'
+  'not_now',
+  'declined'
 ] as const
 
 export const WSL_MOVE_ORCHESTRATOR_ATTEMPT_BUCKETS = ['0', '1', '2_3', 'gte_4'] as const

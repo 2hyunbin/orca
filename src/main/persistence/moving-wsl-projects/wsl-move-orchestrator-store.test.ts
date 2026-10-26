@@ -28,7 +28,8 @@ const deferred: WslMoveOrchestratorRecord = {
   distro: 'Ubuntu',
   state: {
     kind: 'deferred',
-    blockers: [{ kind: 'process-running', ids: ['tab:leaf'], actions: ['end', 'skip-project'] }]
+    blockers: [{ kind: 'process-running', ids: ['tab:leaf'], actions: ['end', 'skip-project'] }],
+    rechecks: 1
   },
   attempts: 2,
   appVersion: '1.0.0',
@@ -63,5 +64,19 @@ describe('wsl-move-orchestrator store', () => {
       })
     )
     expect([...readWslMoveOrchestratorRecords(dir).values()]).toEqual([deferred])
+  })
+
+  it('reads a deferred record from before re-check counting as a fresh series', () => {
+    const dir = userData()
+    const { rechecks: _rechecks, ...older } =
+      deferred.state.kind === 'deferred' ? deferred.state : { rechecks: 0 }
+    writeFileSync(
+      wslMoveOrchestratorStorePath(dir),
+      JSON.stringify({ version: 1, distros: { a: { ...deferred, state: older } } })
+    )
+    expect([...readWslMoveOrchestratorRecords(dir).values()][0]?.state).toMatchObject({
+      kind: 'deferred',
+      rechecks: 0
+    })
   })
 })

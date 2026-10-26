@@ -42,7 +42,7 @@ import { readWslDistroRegistrations } from '../wsl/wsl-distro-registry-id'
 import { wslHostsGateOpen } from '../wsl/wsl-host-gate'
 import { getWslHostService } from '../wsl/wsl-host-service-instance'
 import { getTrustedUIRendererWebContents, getTrustedUIRendererWindow } from './ui'
-import { releaseWslMovedProjectHere } from './wsl-move-handlers'
+import { onWslMoveReleasedByUser, releaseWslMoveChainHere } from './wsl-move-release-here'
 import { createWslMoveUndoPorts } from './wsl-move-undo-wiring'
 
 export const WSL_MOVE_ORCHESTRATOR_AUTO_ENV = 'ORCA_WSL_MOVE_AUTO'
@@ -164,6 +164,7 @@ function createOrchestrator(
     appVersion: app.getVersion(),
     autoMoveEnabled: () => process.env[WSL_MOVE_ORCHESTRATOR_AUTO_ENV] !== '0',
     prepareHost,
+    isHostReady,
     preview: async (distro) =>
       previewWslMove(driverDeps(), {
         distro,
@@ -178,17 +179,10 @@ function createOrchestrator(
     finishedMove: (distro) => finishedWslMove(userDataPath, distro),
     checkMovedDistro: async (distro, move) =>
       wslMovedDistroVerdict(await readWslDistroRegistrations(), distro, move.distroGuid),
-    releaseFinishedMove: async (distro, unsavedWorkspaceIds) => {
-      const move = listWslMoveCutoverChain(userDataPath, wslMoveJournalKey(distro)).at(-1)
-      const repoId = move?.manifest.source.scopeRepoIds[0]
-      const folderWorkspaceId = move?.manifest.source.scopeFolderWorkspaceIds[0]
-      const ref = repoId ? { repoId } : folderWorkspaceId ? { folderWorkspaceId } : null
-      return ref
-        ? releaseWslMovedProjectHere(userDataPath, ref, unsavedWorkspaceIds, () =>
-            createWslMoveUndoPorts(store, userDataPath)
-          )
-        : { released: false, reason: 'not-moved' }
-    },
+    releaseFinishedMove: (distro, unsavedWorkspaceIds) =>
+      releaseWslMoveChainHere(userDataPath, distro, unsavedWorkspaceIds, () =>
+        createWslMoveUndoPorts(store, userDataPath)
+      ),
     load: () => readWslMoveOrchestratorRecords(userDataPath),
     save: (records) => writeWslMoveOrchestratorRecords(userDataPath, records),
     schedule: (delayMs, run) => {
@@ -305,6 +299,8 @@ export function registerWslMoveOrchestrator(
   if (!wslHostsGateOpen() || !getWslHostService() || orchestrator) {
     return
   }
-  orchestrator = createOrchestrator(store, driverDeps)
-  followHostReadiness(orchestrator)
+  const created = createOrchestrator(store, driverDeps)
+  orchestrator = created
+  followHostReadiness(created)
+  onWslMoveReleasedByUser((distro) => created.releasedByUser(distro))
 }
