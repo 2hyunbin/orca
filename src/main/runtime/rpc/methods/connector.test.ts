@@ -61,7 +61,7 @@ describe('connector RPC methods', () => {
     const slack = { key: { source: 'slack', externalId: 'T1:C9:1:U5' }, turnId: 7 }
 
     it('posts to the pane’s Slack conversation and turn', async () => {
-      const posted = { status: 'posted', messageTs: '1793.1' }
+      const posted = { status: 'posted', messageId: '1793.1' }
       await expect(
         reply.handler(reply.params!.parse(input), replyContext(slack, { ok: true, value: posted }))
       ).resolves.toEqual(posted)

@@ -155,7 +155,7 @@ export class FakeConnectorCloud {
     if (!this.replies.has(replyId)) {
       this.replies.set(replyId, body)
     }
-    return { status: 200, body: { status: 'posted', messageTs: '1793.0042' } }
+    return { status: 200, body: { status: 'posted', messageId: '1793.0042' } }
   }
 
   private async machineCall(

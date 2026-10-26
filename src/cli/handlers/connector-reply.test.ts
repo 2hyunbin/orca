@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe('orca connector reply', () => {
   it('sends the calling pane and the text, and says where it went', async () => {
-    call.mockResolvedValue({ result: { status: 'posted', messageTs: '1793.1' } })
+    call.mockResolvedValue({ result: { status: 'posted', messageId: '1793.1' } })
     await CONNECTOR_HANDLERS['connector reply'](context())
     expect(call).toHaveBeenCalledWith(
       'connector.reply',

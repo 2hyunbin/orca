@@ -32,10 +32,16 @@ export async function cancelConversation(
   terminal: CancelTerminal,
   seam: CancelSeam,
   key: ConversationKey,
-  signal: AbortSignal
+  signal: AbortSignal,
+  turnId?: number
 ): Promise<Delivery> {
   if (signal.aborted) {
     return refused('connectors_disabled')
+  }
+  // A Stop pressed for one turn must not stop, or drop the follow-ups of, the next.
+  if (turnId !== undefined && !isOpenTurn(seam, key, turnId)) {
+    console.warn('[connector] ignored a cancel for a turn that is no longer running')
+    return refused('turn_not_running')
   }
   const id = conversationId(key)
   const settling = seam.chain.cancel(id, 'conversation_cancelled')
@@ -61,6 +67,11 @@ export async function cancelConversation(
     throw new Error('external_conversation_not_found')
   }
   return stopLinkedAgent(terminal, seam, linked.link, signal)
+}
+
+function isOpenTurn(seam: CancelSeam, key: ConversationKey, turnId: number): boolean {
+  const linked = findLink(seam.store, key)
+  return linked !== null && seam.events?.openTurn(linked.link.paneKey) === turnId
 }
 
 /** Reject approval or send one Escape to a working agent; idle cancellation records a receipt without proving turn end. */

@@ -137,11 +137,11 @@ export class ExternalConversationSeam {
     })
   }
 
-  /** Receipted like a send, so a retried delivery never cancels twice. */
-  cancel(host: ExternalConversationHost, key: ConversationKey, id: string): Promise<Delivery> {
+  /** Receipted like a send, so a retried delivery never cancels twice. A `turnId` binds it to that turn. */
+  cancel(host: ExternalConversationHost, key: ConversationKey, id: string, turnId?: number) {
     const seam = { ...this.deps, prompts: this.prompts, chain: this.chain, events: this.events }
     return this.deps.receipts.run(key, id, 'connector.cancel', [], () =>
-      cancelConversation(host.terminal, seam, key, this.abort.signal)
+      cancelConversation(host.terminal, seam, key, this.abort.signal, turnId)
     )
   }
 

@@ -590,7 +590,7 @@ describe('ConnectorPollClient', () => {
     const body = { replyId: 'r1', conversation, turnId: 7, text: 'done' }
     await expect(client.reply(body)).resolves.toEqual({
       ok: true,
-      value: { status: 'posted', messageTs: '1793.0042' }
+      value: { status: 'posted', messageId: '1793.0042' }
     })
     await client.reply(body)
     expect([...fake.replies.values()]).toEqual([{ v: 1, ...body }])
