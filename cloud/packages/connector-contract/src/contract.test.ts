@@ -6,6 +6,7 @@ import {
 } from './delivery-messages.js'
 import {
   ConnectorEventSchema,
+  ConnectorEventsRequestSchema,
   ConnectorPendingPromptSchema,
   ConnectorReplyResponseSchema
 } from './event-messages.js'
@@ -141,6 +142,13 @@ describe('events', () => {
         ]
       }).success
     ).toBe(true)
+  })
+
+  it('numbers every events batch within its host session', () => {
+    const events = [{ kind: 'turn-started', conversation, paneKey: 'tab:leaf', at: 1 }]
+    expect(ConnectorEventsRequestSchema.safeParse({ v: 1, seq: 0, events }).success).toBe(true)
+    expect(ConnectorEventsRequestSchema.safeParse({ v: 1, events }).success).toBe(false)
+    expect(ConnectorEventsRequestSchema.safeParse({ v: 1, seq: -1, events }).success).toBe(false)
   })
 
   it('carries a question the agent left without text, as the seam reports it', () => {
