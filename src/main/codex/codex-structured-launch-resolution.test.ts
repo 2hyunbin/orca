@@ -163,7 +163,7 @@ describe('codex structured launch resolution', () => {
       resumeThreadId: null,
       permissionPolicy: {
         approvalPolicy: 'on-request',
-        sandbox: 'workspace-write',
+        sandbox: 'read-only',
         approvalsReviewer: 'user'
       },
       env: { CODEX_HOME: '/home/work/.codex' },
@@ -250,10 +250,7 @@ describe('codex structured launch resolution', () => {
   })
 
   it.each([
-    [
-      'ask',
-      { approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'user' }
-    ],
+    ['ask', { approvalPolicy: 'on-request', sandbox: 'read-only', approvalsReviewer: 'user' }],
     [
       'auto',
       { approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'auto_review' }
