@@ -21,7 +21,7 @@ import {
   isLatestStructuredOptionPick,
   settleStructuredOptionPick,
   structuredOptionPickCommit,
-  structuredOptionPickIsPending
+  structuredOptionPickBlockingId
 } from '../../../../shared/structured-agent-session-option-pick-book'
 import { encodeStructuredAgentSessionOptionValue } from '../../../../shared/structured-agent-session-option-codec'
 import { useHostModelCatalogUpgrade } from './use-host-model-catalog-upgrade'
@@ -231,8 +231,7 @@ export function useStructuredAgentSessionOptions(args: StructuredAgentSessionOpt
       const view = pendingView(optionStateRef.current)
       const pickState = {
         ...view,
-        pendingId:
-          !providerStarting && structuredOptionPickIsPending(optionPicks.current, id) ? id : null
+        pendingId: structuredOptionPickBlockingId(optionPicks.current, id, providerStarting)
       }
       const encoded = encodeStructuredAgentSessionOptionValue(id, value)
       if (
