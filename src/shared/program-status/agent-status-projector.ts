@@ -4,6 +4,7 @@ import type { AgentSubagentSnapshot, AgentSubagentState } from '../agent-status-
 import { AGENT_SUBAGENT_ID_MAX_LENGTH } from '../agent-status-subagent-snapshot'
 import type { AgentTurnOutcome } from '../agent-turn-outcome'
 import { foldMainAgentWithRowChildWork } from '../agent-hook-row-child-work-fold'
+import { isAgentStatusHeldOpenByChildWork } from '../agent-lead-status-fold'
 import { createProgramStatusOscScanner } from './osc-scanner'
 import {
   programStatusDisplayText,
@@ -80,6 +81,24 @@ export type ProgramStatusPayload = {
   payload: ParsedAgentStatusPayload
   offset: number
   removesRow?: true
+}
+
+/** Children report only changes, so a hold none refreshed within `lapseAfterMs` settles to the lead's verdict; its stamp keeps that quiet. */
+export function lapsedProgramStatusChildHold(
+  payload: ParsedAgentStatusPayload,
+  heldSince: number,
+  now: number,
+  lapseAfterMs: number
+): ParsedAgentStatusPayload | null {
+  if (
+    !payload.mainAgent ||
+    !isAgentStatusHeldOpenByChildWork(payload) ||
+    now - heldSince < lapseAfterMs
+  ) {
+    return null
+  }
+  const { subagents: _subagents, ...lead } = payload
+  return { ...lead, state: payload.mainAgent.state }
 }
 
 type ProgramStatusProjector = {

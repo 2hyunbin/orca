@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { createProgramStatusProjector } from './agent-status-projector'
+import {
+  createProgramStatusProjector,
+  lapsedProgramStatusChildHold
+} from './agent-status-projector'
 
 const b64 = (text: string): string => Buffer.from(text, 'utf8').toString('base64')
 const osc = (body: string): string => `\x1b]7501;${body}\x1b\\`
@@ -140,6 +143,22 @@ describe('createProgramStatusProjector', () => {
       mainAgent: { state: 'done', outcome: 'success', stateStartedAt: 1010 }
     })
     expect(settled.subagents).toBeUndefined()
+  })
+
+  it("lapses a hold no child refreshed to the lead's done, keeping its completion stamp", () => {
+    const { feed } = projector()
+    feed(osc('state=working:app=pi') + osc('state=working:id=subagents/run1'))
+    const [held] = feed(osc('state=done:app=pi'))
+    expect(lapsedProgramStatusChildHold(held, 0, 999, 1000)).toBeNull()
+    const lapsed = lapsedProgramStatusChildHold(held, 0, 1000, 1000)
+    expect(lapsed).toMatchObject({
+      state: 'done',
+      turnCompletedAt: held.turnCompletedAt,
+      mainAgent: held.mainAgent
+    })
+    expect(lapsed?.subagents).toBeUndefined()
+    const [settled] = feed(osc('state=done:id=subagents/run1'))
+    expect(lapsedProgramStatusChildHold(settled, 0, 1000, 1000)).toBeNull()
   })
 
   it('leaves live turns, failed children and an idle root as their root reports them', () => {
