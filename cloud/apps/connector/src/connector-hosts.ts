@@ -5,7 +5,7 @@ import type { ConnectorInbox } from './connector-inbox.js'
 // Coarse on purpose: last-seen is written at most once a minute per host.
 const LAST_SEEN_RESOLUTION_MS = 60_000
 
-// Hello, the poll's claim and queueing take this, so a newer hello lands wholly before or after each.
+// Every machine request and queueing take this, so a newer hello lands wholly before or after each.
 export async function lockConnectorHost(transaction: CloudDatabase, hostId: string): Promise<void> {
   await transaction.lockQuotaScope(`orca-connector-host:${hostId}`)
 }
@@ -18,15 +18,16 @@ export class ConnectorHosts {
     private readonly now: () => number
   ) {}
 
-  // Under the host lock. The latest hello wins; held polls wake to find their revision stale, and
-  // the next poll lists what an earlier process received but never settled.
+  // Under the host lock. The highest revision wins (a delayed older hello changes nothing); held polls
+  // wake to find theirs stale, the next poll lists what was received but never settled, and a new
+  // revision restarts the events mark.
   async recordHello(
     transaction: CloudDatabase,
     host: { hostId: string; accountId: string },
     hello: ConnectorHelloRequest
   ): Promise<void> {
     const now = this.now()
-    await transaction.query(
+    const [recorded] = await transaction.query(
       `INSERT INTO connector_hosts
        (host_id, account_id, host_name, platform, runtime, orca_version, hello_rev, hello,
         unsettled_due, first_seen_at, last_seen_at)
@@ -34,7 +35,10 @@ export class ConnectorHosts {
        ON CONFLICT (host_id) DO UPDATE SET host_name = excluded.host_name,
          platform = excluded.platform, runtime = excluded.runtime,
          orca_version = excluded.orca_version, hello_rev = excluded.hello_rev,
-         hello = excluded.hello, unsettled_due = 1, last_seen_at = excluded.last_seen_at`,
+         hello = excluded.hello, unsettled_due = 1, last_seen_at = excluded.last_seen_at,
+         events_seq = CASE WHEN connector_hosts.hello_rev = excluded.hello_rev
+           THEN connector_hosts.events_seq END
+       WHERE connector_hosts.hello_rev <= excluded.hello_rev`,
       [
         host.hostId,
         host.accountId,
@@ -48,15 +52,27 @@ export class ConnectorHosts {
         now
       ]
     )
-    await this.inbox.wake(transaction, host.hostId)
+    if (Number(recorded?.changes ?? 0) > 0) {
+      await this.inbox.wake(transaction, host.hostId)
+    }
   }
 
-  async helloRev(transaction: CloudDatabase, hostId: string): Promise<number | null> {
+  // Under the host lock: a request's hello is the machine's current one, an older one, or one the
+  // cloud has no record of (the machine must send it).
+  async helloStatus(
+    transaction: CloudDatabase,
+    hostId: string,
+    helloRev: number
+  ): Promise<'current' | 'older' | 'unknown'> {
     const [row] = await transaction.query(
       'SELECT hello_rev FROM connector_hosts WHERE host_id = ?',
       [hostId]
     )
-    return row ? Number(row.hello_rev) : null
+    const current = row ? Number(row.hello_rev) : null
+    if (current === helloRev) {
+      return 'current'
+    }
+    return current !== null && helloRev < current ? 'older' : 'unknown'
   }
 
   // Under the host lock: true once per hello, for the poll that lists unsettled deliveries.
@@ -76,7 +92,8 @@ export class ConnectorHosts {
     return row ? String(row.account_id) : null
   }
 
-  // Events apply only above the host's high-water mark, so a late original never undoes newer state.
+  // Under the host lock, for the current hello: events apply only above its high-water mark, so a
+  // late original never undoes newer state.
   async advanceEventsSeq(transaction: CloudDatabase, hostId: string, seq: number): Promise<boolean> {
     const [advanced] = await transaction.query(
       `UPDATE connector_hosts SET events_seq = ?

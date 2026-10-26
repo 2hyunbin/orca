@@ -43,7 +43,12 @@ async function startedThread() {
   const [start] = ConnectorPollResponseSchema.parse((await machine.poll()).body).deliveries
   let seq = 0
   const events = async (...batch: unknown[]) => {
-    const response = await machine.call(CONNECTOR_PATHS.events, { v: 1, seq: ++seq, events: batch })
+    const response = await machine.call(CONNECTOR_PATHS.events, {
+      v: 1,
+      helloRev: 1,
+      seq: ++seq,
+      events: batch
+    })
     expect(response.status).toBe(204)
   }
   const status = async () => {

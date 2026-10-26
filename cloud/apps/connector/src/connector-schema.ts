@@ -32,7 +32,6 @@ CREATE TABLE IF NOT EXISTS connector_threads (
   turn_stop_reason TEXT,
   turn_last_message TEXT,
   pending_prompt TEXT,
-  status_message_ts TEXT,
   created_at BIGINT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS connector_threads_slack

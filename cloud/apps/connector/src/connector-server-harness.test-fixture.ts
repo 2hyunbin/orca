@@ -172,7 +172,7 @@ export async function createConnectorHarness(
         const body: unknown = await response.json()
         return { status: response.status, body }
       },
-      ack: (acks: unknown[]) => call(CONNECTOR_PATHS.acks, { v: 1, acks })
+      ack: (acks: unknown[], helloRev = 1) => call(CONNECTOR_PATHS.acks, { v: 1, helloRev, acks })
     }
   }
 

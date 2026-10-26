@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { listenHostname } from './connector-server.js'
 import {
   cleanupConnectorHarnesses,
-  createConnectorHarness
+  createConnectorHarness,
+  pauseBefore
 } from './connector-server-harness.test-fixture.js'
 
 afterEach(cleanupConnectorHarnesses)
@@ -11,8 +12,8 @@ afterEach(cleanupConnectorHarnesses)
 const conversation = { source: 'slack', externalId: 'T1:C1:1.0:U1' }
 
 // A loopback origin turns on the dev enqueue route, which also creates the thread.
-async function setup() {
-  const harness = await createConnectorHarness({ publicUrl: 'http://127.0.0.1:8080' })
+async function setup(options: Parameters<typeof createConnectorHarness>[1] = {}) {
+  const harness = await createConnectorHarness({ publicUrl: 'http://127.0.0.1:8080' }, options)
   const machine = await harness.machine()
   await machine.hello()
   const enqueue = (hostId: string) =>
@@ -22,8 +23,8 @@ async function setup() {
       delivery: { kind: 'start', agent: 'claude', placeId: 'pl_1', prompt: 'fix it' }
     })
   let nextSeq = 0
-  const events = (list: unknown[], seq = nextSeq++) =>
-    machine.call(CONNECTOR_PATHS.events, { v: 1, seq, events: list })
+  const events = (list: unknown[], seq = nextSeq++, helloRev = 1) =>
+    machine.call(CONNECTOR_PATHS.events, { v: 1, helloRev, seq, events: list })
   const thread = async () =>
     (
       await harness.database.query(
@@ -183,6 +184,7 @@ describe('connector turn events', () => {
     const batch = (seq: number, paneKey: string) =>
       refreshed.call(CONNECTOR_PATHS.events, {
         v: 1,
+        helloRev: 1,
         seq,
         events: [{ conversation, paneKey, kind: 'linked', agent: 'claude' }]
       })
@@ -192,6 +194,63 @@ describe('connector turn events', () => {
     expect(await thread()).toMatchObject({ pane_key: 'pane-3' })
   })
 
+  it('applies events only for the current hello and restarts the mark with a new one', async () => {
+    const { machine, enqueue, events, thread } = await setup()
+    await enqueue(machine.hostId)
+    const linked = (paneKey: string) => [{ conversation, paneKey, kind: 'linked', agent: 'claude' }]
+    await events(linked('pane-1'), 5)
+    expect((await events(linked('pane-x'), 0, 2)).status).toBe(409)
+    await machine.hello(2)
+    // The new hello's batch 0 applies; a late batch from the old hello changes nothing.
+    expect((await events(linked('pane-2'), 0, 2)).status).toBe(204)
+    expect((await events(linked('pane-old'), 6, 1)).status).toBe(204)
+    expect(await thread()).toMatchObject({ pane_key: 'pane-2' })
+    // A repeated hello for the same revision keeps the mark.
+    await machine.hello(2)
+    await events(linked('pane-retry'), 0, 2)
+    expect(await thread()).toMatchObject({ pane_key: 'pane-2' })
+  })
+
+  it('keeps the newer hello when an older one arrives late', async () => {
+    const { harness, machine, enqueue, events, thread } = await setup()
+    await enqueue(machine.hostId)
+    await machine.hello(2)
+    const linked = (paneKey: string) => [{ conversation, paneKey, kind: 'linked', agent: 'claude' }]
+    await events(linked('new-pane'), 3, 2)
+    expect((await machine.hello(1)).status).toBe(204)
+    expect((await events(linked('old-pane'), 0, 1)).status).toBe(204)
+    expect(await thread()).toMatchObject({ pane_key: 'new-pane' })
+    const [host] = await harness.database.query('SELECT hello_rev, events_seq FROM connector_hosts')
+    expect({ helloRev: Number(host?.hello_rev), eventsSeq: Number(host?.events_seq) }).toEqual({
+      helloRev: 2,
+      eventsSeq: 3
+    })
+    expect((await machine.poll(2)).status).toBe(200)
+  })
+
+  // SQLite runs one transaction at a time, so only Postgres can race a batch with a hello.
+  it.skipIf(!process.env.ORCA_CONNECTOR_TEST_DATABASE_URL)(
+    'ignores a batch from the old hello that waited on a newer hello',
+    async () => {
+      let gate!: ReturnType<typeof pauseBefore>
+      const { machine, enqueue, events, thread } = await setup({
+        wrapDatabase: (database) => {
+          gate = pauseBefore(database, 'INSERT INTO connector_hosts', 1)
+          return gate.database
+        }
+      })
+      await enqueue(machine.hostId)
+      const hello = machine.hello(2)
+      await gate.atStatement
+      const late = events([{ conversation, paneKey: 'pane-old', kind: 'linked', agent: 'claude' }], 0, 1)
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      gate.release()
+      expect((await hello).status).toBe(204)
+      expect((await late).status).toBe(204)
+      expect(await thread()).toMatchObject({ pane_key: null })
+    }
+  )
+
   it("ignores events for another host's thread", async () => {
     const { harness, machine, enqueue, thread } = await setup()
     await enqueue(machine.hostId)
@@ -199,6 +258,7 @@ describe('connector turn events', () => {
     await other.hello()
     await other.call(CONNECTOR_PATHS.events, {
       v: 1,
+      helloRev: 1,
       seq: 0,
       events: [{ conversation, paneKey: 'pane-9', kind: 'turn-started', at: 100 }]
     })

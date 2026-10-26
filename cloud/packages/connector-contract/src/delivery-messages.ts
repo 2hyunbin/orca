@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { CONNECTOR_LIMITS } from './connector-limits.js'
 import { ConnectorConversationSchema, PlaceIdSchema } from './connector-wire-scalars.js'
 
+// Polls, acks and events name the hello they belong to; the cloud ignores acks and events from an older
+// one, and the first poll after a hello lists what is still unsettled instead.
 export const ConnectorPollRequestSchema = z.object({ v: z.literal(1), helloRev: SequenceSchema })
 
 const DeliveryBase = {
@@ -44,7 +46,7 @@ export const ConnectorPollResponseSchema = z.object({
   v: z.literal(1),
   serverNow: EpochMsSchema,
   holdMs: z.number().int().nonnegative().lt(CONNECTOR_LIMITS.pollTimeoutMs),
-  // First poll of a session only: deliveries received by an earlier process but never done.
+  // First poll after a hello only: deliveries received but never done, including by an earlier process.
   unsettled: z
     .array(z.object({ deliveryId: OpaqueIdSchema, conversation: ConnectorConversationSchema }))
     .optional(),
@@ -64,6 +66,7 @@ export const ConnectorDeliveryResultSchema = z.discriminatedUnion('outcome', [
 // received once the seam call has written its receipt; done when it settles. First done wins.
 export const ConnectorAcksRequestSchema = z.object({
   v: z.literal(1),
+  helloRev: SequenceSchema,
   acks: z
     .array(
       z.discriminatedUnion('step', [

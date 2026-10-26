@@ -2,16 +2,8 @@
 
 export const CONNECTOR_CONTRACT_VERSION = 1
 
-export const CONNECTOR_HOST_PROOF_TRANSCRIPT_DOMAIN = 'orca-connector-host-proof/v1'
-export const CONNECTOR_HOST_CHALLENGE_PLAINTEXT_DOMAIN = 'orca-connector-host-challenge/v1'
-
-// Every route is POST except hello (PUT).
+// Every route is POST except hello (PUT), and takes `Authorization: Bearer <connector token>`.
 export const CONNECTOR_PATHS = {
-  signInStart: '/v1/host/auth/start',
-  signInPoll: '/v1/host/auth/poll',
-  signOut: '/v1/host/auth/unbind',
-  hostChallenge: '/v1/host/challenge',
-  hostSession: '/v1/host/session',
   hello: '/v1/connector/hello',
   poll: '/v1/connector/poll',
   acks: '/v1/connector/acks',
