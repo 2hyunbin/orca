@@ -76,7 +76,12 @@ describe('RepositorySourceControlAiActionRows', () => {
         value: { preflight: { detectAgents } }
       })
       useAppStore.setState({
-        settings: { ...settings, defaultTuiAgent: 'claude', sourceControlAi: source },
+        settings: {
+          ...settings,
+          experimentalNativeChat: false,
+          defaultTuiAgent: 'claude',
+          sourceControlAi: source
+        },
         settingsSearchQuery: '',
         localDetectedAgentIdsByContext: {}
       })
@@ -118,7 +123,6 @@ describe('RepositorySourceControlAiActionRows', () => {
       expect(cards).toHaveLength(2)
       expect(ensure).toHaveBeenCalledTimes(2)
       expect(detectAgents).toHaveBeenCalledTimes(1)
-      const pendingContent = cards.map((card) => card.textContent)
       for (const card of cards) {
         expect(card.textContent?.includes('Model')).toBe(agent === 'codex')
         expect(card.textContent).toContain('Permissions')
@@ -133,14 +137,11 @@ describe('RepositorySourceControlAiActionRows', () => {
         )
         expect(controls.length).toBeGreaterThan(0)
         expect(controls.every((control) => control.disabled)).toBe(true)
-        expect(
-          card.querySelector<HTMLTextAreaElement>('textarea[aria-label="Arguments"]')?.value
-        ).toBe('--saved-cli')
+        expect(card.querySelector('textarea[aria-label="Arguments"]')).toBeNull()
       }
       await act(async () => {
         finish([...detected])
       })
-      expect(cards.map((card) => card.textContent)).toEqual(pendingContent)
       for (const card of cards) {
         const controls = Array.from(
           card.querySelectorAll<HTMLButtonElement>(
@@ -160,6 +161,19 @@ describe('RepositorySourceControlAiActionRows', () => {
             (field) => field.value === 'kept-template'
           )
         ).toBe(true)
+      }
+      for (const experimentalNativeChat of [true, false]) {
+        await act(() =>
+          useAppStore.setState({
+            settings: { ...useAppStore.getState().settings!, experimentalNativeChat }
+          })
+        )
+        for (const card of cards) {
+          const input = card.querySelector<HTMLTextAreaElement>('textarea[aria-label="Arguments"]')
+          expect(input?.value).toBe(
+            experimentalNativeChat && agent !== 'opencode' ? undefined : '--saved-cli'
+          )
+        }
       }
       expect(JSON.stringify(source.actions.fixCommitFailure)).toBe(originalRecipe)
       expect(writeConfig).not.toHaveBeenCalled()

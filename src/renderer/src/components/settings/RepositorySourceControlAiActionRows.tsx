@@ -49,6 +49,10 @@ import {
   useSourceControlActionAgent
 } from './use-source-control-action-agent'
 import { resolveSourceControlActionRecipe } from '../../../../shared/source-control-ai-operation-policy'
+import { shouldShowSourceControlActionArguments } from './source-control-action-arguments-visibility'
+import { chatProviderAgents, useHostStructuredAgentsVersion } from '@/lib/chat-provider-agents'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { useAppStore } from '@/store'
 
 type RepositorySourceControlAiActionRowsProps = {
   repoId: string
@@ -92,6 +96,8 @@ export function RepositorySourceControlAiActionRows({
   onActionSave
 }: RepositorySourceControlAiActionRowsProps): React.JSX.Element {
   useSourceControlActionAgentInventory()
+  const settings = useAppStore((state) => state.settings)
+  useHostStructuredAgentsVersion()
   const resolveAgent = useSourceControlActionAgent(null, defaultTuiAgent ?? null).resolve
   return (
     <div className="space-y-3">
@@ -261,6 +267,11 @@ export function RepositorySourceControlAiActionRows({
                 ) : null}
                 {isLaunchAction ? (
                   <SourceControlActionArguments
+                    showArguments={shouldShowSourceControlActionArguments({
+                      agent: actual.status === 'ready' ? actual.agent : null,
+                      settings,
+                      chatAgents: chatProviderAgents(LOCAL_EXECUTION_HOST_ID, undefined)
+                    })}
                     agent={pickerAgent}
                     value={agentArgsValue}
                     preferences={recipe.launchPreferences}
