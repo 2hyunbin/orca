@@ -17,7 +17,7 @@ type UseFileExplorerTreeLoadEffectsParams = {
   isDirStale: (dirPath: string) => boolean
   loadDir: (dirPath: string, depth: number, options?: { force?: boolean }) => Promise<boolean>
   refreshTree: () => Promise<unknown>
-  resetAndLoad: () => void
+  resetAndLoad: (options?: { wakeWslDistro?: boolean }) => void
   resetSelection: () => void
   setNameFilterQuery: Dispatch<SetStateAction<string>>
 }
@@ -82,7 +82,8 @@ export function useFileExplorerTreeLoadEffects({
     lastResetWorktreePathRef.current = visibleFilesWorktreePath
     resetSelection()
     setNameFilterQuery('')
-    resetAndLoad()
+    // Opening a workspace is a user act: it may start its stopped WSL distro.
+    resetAndLoad({ wakeWslDistro: true })
     clearFileExplorerUndoHistory()
   }, [visibleFilesWorktreePath, resetSelection]) // eslint-disable-line react-hooks/exhaustive-deps
 

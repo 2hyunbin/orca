@@ -9,6 +9,7 @@ import { getRuntimeFileReadScope } from './runtime-file-routing'
 import { readRuntimeFileContent, readRuntimeFilePreview } from './runtime-file-read-client'
 import type { RuntimeReadableFileContent } from './runtime-file-client-types'
 import {
+  fsReadDir,
   fsReadFile,
   fsWriteFile,
   fsRename,
@@ -447,6 +448,43 @@ describe('runtime file client', () => {
       selector: 'env-1',
       method: 'files.readDir',
       params: { worktree: 'id:wt-1', relativePath: 'Src' },
+      timeoutMs: 15_000
+    })
+  })
+
+  it('sends the WSL wake flag of a user act to the local read only, never to a remote host', async () => {
+    fsReadDir.mockResolvedValue([])
+    await readRuntimeDirectory(
+      { target: { kind: 'local' as const }, worktreeId: 'wt-1', worktreePath: 'C:\\Repo' },
+      'C:\\Repo',
+      { followSymlinks: true, wakeWslDistro: true }
+    )
+    expect(fsReadDir).toHaveBeenCalledWith({
+      dirPath: 'C:\\Repo',
+      connectionId: undefined,
+      followSymlinks: true,
+      wakeWslDistro: true
+    })
+
+    runtimeEnvironmentCall.mockResolvedValue({
+      id: 'rpc-1',
+      ok: true,
+      result: [],
+      _meta: { runtimeId: 'remote-runtime' }
+    })
+    await readRuntimeDirectory(
+      {
+        target: { kind: 'environment' as const, environmentId: 'env-1' },
+        worktreeId: 'wt-1',
+        worktreePath: '/repo'
+      },
+      '/repo/src',
+      { wakeWslDistro: true }
+    )
+    expect(runtimeEnvironmentCall).toHaveBeenCalledWith({
+      selector: 'env-1',
+      method: 'files.readDir',
+      params: { worktree: 'id:wt-1', relativePath: 'src' },
       timeoutMs: 15_000
     })
   })

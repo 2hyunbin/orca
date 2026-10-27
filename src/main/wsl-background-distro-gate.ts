@@ -58,11 +58,15 @@ export async function isWslDistroRunningForBackgroundWork(
   return target ? isWslDistroRunning(target) : false
 }
 
-/** In-memory deferred work is keyed per distro; callers must rediscover it after restart. */
-export function deferUntilWslDistroRunning(distro: string, key: string, task: DeferredTask): void {
+/** In-memory deferred work is keyed per distro; callers must rediscover it after restart. Returns a cancel. */
+export function deferUntilWslDistroRunning(
+  distro: string,
+  key: string,
+  task: DeferredTask
+): () => void {
   const keyForDistro = distroKey(distro)
   if (!keyForDistro) {
-    return
+    return () => {}
   }
   unsubscribeObservations ??= onConfirmedRunningWslDistros(noteWslDistrosRunning)
   let tasks = deferredTasksByDistro.get(keyForDistro)
@@ -71,6 +75,12 @@ export function deferUntilWslDistroRunning(distro: string, key: string, task: De
     deferredTasksByDistro.set(keyForDistro, tasks)
   }
   tasks.set(key, task)
+  return () => {
+    const current = deferredTasksByDistro.get(keyForDistro)
+    if (current?.get(key) === task) {
+      current.delete(key)
+    }
+  }
 }
 
 /** Runs work deferred for these distros; callers must know they are running now. */

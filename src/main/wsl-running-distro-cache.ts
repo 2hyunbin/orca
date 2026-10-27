@@ -2,6 +2,8 @@ import { wslDistroListRetryDelayMs } from './wsl-distro-retry'
 
 // Preserve last-known-good state and back off failed discovery so sessions survive a persistent wsl.exe outage.
 let cache: string[] | null = null
+// Monotonic start of the probe that produced `cache`; it answers any caller anchored before then.
+let cacheStartedAt = -Infinity
 let retryAfterMs = 0
 let failureStreak = 0
 type RunningDistroObservation = { distros: string[]; confirmed: boolean }
@@ -85,6 +87,9 @@ function observeRunningWslDistros(
   probe: () => Promise<string[]>,
   startedAfter?: number
 ): Promise<RunningDistroObservation> {
+  if (startedAfter !== undefined && cache && cacheStartedAt > startedAfter) {
+    return Promise.resolve({ distros: cache, confirmed: true })
+  }
   if (inFlightProbe && (startedAfter === undefined || inFlightStartedAt > startedAfter)) {
     return inFlightProbe
   }
@@ -99,11 +104,13 @@ function observeRunningWslDistros(
   if (Date.now() < retryAfterMs) {
     return Promise.resolve({ distros: cache ?? [], confirmed: false })
   }
-  inFlightStartedAt = performance.now()
+  const startedAt = performance.now()
+  inFlightStartedAt = startedAt
   const result = probe()
     .then((distros) => {
       const previous = cache
       cache = distros
+      cacheStartedAt = startedAt
       retryAfterMs = 0
       failureStreak = 0
       notifyStopped(previous, distros)
@@ -131,6 +138,7 @@ export function peekConfirmedRunningWslDistros(): readonly string[] | null {
 
 export function _resetRunningWslDistroCacheForTests(): void {
   cache = null
+  cacheStartedAt = -Infinity
   retryAfterMs = 0
   failureStreak = 0
   inFlightProbe = null
