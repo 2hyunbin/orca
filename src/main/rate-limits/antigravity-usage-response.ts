@@ -142,7 +142,9 @@ export function parseAntigravityUsageEnvelope(value: unknown): AntigravityUsageR
     return null
   }
   const buckets = parseGroups(data.groups)
-  if (buckets.length === 0) {
+  // A login with no Antigravity quota, such as a Google Cloud project, answers with no groups.
+  const noQuota = Array.isArray(data.groups) && data.groups.length === 0
+  if (buckets.length === 0 && !noQuota) {
     return null
   }
   const windowsOf = (minutes: number): AntigravityUsageBucket[] =>

@@ -271,12 +271,15 @@ describe('parseAntigravityUsageEnvelope', () => {
     expect(reading?.buckets[0]?.resetsAt).toBeNull()
   })
 
+  it('reads an empty group list as a reply with no quota', () => {
+    expect(parseAntigravityUsageEnvelope(envelope([]))?.buckets).toEqual([])
+  })
+
   it.each([
     ['a non-SUCCESS status', { status: 'ERROR', command: { name: 'usage', data: { groups: [] } } }],
     ['another command’s payload', { status: 'SUCCESS', command: { name: 'models', data: {} } }],
     ['a missing command', { status: 'SUCCESS' }],
     ['no groups', envelope(undefined)],
-    ['an empty group list', envelope([])],
     ['a group with no usable bucket', envelope([{ name: 'G', buckets: [{ id: 'a' }] }])],
     [
       'a group with every bucket disabled',
