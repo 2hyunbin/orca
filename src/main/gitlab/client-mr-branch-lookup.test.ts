@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as GlUtils from './gl-utils'
+import type { mapMRInfo } from './mappers'
 import { mapGitLabReview } from '../source-control/forge-review-mappers'
 import {
   __resetHostedReviewBranchCacheForTests,
@@ -53,7 +54,9 @@ import {
 } from './client'
 import { resetGitLabMrMocks } from './client-mr-test-harness'
 
-function mockBranchLookup(mr: object): void {
+type MergeRequestDetail = Parameters<typeof mapMRInfo>[0]
+
+function mockBranchLookup(mr: MergeRequestDetail): void {
   glabExecFileAsyncMock
     .mockResolvedValueOnce({ stdout: JSON.stringify([mr]) })
     .mockResolvedValueOnce({ stdout: JSON.stringify(mr) })
