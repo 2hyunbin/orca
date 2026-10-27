@@ -210,11 +210,25 @@ export function emitBrowserCookieImportToast(
   if (warning) {
     toast.warning(formatCookieImportWarning(warning))
   } else {
+    const skipped = Math.max(
+      0,
+      summary.skippedCookies -
+        (summary.googleCookiesSkipped ?? 0) -
+        (summary.partitionSkippedCookies ?? 0)
+    )
+    const message =
+      skipped > 0
+        ? `${successMessage} ${translate(
+            'auto.lib.browser.cookie.import.toast.cookiesSkipped',
+            '{{value0}} cookies skipped.',
+            { value0: skipped }
+          )}`
+        : successMessage
     const description = cookieImportLocationDescription(execution)
     if (description) {
-      toast.success(successMessage, { description })
+      toast.success(message, { description })
     } else {
-      toast.success(successMessage)
+      toast.success(message)
     }
   }
   emitGoogleCookieImportWarning(summary, execution)

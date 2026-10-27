@@ -1848,6 +1848,7 @@
               "googleCookiesSkippedLocal": "Os cookies do Google não foram importados. Abra um navegador no Orca com este perfil e entre no Google.",
               "googleCookiesSkippedClientHosted": "Os cookies do Google não foram importados. Abra uma aba do navegador no espaço de trabalho {{value0}} com este perfil — ela abre neste dispositivo — e entre no Google.",
               "googleCookiesSkippedRemoteWorkspace": "Os cookies do Google não foram importados. Abra uma aba do navegador no espaço de trabalho {{value0}} com este perfil e entre no Google.",
+              "cookiesSkipped": "{{value0}} cookies ignorados.",
               "partitionSkippedCounts": "Cookies com partições de site ilegíveis: {{value0}}. Cookies relacionados também ignorados: {{value1}}. Verifique esses sites neste perfil antes de entrar novamente."
             }
           }

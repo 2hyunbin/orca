@@ -50,6 +50,62 @@ describe('emitBrowserCookieImportToast', () => {
     expect(warningToastMock).not.toHaveBeenCalled()
   })
 
+  it.each([2, 0])('reports %i imported and 2 ordinary skipped cookies once', (importedCookies) => {
+    emitBrowserCookieImportToast(
+      { ...summary, totalCookies: importedCookies + 2, importedCookies, skippedCookies: 2 },
+      `Imported ${importedCookies} cookies.`,
+      localExecution
+    )
+
+    expect(successToastMock).toHaveBeenCalledExactlyOnceWith(
+      `Imported ${importedCookies} cookies. 2 cookies skipped.`
+    )
+    expect(warningToastMock).not.toHaveBeenCalled()
+  })
+
+  it('counts only skips not already explained by Google and partition warnings', () => {
+    emitBrowserCookieImportToast(
+      {
+        ...summary,
+        totalCookies: 6,
+        importedCookies: 2,
+        skippedCookies: 4,
+        googleCookiesSkipped: 1,
+        partitionSkippedCookies: 1
+      },
+      'Imported 2 cookies.',
+      remoteExecution
+    )
+
+    expect(successToastMock).toHaveBeenCalledExactlyOnceWith(
+      'Imported 2 cookies. 2 cookies skipped.',
+      { description: 'Read from browsers on Remote Mac and stored there.' }
+    )
+    expect(warningToastMock).toHaveBeenCalledTimes(2)
+    expect(warningToastMock.mock.calls[1]?.[0]).toContain(
+      '1 cookies were not imported because their site-partition could not be read.'
+    )
+  })
+
+  it('relies on the existing undecryptable warning without duplicating failure counts', () => {
+    emitBrowserCookieImportToast(
+      {
+        ...summary,
+        totalCookies: 6,
+        importedCookies: 2,
+        skippedCookies: 4,
+        warning: { code: 'cookies-undecryptable', failedCookies: 2, reason: 'unknown' }
+      },
+      'Imported 2 cookies.',
+      localExecution
+    )
+
+    expect(warningToastMock).toHaveBeenCalledExactlyOnceWith(
+      '2 cookies could not be decrypted and were skipped. Close the source browser completely and try the import again.'
+    )
+    expect(successToastMock).not.toHaveBeenCalled()
+  })
+
   it('offers the in-app file import without recommending an exporter', () => {
     emitBrowserCookieImportToast(
       {
@@ -264,11 +320,17 @@ describe('emitBrowserCookieImportToast', () => {
       emitBrowserCookieImportToast(
         {
           ...summary,
+          totalCookies: 5,
+          importedCookies: 1,
+          skippedCookies: 4,
           partitionSkippedCookies: 2,
           partitionSkipBreakdown: { unreadableCookies: 1, preservedRelatedCookies: 1 }
         },
         'Imported 1 cookie.',
         localExecution
+      )
+      expect(successToastMock).toHaveBeenCalledExactlyOnceWith(
+        'Imported 1 cookie. 2 件の Cookie をスキップしました。'
       )
       expect(warningToastMock.mock.calls[0]?.[0]).toContain('読み取れない Cookie: 1')
       expect(warningToastMock.mock.calls[0]?.[0]).toContain('スキップされた関連 Cookie: 1')
@@ -304,7 +366,7 @@ describe('emitBrowserCookieImportToast', () => {
       localExecution
     )
 
-    expect(successToastMock).toHaveBeenCalledWith('Imported 2 cookies.')
+    expect(successToastMock).toHaveBeenCalledWith('Imported 2 cookies. 1 cookies skipped.')
     expect(warningToastMock).not.toHaveBeenCalled()
   })
 
