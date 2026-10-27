@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GitHubProjectTable } from '../../../../shared/github/project-types'
 import type { GetProjectViewTableResult } from '../../../../shared/github/project-result-types'
-import { projectViewCacheKey } from '../github/cache-identity'
+import { projectViewCacheKey, projectViewSourceScope } from '../github/cache-identity'
 import {
   createTestStore,
   mockApi,
@@ -11,7 +11,6 @@ import {
 import { projectRelationsTableFixture } from '../../../../shared/github/project-relations.test-fixture'
 import { projectRelationCellText } from '../../components/github-project/ProjectCell.test-fixture'
 import { sortRows, groupRows } from '../../../../shared/github/project-group-sort'
-import { projectViewSourceScope } from '../github/cache-identity'
 
 function makeTable(title = 'Roadmap'): GitHubProjectTable {
   return {
