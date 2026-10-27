@@ -20,7 +20,11 @@ import { mainWindowLoadErrorCode } from './main-window-load-error-code'
 import { installMainWindowFocusLifecycle } from './main-window-focus-lifecycle'
 import { installMainWindowShortcutRouting } from './main-window-shortcut-routing'
 import { installMainWindowStateLifecycle } from './main-window-state-lifecycle'
-import { installHiddenWindowFrameKeepalive } from './hidden-window-frame-keepalive'
+import { stopHiddenWindowFramePumpOnShow } from './hidden-window-frame-pump'
+import {
+  formatHiddenWindowFramePumpArgument,
+  shouldPumpHiddenWindowFrames
+} from '../../shared/hidden-window-frame-pump'
 import {
   forceRepaint,
   installMacosVisibilityRepaint,
@@ -98,6 +102,7 @@ export function createMainWindow(
   const platformBlurOptions =
     blur && process.platform === 'win32' ? { backgroundMaterial: 'acrylic' as const } : {}
 
+  const pumpHiddenFrames = shouldPumpHiddenWindowFrames(process.env, process.platform)
   const mainWindow = new BrowserWindow({
     width: savedBounds?.width ?? defaultBounds.width,
     height: savedBounds?.height ?? defaultBounds.height,
@@ -136,7 +141,10 @@ export function createMainWindow(
       sandbox: true,
       webviewTag: true,
       // Pass host identity at birth so the renderer has it before first snapshot, without waiting for IPC registration.
-      additionalArguments: [formatBrowserClientHostIdArgument(getBrowserClientHostId())]
+      additionalArguments: [
+        formatBrowserClientHostIdArgument(getBrowserClientHostId()),
+        ...(pumpHiddenFrames ? [formatHiddenWindowFramePumpArgument()] : [])
+      ]
     }
   })
   const rendererWebContentsId = mainWindow.webContents.id
@@ -184,7 +192,9 @@ export function createMainWindow(
     store
   })
   installMainWindowWebviewSecurity(mainWindow)
-  installHiddenWindowFrameKeepalive(mainWindow)
+  if (pumpHiddenFrames) {
+    stopHiddenWindowFramePumpOnShow(mainWindow)
+  }
   const focus = installMainWindowFocusLifecycle({
     isWindowClosing: state.isWindowClosing,
     mainWindow,
