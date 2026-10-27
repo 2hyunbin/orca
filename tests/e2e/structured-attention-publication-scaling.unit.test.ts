@@ -245,6 +245,8 @@ it.each([
       }
     })
     const feed = getStructuredAgentSessionTurnCompletionFeed(TARGET)
+    // Retain the observed handle so bridge effects join it instead of another unused getter handle.
+    const stopFeedObservation = feed.subscribe(() => {})
     let edgeVisits = 0
     const edges = feed.subscribe.bind(feed)
     const edgeSpy = vi.spyOn(feed, 'subscribe').mockImplementation((listener) =>
@@ -465,6 +467,7 @@ it.each([
       })
     } finally {
       screen?.unmount()
+      stopFeedObservation()
       measuring = false
       Object.defineProperty(Map.prototype, Symbol.iterator, entryDescriptor)
       Object.defineProperty(Map.prototype, 'get', getDescriptor)
