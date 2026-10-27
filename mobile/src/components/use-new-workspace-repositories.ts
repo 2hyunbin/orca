@@ -22,6 +22,7 @@ export function useNewWorkspaceRepositories(args: {
   visible: boolean
 }): {
   repos: MobileWorkspaceRepo[]
+  allRepos: MobileWorkspaceRepo[]
   selectedRepo: MobileWorkspaceRepo | null
   setSelectedRepo: (repo: MobileWorkspaceRepo | null) => void
   loading: boolean
@@ -35,15 +36,15 @@ export function useNewWorkspaceRepositories(args: {
   const [pickedRepo, setSelectedRepo] = useState<MobileWorkspaceRepo | null>(null)
   const [loading, setLoading] = useState(initialRepos == null)
   const lastVisitedRepo = useLastVisitedWorktreeRepoId(hostId, visible)
-  const repos = useMemo(
+  // Why: trust checks count same-id rows on every host, as desktop does; only the picker filters.
+  const allRepos = useMemo(
     () =>
-      getNewWorkspaceDialogEligibleRepos(
-        serverRepos.size === 0
-          ? desktopRepos
-          : [...desktopRepos, ...[...serverRepos.values()].flat()]
-      ),
+      serverRepos.size === 0
+        ? desktopRepos
+        : [...desktopRepos, ...[...serverRepos.values()].flat()],
     [desktopRepos, serverRepos]
   )
+  const repos = useMemo(() => getNewWorkspaceDialogEligibleRepos(allRepos), [allRepos])
   // Derive the pick so it follows updated listings and disappears when its host stops listing it.
   const selectedRepo = useMemo(
     () => refreshMobileNewWorkspaceDialogSelectedRepo(repos, pickedRepo),
@@ -91,5 +92,5 @@ export function useNewWorkspaceRepositories(args: {
     }
   }, [visible, client, hostId])
 
-  return { repos, selectedRepo, setSelectedRepo, loading: loading && repos.length === 0 }
+  return { repos, allRepos, selectedRepo, setSelectedRepo, loading: loading && repos.length === 0 }
 }
