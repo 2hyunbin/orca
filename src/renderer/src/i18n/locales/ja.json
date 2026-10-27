@@ -3331,6 +3331,7 @@
             "78b79d854d": "ターミナルを閉じますか?",
             "stop_agent_title": "この Agent を停止しますか?",
             "stop_command_title": "実行中のコマンドを停止しますか?",
+            "stop_chat_description": "このチャットを閉じると、エージェントの現在の作業が停止します。",
             "stop_agent_description": "このターミナルを閉じると、Agent の現在の作業が停止します。",
             "stop_command_description": "このターミナルを閉じると、その中で実行中のコマンドが停止します。",
             "dont_ask_again": "実行中のターミナルでは今後確認しない",
@@ -7653,6 +7654,8 @@
           "projectRuntimeDescription": "個別に指定していないローカル Windows プロジェクトの既定のランタイム。",
           "editor_preview_tabs": "ファイルを参照するときにプレビュータブを再利用する",
           "editor_preview_tabs_description": "エクスプローラーでファイルをシングルクリックするか、Markdown ソースのリンクをたどると、新規タブを開くのではなく、グループごとに 1 つの斜体のプレビュータブが再利用されます。編集、ダブルクリック、または固定すると、そのタブは開いたままになります。これをオフにすると、すべてのファイルに独自のタブが与えられます。",
+          "confirm_running_work_close": "実行中のチャットやターミナルを閉じる前に確認する",
+          "confirm_running_work_close_description": "チャットやターミナルを閉じる際、実行中のエージェントやコマンドを停止する前に確認します。",
           "confirm_running_terminal_close": "実行中のターミナルを閉じる前に確認してください",
           "confirm_running_terminal_close_description": "ターミナルを閉じるときに、実行中の Agent またはコマンドを停止する前に確認してください。"
         },

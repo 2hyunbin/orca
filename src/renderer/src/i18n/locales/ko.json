@@ -3331,6 +3331,7 @@
             "78b79d854d": "Terminal을 닫으시겠습니까?",
             "stop_agent_title": "이 agent를 중지할까요?",
             "stop_command_title": "실행 중인 명령을 중지할까요?",
+            "stop_chat_description": "이 채팅을 닫으면 에이전트의 현재 작업이 중지됩니다.",
             "stop_agent_description": "이 terminal을 닫으면 agent의 현재 작업이 중지됩니다.",
             "stop_command_description": "이 terminal을 닫으면 내부에서 실행 중인 명령이 중지됩니다.",
             "dont_ask_again": "실행 중인 terminals에 대해 다시 묻지 않기",
@@ -7653,6 +7654,8 @@
           "projectRuntimeDescription": "별도로 재정의하지 않은 로컬 Windows 프로젝트의 기본 런타임입니다.",
           "editor_preview_tabs": "파일 탐색 시 미리보기 탭 재사용",
           "editor_preview_tabs_description": "탐색기에서 파일을 한 번 클릭하거나 Markdown 소스의 링크를 따라가면 새 탭을 여는 대신 그룹당 하나의 기울임꼴 미리 보기 탭을 재사용합니다. 편집하거나 두 번 클릭하거나 고정하면 해당 탭이 열린 상태로 유지됩니다. 모든 파일에 자체 탭을 제공하려면 이 기능을 끄십시오.",
+          "confirm_running_work_close": "실행 중인 채팅이나 터미널을 닫기 전에 확인",
+          "confirm_running_work_close_description": "채팅이나 터미널을 닫을 때 실행 중인 에이전트나 명령을 중지하기 전에 확인합니다.",
           "confirm_running_terminal_close": "실행 중인 터미널을 닫기 전에 확인하세요.",
           "confirm_running_terminal_close_description": "터미널을 닫을 때 실행 중인 에이전트나 명령을 중지하기 전에 묻습니다."
         },

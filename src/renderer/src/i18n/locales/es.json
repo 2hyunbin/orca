@@ -3346,6 +3346,7 @@
             "78b79d854d": "¿Cerrar terminal?",
             "stop_agent_title": "¿Detener este agente?",
             "stop_command_title": "¿Detener comando en ejecución?",
+            "stop_chat_description": "Al cerrar este chat, se detendrá el trabajo actual del agente.",
             "stop_agent_description": "Al cerrar esta terminal, se detendrá el trabajo actual del agente.",
             "stop_command_description": "Al cerrar esta terminal, se detendrá el comando que se está ejecutando en ella.",
             "dont_ask_again": "No volver a preguntar para terminales en ejecución",
@@ -7684,6 +7685,8 @@
           "projectRuntimeDescription": "Runtime predeterminado para proyectos locales de Windows que no lo sobrescriben.",
           "editor_preview_tabs": "Reutilice una pestaña de vista previa al explorar archivos",
           "editor_preview_tabs_description": "Al hacer un solo clic en un archivo en el Explorador o al seguir un enlace en la fuente de Markdown, se reutiliza una pestaña de vista previa en cursiva por grupo en lugar de abrir una nueva. Editar, hacer doble clic o fijar mantiene esa pestaña abierta. Desactívelo para darle a cada archivo su propia pestaña.",
+          "confirm_running_work_close": "Confirmar antes de cerrar chats o terminales activos",
+          "confirm_running_work_close_description": "Preguntar antes de detener un agente o comando activo al cerrar su chat o terminal.",
           "confirm_running_terminal_close": "Confirmar antes de cerrar terminales en funcionamiento",
           "confirm_running_terminal_close_description": "Pregunte antes de detener un agente o comando en ejecución al cerrar una terminal."
         },

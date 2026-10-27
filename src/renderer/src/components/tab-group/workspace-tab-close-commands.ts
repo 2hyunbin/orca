@@ -5,6 +5,8 @@ import { requestEditorFileClose } from '../editor/editor-autosave'
 import { closeTerminalTab } from '../terminal/terminal-tab-actions'
 import { closeWorkspaceBrowserTab } from '@/lib/workspace-browser-tab-close'
 import { isEditorTabContentType } from '@/store/slices/editor/tabs/editor-tab-content-type'
+import { isStructuredAgentSessionBusy } from '@/lib/agent-session/structured-agent-session-busy'
+import { useRunningTerminalCloseConfirmStore } from '@/store/running-terminal-close-confirm'
 
 export function createWorkspaceTabCloseCommands({
   worktreeId,
@@ -48,8 +50,25 @@ export function createWorkspaceTabCloseCommands({
     }
     const whenEmptied = opts?.whenEmptied ?? null
     if (item.contentType === 'agent-session') {
-      closeUnifiedTab(item.id)
-      whenEmptied?.()
+      const close = () => {
+        if (useAppStore.getState().closeUnifiedTab(item.id)) {
+          whenEmptied?.()
+        }
+      }
+      if (
+        !opts?.skipRunningProcessConfirm &&
+        !useAppStore.getState().settings.skipCloseTerminalWithRunningProcessConfirm &&
+        isStructuredAgentSessionBusy(worktreeId, item)
+      ) {
+        useRunningTerminalCloseConfirmStore.getState().requestRunningTerminalCloseConfirm({
+          terminalTabId: item.id,
+          tabLabel: item.customLabel || item.label,
+          copyKind: 'chat-agent',
+          onConfirm: close
+        })
+      } else {
+        close()
+      }
       return
     }
     if (item.contentType === 'terminal') {

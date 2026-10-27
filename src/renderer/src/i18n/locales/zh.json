@@ -3331,6 +3331,7 @@
             "78b79d854d": "关闭终端？",
             "stop_agent_title": "停止此智能体？",
             "stop_command_title": "停止运行中的命令？",
+            "stop_chat_description": "关闭此聊天将停止智能体当前任务。",
             "stop_agent_description": "关闭此终端将停止智能体当前任务。",
             "stop_command_description": "关闭此终端将停止其中正在运行的命令。",
             "dont_ask_again": "对有运行中进程的终端不再询问",
@@ -7653,6 +7654,8 @@
           "projectRuntimeDescription": "不覆盖此项的本地 Windows 项目的默认运行时。",
           "editor_preview_tabs": "浏览文件时重复使用预览选项卡",
           "editor_preview_tabs_description": "单击资源管理器中的文件，或点击 Markdown 源中的链接，可以重复使用每组一个斜体预览选项卡，而不是打开一个新选项卡。编辑、双击或固定可以使该选项卡保持打开状态。关闭此选项可为每个文件提供自己的选项卡。",
+          "confirm_running_work_close": "关闭活动聊天或终端前确认",
+          "confirm_running_work_close_description": "关闭聊天或终端时，在停止正在运行的智能体或命令前询问。",
           "confirm_running_terminal_close": "关闭运行终端前确认",
           "confirm_running_terminal_close_description": "关闭终端时，在停止正在运行的智能体或命令之前询问。"
         },

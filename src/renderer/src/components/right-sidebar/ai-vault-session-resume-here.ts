@@ -1,3 +1,4 @@
+import { isStructuredAgentSessionBusy } from '@/lib/agent-session/structured-agent-session-busy'
 import { useAppStore } from '@/store'
 import { activateAiVaultStructuredSession } from '@/lib/activate-ai-vault-structured-session'
 import { insertUnifiedTabAfterAnchor } from '@/lib/unified-tab-anchor-insertion'
@@ -18,12 +19,8 @@ import {
   adoptsCliConversations,
   type CliConversationRowAgent
 } from '../../../../shared/structured-agent-cli-conversation-adoption'
-import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import type { Tab } from '../../../../shared/tab-types'
-import { getStructuredAgentSessionLaunchLifecycle } from '@/lib/agent-session/launch/structured-agent-session-launch-registry'
 import { structuredLaunchConversationOwner } from '@/lib/structured-agent-session-launch-failure'
-import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
-import { getStructuredAgentSessionStatusFeed } from '@/runtime/structured-agent-session-status-feed'
 import type { AiVaultSessionRowChatActions } from './ai-vault-session-chat-action'
 import { resumeAiVaultSessionInNewChat } from './ai-vault-session-resume-in-chat-launch'
 
@@ -78,7 +75,7 @@ export function resumeAiVaultSessionHere(args: {
     return false
   }
   const chat = findChatTab(here)
-  if (!chat || !isChatBusy(here.workspaceId, chat)) {
+  if (!chat || !isStructuredAgentSessionBusy(here.workspaceId, chat)) {
     return replace()
   }
   // Replacing stops the chat's agent, so a busy one asks first; the picker closes so prompts never stack.
@@ -195,25 +192,4 @@ function closeReplacedChat(here: AiVaultResumeHere): void {
     // Direct close: the pin prompt belongs to the close commands, and this replacement was chosen.
     useAppStore.getState().closeUnifiedTab(tab.id)
   }
-}
-
-/** Treat starting, active, asking, and unobservable chats as busy; an unreachable host may still be running. */
-function isChatBusy(workspaceId: string, tab: Tab): boolean {
-  const paneKey = structuredAgentSessionPaneKey(tab.id, tab.entityId)
-  const status = useAppStore.getState().agentStatusByPaneKey[paneKey]?.state
-  if (
-    (status && status !== 'done') ||
-    getStructuredAgentSessionLaunchLifecycle(workspaceId, tab.entityId) === 'pending'
-  ) {
-    return true
-  }
-  const target = structuredAgentSessionTargetForHost(tab.executionHostId)
-  if (!target) {
-    return true
-  }
-  const feed = getStructuredAgentSessionStatusFeed(target)
-  return (
-    feed.getSessionObservation(tab.entityId) !== 'live' ||
-    feed.getSnapshot().get(tab.entityId)?.hostExecutionPhase === 'starting'
-  )
 }

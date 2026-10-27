@@ -8008,6 +8008,8 @@
           "f97b986b7f": "wsl"
         },
         "GeneralPane": {
+          "confirm_running_work_close": "Confirmar antes de fechar chats ou terminais ativos",
+          "confirm_running_work_close_description": "Perguntar antes de parar um agente ou comando ativo ao fechar o chat ou terminal.",
           "confirm_running_terminal_close": "Confirmar antes de fechar terminais em execução",
           "confirm_running_terminal_close_description": "Pergunta antes de interromper um agente ou comando em execução ao fechar um terminal.",
           "d58fccfd84": "Navegação",
@@ -15619,6 +15621,7 @@
             "78b79d854d": "Fechar Terminal?",
             "stop_agent_title": "Parar este agente?",
             "stop_command_title": "Parar o comando em execução?",
+            "stop_chat_description": "Fechar este chat vai parar o trabalho atual do agente.",
             "stop_agent_description": "Fechar este terminal vai parar o trabalho atual do agente.",
             "stop_command_description": "Fechar este terminal vai parar o comando em execução dentro dele.",
             "dont_ask_again": "Não perguntar novamente para terminais em execução",

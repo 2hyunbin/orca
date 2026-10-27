@@ -3689,6 +3689,7 @@
             "78b79d854d": "Close Terminal?",
             "stop_agent_title": "Stop this agent?",
             "stop_command_title": "Stop running command?",
+            "stop_chat_description": "Closing this chat will stop the agent's current work.",
             "stop_agent_description": "Closing this terminal will stop the agent's current work.",
             "stop_command_description": "Closing this terminal will stop the command running inside it.",
             "dont_ask_again": "Don't ask again for running terminals",
@@ -8035,6 +8036,8 @@
         "GeneralPane": {
           "editor_preview_tabs": "Reuse a preview tab when browsing files",
           "editor_preview_tabs_description": "Single-clicking a file in the Explorer, or following a link in Markdown source, reuses one italic preview tab per group instead of opening a new one. Editing, double-clicking, or pinning keeps that tab open. Turn this off to give every file its own tab.",
+          "confirm_running_work_close": "Confirm before closing active chats or terminals",
+          "confirm_running_work_close_description": "Ask before stopping an active agent or command when closing its chat or terminal.",
           "confirm_running_terminal_close": "Confirm before closing running terminals",
           "confirm_running_terminal_close_description": "Ask before stopping a running agent or command when closing a terminal.",
           "d58fccfd84": "Navigation",
