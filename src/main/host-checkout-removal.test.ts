@@ -11,6 +11,7 @@ vi.mock('./asar-transparent-fs', () => ({
 }))
 vi.mock('node:timers/promises', () => ({
   // Route promise backoff through the clock installed by vi.useFakeTimers.
+  // ast-grep-ignore: test-no-real-time-wait -- Schedules the installed fake clock for production backoff.
   setTimeout: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 }))
 const platform = process.platform
