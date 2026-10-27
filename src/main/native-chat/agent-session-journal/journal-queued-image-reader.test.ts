@@ -219,6 +219,65 @@ it('delivers deferred hidden image sources in bounded semantic batches without r
     frames.flatMap((event) => (event.type === 'batch' ? event.batch.removedItemIds : []))
   ).toContain(agentJournalSubmissionKey('image-0'))
   expect(frames.every((event) => event.type === 'batch')).toBe(true)
+  const original = journal.submissionBody('image-1')!
+  await journal.appendSubmission(
+    {
+      clientMessageId: 'new-V',
+      body: original,
+      payloadFingerprint: agentSessionSendBodyFingerprint(identity.sessionId, original),
+      fence: 7,
+      handoverRecorded: true,
+      origin: 'client'
+    },
+    { messageId: 'recovery:image-1', expect: 'returned' }
+  )
+  await journal.resolveDispatch({
+    clientMessageId: 'new-V',
+    state: 'pending',
+    fence: 7,
+    turnScope: AGENT_JOURNAL_THREAD_SCOPE
+  })
+  subscribers.publish(identity.sessionId, journal)
+  expect(journal.queuedMessages.get('recovery:image-1')).toMatchObject({
+    state: 'dispatched',
+    consumedAs: 'new-V'
+  })
+  expect(journal.queuedMessages.get('recovery:new-V')?.body).toEqual(original)
+  await journal.acceptLate({
+    clientMessageId: 'image-1',
+    state: 'accepted',
+    fence: 7,
+    providerIdentity: { provider: 'codex', threadId: 'thread', turnId: 'late-U', ordinal: 0 }
+  })
+  subscribers.publish(identity.sessionId, journal)
+  expect(journal.submission('image-1')?.dispatchState).toBe('accepted')
+  expect(journal.submission('new-V')?.dispatchState).toBe('pending')
+  expect(journal.queuedMessages.get('recovery:new-V')?.body).toEqual(original)
+  expect(
+    queuedImageReaderSnapshot(journal).items.some(
+      (item) => item.itemId === agentJournalSubmissionKey('image-1')
+    )
+  ).toBe(false)
+  expect(frames.every((event) => event.type === 'batch')).toBe(true)
+  await journals.closeAll()
+  journal = await journals.open({ identity, stateDirectory: root, now: () => ++clock })
+  const reopenedWork = structuredAgentSessionCurrentWork(journal, {
+    record: agentSessionRecordFixture(
+      agentSessionLeaseFixture({
+        sessionId: identity.sessionId,
+        runtimeFence: 7,
+        claimStatus: 'released'
+      })
+    )
+  })
+  journal.queuedMessages.recoveryWork = () => reopenedWork
+  expect(journal.submission('image-1')?.dispatchState).toBe('accepted')
+  expect(journal.queuedMessages.get('recovery:new-V')?.body).toEqual(original)
+  expect(
+    queuedImageReaderSnapshot(journal).items.some(
+      (item) => item.itemId === agentJournalSubmissionKey('image-1')
+    )
+  ).toBe(false)
 })
 
 it.each([100, 1000])(

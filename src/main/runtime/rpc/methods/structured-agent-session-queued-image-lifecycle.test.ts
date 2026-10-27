@@ -225,7 +225,7 @@ it('installs old-reader source and exact controls through RPC, disk reopen, Send
   ).toBe(false)
 })
 
-it('keeps a hidden original pageable beyond1024 rows and retires its overlay after changed Save and exact late proof', async () => {
+it('keeps a hidden original pageable beyond1024 rows and preserves edited recovery through a refused original settlement', async () => {
   rig = await createQueuedMessageTestRig({ restartable: true })
   setStructuredAgentSessionHost(rig.host)
   const { id, body, card } = await failedImage()
@@ -334,6 +334,7 @@ it('keeps a hidden original pageable beyond1024 rows and retires its overlay aft
     })[0]
   ).not.toHaveProperty('waitsForAgent')
   await rig.settleAccepted(id, 'late-original')
+  expect(j.submission(id)?.dispatchState).toBe('rejected')
   expect(j.queuedMessages.get(card.messageId)?.body.blocks[0]).toEqual({
     type: 'text',
     text: 'changed'
