@@ -123,6 +123,9 @@ function codexEventMessage(
   id: string,
   timestamp: number | null
 ): NativeChatMessage | null {
+  if (payload.type === 'context_compacted') {
+    return codexCompactionMessage(id, timestamp)
+  }
   if (payload.type === CODEX_EVENT_TURN_ABORTED) {
     return {
       id,
@@ -160,6 +163,9 @@ function codexCompletedTurnItem(
     return null
   }
   const id = extractString(item.id) ?? fallbackId
+  if (item.type === 'ContextCompaction') {
+    return codexCompactionMessage(id, timestamp)
+  }
   const blocks = codexTurnItemBlocks(item.content)
   if (blocks.length === 0) {
     return null
@@ -171,6 +177,16 @@ function codexCompletedTurnItem(
     return { id, role: 'assistant', blocks, timestamp, source: 'transcript' }
   }
   return null
+}
+
+function codexCompactionMessage(id: string, timestamp: number | null): NativeChatMessage {
+  return {
+    id,
+    role: 'system',
+    blocks: [{ type: 'text', text: 'Context compacted', presentation: 'compaction' }],
+    timestamp,
+    source: 'transcript'
+  }
 }
 
 function codexTurnItemBlocks(content: unknown): NativeChatBlock[] {
