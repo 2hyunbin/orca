@@ -8,6 +8,7 @@ import { remainingDaemonRequestTimeoutMs } from './daemon-request-deadline'
 import type { ColdRestoreInfo } from './history-reader'
 import { normalizeWslColdRestoreCwd } from './wsl-cold-restore-cwd'
 import { readDaemonWslSleepCwd } from './daemon-wsl-sleep-cwd'
+import { mayAnyDaemonRunSession, type SessionListingDaemon } from './daemon-unlisted-session'
 import { SessionNotFoundError, type ListSessionsResult } from './types'
 import { resolveSafePtyDefaultCwd } from '../providers/pty-default-cwd'
 import type { PtySpawnResult } from '../providers/pty-provider-contract'
@@ -106,25 +107,19 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
     }
   }
 
-  /**
-   * Closes a session no daemon runs any more but whose history was left unended (a kept host-loss
-   * tab closed after a relaunch). Refuses while any daemon lists the id or cannot answer.
-   */
-  async closeUnlistedSession(
-    id: string,
-    daemons: readonly DaemonPtySessionControl[]
-  ): Promise<boolean> {
-    return this.withHistorySpawnLock(id, async () => {
-      if (this.historyReader?.probeRestorableHistory(id).status !== 'restorable') {
-        return false
-      }
-      const listings = await Promise.all(daemons.map((daemon) => daemon.listsSession(id)))
-      if (listings.some((listed) => listed !== false)) {
-        return false
-      }
-      await this.completeShutdownWithHistoryLock(id, { keepHistory: false })
-      return true
-    })
+  /** The daemons that share this history dir and can answer for it; a router widens this. */
+  private listingDaemons: () => readonly SessionListingDaemon[] = () => [this]
+
+  shareSessionListingWith(daemons: () => readonly SessionListingDaemon[]): void {
+    this.listingDaemons = daemons
+  }
+
+  /** A close found no session: true when its history is unended and no daemon may still run it. */
+  private async isUnlistedLostSession(id: string): Promise<boolean> {
+    return (
+      this.historyReader?.probeRestorableHistory(id).status === 'restorable' &&
+      !(await mayAnyDaemonRunSession(id, this.runtimeDir, this.listingDaemons()))
+    )
   }
 
   async shutdown(
@@ -228,12 +223,12 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
         remainingDaemonRequestTimeoutMs(opts.deadlineMs)
       )
     } catch (error) {
-      // Only a session this adapter turned into host loss is known gone; any other id may still
-      // live in a legacy daemon sharing the history dir, so its history must not be removed.
+      // Gone is known for a session this adapter lost, or (after a relaunch forgot that) one whose
+      // history is unended and that no daemon sharing the history dir may still run.
       if (
         opts.keepHistory ||
         !(error instanceof SessionNotFoundError) ||
-        !this.hostLossSessionIds.has(id)
+        !(this.hostLossSessionIds.has(id) || (await this.isUnlistedLostSession(id)))
       ) {
         throw error
       }
