@@ -24,7 +24,7 @@ export function useStructuredAgentSessionSendOptions(
     const requested = structuredLaunchRequestedOptions({
       seed: selection?.seed ?? launch?.seedOptions,
       explicit: selection?.explicit ?? launch?.explicitOptions,
-      held: { ...(selection?.held ?? launch?.heldOptions), ...pendingOptionsRef.current }
+      held: { ...(selection?.held ?? launch?.heldOptions), ...optionPicks.current.pending }
     })
     if (requested?.model !== undefined) {
       return requested
