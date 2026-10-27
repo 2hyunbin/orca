@@ -153,7 +153,7 @@ export async function startCodexTurn(
     return steered
   }
   let previousApplied = host.appliedTurnOptions
-  let previousOptions: Map<string, string> | null = null
+  let previousOptions: Map<string, string> | null | undefined
   let requested: Readonly<Record<string, string>> = {}
   let enqueued = false
   let discardSettingsAttempt: (() => void) | undefined

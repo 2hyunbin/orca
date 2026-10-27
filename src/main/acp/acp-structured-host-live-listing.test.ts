@@ -141,6 +141,7 @@ it.each([
     const catalog = createAgentModelCatalogService({
       store,
       getRecord: (id) => records?.getRecord(id) ?? undefined,
+      getConversation: (id) => records?.getConversation(id) ?? undefined,
       drivesRecord: () => true,
       resolveAccountHome: async () => ({ variable: 'GROK_HOME', path: '/grok' }),
       recordWorkspacePath: async () => '/generated-project',
