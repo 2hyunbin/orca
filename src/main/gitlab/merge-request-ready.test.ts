@@ -91,7 +91,7 @@ describe('GitLab readiness title ownership', () => {
     ])
   })
 
-  it.each([
+  it.each<[string, unknown, number]>([
     ['structured field error', { errors: [unknownField] }, 200],
     ['legacy field error', { errors: [{ message: unknownField.message }] }, 200],
     [
@@ -105,7 +105,7 @@ describe('GitLab readiness title ownership', () => {
     ['disabled GraphQL', { errors: [{ message: 'Not found!' }] }, 404]
   ])('preserves the existing REST path for %s', async (_name, body, status) => {
     execute
-      .mockRejectedValueOnce(rejected(body, status as number))
+      .mockRejectedValueOnce(rejected(body, status))
       .mockResolvedValueOnce({ stdout: '{"title":"Draft: Current title"}' })
       .mockResolvedValueOnce({ stdout: '{}' })
     await expect(updateMR('/repo', 12, combined)).resolves.toEqual({ ok: true })

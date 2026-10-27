@@ -2,14 +2,8 @@ import { extractExecError } from '../git/exec-error'
 import { parseGlabApiResponse } from './glab-api-response'
 import { glabExecFileAsync } from './gl-utils'
 
-type DraftMutationResponse = {
-  data?: {
-    mergeRequestSetDraft?: { errors?: unknown; mergeRequest?: { iid?: unknown } | null }
-  } | null
-  errors?: {
-    message?: unknown
-    extensions?: { code?: unknown; fieldName?: unknown; typeName?: unknown }
-  }[]
+function isResponseObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 function parseDraftResponse(stdout: string): { body: string; status?: number } {
@@ -31,20 +25,27 @@ function isUnsupportedDraftMutation(stdout: string, stderr: string): boolean {
     return false
   }
   try {
-    const payload = JSON.parse(response.body) as DraftMutationResponse | null
+    const payload: unknown = JSON.parse(response.body)
     return (
-      !payload?.data &&
-      Array.isArray(payload?.errors) &&
+      isResponseObject(payload) &&
+      !payload.data &&
+      Array.isArray(payload.errors) &&
       payload.errors.length > 0 &&
-      payload.errors.every(
-        (error) =>
-          (error?.extensions?.code === 'undefinedField' &&
-            error.extensions.typeName === 'Mutation' &&
-            error.extensions.fieldName === 'mergeRequestSetDraft') ||
-          (!error?.extensions &&
-            (error?.message === "Field 'mergeRequestSetDraft' doesn't exist on type 'Mutation'" ||
-              error?.message === 'Schema is not configured for mutations'))
-      )
+      payload.errors.every((error: unknown) => {
+        if (!isResponseObject(error)) {
+          return false
+        }
+        const extensions = error.extensions
+        return (
+          (isResponseObject(extensions) &&
+            extensions.code === 'undefinedField' &&
+            extensions.typeName === 'Mutation' &&
+            extensions.fieldName === 'mergeRequestSetDraft') ||
+          (!extensions &&
+            (error.message === "Field 'mergeRequestSetDraft' doesn't exist on type 'Mutation'" ||
+              error.message === 'Schema is not configured for mutations'))
+        )
+      })
     )
   } catch {
     return false
@@ -61,12 +62,12 @@ export async function tryMarkMRReady(
     ;({ stdout } = await glabExecFileAsync(args, options))
   } catch (error) {
     const output = extractExecError(error)
-    const exit = error as { code?: unknown; killed?: unknown; signal?: unknown } | null
     // A terminated command cannot confirm that GitLab rejected the operation before execution.
     if (
-      exit?.code === 1 &&
-      !exit.killed &&
-      !exit.signal &&
+      isResponseObject(error) &&
+      error.code === 1 &&
+      !error.killed &&
+      !error.signal &&
       isUnsupportedDraftMutation(output.stdout, output.stderr)
     ) {
       return false
@@ -76,21 +77,26 @@ export async function tryMarkMRReady(
 
   const failure = new Error('GitLab could not mark the merge request ready. Try again.')
   const response = parseDraftResponse(stdout)
-  let payload: DraftMutationResponse | null
+  let payload: unknown
   try {
-    payload = JSON.parse(response.body) as DraftMutationResponse | null
+    payload = JSON.parse(response.body)
   } catch {
     throw failure
   }
-  const mutation = payload?.data?.mergeRequestSetDraft
+  const mutation =
+    isResponseObject(payload) && isResponseObject(payload.data)
+      ? payload.data.mergeRequestSetDraft
+      : undefined
   if (
     (response.status !== undefined && response.status !== 200) ||
-    (payload?.errors !== undefined &&
+    !isResponseObject(payload) ||
+    (payload.errors !== undefined &&
       (!Array.isArray(payload.errors) || payload.errors.length > 0)) ||
-    !mutation ||
+    !isResponseObject(mutation) ||
     !Array.isArray(mutation.errors) ||
     mutation.errors.length > 0 ||
-    mutation.mergeRequest?.iid !== String(iid)
+    !isResponseObject(mutation.mergeRequest) ||
+    mutation.mergeRequest.iid !== String(iid)
   ) {
     throw failure
   }
