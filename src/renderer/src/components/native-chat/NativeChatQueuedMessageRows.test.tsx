@@ -66,7 +66,7 @@ it('gives mixed unsettled senders grips and neighbors while excluding sending pl
     <ul>
       <NativeChatQueuedMessageRows
         cards={cards}
-        reorder={{ pending: false, move }}
+        reorder={{ scope: 'contract', pending: false, move }}
         renderCard={renderCard}
       />
     </ul>
