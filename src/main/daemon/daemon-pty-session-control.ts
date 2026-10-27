@@ -4,7 +4,7 @@ import { GET_SIZE_PROTOCOL_VERSION } from './daemon-protocol-version'
 import { readDaemonAppliedPtySize, type DaemonAppliedPtySize } from './daemon-pty-applied-size'
 import { FinalCheckpointWaitExpiredError } from './daemon-pty-lifecycle-errors'
 import { DaemonPtySessionInput } from './daemon-pty-session-input'
-import { remainingDaemonRequestTimeoutMs } from './daemon-request-deadline'
+import { remainingDaemonRequestTimeoutMs, teardownReadBudgetMs } from './daemon-request-deadline'
 import type { ColdRestoreInfo } from './history-reader'
 import { normalizeWslColdRestoreCwd } from './wsl-cold-restore-cwd'
 import { readDaemonWslSleepCwd } from './daemon-wsl-sleep-cwd'
@@ -15,6 +15,8 @@ import type { PtySpawnResult } from '../providers/pty-provider-contract'
 export const LIVENESS_PROBE_TIMEOUT_MS = 2_000
 
 const MAX_TOMBSTONES = 1000
+// A busy daemon must not eat the final checkpoint's share of the Sleep deadline.
+const LIVE_SLEEP_CWD_BUDGET_MS = 1_500
 
 export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
   protected abstract adoptListedSessionForSleep(
@@ -284,16 +286,18 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
    */
   private async readLiveSleepCwd(id: string, deadlineMs?: number): Promise<string | null> {
     // Windows has no process-cwd lookup (it would spawn a missing lsof); the snapshot's OSC 7 cwd stands.
-    if (process.platform === 'win32' || !this.activeSessionIds.has(id)) {
+    const budget = teardownReadBudgetMs(LIVE_SLEEP_CWD_BUDGET_MS, deadlineMs)
+    if (process.platform === 'win32' || budget <= 0 || !this.activeSessionIds.has(id)) {
       return null
     }
     try {
-      const result = await this.client.request<{ cwd: string | null }>(
+      const { cwd } = await this.client.request<{ cwd: string | null }>(
         'getCwd',
         { sessionId: id },
-        remainingDaemonRequestTimeoutMs(deadlineMs)
+        budget
       )
-      return result.cwd || null
+      // A removed folder reads back from /proc as `<path> (deleted)`, which no shell can return to.
+      return cwd && !cwd.endsWith(' (deleted)') ? cwd : null
     } catch {
       return null
     }

@@ -125,4 +125,48 @@ describe('a native shell slept and woken', () => {
       Object.defineProperty(process, 'platform', { value: realPlatform, configurable: true })
     }
   })
+
+  async function sleepAndWake(sessionId: string, deadlineMs?: number) {
+    const historyDir = join(dir, 'history')
+    const history = new DaemonPtyAdapter({ socketPath, tokenPath, historyPath: historyDir })
+    await history.spawn({ cols: 80, rows: 24, cwd: dir, sessionId })
+    lastSubprocess._simulateData('user@host:~/project$ ')
+    const startedAt = Date.now()
+    await history.shutdown(sessionId, { immediate: true, keepHistory: true, deadlineMs })
+    const sleepMs = Date.now() - startedAt
+    const saved = JSON.parse(
+      readFileSync(join(historyDir, getHistorySessionDirName(sessionId), 'checkpoint.json'), 'utf8')
+    )
+    await history.spawn({ cols: 80, rows: 24, cwd: dir, sessionId })
+    history.dispose()
+    return { savedCwd: saved.cwd, wokeCwd: spawnedCwds.at(-1), sleepMs }
+  }
+
+  it('wakes in the spawn folder when the shell folder was deleted', async () => {
+    resolveProcessCwdSpy.mockResolvedValueOnce(`${dir}/deep (deleted)`)
+    const { savedCwd, wokeCwd } = await sleepAndWake('wt-1::/project@@sleep-deleted')
+    expect(resolveProcessCwdSpy).toHaveBeenCalled()
+    expect(savedCwd).toBe(dir)
+    expect(wokeCwd).toBe(dir)
+  })
+
+  it('wakes in the spawn folder when the shell folder is unreadable', async () => {
+    resolveProcessCwdSpy.mockResolvedValueOnce('')
+    const { savedCwd, wokeCwd } = await sleepAndWake('wt-1::/project@@sleep-unreadable')
+    expect(resolveProcessCwdSpy).toHaveBeenCalled()
+    expect(savedCwd).toBe(dir)
+    expect(wokeCwd).toBe(dir)
+  })
+
+  it('gives a hung folder read a quarter of the Sleep deadline, then checkpoints', async () => {
+    resolveProcessCwdSpy.mockImplementationOnce(() => new Promise<string>(() => {}))
+    const { savedCwd, sleepMs } = await sleepAndWake(
+      'wt-1::/project@@sleep-hung',
+      Date.now() + 2_000
+    )
+    expect(resolveProcessCwdSpy).toHaveBeenCalled()
+    expect(savedCwd).toBe(dir)
+    // ~500ms read budget plus the checkpoint; without the cap the read takes the whole 2s.
+    expect(sleepMs).toBeLessThan(1_500)
+  })
 })
