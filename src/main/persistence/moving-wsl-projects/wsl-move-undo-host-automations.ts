@@ -103,11 +103,25 @@ export async function retryWslMoveHostAutomationsLeftOff(
     }
     try {
       await restore(cutover.destinationEnvironmentId, ids)
-      const { hostAutomationsLeftOff: _done, ...rest } = cutover
-      writeWslMoveCutover(userDataPath, rest)
     } catch {
       remaining = true
+      continue
     }
+    // Fresh after the host round trip: an undo may have released the move, or a pass advanced it.
+    const current = listWslMoveCutovers(userDataPath).find(
+      (entry) => entry.migrationId === cutover.migrationId
+    )
+    if (!current) {
+      continue
+    }
+    const restored = new Set(ids)
+    const left = (current.hostAutomationsLeftOff ?? []).filter((id) => !restored.has(id))
+    const { hostAutomationsLeftOff: _done, ...rest } = current
+    writeWslMoveCutover(
+      userDataPath,
+      left.length > 0 ? { ...rest, hostAutomationsLeftOff: left } : rest
+    )
+    remaining ||= left.length > 0
   }
   return remaining
 }

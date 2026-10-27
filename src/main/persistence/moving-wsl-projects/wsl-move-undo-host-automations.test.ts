@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { wslMoveCutoverFixture } from '../__fixtures__/wsl-mover/wsl-move-cutover-fixture'
 import { seedWslMoveCutover } from '../__fixtures__/wsl-mover/wsl-move-journal-seeding'
-import { listWslMoveCutovers } from './wsl-move-cutover-journal'
+import { listWslMoveCutovers, removeCommittedWslMoveCutover } from './wsl-move-cutover-journal'
 import { listUnfinishedWslMoves } from './wsl-move-host-automations-rewrite'
 import { resetWslMoveDesktopRewriteStoresForTests } from './wsl-move-desktop-rewrite-stores'
 import {
@@ -121,5 +121,27 @@ describe('automations a refused undo left off on the host', () => {
     expect(turnedOn).toHaveBeenCalledWith('wsl:Ubuntu', ['a', 'b'])
     expect(listWslMoveCutovers(userDataPath)[0]?.hostAutomationsLeftOff).toBeUndefined()
     expect(listUnfinishedWslMoves(userDataPath)).toEqual([])
+  })
+
+  it('writes nothing back for a move an undo released while the retry was out', async () => {
+    seedWslMoveCutover(userDataPath, wslMoveCutoverFixture('move-1', 'retained'))
+    recordWslMoveHostAutomationsLeftOff(userDataPath, 'move-1', ['a'])
+    const restore = vi.fn(async () => {
+      // The user's undo releases the move during the host round trip.
+      removeCommittedWslMoveCutover(userDataPath, 'move-1')
+    })
+    expect(await retryWslMoveHostAutomationsLeftOff(userDataPath, restore)).toBe(false)
+    expect(listWslMoveCutovers(userDataPath)).toEqual([])
+  })
+
+  it('keeps fields written during the retry and ids left off meanwhile', async () => {
+    seedWslMoveCutover(userDataPath, wslMoveCutoverFixture('move-1', 'retained'))
+    recordWslMoveHostAutomationsLeftOff(userDataPath, 'move-1', ['a'])
+    const restore = vi.fn(async () => {
+      // Another refused undo left one more off while this retry was out.
+      recordWslMoveHostAutomationsLeftOff(userDataPath, 'move-1', ['b'])
+    })
+    expect(await retryWslMoveHostAutomationsLeftOff(userDataPath, restore)).toBe(true)
+    expect(listWslMoveCutovers(userDataPath)[0]?.hostAutomationsLeftOff).toEqual(['b'])
   })
 })
