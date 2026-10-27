@@ -5,6 +5,10 @@
  */
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { WslMoveCutover } from '../../../shared/wsl-move/wsl-move-cutover'
+import type {
+  WorkspaceSessionPatch,
+  WorkspaceSessionState
+} from '../../../shared/workspace-session-state-types'
 import type { Store } from '../loading-store/store'
 import { wslMoveAutomationHostFilterUpdate } from './wsl-move-automation-filter-rewrite'
 import { registerWslMoveDesktopRewriteStore } from './wsl-move-desktop-rewrite-stores'
@@ -80,19 +84,23 @@ export function registerWslMoveMainRewriteStores(profile: WslMoveMainRewriteProf
   })
 }
 
-/** The local session's focus onto the host when it names a moved project; true when it wrote. */
+/**
+ * The local session's focus onto the host when it names a moved project, or (undo, given
+ * wslMoveReleasedSessionFocusPatch) back here from a released one; true when it wrote.
+ */
 export function applyWslMoveSessionFocus(
   profile: Pick<Store, 'getWorkspaceSession' | 'patchWorkspaceSession'>,
-  scope: WslMoveRewriteScope
+  scope: WslMoveRewriteScope,
+  focusPatch: (
+    session: WorkspaceSessionState,
+    scope: WslMoveRewriteScope
+  ) => WorkspaceSessionPatch | null = wslMoveSessionGlobalsPatch
 ): boolean {
-  const patch = wslMoveSessionGlobalsPatch(
-    profile.getWorkspaceSession(LOCAL_EXECUTION_HOST_ID),
-    scope
-  )
+  const patch = focusPatch(profile.getWorkspaceSession(LOCAL_EXECUTION_HOST_ID), scope)
   if (!patch) {
     return false
   }
-  // A move's one-shot rewrite of focus; no LayoutCommand owns focus.
+  // A move's (or its undo's) one-shot rewrite of focus; no LayoutCommand owns focus.
   profile.patchWorkspaceSession(patch, LOCAL_EXECUTION_HOST_ID)
   return true
 }

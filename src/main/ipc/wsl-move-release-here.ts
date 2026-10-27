@@ -99,6 +99,7 @@ async function releaseWslMovesHere(
   const releaseSpawnFence = fenceHostSpawnsForWslMoveUndo(first.destinationEnvironmentId)
   const repoIds: string[] = []
   const folderWorkspaceIds: string[] = []
+  const released: WslMoveCutover[] = []
   let failure: Extract<WslMoveUseLocallyResult, { released: false }> | null = null
   for (const move of newestFirst) {
     const moveRefusal = move === first ? null : wslMoveReleaseRefusal(userDataPath, move)
@@ -111,13 +112,14 @@ async function releaseWslMovesHere(
       }
       break
     }
-    const released = releaseWslMove(userDataPath, move)
-    if (!released.released) {
-      failure = released
+    const release = releaseWslMove(userDataPath, move)
+    if (!release.released) {
+      failure = release
       break
     }
-    repoIds.push(...released.repoIds)
-    folderWorkspaceIds.push(...released.folderWorkspaceIds)
+    released.push(move)
+    repoIds.push(...release.repoIds)
+    folderWorkspaceIds.push(...release.folderWorkspaceIds)
   }
   if (repoIds.length === 0 && folderWorkspaceIds.length === 0) {
     releaseSpawnFence()
@@ -125,6 +127,11 @@ async function releaseWslMovesHere(
   }
   // Released moves stay released even if an older one refused; the reload shows what came back.
   holdWslMoveWindowWrites()
+  // Focus left on a host copy would reopen its panes after the reload and restart their agents.
+  const ports = createUndoPorts()
+  for (const move of released) {
+    ports.refocusHere?.(move)
+  }
   reloadWslMoveWindowWithWritesHeld(releaseSpawnFence)
   return (
     failure ?? {

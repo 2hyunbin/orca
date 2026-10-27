@@ -57,6 +57,38 @@ export function wslMoveSessionGlobalsPatch(
   }
 }
 
+/**
+ * Undo's inverse: focus left on a released project's host copy returns to its copy here, so the
+ * reloaded window does not open (and so restart) the host's panes; null when focus is elsewhere.
+ */
+export function wslMoveReleasedSessionFocusPatch(
+  session: SessionGlobals & Pick<WorkspaceSessionState, 'tabsByWorktree'>,
+  scope: WslMoveRewriteScope
+): WorkspaceSessionPatch | null {
+  if (session.activeWorkspaceExecutionHostId !== scope.destinationHostId) {
+    return null
+  }
+  const hostWorktreeId = session.activeWorktreeId
+  const key = session.activeWorkspaceKey
+  const releasedWorktree = hostWorktreeId ? scope.inScope(hostWorktreeId) : false
+  if (!releasedWorktree && !(key && scope.inScope(key))) {
+    return null
+  }
+  if (!releasedWorktree) {
+    // A folder workspace keeps its id on the host; only the host changes back.
+    return { activeWorkspaceExecutionHostId: LOCAL_EXECUTION_HOST_ID }
+  }
+  const localWorktreeId =
+    Object.keys(session.tabsByWorktree).find(
+      (id) => id !== hostWorktreeId && scope.worktreeId(id) === hostWorktreeId
+    ) ?? null
+  return {
+    activeWorkspaceExecutionHostId: LOCAL_EXECUTION_HOST_ID,
+    activeWorktreeId: localWorktreeId,
+    activeWorkspaceKey: localWorktreeId ? worktreeWorkspaceKey(localWorktreeId) : null
+  }
+}
+
 // Restart hints for local PTYs; the host decides what to start for its own terminals.
 const UNSEEDED_FIELDS: ReadonlySet<string> = new Set(['activeWorktreeIdsOnShutdown'])
 

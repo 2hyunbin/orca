@@ -12,6 +12,7 @@ import { wslMoveRewriteScope } from './wsl-move-rewrite-scope'
 import {
   withoutDesktopFocus,
   wslMoveHostSessionSeed,
+  wslMoveReleasedSessionFocusPatch,
   wslMoveSessionGlobalsPatch
 } from './wsl-move-session-rewrite'
 import { prepareOrcadMigrationWorkspaceSession } from '../migrating-orcad-catalog/orcad-destination-workspace-session'
@@ -129,6 +130,62 @@ describe('WSL move session globals', () => {
         scope
       )
     ).toBeNull()
+  })
+
+  // verify-15b 6c: undo left focus on the host copy, which reopened and resumed its agent.
+  it("returns focus on a released project's host copy to its copy here", () => {
+    const tabsByWorktree = { [MOVED]: [], 'repo-win::C:\\src\\win': [] }
+    expect(
+      wslMoveReleasedSessionFocusPatch(
+        {
+          activeWorktreeId: MOVED_ON_HOST,
+          activeWorkspaceKey: `worktree:${MOVED_ON_HOST}`,
+          activeWorkspaceExecutionHostId: HOST,
+          tabsByWorktree
+        },
+        scope
+      )
+    ).toEqual({
+      activeWorkspaceExecutionHostId: 'local',
+      activeWorktreeId: MOVED,
+      activeWorkspaceKey: `worktree:${MOVED}`
+    })
+    expect(
+      wslMoveReleasedSessionFocusPatch(
+        {
+          activeWorktreeId: null,
+          activeWorkspaceKey: 'folder:folder-1',
+          activeWorkspaceExecutionHostId: HOST,
+          tabsByWorktree
+        },
+        scope
+      )
+    ).toEqual({ activeWorkspaceExecutionHostId: 'local' })
+    // Nothing here to return to: focus leaves the host copy rather than reopen it.
+    expect(
+      wslMoveReleasedSessionFocusPatch(
+        {
+          activeWorktreeId: MOVED_ON_HOST,
+          activeWorkspaceExecutionHostId: HOST,
+          tabsByWorktree: {}
+        },
+        scope
+      )
+    ).toEqual({
+      activeWorkspaceExecutionHostId: 'local',
+      activeWorktreeId: null,
+      activeWorkspaceKey: null
+    })
+  })
+
+  it('leaves focus on another host project, another host or this computer alone', () => {
+    for (const focus of [
+      { activeWorktreeId: SAME_DISTRO_ON_HOST, activeWorkspaceExecutionHostId: HOST },
+      { activeWorktreeId: MOVED_ON_HOST, activeWorkspaceExecutionHostId: 'ssh:box' },
+      { activeWorktreeId: MOVED, activeWorkspaceExecutionHostId: 'local' }
+    ] as const) {
+      expect(wslMoveReleasedSessionFocusPatch({ ...focus, tabsByWorktree: {} }, scope)).toBeNull()
+    }
   })
 
   it('changes nothing on a second run', () => {

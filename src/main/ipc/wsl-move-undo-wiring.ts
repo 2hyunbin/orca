@@ -12,11 +12,15 @@ import {
   type WslMoveHostCopyStop
 } from '../persistence/moving-wsl-projects/wsl-move-host-copy-stop'
 import { wslMoveRewriteScope } from '../persistence/moving-wsl-projects/wsl-move-rewrite-scope'
+import { wslMoveReleasedSessionFocusPatch } from '../persistence/moving-wsl-projects/wsl-move-session-rewrite'
+import { applyWslMoveSessionFocus } from '../persistence/moving-wsl-projects/wsl-move-main-rewrite-stores'
 import { listEnvironments } from '../../shared/runtime-environment-store'
 import { callRuntimeEnvironment } from './runtime-environments/runtime-environment-transport-routing'
 
 export type WslMoveUndoPorts = {
   stopHostCopies: (move: WslMoveCutover) => Promise<WslMoveHostCopyStop>
+  /** After the release, with window writes held: focus on the host copy returns here. */
+  refocusHere?: (move: WslMoveCutover) => void
 }
 
 // What undo reads of the host's terminal list: whether each terminal is still running.
@@ -27,7 +31,10 @@ const HostTerminalList = z.object({
 const SLEEP_TIMEOUT_MS = 60_000
 const LIST_TIMEOUT_MS = 10_000
 
-export function createWslMoveUndoPorts(store: Store, userDataPath: string): WslMoveUndoPorts {
+export function createWslMoveUndoPorts(
+  store: Pick<Store, 'getWorkspaceSession' | 'patchWorkspaceSession'>,
+  userDataPath: string
+): WslMoveUndoPorts {
   return {
     stopHostCopies: async (move) => {
       // A host the user removed ran its terminals down with it; nothing of the project runs there.
@@ -73,6 +80,13 @@ export function createWslMoveUndoPorts(store: Store, userDataPath: string): WslM
         },
         wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms))
       })
+    },
+    refocusHere: (move) => {
+      applyWslMoveSessionFocus(
+        store,
+        wslMoveRewriteScope(wslMoveDesktopRewriteContext(userDataPath, move)),
+        wslMoveReleasedSessionFocusPatch
+      )
     }
   }
 }

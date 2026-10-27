@@ -11,7 +11,7 @@ type Move = {
 }
 
 const journal = vi.hoisted(() => ({ chain: new Array<Move>(), released: new Array<string>() }))
-const window = vi.hoisted(() => ({ reloads: 0, fences: 0 }))
+const window = vi.hoisted(() => ({ reloads: 0, fences: 0, steps: new Array<string>() }))
 
 function move(migrationId: string, repoId: string): Move {
   return {
@@ -54,9 +54,12 @@ vi.mock('../persistence/moving-wsl-projects/wsl-move-undo-spawn-fence', () => ({
   }
 }))
 vi.mock('../persistence/moving-wsl-projects/wsl-move-window-write-hold', () => ({
-  holdWslMoveWindowWrites: () => {},
+  holdWslMoveWindowWrites: () => {
+    window.steps.push('hold')
+  },
   reloadWslMoveWindowWithWritesHeld: () => {
     window.reloads++
+    window.steps.push('reload')
   }
 }))
 
@@ -73,6 +76,7 @@ beforeEach(() => {
   journal.released = []
   window.reloads = 0
   window.fences = 0
+  window.steps = []
 })
 
 describe('releasing moved projects here', () => {
@@ -112,5 +116,32 @@ describe('releasing moved projects here', () => {
     await releaseWslMoveChainHere('/user-data', 'Ubuntu', [], undoPorts)
     expect(heard).not.toHaveBeenCalled()
     stop()
+  })
+
+  // verify-15b 6c: focus left on the host copy reopened its pane after the reload and resumed
+  // the agent there beside the one restored here.
+  it('returns focus from each released host copy after holding writes and before the reload', async () => {
+    const refocusHere = vi.fn((released: Move) => {
+      window.steps.push(`refocus ${released.migrationId}`)
+    })
+    const result = await releaseWslMoveChainHere('/user-data', 'Ubuntu', [], () => ({
+      stopHostCopies: vi.fn(async () => 'stopped' as const),
+      refocusHere
+    }))
+    expect(result).toMatchObject({ released: true })
+    expect(window.steps).toEqual(['hold', 'refocus m2', 'refocus m1', 'reload'])
+  })
+
+  it('returns no focus for a move that did not come back', async () => {
+    const refocusHere = vi.fn()
+    const stopHostCopies = vi
+      .fn<() => Promise<'stopped' | 'unreachable'>>()
+      .mockResolvedValueOnce('stopped')
+      .mockResolvedValueOnce('unreachable')
+    await releaseWslMoveChainHere('/user-data', 'Ubuntu', [], () => ({
+      stopHostCopies,
+      refocusHere
+    }))
+    expect(refocusHere.mock.calls.map(([released]) => released.migrationId)).toEqual(['m2'])
   })
 })
