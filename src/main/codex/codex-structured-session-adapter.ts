@@ -95,7 +95,7 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
     renameCodexProviderSession({
       ...input,
       session: this.sessions.get(input.record.sessionId),
-      resolveLaunch: this.deps.resolveLaunch
+      invocation: this.deps.renameInvocation
     })
 
   permissionModeRequiresAcquisition = (): boolean => false

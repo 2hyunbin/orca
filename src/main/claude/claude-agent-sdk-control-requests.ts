@@ -47,15 +47,13 @@ export function claudeQueryAsyncCanceller(
 
 // renameSession sends `rename_session` with source 'host' (the CLI's user rename) but is absent
 // from Query's declaration.
-type ClaudeQuerySessionRenamer = {
-  renameSession?: (title: string, sessionId: string) => Promise<unknown>
-}
-
 export function claudeQuerySessionRenamer(
   query: Query
-): ((title: string, sessionId: string) => Promise<unknown>) | null {
-  const rename = (query as unknown as ClaudeQuerySessionRenamer).renameSession
-  return typeof rename === 'function' ? rename.bind(query) : null
+): ((title: string, sessionId: string) => unknown) | null {
+  const rename = 'renameSession' in query ? query.renameSession : null
+  return typeof rename === 'function'
+    ? (title, sessionId): unknown => rename.call(query, title, sessionId)
+    : null
 }
 
 export type ClaudeControlOptions = { timeoutMs?: number }
@@ -167,7 +165,7 @@ export function createClaudeControlSurface(query: Query): ClaudeControlSurface {
       return rename
         ? runClaudeControl(
             'rename_session',
-            () => rename(title, sessionId),
+            () => Promise.resolve(rename(title, sessionId)),
             options?.timeoutMs
           ).then(() => {})
         : Promise.reject(
