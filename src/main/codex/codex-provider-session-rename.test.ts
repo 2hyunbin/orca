@@ -104,7 +104,7 @@ it('resolves idle metadata independently of chat admission, preserving configure
     expect(invocation.args).toEqual(['-c', 'model_provider=first', '--no-daemon', ...tail])
     const stale = { ORCA_CHAT_SCRATCH_DIR: 'old', ORCA_CHAT_VISUALS_DIR: 'old' }
     const child = resolveProviderChildEnv(invocation, stale)
-    expect(child).toMatchObject({ CODEX_HOME: '/saved/account', CUSTOM: 'first' })
+    expect(child).toMatchObject({ CODEX_HOME: '/saved/account', CUSTOM: 'first', PATH: 'bin' })
     expect([child.ORCA_CHAT_SCRATCH_DIR, child.ORCA_CHAT_VISUALS_DIR]).toEqual([
       undefined,
       undefined
