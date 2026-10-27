@@ -2,7 +2,12 @@ import { PassThrough } from 'node:stream'
 import { afterEach, expect, it, vi } from 'vitest'
 import { JsonlRpcPeer } from '../jsonl-rpc/peer'
 import { agentSessionRecordFixture } from '../native-chat/agent-session-record-test-fixture'
-import { closePiRpcAdapterFixtures, file, sessionId, setup } from './rpc-session-adapter.test-fixture'
+import {
+  closePiRpcAdapterFixtures,
+  file,
+  sessionId,
+  setup
+} from './rpc-session-adapter.test-fixture'
 
 afterEach(closePiRpcAdapterFixtures)
 
@@ -11,9 +16,7 @@ it('sends Pi the current session name and accepts its success response without d
   const input = new PassThrough()
   const output = new PassThrough()
   const peer = new JsonlRpcPeer(input, output)
-  const request = vi.spyOn(h.connection, 'request').mockImplementation(
-    (...args: Parameters<JsonlRpcPeer['request']>) => peer.request(...args)
-  )
+  const request = vi.spyOn(h.connection, 'request').mockImplementation(peer.request.bind(peer))
   try {
     const done = h.adapter.renameProviderSession({
       record: agentSessionRecordFixture({ sessionId, provider: 'pi' }),

@@ -21,11 +21,7 @@ it("renames the running thread the way Codex's own /rename does, waiting out an 
   await renameCodexProviderSession({
     session,
     resolveLaunch: vi.fn(),
-    record: agentSessionRecordFixture({
-      sessionId: 'chat-1',
-      provider: 'codex',
-      accountHome: { variable: 'CODEX_HOME', path: '/home/work/.codex' }
-    }),
+    record: agentSessionRecordFixture({ provider: 'codex' }),
     providerSessionId: 'thread-1',
     name: 'Release notes'
   })
@@ -40,9 +36,9 @@ it("renames the running thread the way Codex's own /rename does, waiting out an 
 
 it('keeps the configured idle command/env/account and propagates failure', async () => {
   const request = vi.fn().mockRejectedValue(new Error('thread not found'))
-  const run = vi.spyOn(appServer, 'runCodexAppServerSession').mockImplementation(
-    async (_invocation, body) => body({ request, notify: vi.fn() })
-  )
+  const run = vi
+    .spyOn(appServer, 'runCodexAppServerSession')
+    .mockImplementation(async (_invocation, body) => body({ request, notify: vi.fn() }))
   const resolveLaunch = vi.fn(async () => ({
     command: '/tools/cx',
     args: ['--profile', 'work', 'app-server'],
