@@ -263,8 +263,13 @@ describe('gitlab client — MR operations', () => {
           ? expect(result).rejects.toThrow('glab: 502')
           : expect(result).resolves.toBeNull())
       }
-      expect(glabExecFileAsyncMock).toHaveBeenCalledTimes(4)
-      expect(releaseMock).toHaveBeenCalledTimes(2)
+      glabExecFileAsyncMock.mockRejectedValueOnce(new Error('glab: 502'))
+      await expect(getMergeRequestForBranchOrThrow('/repo', 'flaky', 6)).rejects.toThrow(
+        'glab: 502'
+      )
+      expect(glabExecFileAsyncMock.mock.calls[4]).toEqual(glabExecFileAsyncMock.mock.calls[3])
+      expect(glabExecFileAsyncMock).toHaveBeenCalledTimes(5)
+      expect(releaseMock).toHaveBeenCalledTimes(3)
     })
 
     it.each([10, 100])(
