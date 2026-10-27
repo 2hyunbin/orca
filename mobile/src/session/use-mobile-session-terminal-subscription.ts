@@ -124,6 +124,12 @@ export function useMobileSessionTerminalSubscription(
         }
       })
 
+      // Reuse mode Map on no-op frames so every stream pass cannot rerender the route.
+      const adoptDisplayMode = (displayMode: MobileDisplayMode) =>
+        setTerminalModes((prev) =>
+          prev.get(handle) === displayMode ? prev : new Map(prev).set(handle, displayMode)
+        )
+
       // Send viewport in subscribe so host fitting precedes snapshot serialization without a focus/fit race.
       const stopStream = subscribeMobileTerminalSafely(
         client,
@@ -206,11 +212,7 @@ export function useMobileSessionTerminalSubscription(
             ref.init({ cols, rows, initialData, preserveScroll: true, oscLinks, kittyFlags, frame })
             initializedHandlesRef.current.add(handle)
             if (data.displayMode) {
-              const displayMode = data.displayMode as MobileDisplayMode
-              // Reuse mode Map on no-op frames so every stream pass cannot rerender the route.
-              setTerminalModes((prev) =>
-                prev.get(handle) === displayMode ? prev : new Map(prev).set(handle, displayMode)
-              )
+              adoptDisplayMode(data.displayMode as MobileDisplayMode)
             }
             // Refit after DOM settles because init can see transient scrollWidth.
             lifetime.scheduleSettledFit(ref)
@@ -282,11 +284,7 @@ export function useMobileSessionTerminalSubscription(
               getTerminalRef(handle)?.resize(cols, rows, terminalFrameRef.current)
             }
             if (data.displayMode) {
-              const displayMode = data.displayMode as MobileDisplayMode
-              // Reuse mode Map on no-op frames so every stream pass cannot rerender the route.
-              setTerminalModes((prev) =>
-                prev.get(handle) === displayMode ? prev : new Map(prev).set(handle, displayMode)
-              )
+              adoptDisplayMode(data.displayMode as MobileDisplayMode)
             }
             lifetime.scheduleSettledFit(getTerminalRef(handle))
           }
