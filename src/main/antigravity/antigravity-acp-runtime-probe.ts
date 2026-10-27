@@ -78,10 +78,13 @@ export async function probeAntigravityAcpServer(
       }
     }
   } catch (error) {
-    failure = { cause: error, observed: observedFailure(error, probe) }
+    failure = { cause: error, observed: await observedFailure(error, probe) }
   }
   if (probe.connection && !probe.connection.exited) {
-    failure = { cause: new Error('Its exit was not proven after the check'), observed: null }
+    failure = {
+      cause: new Error('Its exit was not proven after the check', { cause: failure?.cause }),
+      observed: failure?.observed ?? null
+    }
   }
   await rm(home, { recursive: true, force: true })
   if (failure !== null) {
@@ -93,10 +96,10 @@ export async function probeAntigravityAcpServer(
   }
 }
 
-function observedFailure(
+async function observedFailure(
   error: unknown,
   probe: { connection?: AcpAgentConnection; exit?: ProviderProcessExit }
-): ManagedRuntimeStartFailure | null {
+): Promise<ManagedRuntimeStartFailure | null> {
   // The initialize request's own deadline usually fires before the probe's.
   const requestTimeout = providerRequestTimeoutOf(error)
   if (requestTimeout) {
@@ -108,7 +111,7 @@ function observedFailure(
   if (!probe.exit || !probe.connection) {
     return null
   }
-  const stderr = probe.connection.stderrTail()
+  const stderr = await probe.connection.stderrTailAfterExit()
   return supervisedProviderSpawnFailure(probe.exit.code, stderr)
     ? null
     : { kind: 'exit', exit: probe.exit, stderr }
