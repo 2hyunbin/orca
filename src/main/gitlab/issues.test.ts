@@ -195,6 +195,8 @@ describe('gitlab issue operations', () => {
     )
     expect(glabApiWithHeadersMock).toHaveBeenCalledWith(
       [
+        '--hostname',
+        'gitlab.com',
         'projects/stablyai%2Forca/issues?page=1&per_page=5&order_by=updated_at&sort=desc&state=opened'
       ],
       { cwd: '/repo-root', ...localGitOptions }
@@ -228,6 +230,8 @@ describe('gitlab issue operations', () => {
 
     expect(glabApiWithHeadersMock).toHaveBeenCalledWith(
       [
+        '--hostname',
+        'gitlab.com',
         'projects/stablyai%2Forca/issues?page=1&per_page=5&order_by=updated_at&sort=desc&state=opened'
       ],
       { cwd: '/repo-root' }
@@ -244,6 +248,8 @@ describe('gitlab issue operations', () => {
 
     expect(glabApiWithHeadersMock).toHaveBeenCalledWith(
       [
+        '--hostname',
+        'gitlab.com',
         'projects/stablyai%2Forca/issues?page=3&per_page=50&order_by=updated_at&sort=desc&state=opened'
       ],
       { cwd: '/repo-root' }

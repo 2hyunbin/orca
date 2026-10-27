@@ -49,6 +49,26 @@ describe('createGitHubSlice.fetchWorkItems source/error envelope', () => {
     expect(result.error).toBeNull()
   })
 
+  it('replaces a stale ineligible marker after a completed fresh fetch with unchanged empty rows', async () => {
+    const store = createTestStore()
+    const emptySources = { issues: null, prs: null, originCandidate: null, upstreamCandidate: null }
+    mockApi.gh.listWorkItems.mockResolvedValueOnce({
+      items: [],
+      sources: { ...emptySources, ineligible: true }
+    })
+    await store.getState().fetchWorkItems('repo-id', '/repo', 24, '')
+    expect(
+      store.getState().getWorkItemsSourcesAndError('repo-id', 24, '').sources?.ineligible
+    ).toBe(true)
+
+    mockApi.gh.listWorkItems.mockResolvedValueOnce({ items: [], sources: emptySources })
+    await store.getState().fetchWorkItems('repo-id', '/repo', 24, '', { force: true })
+
+    expect(store.getState().getWorkItemsSourcesAndError('repo-id', 24, '').sources).toEqual(
+      emptySources
+    )
+  })
+
   it('stamps the issues-side ClassifiedError with its source slug for banner copy', async () => {
     // Issue-only failure keeps successful PR items plus source-qualified error so list/banner coexist even after later reads (design §2).
     const store = createTestStore()

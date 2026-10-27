@@ -104,7 +104,13 @@ export function selectTaskPageUnresolvedSourceRepos(
   const unresolved: TaskPageUnresolvedSourceRepo[] = []
   for (const repo of repos) {
     const state = stateByRepoId.get(repo.id)
-    if (state?.sources && !state.sources.issues && !state.sources.prs && !state.error) {
+    if (
+      state?.sources &&
+      !state.sources.ineligible &&
+      !state.sources.issues &&
+      !state.sources.prs &&
+      !state.error
+    ) {
       unresolved.push({
         repoId: repo.id,
         sourceKey: state.sourceKey,

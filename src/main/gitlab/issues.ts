@@ -5,6 +5,7 @@ import { mapGitLabIssueInfo } from './mappers'
 // prettier-ignore
 import { glabApiWithHeaders, glabExecFileAsync, acquire, release, getIssueProjectRef, resolveIssueSource, classifyGlabError, classifyListFetchError, getGlabKnownHosts, glabRepoExecOptions, glabHostnameArgs, parseGlabJsonList, parseGlabPaginationHeader, type LocalGitExecOptions, type ProjectRef } from './gl-utils'
 import { encodedProject } from './project-path-encoding'
+import { isTaskRepositoryIneligible } from '../git/task-repository-eligibility'
 
 // Distinguish a confirmed empty list from fetch failure.
 export type IssueListResult = {
@@ -71,6 +72,9 @@ export async function listIssues(
   )
   // Isolate unresolved projects instead of letting cwd inference fail the cross-project aggregate.
   if (!projectRef) {
+    if (await isTaskRepositoryIneligible(repoPath, 'gitlab', connectionId, localGitOptions)) {
+      return { items: [], totalPages: 0 }
+    }
     return {
       items: [],
       totalPages: 0,
@@ -86,7 +90,8 @@ export async function listIssues(
     const scopeParam = assignee === '@me' ? '&scope=assigned_to_me' : ''
     const { body, headers } = await glabApiWithHeaders(
       [
-        ...glabHostnameArgs(projectRef, connectionId),
+        '--hostname',
+        projectRef.host,
         `projects/${encodedProject(projectRef.path)}/issues?page=${currentPage}&per_page=${perPage}&order_by=updated_at&sort=desc${stateParam}${scopeParam}`
       ],
       glabRepoExecOptions(repoPath, connectionId, localGitOptions)

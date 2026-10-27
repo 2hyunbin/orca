@@ -141,6 +141,37 @@ describe('task page cache selectors', () => {
     ])
   })
 
+  it('silently omits a proven other-forge source while keeping unknown identity retryable', () => {
+    const repos = [
+      { id: 'gitlab-only', path: '/repos/gitlab-only' },
+      { id: 'unknown', path: '/repos/unknown' }
+    ]
+    const entries = [
+      {
+        data: [],
+        fetchedAt: 1,
+        sources: {
+          issues: null,
+          prs: null,
+          originCandidate: null,
+          upstreamCandidate: null,
+          ineligible: true as const
+        }
+      },
+      {
+        data: [],
+        fetchedAt: 1,
+        sources: { issues: null, prs: null, originCandidate: null, upstreamCandidate: null }
+      }
+    ]
+
+    const sourceState = buildTaskPageRepoSourceState(repos, entries)
+
+    expect(selectTaskPageUnresolvedSourceRepos(repos, sourceState)).toEqual([
+      { repoId: 'unknown', sourceKey: 'unknown::local', label: '/repos/unknown' }
+    ])
+  })
+
   it('does not flag an unresolved-source repo that already carries a per-repo error', () => {
     const repos = [{ id: 'errored', path: '/repos/errored', displayName: 'errored-repo' }]
     const erroredEntry = {
