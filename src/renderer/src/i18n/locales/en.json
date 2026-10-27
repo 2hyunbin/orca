@@ -63,6 +63,8 @@
       "useHereHostUnreachable": "The {{distro}} host isn't answering, so Orca can't stop its copy of this project, and its agents may still be running there. Connect the host in Settings, or remove it, then try again.",
       "useHereHostStillRunning": "The {{distro}} host's copy of this project is still running terminals, so its agents could run twice. Wait a moment, then try again.",
       "useHereFailed": "Could not bring this project back to this computer.",
+      "useHereHostRemovalPending": "The {{distro}} host is still being removed, so Orca leaves it alone. Finish removing it in Settings, then try again.",
+      "useHereHostAutomations": "Orca couldn't turn off this project's automations on the {{distro}} host, so they could run twice. Connect the host in Settings, then try again.",
       "useHereUnsavedTitle": "Save your files first",
       "useHereUnsavedDescription": "Bringing {{name}} back reloads this window. Save or close these files first: {{files}}"
     }

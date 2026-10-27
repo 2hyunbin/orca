@@ -111,6 +111,20 @@ function wslMoveUseHereRefusalMessage(
       { distro }
     )
   }
+  if (result.detail === 'host-removal-pending') {
+    return translate(
+      'sidebar.wslMoved.useHereHostRemovalPending',
+      'The {{distro}} host is still being removed, so Orca leaves it alone. Finish removing it in Settings, then try again.',
+      { distro }
+    )
+  }
+  if (result.detail === 'host-automations') {
+    return translate(
+      'sidebar.wslMoved.useHereHostAutomations',
+      "Orca couldn't turn off this project's automations on the {{distro}} host, so they could run twice. Connect the host in Settings, then try again.",
+      { distro }
+    )
+  }
   if (reason === 'host-unreachable') {
     return translate(
       'sidebar.wslMoved.useHereHostUnreachable',

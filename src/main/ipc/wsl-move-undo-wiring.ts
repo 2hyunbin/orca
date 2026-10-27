@@ -17,10 +17,13 @@ import { applyWslMoveSessionFocus } from '../persistence/moving-wsl-projects/wsl
 import { listEnvironments } from '../../shared/runtime-environment-store'
 import { callRuntimeEnvironment } from './runtime-environments/runtime-environment-transport-routing'
 import {
+  recordWslMoveHostAutomationsLeftOff,
   stopWslMoveHostAutomations,
   wslMoveAutomationsToTurnOffOnHost,
   type WslMoveHostAutomationStop
 } from '../persistence/moving-wsl-projects/wsl-move-undo-host-automations'
+import { scheduleWslMoveRewriteRetry } from '../persistence/moving-wsl-projects/wsl-move-rewrite-retry'
+import { wslHostRemovalPending } from './wsl-move-host-connect'
 import { disableWslHostAutomations, restoreWslHostAutomations } from './wsl-host-automation-disable'
 
 export type WslMoveUndoPorts = {
@@ -90,18 +93,34 @@ export function createWslMoveUndoPorts(
       })
     },
     stopHostAutomations: async (move) => {
-      // A removed host took its automations with it.
-      if (!listEnvironments(userDataPath).some((env) => env.id === move.destinationEnvironmentId)) {
-        return { outcome: 'stopped', restore: async () => {} }
-      }
-      const environmentId = move.destinationEnvironmentId
-      return stopWslMoveHostAutomations(
-        wslMoveAutomationsToTurnOffOnHost(move, store.listAutomations()),
-        {
-          disable: (ids) => disableWslHostAutomations(userDataPath, environmentId, ids),
-          restore: (ids) => restoreWslHostAutomations(userDataPath, environmentId, ids)
+      // Inside a try: a throw here would otherwise escape past undo's spawn fence.
+      try {
+        // A removed host took its automations with it.
+        if (
+          !listEnvironments(userDataPath).some((env) => env.id === move.destinationEnvironmentId)
+        ) {
+          return { outcome: 'stopped', restore: async () => {} }
         }
-      )
+        // E11: a Remove that could not prove the server stopped; the host is not to be touched.
+        if (wslHostRemovalPending(userDataPath, move.manifest.source.distro)) {
+          return { outcome: 'removal-pending' }
+        }
+        const environmentId = move.destinationEnvironmentId
+        return await stopWslMoveHostAutomations(
+          wslMoveAutomationsToTurnOffOnHost(move, store.listAutomations()),
+          {
+            disable: (ids) => disableWslHostAutomations(userDataPath, environmentId, ids),
+            restore: (ids) => restoreWslHostAutomations(userDataPath, environmentId, ids),
+            leftOff: (ids) => {
+              recordWslMoveHostAutomationsLeftOff(userDataPath, move.migrationId, ids)
+              scheduleWslMoveRewriteRetry(userDataPath)
+            }
+          }
+        )
+      } catch (error) {
+        console.warn('[wsl-move] Could not read what undo turns off on the host:', error)
+        return { outcome: 'failed' }
+      }
     },
     refocusHere: (move) => {
       applyWslMoveSessionFocus(

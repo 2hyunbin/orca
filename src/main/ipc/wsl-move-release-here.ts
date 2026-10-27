@@ -97,69 +97,74 @@ async function releaseWslMovesHere(
   }
   // Fenced until the reload: an open host pane would otherwise start its stopped agent again.
   const releaseSpawnFence = fenceHostSpawnsForWslMoveUndo(first.destinationEnvironmentId)
-  const repoIds: string[] = []
-  const folderWorkspaceIds: string[] = []
-  const released: WslMoveCutover[] = []
-  let failure: Extract<WslMoveUseLocallyResult, { released: false }> | null = null
-  for (const move of newestFirst) {
-    const moveRefusal = move === first ? null : wslMoveReleaseRefusal(userDataPath, move)
-    if (moveRefusal) {
-      failure = moveRefusal
-      break
+  let fenceHandedToReload = false
+  try {
+    const repoIds: string[] = []
+    const folderWorkspaceIds: string[] = []
+    const released: WslMoveCutover[] = []
+    let failure: Extract<WslMoveUseLocallyResult, { released: false }> | null = null
+    for (const move of newestFirst) {
+      const moveRefusal = move === first ? null : wslMoveReleaseRefusal(userDataPath, move)
+      if (moveRefusal) {
+        failure = moveRefusal
+        break
+      }
+      const ports = createUndoPorts()
+      // Automations first, as they undo cleanly: a refusal must leave the host's terminals running (X1).
+      const automations = (await ports.stopHostAutomations?.(move)) ?? {
+        outcome: 'stopped',
+        restore: async () => {}
+      }
+      if (automations.outcome !== 'stopped') {
+        failure = {
+          released: false,
+          reason: automations.outcome === 'unreachable' ? 'host-unreachable' : 'failed',
+          detail:
+            automations.outcome === 'removal-pending' ? 'host-removal-pending' : 'host-automations'
+        }
+        break
+      }
+      // The host's copies stop next, or an agent the move resumed there runs beside this one.
+      const stop = await ports.stopHostCopies(move).catch(() => 'unreachable' as const)
+      const release: WslMoveUseLocallyResult | null =
+        stop === 'stopped' ? releaseWslMove(userDataPath, move) : null
+      if (!release?.released) {
+        // Refused after the automations went off: this attempt turns them back on.
+        await automations.restore()
+        failure = release ?? {
+          released: false,
+          reason: stop === 'unreachable' ? 'host-unreachable' : 'host-still-running'
+        }
+        break
+      }
+      released.push(move)
+      repoIds.push(...release.repoIds)
+      folderWorkspaceIds.push(...release.folderWorkspaceIds)
     }
+    if (repoIds.length === 0 && folderWorkspaceIds.length === 0) {
+      return failure ?? { released: false, reason: 'not-moved' }
+    }
+    // Released moves stay released even if an older one refused; the reload shows what came back.
+    holdWslMoveWindowWrites()
+    // Focus left on a host copy would reopen its panes after the reload and restart their agents.
     const ports = createUndoPorts()
-    // Automations first, as they undo cleanly: a refusal must leave the host's terminals running (X1).
-    const automations = (await ports.stopHostAutomations?.(move)) ?? {
-      outcome: 'stopped',
-      restore: async () => {}
+    for (const move of released) {
+      ports.refocusHere?.(move)
     }
-    if (automations.outcome !== 'stopped') {
-      failure = {
-        released: false,
-        reason: automations.outcome === 'unreachable' ? 'host-unreachable' : 'failed',
-        detail: 'host-automations'
+    fenceHandedToReload = true
+    reloadWslMoveWindowWithWritesHeld(releaseSpawnFence)
+    return (
+      failure ?? {
+        released: true,
+        distro: first.manifest.source.distro,
+        repoIds,
+        folderWorkspaceIds
       }
-      break
+    )
+  } finally {
+    // Any refusal, or a throw, before the reload took the fence over releases it here.
+    if (!fenceHandedToReload) {
+      releaseSpawnFence()
     }
-    // The host's copies stop next, or an agent the move resumed there runs beside this one.
-    const stop = await ports.stopHostCopies(move)
-    if (stop !== 'stopped') {
-      await automations.restore().catch((error: unknown) => {
-        console.warn('[wsl-move] Could not turn host automations back on:', error)
-      })
-      failure = {
-        released: false,
-        reason: stop === 'unreachable' ? 'host-unreachable' : 'host-still-running'
-      }
-      break
-    }
-    const release = releaseWslMove(userDataPath, move)
-    if (!release.released) {
-      failure = release
-      break
-    }
-    released.push(move)
-    repoIds.push(...release.repoIds)
-    folderWorkspaceIds.push(...release.folderWorkspaceIds)
   }
-  if (repoIds.length === 0 && folderWorkspaceIds.length === 0) {
-    releaseSpawnFence()
-    return failure ?? { released: false, reason: 'not-moved' }
-  }
-  // Released moves stay released even if an older one refused; the reload shows what came back.
-  holdWslMoveWindowWrites()
-  // Focus left on a host copy would reopen its panes after the reload and restart their agents.
-  const ports = createUndoPorts()
-  for (const move of released) {
-    ports.refocusHere?.(move)
-  }
-  reloadWslMoveWindowWithWritesHeld(releaseSpawnFence)
-  return (
-    failure ?? {
-      released: true,
-      distro: first.manifest.source.distro,
-      repoIds,
-      folderWorkspaceIds
-    }
-  )
 }

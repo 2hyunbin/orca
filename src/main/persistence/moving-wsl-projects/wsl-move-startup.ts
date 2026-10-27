@@ -10,12 +10,19 @@ import { installWslMoveRetention } from './wsl-move-retention'
 import { registerWslMoveDesktopRewriteRegistry } from './wsl-move-desktop-rewrite-registry'
 import { sweepOrphanedWslMoveSleptSpools } from './wsl-move-slept-spool-sweep'
 import { enableWslHostAutomations } from '../../ipc/wsl-host-automation-enable'
-import { scheduleWslMoveRewriteRetry } from './wsl-move-rewrite-retry'
+import {
+  scheduleWslMoveRewriteRetry,
+  setWslMoveHostAutomationRestorer
+} from './wsl-move-rewrite-retry'
+import { restoreWslHostAutomations } from '../../ipc/wsl-host-automation-disable'
 import { orchestrationDbFile } from '../../runtime/orchestration/db/orchestration-db-file'
 import { productionWslMoveBrowserCookieCopyDependencies } from './wsl-move-browser-cookie-store'
 
 /** Resolves once interrupted moves are reset or finished; main-process-ready waits on it, bounded. */
 export function startWslMoveStartup(userDataPath: string, store: Store): Promise<void> {
+  setWslMoveHostAutomationRestorer((environmentId, ids) =>
+    restoreWslHostAutomations(userDataPath, environmentId, ids)
+  )
   registerWslMoveDesktopRewriteRegistry({
     profile: store,
     orchestrationDatabasePath: orchestrationDbFile(userDataPath),

@@ -7,20 +7,32 @@ import { wslHostsGateOpen } from '../../wsl/wsl-host-gate'
 import { listWslMoveCutovers } from './wsl-move-cutover-journal'
 import { runWslMoveDesktopRewritePass } from './wsl-move-desktop-rewrite'
 import { pendingWslMoveDesktopRewriteStores } from './wsl-move-desktop-rewrite-stores'
+import { retryWslMoveHostAutomationsLeftOff } from './wsl-move-undo-host-automations'
 
 export const WSL_MOVE_REWRITE_RETRY_DELAYS_MS = [30_000, 2 * 60_000, 10 * 60_000]
 
 let timer: ReturnType<typeof setTimeout> | null = null
+let restoreHostAutomations:
+  | ((environmentId: string, automationIds: readonly string[]) => Promise<void>)
+  | null = null
+
+/** How a retry turns back on host automations a refused undo left off (main wires the host). */
+export function setWslMoveHostAutomationRestorer(
+  restore: (environmentId: string, automationIds: readonly string[]) => Promise<void>
+): void {
+  restoreHostAutomations = restore
+}
 
 function hasUnfinishedMove(userDataPath: string): boolean {
   try {
     // Main-side steps only: renderer stores run on the window's next load, not on a timer.
     return listWslMoveCutovers(userDataPath).some(
       (cutover) =>
-        cutover.phase === 'destination-committed' &&
-        pendingWslMoveDesktopRewriteStores(cutover.rewrittenStores).some(
-          (store) => store.side === 'main'
-        )
+        (cutover.phase === 'destination-committed' &&
+          pendingWslMoveDesktopRewriteStores(cutover.rewrittenStores).some(
+            (store) => store.side === 'main'
+          )) ||
+        (restoreHostAutomations !== null && (cutover.hostAutomationsLeftOff?.length ?? 0) > 0)
     )
   } catch {
     // Unreadable: the pass cannot advance anything either; startup tries again.
@@ -40,9 +52,14 @@ export function scheduleWslMoveRewriteRetry(
   const delay = delaysMs[Math.min(attempt, delaysMs.length - 1)] ?? 0
   timer = setTimeout(() => {
     timer = null
-    void runWslMoveDesktopRewritePass({ userDataPath }).then(() =>
-      scheduleWslMoveRewriteRetry(userDataPath, delaysMs, attempt + 1)
-    )
+    void runWslMoveDesktopRewritePass({ userDataPath })
+      .then(() =>
+        restoreHostAutomations
+          ? retryWslMoveHostAutomationsLeftOff(userDataPath, restoreHostAutomations)
+          : false
+      )
+      .catch(() => false)
+      .then(() => scheduleWslMoveRewriteRetry(userDataPath, delaysMs, attempt + 1))
   }, delay)
   timer.unref?.()
 }

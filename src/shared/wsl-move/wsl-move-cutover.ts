@@ -65,6 +65,13 @@ const WslMoveCutoverSchema = z.object({
   // Automations the manifest carries disabled (the wire only takes disabled ones) that were on
   // here; the host turns them back on after commit. Set with the record, never changed after.
   automationsToReenable: z.array(z.string().min(1).max(1_024)).max(10_000).optional(),
+  // A refused undo turned these off on the host and could not turn them back on yet; retried.
+  // Lenient: a malformed list reads as absent.
+  hostAutomationsLeftOff: z
+    .array(z.string().min(1).max(1_024))
+    .max(10_000)
+    .optional()
+    .catch(undefined),
   manifest: z.unknown()
 })
 

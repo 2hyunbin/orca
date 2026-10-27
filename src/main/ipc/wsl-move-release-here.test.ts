@@ -11,7 +11,13 @@ type Move = {
 }
 
 const journal = vi.hoisted(() => ({ chain: new Array<Move>(), released: new Array<string>() }))
-const window = vi.hoisted(() => ({ reloads: 0, fences: 0, steps: new Array<string>() }))
+const window = vi.hoisted(() => ({
+  reloads: 0,
+  fences: 0,
+  fencesReleased: 0,
+  steps: new Array<string>()
+}))
+const releaseFails = vi.hoisted(() => ({ value: false }))
 
 function move(migrationId: string, repoId: string): Move {
   return {
@@ -37,6 +43,9 @@ vi.mock('../persistence/moving-wsl-projects/wsl-move-use-locally', () => ({
       ? null
       : { released: false, reason: 'superseded' },
   releaseWslMove: (_userData: string, candidate: Move) => {
+    if (releaseFails.value) {
+      return { released: false, reason: 'failed', detail: 'journal' }
+    }
     journal.chain = journal.chain.filter((entry) => entry.migrationId !== candidate.migrationId)
     journal.released.push(candidate.migrationId)
     return {
@@ -50,7 +59,9 @@ vi.mock('../persistence/moving-wsl-projects/wsl-move-use-locally', () => ({
 vi.mock('../persistence/moving-wsl-projects/wsl-move-undo-spawn-fence', () => ({
   fenceHostSpawnsForWslMoveUndo: () => {
     window.fences++
-    return () => {}
+    return () => {
+      window.fencesReleased++
+    }
   }
 }))
 vi.mock('../persistence/moving-wsl-projects/wsl-move-window-write-hold', () => ({
@@ -76,6 +87,8 @@ beforeEach(() => {
   journal.released = []
   window.reloads = 0
   window.fences = 0
+  window.fencesReleased = 0
+  releaseFails.value = false
   window.steps = []
 })
 
@@ -201,5 +214,45 @@ describe('releasing moved projects here', () => {
     expect(result).toMatchObject({ released: false, reason: 'host-still-running' })
     expect(restore).toHaveBeenCalledOnce()
     expect(journal.released).toEqual([])
+  })
+
+  it('turns the automations back on when the release itself then fails', async () => {
+    releaseFails.value = true
+    const restore = vi.fn(async () => {})
+    const result = await releaseWslMovedProjectHere('/user-data', { repoId: 'r2' }, [], () => ({
+      stopHostAutomations: vi.fn(async () => automationsOff(restore)),
+      stopHostCopies: vi.fn(async () => 'stopped' as const)
+    }))
+    expect(result).toMatchObject({ released: false, reason: 'failed', detail: 'journal' })
+    expect(restore).toHaveBeenCalledOnce()
+    expect(window.fencesReleased).toBe(1)
+  })
+
+  it('names a host whose Remove is pending, touching nothing on it', async () => {
+    const stopHostCopies = vi.fn(async () => 'stopped' as const)
+    const result = await releaseWslMovedProjectHere('/user-data', { repoId: 'r2' }, [], () => ({
+      stopHostAutomations: vi.fn(async () => ({ outcome: 'removal-pending' as const })),
+      stopHostCopies
+    }))
+    expect(result).toMatchObject({
+      released: false,
+      reason: 'failed',
+      detail: 'host-removal-pending'
+    })
+    expect(stopHostCopies).not.toHaveBeenCalled()
+  })
+
+  it('releases the spawn fence when a port throws', async () => {
+    await expect(
+      releaseWslMovedProjectHere('/user-data', { repoId: 'r2' }, [], () => ({
+        stopHostAutomations: vi.fn(async () => {
+          throw new Error('boom')
+        }),
+        stopHostCopies: vi.fn(async () => 'stopped' as const)
+      }))
+    ).rejects.toThrow('boom')
+    expect(window.fences).toBe(1)
+    expect(window.fencesReleased).toBe(1)
+    expect(window.reloads).toBe(0)
   })
 })

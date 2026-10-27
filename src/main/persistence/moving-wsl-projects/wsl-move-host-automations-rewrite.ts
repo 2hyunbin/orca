@@ -60,7 +60,10 @@ export function wslMoveAutomationsPending(
 /** Committed moves whose host steps are not all confirmed, for the notice the UI shows. */
 export function listUnfinishedWslMoves(userDataPath: string): WslMoveUnfinished[] {
   return listWslMoveCutovers(userDataPath).flatMap((cutover) => {
-    const automationsPending = wslMoveAutomationsPending(cutover)
+    // Plus what a refused undo turned off on the host and could not turn back on yet.
+    const automationsPending = [
+      ...new Set([...wslMoveAutomationsPending(cutover), ...(cutover.hostAutomationsLeftOff ?? [])])
+    ]
     return automationsPending.length > 0
       ? [
           {

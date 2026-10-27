@@ -142,4 +142,20 @@ describe('bringWslMovedProjectBack', () => {
       'A move to the Ubuntu host is still running. Try again once it ends.'
     )
   })
+
+  it("says to connect the host when its automations couldn't be turned off", async () => {
+    for (const reason of ['host-unreachable', 'failed'] as const) {
+      stubApi({ released: false, reason, detail: 'host-automations' })
+      expect(await refusalShown()).toBe(
+        "Orca couldn't turn off this project's automations on the Ubuntu host, so they could run twice. Connect the host in Settings, then try again."
+      )
+    }
+  })
+
+  it('says a host still being removed is left alone', async () => {
+    stubApi({ released: false, reason: 'failed', detail: 'host-removal-pending' })
+    expect(await refusalShown()).toBe(
+      'The Ubuntu host is still being removed, so Orca leaves it alone. Finish removing it in Settings, then try again.'
+    )
+  })
 })

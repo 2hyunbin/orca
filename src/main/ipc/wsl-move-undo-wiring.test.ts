@@ -9,9 +9,22 @@ import { createWslMoveUndoPorts } from './wsl-move-undo-wiring'
 vi.mock('./runtime-environments/runtime-environment-transport-routing', () => ({
   callRuntimeEnvironment: vi.fn()
 }))
-const host = vi.hoisted(() => ({ disabled: new Array<string[]>(), listed: true }))
+const host = vi.hoisted(() => ({
+  disabled: new Array<string[]>(),
+  listed: true,
+  unreadable: false,
+  removalPending: false
+}))
 vi.mock('../../shared/runtime-environment-store', () => ({
-  listEnvironments: () => (host.listed ? [{ id: 'wsl:Ubuntu' }] : [])
+  listEnvironments: () => {
+    if (host.unreadable) {
+      throw new Error('environment store unreadable')
+    }
+    return host.listed ? [{ id: 'wsl:Ubuntu' }] : []
+  }
+}))
+vi.mock('./wsl-move-host-connect', () => ({
+  wslHostRemovalPending: () => host.removalPending
 }))
 vi.mock('./wsl-host-automation-disable', () => ({
   disableWslHostAutomations: async (_userData: string, _environmentId: string, ids: string[]) => {
@@ -99,5 +112,38 @@ describe("undo's host automation port", () => {
       (await createWslMoveUndoPorts(store, '/user-data').stopHostAutomations?.(move))?.outcome
     ).toBe('stopped')
     expect(host.disabled).toEqual([])
+  })
+})
+
+describe("undo's host automation port, refusing", () => {
+  const move = wslMoveCutoverFixture('move-1', 'retained', {}, { repoIds: ['repo-a'] })
+  const store = {
+    getWorkspaceSession: () => getDefaultWorkspaceSession(),
+    patchWorkspaceSession: vi.fn(),
+    listAutomations: () => []
+  }
+
+  it('fails, without throwing past the spawn fence, when the environment store is unreadable', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    host.unreadable = true
+    try {
+      expect(await createWslMoveUndoPorts(store, '/user-data').stopHostAutomations?.(move)).toEqual(
+        { outcome: 'failed' }
+      )
+    } finally {
+      host.unreadable = false
+    }
+  })
+
+  it('names a host whose Remove is pending (E11) rather than calling it unreachable', async () => {
+    host.listed = true
+    host.removalPending = true
+    try {
+      expect(await createWslMoveUndoPorts(store, '/user-data').stopHostAutomations?.(move)).toEqual(
+        { outcome: 'removal-pending' }
+      )
+    } finally {
+      host.removalPending = false
+    }
   })
 })
