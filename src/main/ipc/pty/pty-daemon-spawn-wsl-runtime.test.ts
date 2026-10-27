@@ -1,4 +1,4 @@
-import { createGlobalSettingsFixture } from '../../shared/global-settings-test-fixture'
+import { createGlobalSettingsFixture } from '../../../shared/global-settings-test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { spawnMock } from '../pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from '../pty-ipc-test-harness'

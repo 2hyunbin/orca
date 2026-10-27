@@ -16,7 +16,8 @@ vi.mock('@/store', async () => {
       tabsByWorktree: {},
       ptyProcessMetadataById: {},
       ptyProcessObservationRevision: 0,
-      agentStatusByPaneKey: {}
+      agentStatusByPaneKey: {},
+      agentLaunchConfigByPaneKey: {}
     }))
   }
 })
@@ -162,8 +163,8 @@ describe('owning process facts through host recovery and renderer consumers', ()
       await import('../../src/renderer/src/components/terminal-pane/terminal-input-host-platform')
     const { resolveTerminalPasteRuntime } =
       await import('../../src/renderer/src/components/terminal-pane/terminal-paste-runtime')
-    const { isLocalWindowsConptyPaneForCtrlArrow } =
-      await import('../../src/renderer/src/components/terminal-pane/terminal-ctrl-arrow-conpty')
+    const { isTerminalPaneLocalWindowsConpty } =
+      await import('../../src/renderer/src/components/terminal-pane/terminal-pane-local-windows-conpty')
     const { resolveDashboardCardTerminalInput } =
       await import('../../src/renderer/src/components/dashboard/dashboard-card-terminal-input')
     const { useAppStore } = await import('../../src/renderer/src/store')
@@ -301,7 +302,7 @@ describe('owning process facts through host recovery and renderer consumers', ()
           .kind
       ).toBe('local')
       expect(
-        isLocalWindowsConptyPaneForCtrlArrow({
+        isTerminalPaneLocalWindowsConpty({
           isWindows: true,
           userAgent: 'Windows',
           state,
