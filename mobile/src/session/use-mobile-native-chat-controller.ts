@@ -53,6 +53,7 @@ export function useMobileNativeChatController(args: {
     onSendResolved
   } = args
   const {
+    activeChatAgent,
     activeChatAgentConfirmed,
     activeChatAgentRef,
     activeChatResolution,
