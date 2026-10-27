@@ -301,6 +301,23 @@
     "followSymlinkedDirectoriesDescription": "Busca carpetas enlazadas en Apertura rápida y expande las carpetas enlazadas locales en el Explorador de archivos.",
     "accounts": {
       "claudeRemoveFolder": "Orca elimina la carpeta de Claude de esta cuenta y su inicio de sesión de este equipo. El historial de chat compartido con Predeterminado del sistema se conserva. Si está seleccionada, el próximo Claude que inicies usará Predeterminado del sistema."
+    },
+    "sourceControl": {
+      "actionModel": {
+        "on": "Activado",
+        "off": "Desactivado",
+        "invalidArgs": "Los argumentos de CLI de {{value0}} no son válidos. Corrígelos en Ajustes → Source Control AI.",
+        "model": "Modelo",
+        "agentDefault": "Predeterminado del agente",
+        "effortDefault": "Predeterminado",
+        "savedModel": "Modelo de Configuración: {{value0}}",
+        "permissionsDefaultHint": "Las terminales usan los Permisos de agentes salvo que esta acción defina sus propios argumentos CLI.",
+        "chatsOnly": "Solo se aplica a los chats",
+        "terminalsOnly": "Solo se aplica a las terminales",
+        "extraArgs": "Argumentos CLI adicionales",
+        "launchOptions": "Modelo y permisos",
+        "savedLaunchOptions": "Opciones guardadas: {{value0}}. Los servidores antiguos usan su propia configuración de permisos."
+      }
     }
   },
   "menu": {
@@ -3451,7 +3468,10 @@
               "failed": {
                 "toast": {
                   "62a0af2cb4": "No se pudo confirmar la copia del portapapeles del terminal",
-                  "fdd3e7e977": "La app del terminal solicitó una copia, pero Orca no pudo confirmar que llegara al portapapeles del sistema."
+                  "fdd3e7e977": "La app del terminal solicitó una copia, pero Orca no pudo confirmar que llegara al portapapeles del sistema.",
+                  "de286dcfe1": "La copia del terminal necesita un clic",
+                  "84c938ffa2": "El navegador bloqueó una copia de la aplicación del terminal. Haz clic en Copiar para ponerla en tu portapapeles.",
+                  "a73165c6c5": "Copiar"
                 }
               }
             }
@@ -8128,6 +8148,10 @@
           "chatErrorEscalationNeedsChat": "Activa la interfaz de chat en la configuración experimental para usarlo.",
           "chatErrorEscalationKeywordError": "error",
           "chatErrorEscalationKeywordChat": "chat",
+          "heartbeatTitle": "Latidos de los trabajadores",
+          "heartbeatDescription": "Los trabajadores asignados se reportan cada pocos minutos para que el coordinador distinga un agente que trabaja de uno colgado. Si lo desactivas, el coordinador recibe menos mensajes, pero pierde esa señal de actividad. Se aplica a los trabajadores asignados después del cambio.",
+          "heartbeatKeywordHeartbeat": "latido",
+          "heartbeatKeywordStalled": "atascado",
           "7bc082f4de": "Copiar comando de instalación"
         },
         "OrchestrationSetupCard": {
@@ -13723,8 +13747,6 @@
             "ea4788705e": "Cancelar",
             "7ec6abbf2a": "Reiniciar",
             "f4f3c9ca4a": "Plantilla de prompt",
-            "fe119187bb": "--model sonnet",
-            "bc8dc39f4b": "Argumentos CLI",
             "b99c33cec5": "Ajustes",
             "15c5d85706": "Agente",
             "3e8f21954f": "error",

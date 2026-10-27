@@ -1,3 +1,5 @@
+import type { LinuxCookieKeyFailure } from '../../../../shared/browser-workspace-types'
+
 const CHROMIUM_EPOCH_OFFSET = 11644473600n
 
 export function chromiumTimestampToUnix(chromiumTs: bigint | number | string): number {
@@ -23,5 +25,6 @@ export type EncryptionKeyResult =
       mode: 'aes-128-cbc'
       keysByVersion: Partial<Record<'v10' | 'v11', Buffer>>
       keyringUnavailable?: boolean
+      keyringFailure?: LinuxCookieKeyFailure
     }
   | { mode: 'aes-256-gcm'; key: Buffer }

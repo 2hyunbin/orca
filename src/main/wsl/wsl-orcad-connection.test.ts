@@ -1,4 +1,5 @@
 import { connect, createServer, type Server, type Socket } from 'node:net'
+import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { encodePairingOffer, parsePairingCode, PAIRING_OFFER_VERSION } from '../../shared/pairing'
 import type { ServeReadiness } from '../server/serve-readiness'
@@ -193,6 +194,19 @@ describe('WslOrcadConnectionManager', () => {
     requireRunning.mockResolvedValue(true)
     await expect(manager.ensure('Ubuntu', { requireRunning })).resolves.toBeTruthy()
     expect(deployAndLaunch).toHaveBeenCalledTimes(1)
+    // The deploy gets the same check, so its own second wake can refuse too.
+    const calls: readonly unknown[][] = deployAndLaunch.mock.calls
+    const deployOptions = calls[0]?.[1]
+    const recheck =
+      deployOptions && typeof deployOptions === 'object' && 'requireRunning' in deployOptions
+        ? deployOptions.requireRunning
+        : undefined
+    expect(typeof recheck).toBe('function')
+    requireRunning.mockClear()
+    if (typeof recheck === 'function') {
+      await recheck()
+    }
+    expect(requireRunning).toHaveBeenCalledWith('Ubuntu')
   })
 
   it('a connect that may boot does not ride on an in-flight no-boot one (E9)', async () => {
@@ -219,6 +233,28 @@ describe('WslOrcadConnectionManager', () => {
       manager.ensure('Ubuntu', { requireRunning: async () => false })
     ).rejects.toBeInstanceOf(WslDistroNotRunningError)
     expect(onChange.mock.calls.map(([, , status]) => status.state)).not.toContain('failed')
+  })
+
+  it('a no-boot connect never shows the row as connecting, since it may be refused quietly', async () => {
+    const { manager, onChange } = setup()
+    await manager.ensure('Ubuntu', { requireRunning: async () => false }).catch(() => {})
+    expect(onChange.mock.calls.map(([, , status]) => status.state)).not.toContain('connecting')
+  })
+
+  it('a no-boot recovery connect still publishes its own pending status', async () => {
+    const { manager, onChange } = setup()
+    const pending: WslOrcadConnectionStatus = {
+      state: 'reconnecting',
+      reason: 'orcad-exited',
+      attempt: 1,
+      terminals: 'unverifiable',
+      retryInMs: null
+    }
+    await manager.ensure('Ubuntu', {
+      requireRunning: async () => true,
+      status: { pending, ready: { state: 'ready', census: null } }
+    })
+    expect(onChange.mock.calls.map(([, , status]) => status)).toContainEqual(pending)
   })
 
   it('a close during the running-list read supersedes the connect before it deploys (E9)', async () => {

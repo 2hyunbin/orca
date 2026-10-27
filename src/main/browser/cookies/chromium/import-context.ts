@@ -5,6 +5,7 @@ import type { ImportedCookieFields, ImportWritePlanResult } from '../browser-coo
 import type { SourcePartitionRead } from '../sources/browser-cookie-source-partition'
 import type { ChromiumCookieSnapshot } from '../../chromium-cookie-snapshot'
 import type { EncryptionKeyResult } from '../sources/browser-cookie-sqlite'
+import type { DetectedBrowser } from '../sources/browser-cookie-detection-types'
 
 export type ChromiumSourceRow = Record<string, unknown>
 
@@ -20,6 +21,7 @@ export type ChromiumImportPlan = ImportWritePlanResult<{
 }>
 
 export type ChromiumImportContext = {
+  browser: DetectedBrowser
   options: CookieImportOptions
   targetSession: Session
   sourceSnapshot: ChromiumCookieSnapshot

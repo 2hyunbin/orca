@@ -96,6 +96,7 @@ export async function prepareChromiumCookieImport(
     }
 
     const context: ChromiumImportContext = {
+      browser,
       options,
       targetSession,
       sourceSnapshot,

@@ -441,6 +441,23 @@
     "followSymlinkedDirectoriesDescription": "Recherchez les dossiers liés dans Quick Open et développez les dossiers liés locaux dans l'Explorateur de fichiers.",
     "accounts": {
       "claudeRemoveFolder": "Orca supprime le dossier Claude de ce compte et sa connexion de cet ordinateur. L'historique de chat partagé avec Système par défaut est conservé. S'il est sélectionné, le prochain Claude que vous démarrez utilise Système par défaut."
+    },
+    "sourceControl": {
+      "actionModel": {
+        "on": "Activé",
+        "off": "Désactivé",
+        "invalidArgs": "Les arguments CLI de {{value0}} sont invalides. Corrigez-les dans Paramètres → Source Control AI.",
+        "model": "Modèle",
+        "agentDefault": "Par défaut de l'agent",
+        "effortDefault": "Par défaut",
+        "savedModel": "Modèle des Réglages : {{value0}}",
+        "permissionsDefaultHint": "Les terminaux utilisent les Permissions des agents, sauf si cette action définit ses propres arguments CLI.",
+        "chatsOnly": "S'applique uniquement aux chats",
+        "terminalsOnly": "S'applique uniquement aux terminaux",
+        "extraArgs": "Arguments CLI supplémentaires",
+        "launchOptions": "Modèle et autorisations",
+        "savedLaunchOptions": "Options enregistrées : {{value0}}. Les anciens serveurs utilisent leurs propres réglages d’autorisations."
+      }
     }
   },
   "menu": {
@@ -3616,7 +3633,10 @@
               "failed": {
                 "toast": {
                   "62a0af2cb4": "La copie du presse-papiers du terminal n'a pas pu être confirmée",
-                  "fdd3e7e977": "L'application de terminal a demandé une copie, mais Orca n'a pas pu confirmer qu'elle a bien atteint le presse-papiers système."
+                  "fdd3e7e977": "L'application de terminal a demandé une copie, mais Orca n'a pas pu confirmer qu'elle a bien atteint le presse-papiers système.",
+                  "de286dcfe1": "La copie du terminal nécessite un clic",
+                  "84c938ffa2": "Le navigateur a bloqué une copie depuis l'application du terminal. Cliquez sur Copier pour placer le texte dans votre presse-papiers.",
+                  "a73165c6c5": "Copier"
                 }
               }
             }
@@ -8304,6 +8324,10 @@
           "chatErrorEscalationNeedsChat": "Activez l'interface de chat dans les paramètres expérimentaux pour l'utiliser.",
           "chatErrorEscalationKeywordError": "erreur",
           "chatErrorEscalationKeywordChat": "chat",
+          "heartbeatTitle": "Signaux de vie des travailleurs",
+          "heartbeatDescription": "Les travailleurs assignés se signalent toutes les quelques minutes pour que le coordinateur distingue un agent qui travaille d'un agent figé. Les désactiver réduit les messages envoyés au coordinateur, mais il perd ce signal de suivi. S'applique aux travailleurs assignés après le changement.",
+          "heartbeatKeywordHeartbeat": "signal de vie",
+          "heartbeatKeywordStalled": "bloqué",
           "7bc082f4de": "Copier la commande d'installation"
         },
         "OrchestrationSetupCard": {
@@ -13867,8 +13891,6 @@
             "ea4788705e": "Annuler",
             "7ec6abbf2a": "Réinitialiser",
             "f4f3c9ca4a": "Modèle de prompt",
-            "fe119187bb": "--model sonnet",
-            "bc8dc39f4b": "Arguments CLI",
             "b99c33cec5": "Paramètres",
             "15c5d85706": "Agent",
             "3e8f21954f": "error",
