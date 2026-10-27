@@ -14,7 +14,6 @@ import { keepTeammateContext, withTeammateContext } from './teammate-context.js'
 import type { ThreadPosts } from './thread-posts.js'
 
 export type RoutingDeps = {
-  database: CloudDatabase
   queue: QueueInTransaction
   threadPosts: ThreadPosts
   now: () => number
@@ -30,65 +29,73 @@ type ThreadRow = {
 
 // Decisions §1: only a conversation's owner starts or steers it; anyone else's message in the thread
 // is kept as context for the owner's next turn, and a new mention by them starts their own.
-export async function routeMessage(deps: RoutingDeps, message: InboundMessage): Promise<void> {
+export async function routeMessage(
+  deps: RoutingDeps,
+  transaction: CloudDatabase,
+  message: InboundMessage
+): Promise<void> {
   const { source, place, messageId, authorId } = message
   const messageKey = `${place.workspaceId}:${place.containerId}:${messageId}`
-  await deps.database.transaction(async (transaction) => {
-    // A source may send one message more than once (Slack: message and app_mention, and retries).
-    const [seen] = await transaction.query(
-      `INSERT INTO connector_seen (source, message_key, seen_at) VALUES (?, ?, ?)
-       ON CONFLICT (source, message_key) DO NOTHING`,
-      [source, messageKey, deps.now()]
-    )
-    if (Number(seen?.changes ?? 0) === 0) {
-      return
-    }
-    // Serializes routing per thread, so two quick messages can't both start a conversation.
-    await transaction.lockQuotaScope(
-      `orca-connector-thread:${source}:${place.workspaceId}:${place.containerId}:${place.threadId}`
-    )
-    const threads = await threadsIn(transaction, source, place)
-    const own = threads.find((thread) => thread.ownerUserId === authorId)
-    const conversation = {
-      source,
-      externalId: `${place.workspaceId}:${place.containerId}:${place.threadId}:${authorId}`
-    }
-    const othersConversations = threads
-      .filter((thread) => thread.ownerUserId !== authorId)
-      .map((thread) => thread.conversation)
-    const addressed = own !== undefined || message.mentioned
-    if (!addressed && othersConversations.length === 0) {
-      return
-    }
-    const route: Route = { deps, transaction, message, messageKey, conversation }
-    // Paused input is neither delivered nor kept for later.
-    if (message.paused) {
-      if (addressed) {
-        await notify(
-          route,
-          `paused:${place.workspaceId}:${place.containerId}:${place.threadId}:${authorId}`,
-          { kind: 'paused' }
-        )
-      }
-      return
-    }
-    if (message.text.length === 0) {
-      return
-    }
-    // Context for every other owner's conversation here, whatever this message does for its author.
-    for (const other of othersConversations) {
-      await keepTeammateContext(
-        transaction,
-        other,
-        { messageId, workspaceId: place.workspaceId, authorId, text: message.text },
-        deps.now()
+  // A source may send one message more than once (Slack: message and app_mention, and retries).
+  const [seen] = await transaction.query(
+    `INSERT INTO connector_seen (source, message_key, seen_at) VALUES (?, ?, ?)
+     ON CONFLICT (source, message_key) DO NOTHING`,
+    [source, messageKey, deps.now()]
+  )
+  if (Number(seen?.changes ?? 0) === 0) {
+    return
+  }
+  // Serializes routing per thread, so two quick messages can't both start a conversation.
+  await transaction.lockQuotaScope(
+    `orca-connector-thread:${source}:${place.workspaceId}:${place.containerId}:${place.threadId}`
+  )
+  const threads = await threadsIn(transaction, source, place)
+  const own = threads.find((thread) => thread.ownerUserId === authorId)
+  const conversation = {
+    source,
+    externalId: `${place.workspaceId}:${place.containerId}:${place.threadId}:${authorId}`
+  }
+  const othersConversations = threads
+    .filter((thread) => thread.ownerUserId !== authorId)
+    .map((thread) => thread.conversation)
+  const addressed = own !== undefined || message.mentioned
+  if (!addressed && othersConversations.length === 0) {
+    return
+  }
+  const route: Route = { deps, transaction, message, messageKey, conversation }
+  // Paused input is neither delivered nor kept for later.
+  if (message.paused) {
+    if (addressed) {
+      await notify(
+        route,
+        `paused:${place.workspaceId}:${place.containerId}:${place.threadId}:${authorId}`,
+        { kind: 'paused' }
       )
     }
-    if (!addressed) {
-      return
-    }
-    await (own ? continueConversation(route, own) : startConversation(route))
-  })
+    return
+  }
+  if (message.text.length === 0) {
+    return
+  }
+  // Context for every other owner's conversation here, whatever this message does for its author.
+  for (const other of othersConversations) {
+    await keepTeammateContext(
+      transaction,
+      other,
+      {
+        messageId,
+        workspaceId: place.workspaceId,
+        authorId,
+        authorName: message.authorName,
+        text: message.text
+      },
+      deps.now()
+    )
+  }
+  if (!addressed) {
+    return
+  }
+  await (own ? continueConversation(route, own) : startConversation(route))
 }
 
 type Route = {
@@ -108,7 +115,7 @@ async function notify(route: Route, postId: string, notice: Notice): Promise<voi
       place: message.place,
       userId: message.authorId,
       direct: message.direct,
-      inThread: message.messageId !== message.place.threadId
+      messageId: message.messageId
     },
     postId,
     notice

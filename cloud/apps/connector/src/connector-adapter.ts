@@ -16,6 +16,8 @@ export type InboundMessage = {
   place: ThreadPlace
   messageId: string
   authorId: string
+  // The author's display name, where the source sends one with each message.
+  authorName?: string
   // What the agent reads: the mention dropped, the source's escapes undone.
   text: string
   // Mentions Orca, or is a direct message to it.
@@ -25,12 +27,13 @@ export type InboundMessage = {
   paused: boolean
 }
 
-// The one person a notice is meant for, and where they wrote.
+// The one person a notice is meant for, where they wrote, and the message it answers (none for a
+// button press).
 export type NoticeTarget = {
   place: ThreadPlace
   userId: string
   direct: boolean
-  inThread: boolean
+  messageId?: string
 }
 
 export type Notice =
@@ -56,7 +59,7 @@ export type ConnectorAdapter = {
   agentText(text: string): PostBody
   notice(target: NoticeTarget, notice: Notice): { kind: 'message' | 'ephemeral'; body: PostBody }
   // The acknowledgement on a message handed toward a machine.
-  seen(messageId: string): PostBody
+  seen(place: ThreadPlace, messageId: string): PostBody
   status(view: ConversationView): PostBody
   // Null when the prompt can't be answered here; it is answered in Orca instead.
   card(prompt: AnswerablePrompt): PostBody | null
@@ -71,10 +74,11 @@ export type ConnectorAdapter = {
     messageId: string
     request: string
   }): Promise<string>
-  // Display names of those freshly confirmed trusted members; nobody else's words reach an agent.
+  // Those of userIds confirmed trusted, with a display name where the source keeps one (null: the
+  // name their message carried); nobody else's words reach an agent.
   trustedNames(
     transaction: CloudDatabase,
     workspaceId: string,
     userIds: string[]
-  ): Promise<Map<string, string>>
+  ): Promise<Map<string, string | null>>
 }
