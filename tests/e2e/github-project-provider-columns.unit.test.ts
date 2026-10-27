@@ -1,24 +1,25 @@
 // @vitest-environment happy-dom
 
+import { createElement } from 'react'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   normalizeItem,
   type RawItem
-} from '../../../../main/github/project-view/project-view-item-normalization'
-import { fetchItemsPageWithRaw } from '../../../../main/github/project-view/project-view-item-page'
-import { fetchAllItems } from '../../../../main/github/project-view/project-view-items'
+} from '../../src/main/github/project-view/project-view-item-normalization'
+import { fetchItemsPageWithRaw } from '../../src/main/github/project-view/project-view-item-page'
+import { fetchAllItems } from '../../src/main/github/project-view/project-view-items'
 import {
   _resetProjectViewCachesForTests,
   type OptionalProjectItemField
-} from '../../../../main/github/project-view/project-view-cache'
-import { ghExecFileAsync } from '../../../../main/github/project-view/internals'
-import type { GitHubProjectRow, GitHubProjectTable } from '../../../../shared/github/project-types'
-import { sortRows, groupRows } from '../../../../shared/github/project-group-sort'
-import * as fieldNormalization from '../../../../main/github/project-view/project-view-field-normalization'
-import ProjectCell from './ProjectCell'
+} from '../../src/main/github/project-view/project-view-cache'
+import { ghExecFileAsync } from '../../src/main/github/project-view/internals'
+import type { GitHubProjectRow, GitHubProjectTable } from '../../src/shared/github/project-types'
+import { sortRows, groupRows } from '../../src/shared/github/project-group-sort'
+import * as fieldNormalization from '../../src/main/github/project-view/project-view-field-normalization'
+import ProjectCell from '../../src/renderer/src/components/github-project/ProjectCell'
 
-vi.mock('../../../../main/github/project-view/internals', () => ({
+vi.mock('../../src/main/github/project-view/internals', () => ({
   acquire: vi.fn(),
   release: vi.fn(),
   ghExecFileAsync: vi.fn(),
@@ -27,7 +28,7 @@ vi.mock('../../../../main/github/project-view/internals', () => ({
   repositoryRateLimitGuard: () => ({ blocked: false }),
   noteRepositoryRateLimitSpend: vi.fn()
 }))
-vi.mock('../../../../main/github/project-view/project-view-config', () => ({
+vi.mock('../../src/main/github/project-view/project-view-config', () => ({
   ownerQueryRoot: () => 'organization'
 }))
 
@@ -149,12 +150,12 @@ function renderColumns(row: GitHubProjectRow): void {
     ['field-progress', 'SUB_ISSUES_PROGRESS']
   ] as const) {
     render(
-      <ProjectCell
-        row={row}
-        field={{ kind: 'field', id, name: dataType, dataType }}
-        editable={false}
-        sourceTarget={{ kind: 'local' }}
-      />
+      createElement(ProjectCell, {
+        row,
+        field: { kind: 'field', id, name: dataType, dataType },
+        editable: false,
+        sourceTarget: { kind: 'local' }
+      })
     )
   }
 }

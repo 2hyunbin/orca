@@ -1,4 +1,3 @@
-import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { GitHubProjectRow } from '../../../../shared/github/project-types'
 import ProjectCell from './ProjectCell'
