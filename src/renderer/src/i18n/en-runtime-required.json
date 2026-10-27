@@ -3254,7 +3254,8 @@
         "continuedOutsideRewound": "Continued outside this chat. Earlier replies above are no longer in this conversation's history.",
         "historyItemTooLarge": "This part of the chat was too large to show.",
         "historyRepaired": "Part of this chat's history couldn't be loaded.",
-        "plan": "Plan"
+        "plan": "Plan",
+        "stoppedBeforeStart": "Stopped manually"
       },
       "question": {
         "other": "Other…"
@@ -3340,7 +3341,9 @@
         "runningNamedPreview": "Running {{toolName}} {{preview}}",
         "runningPreview": "Running {{preview}}",
         "usedManySummary": "Used {{toolCount}} tools",
-        "usedOneSummary": "Used 1 tool"
+        "usedOneSummary": "Used 1 tool",
+        "fullOutputPartial": "Showing {{shown}} of {{total}}.",
+        "result": "Result"
       },
       "writeNotice": {
         "agentRefused": "The agent turned this down.",
