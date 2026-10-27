@@ -763,11 +763,12 @@ describe('github RPC methods', () => {
   })
 
   it('fetches GitHub project tables on the runtime server', async () => {
-    const table = projectRelationsTableFixture()
     const runtime = {
       getRuntimeId: () => 'test-runtime',
-      getGitHubProjectViewTable: vi.fn().mockResolvedValue({ ok: true, data: table })
+      getGitHubProjectViewTable: vi.fn().mockResolvedValue({ ok: true, data: { rows: [] } })
     } as unknown as OrcaRuntimeService
+    const table = projectRelationsTableFixture()
+    vi.mocked(runtime.getGitHubProjectViewTable).mockResolvedValueOnce({ ok: true, data: table })
     const dispatcher = new RpcDispatcher({ runtime, methods: GITHUB_METHODS })
 
     const response = await dispatcher.dispatch(

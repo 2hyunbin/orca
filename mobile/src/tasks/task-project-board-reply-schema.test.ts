@@ -1,6 +1,6 @@
+import { deepStrictEqual } from 'node:assert/strict'
 import { describe, expect, it } from 'vitest'
 import { projectRelationsTableFixture } from '../../../src/shared/github/project-relations.test-fixture'
-import type { GitHubProjectTable } from '../../../src/shared/github/project-types'
 import { sortRows, groupRows } from '../../../src/shared/github/project-group-sort'
 import {
   normalizeProjectTableForMobileSort,
@@ -136,9 +136,8 @@ describe('the board table', () => {
     if (!parsed.ok) {
       throw new Error('Expected accepted table')
     }
-    expect(parsed.data).toEqual(table)
-    // SAFETY: exact equality above proves the loose schema retained this fully typed fixture.
-    const decoded = parsed.data as unknown as GitHubProjectTable
+    const decoded = parsed.data
+    deepStrictEqual(decoded, table)
     const projected = normalizeProjectTableForMobileSort(decoded, decoded.rows, null)
     const groups = groupRows(projected, sortRows(projected, projected.rows))
     expect(groups.map((group) => group.label)).toEqual(['1', '2'])
