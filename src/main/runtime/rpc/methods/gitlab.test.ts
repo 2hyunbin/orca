@@ -32,12 +32,19 @@ describe('gitlab RPC methods', () => {
   })
 
   it('routes GitLab task queries and mutations to the runtime server', async () => {
+    const pagedResult = {
+      items: [{ id: 'mr-7', type: 'mr', number: 7 }],
+      page: 3,
+      perPage: 1,
+      totalCount: 0,
+      totalPages: 4
+    }
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       diagnoseGitLabAuth: vi.fn().mockResolvedValue({ glabAvailable: true }),
       getGitLabRateLimit: vi.fn().mockResolvedValue({ ok: true }),
-      listGitLabRepoMRs: vi.fn().mockResolvedValue({ items: [] }),
-      listGitLabRepoWorkItems: vi.fn().mockResolvedValue({ items: [] }),
+      listGitLabRepoMRs: vi.fn().mockResolvedValue(pagedResult),
+      listGitLabRepoWorkItems: vi.fn().mockResolvedValue(pagedResult),
       listGitLabRepoIssues: vi.fn().mockResolvedValue({ items: [] }),
       listGitLabRepoTodos: vi.fn().mockResolvedValue([{ id: 1 }]),
       listGitLabRepoLabels: vi.fn().mockResolvedValue(['bug']),
@@ -63,21 +70,21 @@ describe('gitlab RPC methods', () => {
     await dispatcher.dispatch(
       makeRequest('gitlab.rateLimit', { force: true, host: 'gitlab.example.com' })
     )
-    await dispatcher.dispatch(
+    const mergeRequests = await dispatcher.dispatch(
       makeRequest('gitlab.listMRs', {
         repo: 'id:repo-1',
         state: 'opened',
-        page: 1,
-        perPage: 25,
+        page: 3,
+        perPage: 1,
         query: 'bug'
       })
     )
-    await dispatcher.dispatch(
+    const workItems = await dispatcher.dispatch(
       makeRequest('gitlab.listWorkItems', {
         repo: 'id:repo-1',
         state: 'opened',
-        page: 1,
-        perPage: 25,
+        page: 3,
+        perPage: 1,
         query: 'bug'
       })
     )
@@ -217,14 +224,10 @@ describe('gitlab RPC methods', () => {
       force: true,
       host: 'gitlab.example.com'
     })
-    expect(runtime.listGitLabRepoMRs).toHaveBeenCalledWith('id:repo-1', 'opened', 1, 25, 'bug')
-    expect(runtime.listGitLabRepoWorkItems).toHaveBeenCalledWith(
-      'id:repo-1',
-      'opened',
-      1,
-      25,
-      'bug'
-    )
+    expect(mergeRequests).toMatchObject({ ok: true, result: pagedResult })
+    expect(workItems).toMatchObject({ ok: true, result: pagedResult })
+    expect(runtime.listGitLabRepoMRs).toHaveBeenCalledWith('id:repo-1', 'opened', 3, 1, 'bug')
+    expect(runtime.listGitLabRepoWorkItems).toHaveBeenCalledWith('id:repo-1', 'opened', 3, 1, 'bug')
     expect(runtime.listGitLabRepoIssues).toHaveBeenCalledWith('id:repo-1', 'opened', '@me', 50, 2)
     expect(runtime.createGitLabRepoIssue).toHaveBeenCalledWith('id:repo-1', 'Fix bug', 'Details')
     expect(runtime.listGitLabRepoTodos).toHaveBeenCalledWith('id:repo-1')
