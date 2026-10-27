@@ -182,15 +182,22 @@ export class DeferredTelemetryTransport {
     }
     const generation = this.generation
     let timeout: ReturnType<typeof setTimeout> | undefined
+    let sdkShutdown: Promise<void> | null = null
+    const shutdownClient = (): Promise<void> => {
+      if (!sdkShutdown && this.client) {
+        sdkShutdown = this.client.shutdown(Math.max(0, deadline - Date.now()))
+      }
+      return sdkShutdown ?? Promise.resolve()
+    }
     const drain = async (): Promise<void> => {
       if (drainPending) {
         await this.load()
       }
       await Promise.allSettled(optOutCaptures)
-      if (!this.withinShutdownBudget(generation)) {
+      if (generation !== this.generation) {
         return
       }
-      await this.client?.shutdown(Math.max(0, deadline - Date.now()))
+      await shutdownClient()
     }
     this.closing = Promise.race([
       drain(),
@@ -204,6 +211,12 @@ export class DeferredTelemetryTransport {
       .finally(() => {
         clearTimeout(timeout)
         if (generation === this.generation) {
+          // Even a spent budget must retire a constructed SDK's flush timer.
+          if (!sdkShutdown) {
+            void shutdownClient().catch((error) => {
+              console.warn('[telemetry] shutdown error (ignored):', error)
+            })
+          }
           // Imports cannot be canceled; retire their generation when the quit budget expires.
           this.generation += 1
           this.discardPending()

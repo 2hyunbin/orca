@@ -96,10 +96,10 @@ describe('in-flight opt-out shutdown budget', () => {
     await Promise.all([optingOut, closing])
     expect(stopListening).toHaveBeenCalledTimes(1)
     expect(sdk.optOut).toHaveBeenCalledTimes(1)
-    expect(sdk.shutdown).not.toHaveBeenCalled()
+    expect(sdk.shutdown).toHaveBeenCalledExactlyOnceWith(0)
     await vi.advanceTimersByTimeAsync(5_000)
     expect(sdk.capture).toHaveBeenCalledTimes(1)
-    expect(sdk.shutdown).not.toHaveBeenCalled()
+    expect(sdk.shutdown).toHaveBeenCalledExactlyOnceWith(0)
   })
 
   it('checks the absolute deadline before constructing even before the timeout callback runs', async () => {
@@ -124,7 +124,7 @@ describe('in-flight opt-out shutdown budget', () => {
     expect(createClient).toHaveBeenCalledTimes(1)
     expect(sdk.capture).not.toHaveBeenCalled()
     expect(sdk.optOut).toHaveBeenCalledTimes(1)
-    expect(sdk.shutdown).not.toHaveBeenCalled()
+    expect(sdk.shutdown).toHaveBeenCalledExactlyOnceWith(0)
   })
 
   it('does not extend the deadline when the final SDK drain stalls', async () => {
@@ -140,6 +140,41 @@ describe('in-flight opt-out shutdown budget', () => {
     await closing
     expect(client.track('app_opened', {})).toBe(false)
     expect(sdk.capture).toHaveBeenCalledTimes(1)
+  })
+
+  it('retires the SDK when opt-out finishes after the absolute deadline', async () => {
+    sdk.optOut.mockImplementationOnce(async () => {
+      vi.setSystemTime(Date.now() + 2_001)
+    })
+    const optingOut = client.setOptIn('settings', false)
+    const closing = client.shutdownTelemetry()
+    releaseImport()
+    await Promise.all([optingOut, closing])
+    expect(sdk.shutdown).toHaveBeenCalledExactlyOnceWith(0)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('starts SDK cleanup at the deadline while an admitted opt-out is still pending', async () => {
+    const failure = new Error('transport shutdown failed')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    sdk.shutdown.mockRejectedValueOnce(failure)
+    let finishOptOut = (): void => {}
+    sdk.optOut.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finishOptOut = resolve))
+    )
+    const optingOut = client.setOptIn('settings', false)
+    const closing = client.shutdownTelemetry()
+    releaseImport()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sdk.optOut).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(2_000)
+    await closing
+    expect(sdk.shutdown).toHaveBeenCalledExactlyOnceWith(0)
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[telemetry] shutdown error (ignored):', failure)
+    finishOptOut()
+    await optingOut
+    expect(sdk.shutdown).toHaveBeenCalledExactlyOnceWith(0)
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it.each(['DO_NOT_TRACK', 'ORCA_TELEMETRY_DISABLED', 'CI'])(
