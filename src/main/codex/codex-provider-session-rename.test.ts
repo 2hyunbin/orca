@@ -47,7 +47,9 @@ it("renames the running thread the way Codex's own /rename does, waiting out an 
 let root = ''
 afterEach(async () => {
   vi.restoreAllMocks()
-  if (root) await fs.rm(root, { recursive: true, force: true })
+  if (root) {
+    await fs.rm(root, { recursive: true, force: true })
+  }
 })
 
 it('resolves idle metadata independently of chat admission, preserving configured context and errors', async () => {
@@ -55,7 +57,7 @@ it('resolves idle metadata independently of chat admission, preserving configure
   const program = join(root, 'cx.cmd')
   await fs.writeFile(program, '', { mode: 0o755 })
   const settings = {
-    agentCmdOverrides: { codex: '"' + program + '"' },
+    agentCmdOverrides: { codex: `"${program}"` },
     agentDefaultArgs: { codex: '-c model_provider=first --no-daemon' }
   }
   let overlay: Record<string, string> = { PATH: 'bin', CODEX_HOME: '/current', CUSTOM: 'first' }
@@ -105,14 +107,12 @@ it('resolves idle metadata independently of chat admission, preserving configure
     const stale = { ORCA_CHAT_SCRATCH_DIR: 'old', ORCA_CHAT_VISUALS_DIR: 'old' }
     const child = resolveProviderChildEnv(invocation, stale)
     expect(child).toMatchObject({ CODEX_HOME: '/saved/account', CUSTOM: 'first', PATH: 'bin' })
-    expect([child.ORCA_CHAT_SCRATCH_DIR, child.ORCA_CHAT_VISUALS_DIR]).toEqual([
-      undefined,
-      undefined
-    ])
+    expect(child.ORCA_CHAT_SCRATCH_DIR).toBeUndefined()
+    expect(child.ORCA_CHAT_VISUALS_DIR).toBeUndefined()
   }
   expect(workspace).not.toHaveBeenCalled()
   record.launchDirectory = undefined
-  settings.agentCmdOverrides.codex = '"' + process.execPath + '"'
+  settings.agentCmdOverrides.codex = `"${process.execPath}"`
   settings.agentDefaultArgs.codex = '-c model_provider=second'
   overlay = { PATH: 'bin', CODEX_HOME: '/other' }
   await rename()
@@ -139,7 +139,7 @@ it('resolves idle metadata independently of chat admission, preserving configure
   settings.agentCmdOverrides.codex = join(root, 'missing-command')
   await expect(rename()).rejects.toThrow('Command setting is not a runnable program')
   expect(run).toHaveBeenCalledTimes(6)
-  settings.agentCmdOverrides.codex = '"' + program + '"'
+  settings.agentCmdOverrides.codex = `"${program}"`
   request.mockRejectedValueOnce(new Error('thread not found'))
   await expect(rename()).rejects.toThrow('thread not found')
   expect(request).toHaveBeenLastCalledWith(

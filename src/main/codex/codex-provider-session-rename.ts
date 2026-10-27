@@ -35,9 +35,13 @@ async function renameCwd(
       (await deps.resolveWorkspacePath(record.location.workspaceId))
   )
   try {
-    if ((await stat(cwd)).isDirectory()) return cwd
+    if ((await stat(cwd)).isDirectory()) {
+      return cwd
+    }
   } catch (error) {
-    if (!isDefinitiveAbsence(error)) throw error
+    if (!isDefinitiveAbsence(error)) {
+      throw error
+    }
   }
   return resolveHiddenProbeCwd()
 }
@@ -97,7 +101,9 @@ export async function renameCodexProviderSession(input: {
   ) {
     throw new Error('unsupported Codex rename location, account or handles')
   }
-  if (!invocation) throw new Error('Codex rename invocation is not configured')
+  if (!invocation) {
+    throw new Error('Codex rename invocation is not configured')
+  }
   const codexHome = requireLegacyAgentSessionAccountHome(record.accountHome).path
   const cwd = await renameCwd(record, invocation)
   const { command, environment } = await resolveCodexStructuredInvocation({
