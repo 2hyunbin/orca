@@ -1,5 +1,6 @@
 import type { TaskPageGlobalEffectsModel } from '../use-task-page-global-effects'
 import { useEffect } from 'react'
+import { installWindowFocusRevalidation } from '@/lib/window-focus-revalidation'
 import { isIntegrationCredentialDecryptionError } from '../../../../../shared/integration-credential-errors'
 import { saveLinearIssueView } from '../../linear-issue-view-storage'
 import { serializeLinearIssueViewResumeState } from '../../../../../shared/linear/issue-view-resume-state'
@@ -119,158 +120,159 @@ export function useTaskPageLinearListEffects(model: TaskPageGlobalEffectsModel) 
   ])
 
   useEffect(() => {
-    if (!taskResumeApplied) {
-      return
-    }
-    if (taskSource !== 'linear') {
-      return
-    }
-    if (linearMode !== 'issues') {
-      return
-    }
-    if (!linearConnected) {
+    if (
+      !taskResumeApplied ||
+      taskSource !== 'linear' ||
+      linearMode !== 'issues' ||
+      !linearConnected
+    ) {
       return
     }
     let cancelled = false
-    // Why: keep an unreadable-login error up during the re-read so the Reconnect card doesn't flash.
-    setLinearError((current) =>
-      current && isIntegrationCredentialDecryptionError(current) ? current : null
-    )
-    const trimmed = appliedLinearSearch.trim()
-    const effectiveLinearIssueLimit = clampLinearIssueListLimit(linearIssueLimit)
-    const searchActive = trimmed.length > 0
-    const listReadArgs = buildLinearIssueListReadArgs({
-      filter: 'all',
-      limit: effectiveLinearIssueLimit,
-      attributeFilter: linearAttributeFilter,
-      searchActive,
-      allowAttributeFilter: selectedLinearWorkspaceId !== 'all'
-    })
-    const readArgs = searchActive
-      ? ({
-          kind: 'search',
-          query: trimmed,
-          limit: LINEAR_ITEM_LIMIT
-        } as const)
-      : listReadArgs
-    const cachedResult = getCachedLinearIssues(readArgs, {
-      sourceContext: linearTaskSourceContext
-    })
-    if (readArgs.kind === 'search') {
-      setLinearIssuesHasMore(false)
-      if (cachedResult) {
-        setLinearIssues(cachedResult as LinearIssue[])
-      }
-    } else if (cachedResult) {
-      const collection = cachedResult as LinearCollectionResult<LinearIssue>
-      setLinearIssues(collection.items)
-      setLinearIssuesHasMore(
-        Boolean(collection.hasMore) && effectiveLinearIssueLimit < LINEAR_ISSUE_LIST_MAX
+    const read = (revalidating: boolean) => {
+      // Why: keep an unreadable-login error up during the re-read so the Reconnect card doesn't flash.
+      setLinearError((current) =>
+        current && isIntegrationCredentialDecryptionError(current) ? current : null
       )
-    }
-    const nextFilterRead: LinearIssueListFilterRead = {
-      workspaceId: linearAttributeFilterWorkspaceId,
-      signature: linearIssueAttributeFilterSignature(linearAttributeFilter)
-    }
-    const previousFilterRead = linearAttributeFilterReadRef.current
-    linearAttributeFilterReadRef.current = nextFilterRead
-    const filterForce = shouldForceLinearIssueListRead({
-      previousFilterRead,
-      nextFilterRead,
-      refreshForced: false
-    })
-    const requestSignature = buildLinearIssueListRequestSignature({
-      sourceContext: linearTaskSourceContext,
-      workspaceId: selectedLinearWorkspaceId,
-      filter: 'all',
-      limit: effectiveLinearIssueLimit,
-      attributeFilter: linearAttributeFilter,
-      searchQuery: searchActive ? trimmed : undefined
-    })
-    const previousRequest = lastLinearRequestRef.current
-    const forceRefresh =
-      filterForce ||
-      (linearRefreshNonce > 0 &&
-        previousRequest?.nonce !== linearRefreshNonce &&
-        previousRequest?.signature === requestSignature)
-    lastLinearRequestRef.current = {
-      nonce: linearRefreshNonce,
-      signature: requestSignature
-    }
-    const shouldProbeOnLanding =
-      !forceRefresh &&
-      cachedResult !== null &&
-      !landingLinearRefreshKeysRef.current.has(requestSignature)
-    if (shouldProbeOnLanding) {
-      landingLinearRefreshKeysRef.current = new Set([
-        ...landingLinearRefreshKeysRef.current,
-        requestSignature
-      ])
-    }
+      const trimmed = appliedLinearSearch.trim()
+      const effectiveLinearIssueLimit = clampLinearIssueListLimit(linearIssueLimit)
+      const searchActive = trimmed.length > 0
+      const listReadArgs = buildLinearIssueListReadArgs({
+        filter: 'all',
+        limit: effectiveLinearIssueLimit,
+        attributeFilter: linearAttributeFilter,
+        searchActive,
+        allowAttributeFilter: selectedLinearWorkspaceId !== 'all'
+      })
+      const readArgs = searchActive
+        ? ({
+            kind: 'search',
+            query: trimmed,
+            limit: LINEAR_ITEM_LIMIT
+          } as const)
+        : listReadArgs
+      const cachedResult = getCachedLinearIssues(readArgs, {
+        sourceContext: linearTaskSourceContext
+      })
+      if (readArgs.kind === 'search') {
+        setLinearIssuesHasMore(false)
+        if (cachedResult) {
+          setLinearIssues(cachedResult as LinearIssue[])
+        }
+      } else if (cachedResult) {
+        const collection = cachedResult as LinearCollectionResult<LinearIssue>
+        setLinearIssues(collection.items)
+        setLinearIssuesHasMore(
+          Boolean(collection.hasMore) && effectiveLinearIssueLimit < LINEAR_ISSUE_LIST_MAX
+        )
+      }
+      const nextFilterRead: LinearIssueListFilterRead = {
+        workspaceId: linearAttributeFilterWorkspaceId,
+        signature: linearIssueAttributeFilterSignature(linearAttributeFilter)
+      }
+      const previousFilterRead = linearAttributeFilterReadRef.current
+      linearAttributeFilterReadRef.current = nextFilterRead
+      const filterForce = shouldForceLinearIssueListRead({
+        previousFilterRead,
+        nextFilterRead,
+        refreshForced: false
+      })
+      const requestSignature = buildLinearIssueListRequestSignature({
+        sourceContext: linearTaskSourceContext,
+        workspaceId: selectedLinearWorkspaceId,
+        filter: 'all',
+        limit: effectiveLinearIssueLimit,
+        attributeFilter: linearAttributeFilter,
+        searchQuery: searchActive ? trimmed : undefined
+      })
+      const previousRequest = lastLinearRequestRef.current
+      const forceRefresh =
+        filterForce ||
+        (linearRefreshNonce > 0 &&
+          previousRequest?.nonce !== linearRefreshNonce &&
+          previousRequest?.signature === requestSignature)
+      lastLinearRequestRef.current = {
+        nonce: linearRefreshNonce,
+        signature: requestSignature
+      }
+      const shouldProbeOnLanding =
+        !revalidating &&
+        !forceRefresh &&
+        cachedResult !== null &&
+        !landingLinearRefreshKeysRef.current.has(requestSignature)
+      if (shouldProbeOnLanding) {
+        landingLinearRefreshKeysRef.current = new Set([
+          ...landingLinearRefreshKeysRef.current,
+          requestSignature
+        ])
+      }
 
-    // Why: keep cached rows visible on navigation; only explicit refresh or a true cache miss shows the blocking loading state.
-    setLinearLoading(forceRefresh || cachedResult === null)
-    const request =
-      readArgs.kind === 'search'
-        ? searchLinearIssues(readArgs.query, LINEAR_ITEM_LIMIT, {
-            force: forceRefresh || shouldProbeOnLanding,
-            sourceContext: linearTaskSourceContext
-          })
-        : listLinearIssues(listReadArgs, {
-            force: forceRefresh || shouldProbeOnLanding,
-            sourceContext: linearTaskSourceContext
-          })
-    void request
-      .then((result) => {
-        if (
-          cancelled ||
-          lastLinearRequestRef.current?.signature !== requestSignature ||
-          lastLinearRequestRef.current?.nonce !== linearRefreshNonce
-        ) {
-          return
-        }
-        setLinearError(null)
-        if (readArgs.kind === 'search') {
-          const issues = result as LinearIssue[]
-          setLinearIssuesHasMore(false)
-          if (shouldProbeOnLanding) {
-            setLinearIssues((current) =>
-              reconcileTaskPageLinearIssuesAfterLandingRefresh(current, issues)
-            )
-          } else {
-            setLinearIssues(issues)
+      // Why: keep cached rows visible on navigation; only explicit refresh or a true cache miss shows the blocking loading state.
+      setLinearLoading(forceRefresh || cachedResult === null)
+      const request =
+        readArgs.kind === 'search'
+          ? searchLinearIssues(readArgs.query, LINEAR_ITEM_LIMIT, {
+              force: forceRefresh || shouldProbeOnLanding,
+              sourceContext: linearTaskSourceContext
+            })
+          : listLinearIssues(listReadArgs, {
+              force: forceRefresh || shouldProbeOnLanding,
+              sourceContext: linearTaskSourceContext
+            })
+      return request
+        .then((result) => {
+          if (
+            cancelled ||
+            lastLinearRequestRef.current?.signature !== requestSignature ||
+            lastLinearRequestRef.current?.nonce !== linearRefreshNonce
+          ) {
+            return
           }
-        } else {
-          const collection = result as LinearCollectionResult<LinearIssue>
-          setLinearIssuesHasMore(
-            Boolean(collection.hasMore) && effectiveLinearIssueLimit < LINEAR_ISSUE_LIST_MAX
-          )
-          setLinearIssues((current) =>
-            shouldProbeOnLanding
-              ? reconcileTaskPageLinearIssuesAfterLandingRefresh(current, collection.items)
-              : collection.items
-          )
-        }
-        setLinearLoading(false)
-      })
-      .catch((err) => {
-        if (
-          cancelled ||
-          lastLinearRequestRef.current?.signature !== requestSignature ||
-          lastLinearRequestRef.current?.nonce !== linearRefreshNonce
-        ) {
-          return
-        }
-        // Why: a credential failure used to resolve as no rows; keep not showing the previous scope's rows.
-        if (isIntegrationCredentialDecryptionError(err)) {
-          setLinearIssues([])
-          setLinearIssuesHasMore(false)
-        }
-        setLinearError(err instanceof Error ? err.message : 'Failed to load Linear issues.')
-        setLinearLoading(false)
-      })
+          setLinearError(null)
+          if (readArgs.kind === 'search') {
+            const issues = result as LinearIssue[]
+            setLinearIssuesHasMore(false)
+            if (shouldProbeOnLanding) {
+              setLinearIssues((current) =>
+                reconcileTaskPageLinearIssuesAfterLandingRefresh(current, issues)
+              )
+            } else {
+              setLinearIssues(issues)
+            }
+          } else {
+            const collection = result as LinearCollectionResult<LinearIssue>
+            setLinearIssuesHasMore(
+              Boolean(collection.hasMore) && effectiveLinearIssueLimit < LINEAR_ISSUE_LIST_MAX
+            )
+            setLinearIssues((current) =>
+              shouldProbeOnLanding
+                ? reconcileTaskPageLinearIssuesAfterLandingRefresh(current, collection.items)
+                : collection.items
+            )
+          }
+          setLinearLoading(false)
+        })
+        .catch((err) => {
+          if (
+            cancelled ||
+            lastLinearRequestRef.current?.signature !== requestSignature ||
+            lastLinearRequestRef.current?.nonce !== linearRefreshNonce
+          ) {
+            return
+          }
+          // Why: a credential failure used to resolve as no rows; keep not showing the previous scope's rows.
+          if (isIntegrationCredentialDecryptionError(err)) {
+            setLinearIssues([])
+            setLinearIssuesHasMore(false)
+          }
+          setLinearError(err instanceof Error ? err.message : 'Failed to load Linear issues.')
+          setLinearLoading(false)
+        })
+    }
+    const unsubscribe = installWindowFocusRevalidation(read)
     return () => {
       cancelled = true
+      unsubscribe()
     }
   }, [
     taskSource,
