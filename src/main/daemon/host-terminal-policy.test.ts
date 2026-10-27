@@ -14,6 +14,8 @@ vi.mock('node:fs/promises', async (original) => {
   return { ...fs, writeFile: vi.fn(fs.writeFile), rename: vi.fn(fs.rename), rm: vi.fn(fs.rm) }
 })
 
+const fs = await vi.importActual<typeof FileSystem>('node:fs/promises')
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((done) => {
@@ -33,7 +35,6 @@ const system = () => new SystemPtyLimit(async () => 511)
 const directories: string[] = []
 afterEach(async () => {
   vi.useRealTimers()
-  const fs = await vi.importActual<typeof FileSystem>('node:fs/promises')
   await Promise.all(
     directories.splice(0).map((path) => fs.rm(path, { recursive: true, force: true }))
   )
@@ -144,7 +145,6 @@ describe('host terminal policy', () => {
     const policy = new HostTerminalPolicy(path, {}, system(), read)
     const admission = policy.admissionMaximum()
     const replaced = deferred<void>()
-    const fs = await vi.importActual<typeof FileSystem>('node:fs/promises')
     vi.mocked(rename).mockImplementationOnce(async (...args) => {
       await fs.rename(...args)
       replaced.resolve()
@@ -160,7 +160,6 @@ describe('host terminal policy', () => {
 
   it('expires staging without a late rename or orphan, and permits retry while cleanup stalls', async () => {
     const path = join(await home(), 'policy.json')
-    const fs = await vi.importActual<typeof FileSystem>('node:fs/promises')
     const started = deferred<void>()
     const release = deferred<void>()
     const staged = deferred<void>()
@@ -208,7 +207,6 @@ describe('host terminal policy', () => {
     'keeps an expired issued rename unconfirmed: %s',
     async (outcome) => {
       const path = join(await home(), 'policy.json')
-      const fs = await vi.importActual<typeof FileSystem>('node:fs/promises')
       const started = deferred<void>()
       const release = deferred<void>()
       const cleaned = deferred<void>()

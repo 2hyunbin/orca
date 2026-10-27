@@ -19,6 +19,8 @@ vi.mock('node:fs/promises', async (original) => {
   return { ...fs, writeFile: vi.fn(fs.writeFile), rm: vi.fn(fs.rm) }
 })
 
+const fs = await vi.importActual<typeof FileSystem>('node:fs/promises')
+
 let server: DaemonServer | undefined
 let client: DaemonClient | undefined
 let directory: string | undefined
@@ -114,7 +116,6 @@ it('fences an actual pending save when the server shuts down before replacement'
   const staging = new Promise<void>((done) => {
     started = done
   })
-  const fs = await vi.importActual<typeof FileSystem>('node:fs/promises')
   vi.mocked(writeFile).mockImplementationOnce(async (...args) => {
     started()
     await held
