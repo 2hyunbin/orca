@@ -12,22 +12,19 @@ import { findWslHostDeployment } from '../../shared/runtime-environment-wsl-host
 import { getPreferredPairingOffer } from '../../shared/runtime-environments'
 import type { WslHostStatus } from '../../shared/wsl-host-types'
 import { OrcadHostUnsupportedError } from '../orcad/orcad-host-unavailable'
-import type { WslHostDistroCandidate } from './wsl-host-distro-list'
 import { WslHostService, type WslHostConnector } from './wsl-host-service'
 import { wakeRememberedWslHosts } from './wsl-host-early-wake'
 import { WslOrcadLaunchDeferredError } from './wsl-orcad-connection-errors'
 import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
 import { isRecoverableRemoteRuntimeConnectionError } from '../../shared/remote-runtime/remote-runtime-client-error-classification'
-import { KEY, pairing, connection, makeConnector } from './wsl-host-service-test-fixtures'
-
-const UBUNTU_ID = '0e3a7f2c-1b4d-4c5e-9f60-7a8b9c0d1e2f'
-
-const UBUNTU: WslHostDistroCandidate = {
-  id: UBUNTU_ID,
-  name: 'Ubuntu',
-  state: 'running',
-  version: 2
-}
+import {
+  KEY,
+  UBUNTU_ID,
+  UBUNTU,
+  pairing,
+  connection,
+  makeConnector
+} from './wsl-host-service-test-connector'
 
 describe('WslHostService', () => {
   let userDataPath: string

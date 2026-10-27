@@ -6,6 +6,7 @@ import type { WslHostConnector } from './wsl-host-service'
 import type { WslOrcadConnection } from './wsl-orcad-connection'
 
 export const KEY = Buffer.alloc(32, 3).toString('base64')
+export const UBUNTU_ID = '0e3a7f2c-1b4d-4c5e-9f60-7a8b9c0d1e2f'
 
 export function pairing(port: number, deviceToken = 'token-1', publicKeyB64 = KEY): string {
   return encodePairingOffer({ v: 2, endpoint: `ws://127.0.0.1:${port}`, deviceToken, publicKeyB64 })
@@ -63,4 +64,11 @@ export function makeConnector(distros: WslHostDistroCandidate[]) {
     dispose: vi.fn(async () => {})
   } satisfies WslHostConnector
   return Object.assign(connector, { distro })
+}
+
+export const UBUNTU: WslHostDistroCandidate = {
+  id: UBUNTU_ID,
+  name: 'Ubuntu',
+  state: 'running',
+  version: 2
 }
