@@ -29,7 +29,7 @@ export async function fetchAllItems(args: {
 > {
   const scopeKey = ownerScopeKey(args.owner, args.ownerType, args.host)
   const inFlight = parentFieldProbeInFlight.get(scopeKey)
-  if (inFlight) {
+  if (inFlight && getUnsupportedItemFields(scopeKey).size < 3) {
     await inFlight.catch(() => {})
   }
   const unsupportedFields = new Set(getUnsupportedItemFields(scopeKey))
@@ -63,7 +63,7 @@ export async function fetchAllItems(args: {
     return result
   }
   let first: Awaited<ReturnType<typeof fetchItemsPageWithRaw>>
-  if (!parentFieldProbeInFlight.has(scopeKey)) {
+  if (unsupportedFields.size < 3 && !parentFieldProbeInFlight.has(scopeKey)) {
     let resolveProbe: () => void = () => {}
     parentFieldProbeInFlight.set(
       scopeKey,

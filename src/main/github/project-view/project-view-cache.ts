@@ -82,14 +82,6 @@ export function getUnsupportedItemFields(scopeKey: string): ReadonlySet<Optional
   return getProjectViewCacheEntry(unsupportedItemFieldsByOwner, scopeKey) ?? new Set()
 }
 
-export function markParentFieldRetried(scopeKey: string): void {
-  markItemFieldsUnsupported(scopeKey, ['parent'])
-}
-
-export function hasParentFieldRetried(scopeKey: string): boolean {
-  return getUnsupportedItemFields(scopeKey).has('parent')
-}
-
 export function markParentFieldWarningLogged(scopeKey: string): void {
   rememberProjectViewCacheEntry(parentFieldWarningLoggedByOwner, scopeKey, true)
 }
@@ -138,12 +130,12 @@ export function _getProjectViewOwnerTypeForTests(
 
 /** @internal - exposed for cache-bound tests only. */
 export function _markProjectViewParentFieldRetriedForTests(scopeKey: string): void {
-  markParentFieldRetried(scopeKey)
+  markItemFieldsUnsupported(scopeKey, ['parent'])
 }
 
 /** @internal - exposed for cache-bound tests only. */
 export function _hasProjectViewParentFieldRetriedForTests(scopeKey: string): boolean {
-  return hasParentFieldRetried(scopeKey)
+  return getUnsupportedItemFields(scopeKey).has('parent')
 }
 
 /** @internal - exposed for cache-bound tests only. */

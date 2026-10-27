@@ -184,12 +184,7 @@ export function normalizeFieldValue(
   }
 }
 
-export function normalizeLinkedPullRequests(
-  raw: RawFieldValue
-): GitHubProjectLinkedPullRequests | null {
-  if (raw.__typename !== 'ProjectV2ItemFieldPullRequestValue') {
-    return null
-  }
+export function normalizeLinkedPullRequests(raw: RawFieldValue): GitHubProjectLinkedPullRequests {
   const pullRequests = (raw.pullRequests?.nodes ?? []).flatMap((node) =>
     !node || typeof node.number !== 'number'
       ? []

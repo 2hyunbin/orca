@@ -47,7 +47,7 @@ export type RawItem = {
   updatedAt?: string
   content?: RawContent | null
   fieldValues?: {
-    nodes?: RawFieldValue[]
+    nodes?: (RawFieldValue | null)[]
     pageInfo?: { hasNextPage?: boolean }
   }
 }
@@ -129,7 +129,7 @@ export function normalizeItem(raw: RawItem, position: number): NormalizedItemOut
   let linkedPullRequests: GitHubProjectLinkedPullRequests | null = null
   const fieldValuesByFieldId: Record<string, GitHubProjectFieldValue> = {}
   for (const fv of raw.fieldValues?.nodes ?? []) {
-    if (fv.__typename === 'ProjectV2ItemFieldPullRequestValue') {
+    if (fv?.__typename === 'ProjectV2ItemFieldPullRequestValue') {
       linkedPullRequests = normalizeLinkedPullRequests(fv)
       continue
     }

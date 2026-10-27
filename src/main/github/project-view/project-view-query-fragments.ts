@@ -66,7 +66,6 @@ export function fieldValuesSelection(includeLinkedPullRequests: boolean): string
   const linkedPullRequestsFrag = includeLinkedPullRequests
     ? `
       ... on ProjectV2ItemFieldPullRequestValue {
-        field { ...FieldConfig }
         pullRequests(first:10) {
           totalCount
           nodes { number title url }
