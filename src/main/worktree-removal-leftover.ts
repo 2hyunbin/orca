@@ -10,11 +10,7 @@ import { getErrorCode, normalizeLocalBranchRef } from './git/worktree-operation-
 import type { WorktreeRemovalRecord } from './worktree-removal-records'
 import { areWorktreePathsEqual } from './git/worktree-path-comparison'
 import { CLIENT_REMOVAL_HOME } from './worktree-removal-home-guard'
-import {
-  failedWorktreeRemovals,
-  persistWorktreeRemovalRecords,
-  worktreeCheckoutExists
-} from './worktree-removal-table'
+import { failedWorktreeRemovals, worktreeCheckoutExists } from './worktree-removal-table'
 import {
   assertWorktreeDoesNotContainRegisteredWorktree,
   canSafelyRemoveOrphanedWorktreeDirectory
@@ -87,9 +83,6 @@ export async function retryFailedRemovalUnlessRegistered(
   retry: () => Promise<RemoveWorktreeResult> | undefined
 ): Promise<boolean> {
   if (registeredWorktrees.some((worktree) => areWorktreePathsEqual(worktree.path, worktreePath))) {
-    if (failedWorktreeRemovals.delete(worktreeId)) {
-      void persistWorktreeRemovalRecords()
-    }
     return false
   }
   const failed = failedWorktreeRemovals.get(worktreeId)

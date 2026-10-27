@@ -10,7 +10,8 @@ function nativeFs(): typeof nodeFs {
   if (!resolvedFs) {
     try {
       // Resolve lazily: original-fs exists only in Electron; plain Node's fs is already unpatched.
-      resolvedFs = createRequire(__filename)('original-fs').promises ?? nodeFs
+      const originalFs: { promises?: typeof nodeFs } = createRequire(__filename)('original-fs')
+      resolvedFs = originalFs.promises ?? nodeFs
     } catch {
       resolvedFs = nodeFs
     }

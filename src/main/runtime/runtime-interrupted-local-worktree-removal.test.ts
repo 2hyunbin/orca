@@ -31,7 +31,7 @@ import * as backgroundRemoval from '../worktree-background-removal'
 import * as worktreeGit from '../git/worktree'
 import * as worktreeRemote from '../ipc/worktree-remote'
 import { getLocalProjectWorktreeGitOptions } from '../project-runtime-git-options'
-import { pendingWorktreeRemovals } from '../worktree-removal-table'
+import * as removalTable from '../worktree-removal-table'
 import { listWorktreesStrict } from '../git/worktree'
 import { areWorktreePathsEqual } from '../git/worktree-path-comparison'
 import {
@@ -186,8 +186,9 @@ async function listedRows(): Promise<{ path: string; removalError?: string }[]> 
 
 function removalHost(
   repoGone = false,
-  stopPtys = async () => {}
-): Parameters<typeof interruptedLocalWorktreeRemovalJob>[1] {
+  stopPtys = async () => {},
+  teardown = () => {}
+): Parameters<typeof interruptedLocalWorktreeRemovalJob>[1] & { store: Store } {
   const store = {
     getRepo: (id: string) => (id === repo.id && !repoGone ? repo : undefined),
     getRepos: () => (repoGone ? [] : [repo]),
@@ -207,10 +208,11 @@ function removalHost(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the removal/listing paths read only the supplied store methods; the fixture owns all process/session services.
     store: store as unknown as Store,
     acquireWatcherRemoval: async (path) => {
+      teardown()
       const gate = acquireWatcherRemovalGate(path)
       return { finish: async () => gate.release() }
     },
-    closeWatchers: vi.fn(async () => {}),
+    closeWatchers: vi.fn(async () => teardown()),
     stopPtys,
     preservedBranchCleanup: { preserveHead: (result) => result ?? {}, remember: vi.fn() },
     purge: () => expect(existsSync(worktreePath)).toBe(false),
@@ -244,13 +246,8 @@ async function deleteViaEntry(
   teardown = vi.fn()
 ): Promise<unknown> {
   const worktreeId = `repo-1::${worktreePath}`
-  const host = removalHost(false, stop)
-  host.closeWatchers = async () => teardown()
-  const { store, acquireWatcherRemoval } = host
-  host.acquireWatcherRemoval = async (path) => {
-    teardown()
-    return acquireWatcherRemoval(path)
-  }
+  const host = removalHost(false, stop, teardown)
+  const { store } = host
   const runtime: OrcaRuntimeWithResolveWorktreeRemovalTarget = Object.assign(
     Object.create(OrcaRuntimeWithResolveWorktreeRemovalTarget.prototype),
     {
@@ -296,10 +293,7 @@ async function deleteViaEntry(
             force,
             waitForBackgroundRemoval: true
           })
-    if (accepted.removing) {
-      return await waitForPendingWorktreeRemoval(worktreeId)
-    }
-    return accepted
+    return await backgroundRemoval.finishAcceptedWorktreeRemoval(accepted, worktreeId)
   } finally {
     await _settlePendingWorktreeRemovalsForTests()
   }
@@ -394,13 +388,14 @@ describe('finishing an interrupted worktree removal after a restart', () => {
   ] as const)(
     '$entry completes explicit retry after releasing held $phase across restart',
     async ({ entry, phase }) => {
+      const remoteUrl = 'https://example.invalid/repo.git'
       pushTarget = {
         remoteName: 'pr-contributor',
         branchName: 'feature',
         remoteCreated: true,
-        remoteUrl: 'https://example.invalid/repo.git'
+        remoteUrl
       }
-      await git(['remote', 'add', pushTarget.remoteName, pushTarget.remoteUrl])
+      await git(['remote', 'add', pushTarget.remoteName, remoteUrl])
       await git(['config', `remote.${pushTarget.remoteName}.orca-created`, 'true'])
       const sibling = join(scratchDir, 'temporarily-missing')
       await git(['worktree', 'add', '-q', sibling, '-b', 'sibling'])
@@ -493,7 +488,7 @@ describe('finishing an interrupted worktree removal after a restart', () => {
       }).catch((error: unknown) => error)
       try {
         await started.promise
-        expect([...pendingWorktreeRemovals.values()]).toMatchObject([
+        expect([...removalTable.pendingWorktreeRemovals.values()]).toMatchObject([
           { force: true, branch: 'feature', deleteBranch: true }
         ])
         expect(await readWorktreeRemovalRecords(recordsDir)).toMatchObject([{ force: true }])
@@ -600,6 +595,9 @@ describe('finishing an interrupted worktree removal after a restart', () => {
     'preserves a nonempty markerless checkout and platform cleanup policy (force %s)',
     async (force) => {
       vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const admin = (await readFile(join(worktreePath, '.git'), 'utf8')).trim().slice(8)
+      const backlink = await readFile(join(admin, 'gitdir'), 'utf8')
+      const branchHead = await git(['rev-parse', 'feature'])
       // Git deletes in directory order; without `.git` no `worktree remove` can validate it.
       await unlink(join(worktreePath, '.git'))
 
@@ -607,10 +605,17 @@ describe('finishing an interrupted worktree removal after a restart', () => {
 
       const refusal = `${worktreePath} is no longer a Git worktree, so its folder was left on disk. Delete the folder yourself to finish removing this workspace.`
       expect(outcome).toEqual({ status: 'failed', error: `Error: ${refusal}` })
-      expect(existsSync(join(worktreePath, '.git'))).toBe(false)
-      expect(existsSync(join(worktreePath, 'seed.txt'))).toBe(true)
-      expect(removeHostTree).not.toHaveBeenCalled()
       const native = process.platform === 'win32'
+      if (native && force) {
+        await expect(deleteViaEntry('runtime', force)).rejects.toThrow(refusal)
+        await removalTable.persistWorktreeRemovalRecords()
+        expect(await readWorktreeRemovalRecords(recordsDir)).toEqual(records)
+        expect(await readFile(join(admin, 'gitdir'), 'utf8')).toBe(backlink)
+        expect(await git(['rev-parse', 'feature'])).toBe(branchHead)
+      }
+      expect(existsSync(join(worktreePath, '.git'))).toBe(false)
+      expect(await readFile(join(worktreePath, 'seed.txt'), 'utf8')).toBe('seed\n')
+      expect(removeHostTree).not.toHaveBeenCalled()
       expect(await isRegistered(worktreePath)).toBe(native)
       expect((await git(['branch', '--list', 'feature'])).trim() !== '').toBe(native)
       expect(purged).toEqual([])
