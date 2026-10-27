@@ -413,6 +413,35 @@ describe('deferred telemetry transport', () => {
     expect(sdk.capture).not.toHaveBeenCalled()
   })
 
+  it.each(['settings', 'banner'] as const)(
+    'retains %s consent events for retry when deferred initialization fails',
+    async (surface) => {
+      settings.telemetry!.optedIn = surface === 'settings' ? false : null
+      client.initTelemetry(store)
+      const failure = new Error('transport unavailable')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      createClient.mockImplementationOnce(() => {
+        throw failure
+      })
+
+      await expect(
+        surface === 'settings'
+          ? client.setOptIn('settings', true)
+          : client.persistBannerAcknowledgeWithoutEmitting()
+      ).resolves.toBeUndefined()
+      expect(settings.telemetry!.optedIn).toBe(true)
+      expect(warn).toHaveBeenCalledWith('[telemetry] transport initialization failed:', failure)
+      expect(sdk.capture).not.toHaveBeenCalled()
+
+      await client.startTelemetryTransport()
+      client.trackAppOpenedOnce()
+      expect(createClient).toHaveBeenCalledTimes(2)
+      expect(sdk.capture.mock.calls.map(([capture]) => capture.event)).toEqual(
+        surface === 'settings' ? ['app_opened', 'telemetry_opted_in'] : ['app_opened']
+      )
+    }
+  )
+
   it('retains bounded startup captures across a failed first initialization', async () => {
     client.track('app_opened', {})
     createClient.mockImplementationOnce(() => {

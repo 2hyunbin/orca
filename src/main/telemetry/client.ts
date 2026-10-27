@@ -97,6 +97,14 @@ export function startTelemetryTransport(): Promise<void> {
   return transport.start()
 }
 
+async function startTelemetryTransportForConsent(): Promise<void> {
+  try {
+    await startTelemetryTransport()
+  } catch (error) {
+    console.warn('[telemetry] transport initialization failed:', error)
+  }
+}
+
 /** Lets producers avoid preparing usage payloads when transmission is disabled. */
 export function isTelemetryEnabled(): boolean {
   return (
@@ -236,7 +244,7 @@ export async function setOptIn(via: OptInVia, optedIn: boolean): Promise<void> {
   )
 
   if (optedIn) {
-    await startTelemetryTransport()
+    await startTelemetryTransportForConsent()
     const client = transport.client
     if (client) {
       await client.optIn()
@@ -292,7 +300,7 @@ export async function persistBannerAcknowledgeWithoutEmitting(): Promise<void> {
     },
     { notifyListeners: true }
   )
-  await startTelemetryTransport()
+  await startTelemetryTransportForConsent()
   if (transport.client) {
     await transport.client.optIn()
   }
