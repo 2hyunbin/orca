@@ -94,10 +94,7 @@ function parseBucket(
   }
 }
 
-function parseGroups(groups: unknown): AntigravityUsageBucket[] {
-  if (!Array.isArray(groups)) {
-    return []
-  }
+function parseGroups(groups: unknown[]): AntigravityUsageBucket[] {
   const parsed: AntigravityUsageBucket[] = []
   for (const group of groups) {
     if (!isRecord(group)) {
@@ -138,13 +135,11 @@ export function parseAntigravityUsageEnvelope(value: unknown): AntigravityUsageR
     return null
   }
   const data = command.data
-  if (!isRecord(data)) {
+  if (!isRecord(data) || !Array.isArray(data.groups)) {
     return null
   }
   const buckets = parseGroups(data.groups)
-  // A login with no Antigravity quota, such as a Google Cloud project, answers with no groups.
-  const noQuota = Array.isArray(data.groups) && data.groups.length === 0
-  if (buckets.length === 0 && !noQuota) {
+  if (data.groups.length > 0 && buckets.length === 0) {
     return null
   }
   const windowsOf = (minutes: number): AntigravityUsageBucket[] =>
