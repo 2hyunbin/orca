@@ -15,6 +15,10 @@ const darkColors = {
   composerControl: '#262626',
   skillToken: '#8ab4f8',
   skillTokenSurface: 'rgba(59, 130, 246, 0.2)',
+  // Your own message: --chat-user-surface and --chat-user-border over --chat-canvas, text in --chat-foreground-strong.
+  chatUserSurface: '#262626',
+  chatUserBorder: 'rgba(250, 250, 250, 0.06)',
+  chatForegroundStrong: '#e3e3e3',
 
   // --foreground, --muted-foreground, --chat-foreground-faint
   textPrimary: '#fafafa',
@@ -75,6 +79,9 @@ const lightColors: MobilePalette = {
   composerControl: '#f5f5f5',
   skillToken: '#1d4ed8',
   skillTokenSurface: 'rgba(59, 130, 246, 0.12)',
+  chatUserSurface: '#f5f5f5',
+  chatUserBorder: 'rgba(10, 10, 10, 0.07)',
+  chatForegroundStrong: '#1e1e1e',
 
   textPrimary: '#0a0a0a',
   textSecondary: '#737373',
@@ -113,38 +120,14 @@ const lightColors: MobilePalette = {
   terminalBg: '#1a1b26'
 }
 
-type OnBrightPalette = {
-  readonly secondary: string
-  readonly link: string
-  readonly codeBackground: string
-}
-
-// Copy on your own message’s fill, which is the opposite brightness of the canvas.
-const darkOnBrightColors: OnBrightPalette = {
-  secondary: '#4a4a4a',
-  link: '#1e40af',
-  codeBackground: '#c8c8c8'
-}
-
-const lightOnBrightColors: OnBrightPalette = {
-  secondary: '#a1a1a1',
-  link: '#93c5fd',
-  codeBackground: '#404040'
-}
-
 const palettes: Record<MobileColorScheme, MobilePalette> = { dark: darkColors, light: lightColors }
-const onBrightPalettes: Record<MobileColorScheme, OnBrightPalette> = {
-  dark: darkOnBrightColors,
-  light: lightOnBrightColors
-}
 
 export function paletteForScheme(scheme: MobileColorScheme): MobilePalette {
   return palettes[scheme]
 }
 
-// Live objects rewritten in place on a scheme change; read them at render time, never copy at module scope.
+// Live object rewritten in place on a scheme change; read it at render time, never copy at module scope.
 export const colors: MobilePalette = { ...darkColors }
-export const onBrightColors: OnBrightPalette = { ...darkOnBrightColors }
 
 let currentScheme: MobileColorScheme = 'dark'
 const schemeListeners = new Set<() => void>()
@@ -159,7 +142,6 @@ export function applyMobileColorScheme(scheme: MobileColorScheme): void {
   }
   currentScheme = scheme
   Object.assign(colors, palettes[scheme])
-  Object.assign(onBrightColors, onBrightPalettes[scheme])
   for (const listener of schemeListeners) {
     listener()
   }

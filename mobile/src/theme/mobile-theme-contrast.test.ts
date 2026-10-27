@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyMobileColorScheme, onBrightColors, paletteForScheme } from './mobile-theme'
+import { paletteForScheme } from './mobile-theme'
 
 function channelLuminance(channel: number): number {
   const value = channel / 255
@@ -39,12 +39,9 @@ describe.each(['dark', 'light'] as const)('mobile text contrast (%s)', (scheme) 
     )
   })
 
-  it("keeps every colour on your own message's fill readable", () => {
-    applyMobileColorScheme(scheme)
-    for (const foreground of [colors.bgBase, onBrightColors.secondary, onBrightColors.link]) {
-      expect(contrastRatio(foreground, colors.textPrimary)).toBeGreaterThanOrEqual(4.5)
-    }
-    expect(contrastRatio(colors.bgBase, onBrightColors.codeBackground)).toBeGreaterThanOrEqual(4.5)
-    applyMobileColorScheme('dark')
+  it('keeps your own message readable on its bubble', () => {
+    expect(
+      contrastRatio(colors.chatForegroundStrong, colors.chatUserSurface)
+    ).toBeGreaterThanOrEqual(4.5)
   })
 })

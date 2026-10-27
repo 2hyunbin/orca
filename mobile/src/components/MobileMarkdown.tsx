@@ -26,7 +26,7 @@ type Props = {
   renderVisual?: (directive: NativeChatVisualDirective, index: number) => ReactNode
   // Close incomplete streaming markup like desktop; diagrams remain code until text stops.
   growing?: boolean
-  /** The surface under the text: `onBright` for your own message's light fill. */
+  /** The surface under the text: `userMessage` inside your own message's bubble. */
   tone?: keyof typeof MARKDOWN_TONES
 }
 

@@ -247,7 +247,7 @@ function MobileNativeChatMessageImpl({
       <Prose
         key={index}
         block={block}
-        invert={isUser}
+        userMessage={isUser}
         fontScale={fontScale}
         onOpenFile={onOpenFile}
         onLongPress={onLongPress}

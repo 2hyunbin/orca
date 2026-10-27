@@ -1,6 +1,6 @@
 import { StyleSheet, type TextStyle } from 'react-native'
-import { colors, onBrightColors, radii, spacing, typography } from '../theme/mobile-theme'
-import { themedStyleSheet } from '../theme/themed-styles'
+import { colors, radii, spacing, typography } from '../theme/mobile-theme'
+import { themedStyleSheet, themedStyles } from '../theme/themed-styles'
 
 export const styles = themedStyleSheet(() => ({
   root: {
@@ -173,12 +173,13 @@ export type MarkdownTone = {
 }
 
 /** Colours over the styles above, for one surface. The default tone overrides nothing. */
-export const MARKDOWN_TONES: Record<'default' | 'onBright', MarkdownTone> = {
+export const MARKDOWN_TONES: Record<'default' | 'userMessage', MarkdownTone> = {
   default: { text: null, secondary: null, link: null, inlineCode: null },
-  onBright: themedStyleSheet(() => ({
-    text: { color: colors.bgBase },
-    secondary: { color: onBrightColors.secondary },
-    link: { color: onBrightColors.link },
-    inlineCode: { color: colors.bgBase, backgroundColor: onBrightColors.codeBackground }
+  // Desktop's user bubble only strengthens the text; links and code keep their chat colors.
+  userMessage: themedStyles(() => ({
+    text: { color: colors.chatForegroundStrong },
+    secondary: null,
+    link: null,
+    inlineCode: null
   }))
 }

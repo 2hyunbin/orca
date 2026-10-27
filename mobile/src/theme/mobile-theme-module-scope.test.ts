@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 const mobileRoot = fileURLToPath(new URL('../..', import.meta.url))
 const scannedDirectories = ['src', 'app', 'web-entry']
-const paletteObjects = new Set(['colors', 'onBrightColors'])
+const paletteObjects = new Set(['colors'])
 // The terminal background is the same in both palettes.
 const schemeIndependentKeys = new Set(['terminalBg'])
 
@@ -45,8 +45,10 @@ function moduleScopePaletteReads(path: string): string[] {
     // Spreading a themed stylesheet copies the scheme current at load.
     if (
       (ts.isSpreadAssignment(node) || ts.isSpreadElement(node)) &&
-      ts.isIdentifier(node.expression) &&
-      /[sS]tyles$/.test(node.expression.text)
+      ((ts.isIdentifier(node.expression) && /[sS]tyles$/.test(node.expression.text)) ||
+        (ts.isCallExpression(node.expression) &&
+          ts.isIdentifier(node.expression.expression) &&
+          node.expression.expression.text.startsWith('themedStyle')))
     ) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart())
       reads.push(`${relative(mobileRoot, path)}:${line + 1} ${node.getText()}`)

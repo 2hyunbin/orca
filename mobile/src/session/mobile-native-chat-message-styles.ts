@@ -25,7 +25,9 @@ export const styles = themedStyleSheet(() => ({
   },
   userBubble: {
     maxWidth: '88%',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.chatUserSurface,
+    borderWidth: 1,
+    borderColor: colors.chatUserBorder,
     borderRadius: radii.card,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm

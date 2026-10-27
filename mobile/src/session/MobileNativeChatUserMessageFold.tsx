@@ -5,7 +5,7 @@ import {
   nativeChatUserMessageFolds
 } from '../../../src/shared/native-chat-user-message-fold'
 import { styles as markdownStyles } from '../components/mobile-markdown-styles'
-import { onBrightColors, spacing, typography } from '../theme/mobile-theme'
+import { colors, spacing, typography } from '../theme/mobile-theme'
 import { themedStyleSheet } from '../theme/themed-styles'
 import { useMobileColorScheme } from '../theme/use-mobile-color-scheme'
 import { CHAT_PROSE_SCALE } from './mobile-native-chat-message-styles'
@@ -82,7 +82,7 @@ const styles = themedStyleSheet(() => ({
     paddingTop: spacing.xs
   },
   toggleText: {
-    color: onBrightColors.secondary,
+    color: colors.chatForegroundStrong,
     fontSize: typography.metaSize,
     fontWeight: '600'
   }
