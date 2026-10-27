@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { WslRelayRecovery, type WslRelayRecoveryState } from './wsl-hook-relay-recovery'
-import { restartWslRelay } from './wsl-hook-relay-state-machine'
+import type { WslRelayDistroState, WslRelayRestartSetup } from './wsl-hook-relay-state'
+import { wslHookRelayStateKey } from './wsl-hook-relay-state-key'
+import { captureWslRelaySetup, restartWslRelay } from './wsl-hook-relay-state-machine'
 
 beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }))
 
@@ -21,6 +23,7 @@ describe('WslRelayRecovery', () => {
     const recovery = new WslRelayRecovery({
       isDistroRunning: async () => true,
       deferUntilRunning: vi.fn(),
+      captureSetup: () => ({ launchKinds: [] }),
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => true,
@@ -31,7 +34,7 @@ describe('WslRelayRecovery', () => {
     recovery.scheduleRestart(state)
     await vi.advanceTimersByTimeAsync(250)
     await waitFor(() => restart.mock.calls.length === 1)
-    expect(restart).toHaveBeenCalledWith('Ubuntu', { codexHomePath: undefined, launchKinds: [] })
+    expect(restart).toHaveBeenCalledWith('Ubuntu', { launchKinds: [] })
   })
 
   it('drops the state instead of booting a stopped distro', async () => {
@@ -41,6 +44,7 @@ describe('WslRelayRecovery', () => {
     const recovery = new WslRelayRecovery({
       isDistroRunning: async () => false,
       deferUntilRunning: vi.fn(),
+      captureSetup: () => ({ launchKinds: [] }),
       warn,
       isDisposed: () => false,
       isCurrent: () => true,
@@ -63,6 +67,7 @@ describe('WslRelayRecovery', () => {
     const recovery = new WslRelayRecovery({
       isDistroRunning,
       deferUntilRunning: (_distro, task) => deferred.push(task),
+      captureSetup: () => ({ launchKinds: [] }),
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => true,
@@ -70,50 +75,64 @@ describe('WslRelayRecovery', () => {
       dropState
     })
     const state = makeState()
-    const beforeDeath = performance.now()
     recovery.scheduleRestart(state)
     await vi.advanceTimersByTimeAsync(250)
     await waitFor(() => dropState.mock.calls.length === 1)
-    // The running-list read must have started after the link died, never a stale earlier one.
-    expect(isDistroRunning.mock.calls[0]?.[1]).toBeGreaterThanOrEqual(beforeDeath)
     expect(restart).not.toHaveBeenCalled()
     expect(deferred).toHaveLength(1)
     // Something else (the user) started the distro: only now does the relay come back.
     deferred[0]()
-    expect(restart).toHaveBeenCalledExactlyOnceWith('Ubuntu', {
-      codexHomePath: undefined,
-      launchKinds: []
-    })
+    expect(restart).toHaveBeenCalledExactlyOnceWith('Ubuntu', { launchKinds: [] })
   })
 
-  it('brings back the Codex home and pi/omp setups that dropState discarded', async () => {
+  it('restarts with the relay config captured before dropState discarded it', async () => {
     const restart = vi.fn()
     const deferred: (() => void)[] = []
+    let live: WslRelayRestartSetup | undefined = {
+      codexHomePath: '/home/u/.orca-codex',
+      claudeConfigDir: '/home/u/.orca/claude',
+      launchKinds: ['pi', 'omp']
+    }
+    const expected = live
     const recovery = new WslRelayRecovery({
       isDistroRunning: async () => false,
       deferUntilRunning: (_distro, task) => deferred.push(task),
+      captureSetup: () => live ?? { launchKinds: [] },
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => true,
       restart,
-      dropState: (state) => {
-        state.codexHomePath = undefined
-        state.launchKinds = undefined
+      dropState: () => {
+        live = undefined
       }
     })
-    const state: WslRelayRecoveryState = {
-      ...makeState(),
-      codexHomePath: '/home/u/.orca-codex',
-      launchKinds: new Set(['pi', 'omp'])
-    }
-    recovery.scheduleRestart(state)
+    recovery.scheduleRestart(makeState())
     await vi.advanceTimersByTimeAsync(250)
     await waitFor(() => deferred.length === 1)
     deferred[0]()
-    expect(restart).toHaveBeenCalledExactlyOnceWith('Ubuntu', {
-      codexHomePath: '/home/u/.orca-codex',
-      launchKinds: ['pi', 'omp']
+    expect(restart).toHaveBeenCalledExactlyOnceWith('Ubuntu', expected)
+  })
+
+  it('accepts only a running-list read started at check time, not one begun at the terminate', async () => {
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1_000)
+    const isDistroRunning = vi.fn(async (_distro: string, _startedAfter: number) => false)
+    const recovery = new WslRelayRecovery({
+      isDistroRunning,
+      deferUntilRunning: vi.fn(),
+      captureSetup: () => ({ launchKinds: [] }),
+      warn: vi.fn(),
+      isDisposed: () => false,
+      isCurrent: () => true,
+      restart: vi.fn(),
+      dropState: vi.fn()
     })
+    recovery.scheduleRestart(makeState())
+    // A read begun just after the terminate may still list the distro; the check runs later.
+    now.mockReturnValue(11_000)
+    await vi.advanceTimersByTimeAsync(250)
+    await waitFor(() => isDistroRunning.mock.calls.length === 1)
+    expect(isDistroRunning.mock.calls[0]?.[1]).toBe(11_000)
+    now.mockRestore()
   })
 
   it('re-probes once after a stopped verdict and restarts only once', async () => {
@@ -123,6 +142,7 @@ describe('WslRelayRecovery', () => {
     const recovery = new WslRelayRecovery({
       isDistroRunning,
       deferUntilRunning: (_distro, task) => deferred.push(task),
+      captureSetup: () => ({ launchKinds: [] }),
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => true,
@@ -148,6 +168,7 @@ describe('WslRelayRecovery', () => {
     const recovery = new WslRelayRecovery({
       isDistroRunning: probe,
       deferUntilRunning: vi.fn(),
+      captureSetup: () => ({ launchKinds: [] }),
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => false,
@@ -170,6 +191,7 @@ describe('WslRelayRecovery', () => {
     const recovery = new WslRelayRecovery({
       isDistroRunning: probe,
       deferUntilRunning: vi.fn(),
+      captureSetup: () => ({ launchKinds: [] }),
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => current,
@@ -195,6 +217,7 @@ describe('WslRelayRecovery', () => {
     const recovery = new WslRelayRecovery({
       isDistroRunning: probe,
       deferUntilRunning: vi.fn(),
+      captureSetup: () => ({ launchKinds: [] }),
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => current,
@@ -216,6 +239,7 @@ describe('WslRelayRecovery', () => {
     const recovery = new WslRelayRecovery({
       isDistroRunning: async () => true,
       deferUntilRunning: vi.fn(),
+      captureSetup: () => ({ launchKinds: [] }),
       warn: vi.fn(),
       isDisposed: () => true,
       isCurrent: () => true,
@@ -234,6 +258,7 @@ describe('WslRelayRecovery', () => {
     const recovery = new WslRelayRecovery({
       isDistroRunning: async () => true,
       deferUntilRunning: vi.fn(),
+      captureSetup: () => ({ launchKinds: [] }),
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => true,
@@ -254,19 +279,64 @@ describe('WslRelayRecovery', () => {
 })
 
 describe('restartWslRelay', () => {
-  it('re-ensures the base relay and every captured pi/omp setup with the captured Codex home', () => {
-    const ensure = vi.fn(async () => {})
-    restartWslRelay(ensure, 'Ubuntu', { codexHomePath: '/h', launchKinds: ['pi', 'omp'] }, '/now')
+  function relayState(overrides: Partial<WslRelayDistroState> = {}): WslRelayDistroState {
+    return {
+      distro: 'Ubuntu',
+      phase: 'running',
+      failures: 0,
+      cooldownUntil: 0,
+      launchKinds: new Set(),
+      ...overrides
+    }
+  }
+
+  it('seeds a dropped relay so ensure inherits every captured config field', async () => {
+    const states = new Map<string, WslRelayDistroState>()
+    const key = wslHookRelayStateKey('Ubuntu')
+    const source = relayState({
+      codexHomePath: '/h',
+      claudeAgentViewDir: '/av',
+      claudeConfigDir: '/cc',
+      opencodeOverlayDir: '/oc',
+      opencode2OverlayDir: '/oc2',
+      piAgentDir: '/pi',
+      ompStatusExtension: '/omp',
+      launchKinds: new Set(['pi', 'omp'])
+    })
+    const setup = captureWslRelaySetup(source)
+    const seen: (WslRelayDistroState | undefined)[] = []
+    const ensure = vi.fn(async () => {
+      seen.push(states.get(key))
+      states.set(key, relayState({ ...states.get(key), phase: 'starting' }))
+    })
+    await restartWslRelay(states, ensure, 'Ubuntu', setup)
+    const { phase: _p, ...expectedConfig } = source
+    expect(seen[0]).toMatchObject({ ...expectedConfig, phase: 'failed', cooldownUntil: 0 })
     expect(ensure.mock.calls).toEqual([
-      ['Ubuntu', '/h'],
-      ['Ubuntu', '/h', 'pi'],
-      ['Ubuntu', '/h', 'omp']
+      ['Ubuntu'],
+      ['Ubuntu', undefined, 'pi'],
+      ['Ubuntu', undefined, 'omp']
     ])
   })
 
-  it('falls back to the live Codex home when nothing was captured', () => {
+  it('removes the seed when ensure bails without replacing it', async () => {
+    const states = new Map<string, WslRelayDistroState>()
+    await restartWslRelay(
+      states,
+      vi.fn(async () => {}),
+      'Ubuntu',
+      { codexHomePath: '/h', launchKinds: [] }
+    )
+    expect(states.size).toBe(0)
+  })
+
+  it('leaves a relay a terminal already re-ensured in place', async () => {
+    const live = relayState({ codexHomePath: '/new' })
+    const states = new Map([[wslHookRelayStateKey('Ubuntu'), live]])
     const ensure = vi.fn(async () => {})
-    restartWslRelay(ensure, 'Ubuntu', undefined, '/now')
-    expect(ensure.mock.calls).toEqual([['Ubuntu', '/now']])
+    await restartWslRelay(states, ensure, 'Ubuntu', { codexHomePath: '/old', launchKinds: ['pi'] })
+    expect(states.get(wslHookRelayStateKey('Ubuntu'))).toBe(live)
+    expect(live.codexHomePath).toBe('/new')
+    expect(ensure.mock.calls).toEqual([['Ubuntu'], ['Ubuntu', undefined, 'pi']])
   })
 })

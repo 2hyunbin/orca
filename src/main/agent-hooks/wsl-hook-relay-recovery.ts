@@ -1,9 +1,8 @@
+import type { WslRelayRestartSetup } from './wsl-hook-relay-state'
+
 export type WslRelayRecoveryState = {
   distro: string
   cooldownUntil: number
-  /** What a later restart must bring back: the managed Codex home and the pi/omp launch setups. */
-  codexHomePath?: string
-  launchKinds?: ReadonlySet<'pi' | 'omp'>
   restartTimer?: ReturnType<typeof setTimeout>
   reinstallTimer?: ReturnType<typeof setTimeout>
 }
@@ -16,13 +15,10 @@ export type WslRelayRecoveryIo = {
   warn: (message: string) => void
   isDisposed: () => boolean
   isCurrent: (state: WslRelayRecoveryState) => boolean
-  restart: (distro: string, setup?: WslRelayRestartSetup) => void
+  /** Snapshot of the relay config; read before `dropState` discards it. */
+  captureSetup: (state: WslRelayRecoveryState) => WslRelayRestartSetup
+  restart: (distro: string, setup: WslRelayRestartSetup) => void
   dropState: (state: WslRelayRecoveryState) => void
-}
-
-export type WslRelayRestartSetup = {
-  codexHomePath?: string
-  launchKinds: readonly ('pi' | 'omp')[]
 }
 
 // A failed running-list read is not proof the distro stopped; look once more after WSL's backoff.
@@ -37,11 +33,9 @@ export class WslRelayRecovery {
       return
     }
     const delayMs = Math.max(state.cooldownUntil - Date.now(), 0) + 250
-    // Only a running-list read started after the link died may say the distro still runs.
-    const linkDiedAt = performance.now()
     state.restartTimer = setTimeout(() => {
       state.restartTimer = undefined
-      void this.restartIfDistroRunning(state, linkDiedAt)
+      void this.restartIfDistroRunning(state)
     }, delayMs)
     state.restartTimer.unref?.()
   }
@@ -68,19 +62,14 @@ export class WslRelayRecovery {
     }
   }
 
-  private async restartIfDistroRunning(
-    state: WslRelayRecoveryState,
-    linkDiedAt: number
-  ): Promise<void> {
+  private async restartIfDistroRunning(state: WslRelayRecoveryState): Promise<void> {
     if (this.io.isDisposed() || !this.io.isCurrent(state)) {
       return
     }
     // Captured now: once the state is dropped, a later restart would otherwise come back bare.
-    const setup: WslRelayRestartSetup = {
-      codexHomePath: state.codexHomePath,
-      launchKinds: [...(state.launchKinds ?? [])]
-    }
-    const running = await this.io.isDistroRunning(state.distro, linkDiedAt)
+    const setup = this.io.captureSetup(state)
+    // Anchored at check time: a read begun right after the terminate may still list the distro.
+    const running = await this.io.isDistroRunning(state.distro, performance.now())
     // The probe await may outlive state replacement; never drop or restart the replacement relay.
     if (this.io.isDisposed() || !this.io.isCurrent(state)) {
       return

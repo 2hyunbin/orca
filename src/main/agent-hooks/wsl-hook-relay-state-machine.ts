@@ -1,6 +1,6 @@
-import { WslRelayRecovery, type WslRelayRestartSetup } from './wsl-hook-relay-recovery'
+import { WslRelayRecovery } from './wsl-hook-relay-recovery'
 import type { WslHookRelayManagerDeps } from './wsl-hook-relay-deps'
-import type { WslRelayDistroState } from './wsl-hook-relay-state'
+import type { WslRelayDistroState, WslRelayRestartSetup } from './wsl-hook-relay-state'
 import { wslHookRelayStateKey } from './wsl-hook-relay-state-key'
 import { FAILURE_COOLDOWN_MAX_MS } from './wsl-hook-relay-deps'
 
@@ -75,17 +75,55 @@ export async function resolveWslDefaultDistro(
   }
 }
 
-/** Brings a relay back with what it served before: the managed Codex home and pi/omp setups. */
-export function restartWslRelay(
-  ensure: (distro: string, codexHomePath?: string, launchKind?: 'pi' | 'omp') => Promise<void>,
+type WslRelayEnsure = (
   distro: string,
-  setup: WslRelayRestartSetup | undefined,
-  currentCodexHomePath: string | undefined
-): void {
-  const codexHomePath = setup?.codexHomePath ?? currentCodexHomePath
-  void ensure(distro, codexHomePath)
-  for (const launchKind of setup?.launchKinds ?? []) {
-    void ensure(distro, codexHomePath, launchKind)
+  codexHomePath?: string,
+  launchKind?: 'pi' | 'omp'
+) => Promise<void>
+
+export function captureWslRelaySetup(state: WslRelayDistroState): WslRelayRestartSetup {
+  return {
+    codexHomePath: state.codexHomePath,
+    claudeAgentViewDir: state.claudeAgentViewDir,
+    claudeConfigDir: state.claudeConfigDir,
+    opencodeOverlayDir: state.opencodeOverlayDir,
+    opencode2OverlayDir: state.opencode2OverlayDir,
+    piAgentDir: state.piAgentDir,
+    ompStatusExtension: state.ompStatusExtension,
+    launchKinds: [...state.launchKinds]
+  }
+}
+
+/** Brings a relay back with everything it served before, even after its state was dropped. */
+export async function restartWslRelay(
+  states: Map<string, WslRelayDistroState>,
+  ensure: WslRelayEnsure,
+  distro: string,
+  setup: WslRelayRestartSetup
+): Promise<void> {
+  const key = wslHookRelayStateKey(distro)
+  let seed: WslRelayDistroState | undefined
+  if (!states.has(key)) {
+    // A cooled-down failed state: ensure replaces it with a starting relay that inherits its config.
+    seed = {
+      distro,
+      ...setup,
+      launchKinds: new Set(setup.launchKinds),
+      phase: 'failed',
+      failures: 0,
+      cooldownUntil: 0
+    }
+    states.set(key, seed)
+  }
+  // No Codex home argument: ensure keeps the seed's, and never overwrites a newer relay's.
+  const ensures = [ensure(distro)]
+  for (const launchKind of setup.launchKinds) {
+    ensures.push(ensure(distro, undefined, launchKind))
+  }
+  await Promise.all(ensures)
+  // An ensure that bailed (gate closed, no bundle) must not leave the seed behind.
+  if (seed && states.get(key) === seed) {
+    states.delete(key)
   }
 }
 
@@ -94,7 +132,7 @@ export function createWslRelayRecoveryForManager(manager: {
   deps: () => WslHookRelayManagerDeps
   states: Map<string, WslRelayDistroState>
   isDisposed: () => boolean
-  ensure: (distro: string, codexHomePath?: string, launchKind?: 'pi' | 'omp') => Promise<void>
+  ensure: WslRelayEnsure
 }): WslRelayRecovery {
   const { states } = manager
   return new WslRelayRecovery({
@@ -105,13 +143,11 @@ export function createWslRelayRecoveryForManager(manager: {
     warn: (message) => manager.deps().warn(message),
     isDisposed: manager.isDisposed,
     isCurrent: (state) => states.get(wslHookRelayStateKey(state.distro)) === state,
-    restart: (distro, setup) =>
-      restartWslRelay(
-        manager.ensure,
-        distro,
-        setup,
-        states.get(wslHookRelayStateKey(distro))?.codexHomePath
-      ),
+    captureSetup: (state) => {
+      const current = states.get(wslHookRelayStateKey(state.distro))
+      return current ? captureWslRelaySetup(current) : { launchKinds: [] }
+    },
+    restart: (distro, setup) => void restartWslRelay(states, manager.ensure, distro, setup),
     dropState: (state) => {
       const key = wslHookRelayStateKey(state.distro)
       if (states.get(key) === state) {
