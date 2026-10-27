@@ -4,9 +4,18 @@ import {
   getStructuredAgentSessionHost,
   setStructuredAgentSessionHost
 } from '../native-chat/agent-session-wire/structured-agent-session-registry'
+import {
+  answerAntigravityChatAuth,
+  antigravityChatSignIn
+} from '../antigravity/antigravity-chat-account'
 
 const { isWindowsProcessStartTimeAvailable } = vi.hoisted(() => ({
   isWindowsProcessStartTimeAvailable: vi.fn(() => true)
+}))
+
+vi.mock('../acp/acp-structured-launch-resolution', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  resolveAcpLaunchCommand: () => '/installed/agy_acp_server.par'
 }))
 
 vi.mock('../windows/windows-process-table', async (importOriginal) => ({
@@ -53,7 +62,7 @@ type TestLocation = {
 
 type SupportResult = {
   supported: boolean
-  reason?: 'agent' | 'remote' | 'wsl' | 'chat-program'
+  reason?: 'agent' | 'remote' | 'wsl' | 'chat-program' | 'chat-sign-in'
 }
 
 function createRuntime(location: TestLocation): OrcaRuntimeService {
@@ -168,6 +177,23 @@ describe('structured agent-session create-support probe', () => {
       })
     }
   )
+
+  it('sends launches without a chat tab to a terminal only after the chat was seen signed out', async () => {
+    const runtime = createRuntime({ executionHostId: 'local', wslDistro: null })
+    const support = () =>
+      runtime.getStructuredAgentSessionCreateSupport('id:workspace-1', 'antigravity', {
+        requireInstalledChatProgram: true
+      })
+    antigravityChatSignIn.set({ auth: 'unknown', flow: null })
+    expect(await support()).toEqual({ supported: true })
+    answerAntigravityChatAuth(false)
+    expect(await support()).toEqual({ supported: false, reason: 'chat-sign-in' })
+    expect(
+      await runtime.getStructuredAgentSessionCreateSupport('id:workspace-1', 'antigravity')
+    ).toEqual({ supported: true })
+    answerAntigravityChatAuth(true)
+    expect(await support()).toEqual({ supported: true })
+  })
 
   it('still installs and reconciles on startup when a store is already persisted', async () => {
     const runtime = createRuntime({ executionHostId: 'local', wslDistro: null })
