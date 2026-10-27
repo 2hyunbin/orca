@@ -19,6 +19,7 @@ describe('WslRelayRecovery', () => {
     const restart = vi.fn()
     const recovery = new WslRelayRecovery({
       isDistroRunning: async () => true,
+      deferUntilRunning: vi.fn(),
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => true,
@@ -38,6 +39,7 @@ describe('WslRelayRecovery', () => {
     const warn = vi.fn()
     const recovery = new WslRelayRecovery({
       isDistroRunning: async () => false,
+      deferUntilRunning: vi.fn(),
       warn,
       isDisposed: () => false,
       isCurrent: () => true,
@@ -52,11 +54,40 @@ describe('WslRelayRecovery', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('distro not running'))
   })
 
+  it('after a terminate, stays down and comes back only once the distro runs again (E9)', async () => {
+    const restart = vi.fn()
+    const dropState = vi.fn()
+    const deferred: (() => void)[] = []
+    const isDistroRunning = vi.fn(async (_distro: string, _startedAfter: number) => false)
+    const recovery = new WslRelayRecovery({
+      isDistroRunning,
+      deferUntilRunning: (_distro, task) => deferred.push(task),
+      warn: vi.fn(),
+      isDisposed: () => false,
+      isCurrent: () => true,
+      restart,
+      dropState
+    })
+    const state = makeState()
+    const beforeDeath = performance.now()
+    recovery.scheduleRestart(state)
+    await vi.advanceTimersByTimeAsync(250)
+    await waitFor(() => dropState.mock.calls.length === 1)
+    // The running-list read must have started after the link died, never a stale earlier one.
+    expect(isDistroRunning.mock.calls[0]?.[1]).toBeGreaterThanOrEqual(beforeDeath)
+    expect(restart).not.toHaveBeenCalled()
+    expect(deferred).toHaveLength(1)
+    // Something else (the user) started the distro: only now does the relay come back.
+    deferred[0]()
+    expect(restart).toHaveBeenCalledExactlyOnceWith('Ubuntu')
+  })
+
   it('does nothing when the state was replaced before the restart probe', async () => {
     const restart = vi.fn()
     const probe = vi.fn(async () => true)
     const recovery = new WslRelayRecovery({
       isDistroRunning: probe,
+      deferUntilRunning: vi.fn(),
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => false,
@@ -78,6 +109,7 @@ describe('WslRelayRecovery', () => {
     const dropState = vi.fn()
     const recovery = new WslRelayRecovery({
       isDistroRunning: probe,
+      deferUntilRunning: vi.fn(),
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => current,
@@ -102,6 +134,7 @@ describe('WslRelayRecovery', () => {
     const restart = vi.fn()
     const recovery = new WslRelayRecovery({
       isDistroRunning: probe,
+      deferUntilRunning: vi.fn(),
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => current,
@@ -122,6 +155,7 @@ describe('WslRelayRecovery', () => {
     const run = vi.fn()
     const recovery = new WslRelayRecovery({
       isDistroRunning: async () => true,
+      deferUntilRunning: vi.fn(),
       warn: vi.fn(),
       isDisposed: () => true,
       isCurrent: () => true,
@@ -139,6 +173,7 @@ describe('WslRelayRecovery', () => {
     const restart = vi.fn()
     const recovery = new WslRelayRecovery({
       isDistroRunning: async () => true,
+      deferUntilRunning: vi.fn(),
       warn: vi.fn(),
       isDisposed: () => false,
       isCurrent: () => true,

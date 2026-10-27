@@ -45,7 +45,10 @@ export class WslHookRelayManager {
   constructor(deps: Partial<WslHookRelayManagerDeps> = {}) {
     this.deps = { ...defaultWslHookRelayDeps, ...deps }
     this.recovery = new WslRelayRecovery({
-      isDistroRunning: (distro) => this.deps.isDistroRunning(distro),
+      isDistroRunning: (distro, startedAfter) =>
+        this.deps.isDistroRunning(distro, { startedAfter }),
+      deferUntilRunning: (distro, task) =>
+        this.deps.deferUntilRunning(distro, 'wsl-hook-relay-restart', task),
       warn: (message) => this.deps.warn(message),
       isDisposed: () => this.disposed,
       isCurrent: (state) => this.states.get(wslHookRelayStateKey(state.distro)) === state,
