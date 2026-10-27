@@ -158,8 +158,8 @@ export type RuntimeCatalogFetchOptions = {
 
 export type RepoSlice = {
   repos: readonly Repo[]
-  projects: readonly Project[]
-  projectHostSetups: readonly ProjectHostSetup[]
+  endpointProjects: readonly Project[]
+  endpointProjectHostSetups: readonly ProjectHostSetup[]
   projectGroups: readonly ProjectGroup[]
   folderWorkspaces: readonly FolderWorkspace[]
   /** Local projects a WSL host now owns: never in `repos`/`folderWorkspaces`, read-only, chats only. */
