@@ -1,4 +1,8 @@
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ANTIGRAVITY_LAUNCH_SPEC } from '../acp/acp-launch-specs'
+import * as acpLaunchResolution from '../acp/acp-structured-launch-resolution'
 import { OrcaRuntimeService } from './orca-runtime'
 import {
   getStructuredAgentSessionHost,
@@ -11,11 +15,6 @@ import {
 
 const { isWindowsProcessStartTimeAvailable } = vi.hoisted(() => ({
   isWindowsProcessStartTimeAvailable: vi.fn(() => true)
-}))
-
-vi.mock('../acp/acp-structured-launch-resolution', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  resolveAcpLaunchCommand: () => '/installed/agy_acp_server.par'
 }))
 
 vi.mock('../windows/windows-process-table', async (importOriginal) => ({
@@ -107,6 +106,7 @@ describe('structured agent-session create-support probe', () => {
     isWindowsProcessStartTimeAvailable.mockReset()
     isWindowsProcessStartTimeAvailable.mockReturnValue(true)
     setStructuredAgentSessionHost(null)
+    antigravityChatSignIn.set({ auth: 'unknown', flow: null })
     vi.restoreAllMocks()
   })
 
@@ -179,10 +179,21 @@ describe('structured agent-session create-support probe', () => {
   )
 
   it('sends launches without a chat tab to a terminal only after the chat was seen signed out', async () => {
+    setPlatform('win32')
+    vi.spyOn(ANTIGRAVITY_LAUNCH_SPEC.managedRuntime, 'pin').mockReturnValue({
+      version: '1.3.0',
+      url: 'https://example.test/runtime.zip',
+      archiveSha256: 'a'.repeat(64),
+      archiveBytes: 1,
+      members: []
+    })
+    vi.spyOn(acpLaunchResolution, 'resolveAcpLaunchCommand').mockReturnValue(
+      join(tmpdir(), ANTIGRAVITY_LAUNCH_SPEC.command)
+    )
     const runtime = createRuntime({ executionHostId: 'local', wslDistro: null })
     const support = () =>
       runtime.getStructuredAgentSessionCreateSupport('id:workspace-1', 'antigravity', {
-        requireInstalledChatProgram: true
+        requireReadyChatProgram: true
       })
     antigravityChatSignIn.set({ auth: 'unknown', flow: null })
     expect(await support()).toEqual({ supported: true })

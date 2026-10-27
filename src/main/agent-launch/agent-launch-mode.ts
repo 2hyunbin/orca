@@ -85,10 +85,14 @@ const BLOCKER_REASON: Record<StructuredNativeChatBlocker, AgentLaunchDowngradeRe
   'client-capability': 'structured_sessions_unavailable'
 }
 
-type HostSupportReason = 'agent' | 'remote' | 'wsl' | 'chat-program' | 'chat-sign-in'
-type HostLaunchSupport = { supported: boolean; reason?: HostSupportReason }
+type HostLaunchSupport = Awaited<
+  ReturnType<OrcaRuntimeService['getStructuredAgentSessionCreateSupport']>
+>
 
-const HOST_SUPPORT_REASON: Record<HostSupportReason, AgentLaunchDowngradeReason> = {
+const HOST_SUPPORT_REASON: Record<
+  NonNullable<HostLaunchSupport['reason']>,
+  AgentLaunchDowngradeReason
+> = {
   agent: 'structured_unsupported_on_host',
   remote: 'remote_execution_host',
   wsl: 'wsl_execution_runtime',
@@ -208,9 +212,9 @@ async function readStructuredCreateSupport(
     return { supported: false, reason: 'agent' }
   }
   try {
-    // These launches have no chat tab to offer the install, so they keep the agent's own CLI.
+    // These launches have no chat tab to offer setup, so they keep the agent's own CLI.
     return await runtime.getStructuredAgentSessionCreateSupport(`id:${worktreeId}`, agent, {
-      requireInstalledChatProgram: true
+      requireReadyChatProgram: true
     })
   } catch {
     return null

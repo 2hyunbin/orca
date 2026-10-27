@@ -47,11 +47,11 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     RestoreStructuredAgentSessionTabsOnceMethods['restoreStructuredAgentSessionTabsOnce']
   >
 
-  /** `requireInstalledChatProgram` is for launches with no chat tab to offer Orca's install or sign-in. */
+  /** `requireReadyChatProgram` is for launches with no chat tab to offer Orca's install or sign-in. */
   async getStructuredAgentSessionCreateSupport(
     worktreeSelector: string,
     agent: StructuredAgentId,
-    options?: { requireInstalledChatProgram?: boolean }
+    options?: { requireReadyChatProgram?: boolean }
   ): Promise<{
     supported: boolean
     reason?: 'agent' | 'remote' | 'wsl' | StructuredAgentChatBlocker
@@ -62,10 +62,10 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
       location: await this.resolveStructuredAgentSessionLocation(worktreeSelector),
       runtime: this
     })
-    const blocker =
-      support.supported && options?.requireInstalledChatProgram
-        ? await structuredAgentChatBlocker(agent, this)
-        : null
+    if (!support.supported || !options?.requireReadyChatProgram) {
+      return support
+    }
+    const blocker = await structuredAgentChatBlocker(agent, this)
     return blocker ? { supported: false, reason: blocker } : support
   }
 
