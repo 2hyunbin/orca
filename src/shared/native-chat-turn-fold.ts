@@ -9,6 +9,7 @@ import { isStoppedBeforeStartBlock } from './native-chat-stopped-before-start'
 import { nativeChatRowRendersProse } from './native-chat-trailing-run'
 import {
   isBackgroundTaskBlock,
+  isInterruptedStatusMessage,
   isSubagentGroupBlock,
   type NativeChatMessage,
   type NativeChatRole
@@ -56,14 +57,16 @@ export function nativeChatTurnFoldRow(
         (block.tone === 'error' || block.failure?.kind === 'usageLimitReached') &&
         block.presentation !== AGENT_SESSION_ORCA_STOP_PRESENTATION
     ),
-    explainsTurn: message.blocks.some(
-      (block) =>
-        block.type === 'text' &&
-        (block.presentation === 'compaction' ||
-          block.presentation === AGENT_SESSION_COMPACTION_SKIPPED_PRESENTATION ||
-          block.presentation === AGENT_SESSION_ORCA_STOP_PRESENTATION ||
-          block.presentation === AGENT_SESSION_TURN_NOTICE_PRESENTATION)
-    )
+    explainsTurn:
+      isInterruptedStatusMessage(message) ||
+      message.blocks.some(
+        (block) =>
+          block.type === 'text' &&
+          (block.presentation === 'compaction' ||
+            block.presentation === AGENT_SESSION_COMPACTION_SKIPPED_PRESENTATION ||
+            block.presentation === AGENT_SESSION_ORCA_STOP_PRESENTATION ||
+            block.presentation === AGENT_SESSION_TURN_NOTICE_PRESENTATION)
+      )
   }
 }
 

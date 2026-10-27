@@ -3,9 +3,14 @@
 import '@testing-library/jest-dom/vitest'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { AgentStatusEntry, AgentStatusPayload } from '../../../../shared/agent-status-types'
-import type { NativeChatMessage } from '../../../../shared/native-chat-types'
+import {
+  NATIVE_CHAT_INTERRUPTED_STATUS_TEXT,
+  type NativeChatMessage
+} from '../../../../shared/native-chat-types'
+import { agentVerdictDisplayMark } from '../../../../shared/agent-main-agent-verdict'
+import { decodeCodexTranscriptLine } from '../../../../main/native-chat/transcript-line-decoders-codex'
 import type { NativeChatLiveSession } from './use-native-chat-live-session'
 
 // Stub transcript/composer to exercise store status through the view into shared turn and prompt rendering.
@@ -82,7 +87,7 @@ function transcript(
   }
 }
 
-function setStatus(payload: Omit<AgentStatusPayload, 'prompt' | 'agentType'>, age = 0): void {
+function setStatus(payload: AgentStatusPayload, age = 0): void {
   useAppStore
     .getState()
     .setAgentStatus(paneKey, { prompt: 'Rename the module', agentType: 'claude', ...payload })
@@ -107,12 +112,15 @@ function patchStatus(fields: Partial<AgentStatusEntry>): void {
   }))
 }
 
-function renderPane(): void {
-  render(
+function renderPane(
+  agent: 'claude' | 'zcode' | 'codex' = 'claude',
+  container?: HTMLElement
+): ReturnType<typeof render> {
+  return render(
     <TooltipProvider>
       <NativeChatResolvedView
         paneKey={paneKey}
-        agent="claude"
+        agent={agent}
         sessionId="session-state"
         transcriptPath={null}
         isVisible
@@ -121,7 +129,8 @@ function renderPane(): void {
         terminalTabId="tab-state"
         ownsTabWideLaunchDraft={false}
       />
-    </TooltipProvider>
+    </TooltipProvider>,
+    { container }
   )
 }
 
@@ -205,50 +214,160 @@ describe('NativeChatResolvedView turn status', () => {
     expect(screen.getByText('Working for 1m 30s')).toBeInTheDocument()
   })
 
-  // A remounted pane must use the host’s recorded end and duration instead of drawing an unfinished turn.
   it.each([
-    ['cancellation', 'Interrupted after'],
-    ['superseded', 'Interrupted after'],
-    ['failure', 'Failed after'],
-    ['success', 'Worked for'],
-    ['interruption', 'Worked for'],
-    ['unconfirmed', 'Worked for'],
-    [undefined, 'Worked for']
-  ] as const)(
-    'renders canonical %s on only the latest host-ended turn, including remount',
-    (outcome, label) => {
-      retained.session = transcript('ready', false, [
-        { ...userTurn, id: 'earlier', timestamp: 1_000 },
-        { ...stepCall, id: 'earlier-step', timestamp: 46_000 },
-        { ...userTurn, timestamp: 100_000 },
-        { ...stepCall, timestamp: 110_000 }
-      ])
-      setStatus({ state: 'done' })
-      const now = Date.now()
-      patchStatus({
-        stateStartedAt: now - 10_000,
-        turnStartedAt: now - 100_000,
-        mainAgent: { state: 'done', stateStartedAt: now - 10_000, outcome }
+    ['cancellation', 'interrupted'],
+    ['failure', 'failed']
+  ] as const)('keeps canonical %s off an independently arriving transcript', (outcome, mark) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const at = Date.parse('2026-10-25T10:00:00.000Z')
+      const oldTranscript: NativeChatMessage[] = [
+        { ...userTurn, id: 'u1', timestamp: at + 10_000 },
+        {
+          ...stepCall,
+          id: 'a1',
+          blocks: [{ type: 'text', text: 'Renamed successfully.' }],
+          timestamp: at + 30_000
+        }
+      ]
+      retained.session = { ...transcript('ready', false, oldTranscript), agent: 'zcode' }
+      vi.setSystemTime(at + 30_000)
+      setStatus({
+        state: 'done',
+        agentType: 'zcode',
+        mainAgent: { state: 'done', outcome: 'success', stateStartedAt: Date.now() }
       })
-      renderPane()
-      expect(screen.getByText(`${label} 1m 30s`)).toBeInTheDocument()
-      expect(screen.getByText('Worked for 45s')).toBeInTheDocument()
-      cleanup()
-      patchStatus({ updatedAt: now - 31 * 60_000 })
-      renderPane()
-      expect(screen.getByText(`${label} 1m 30s`)).toBeInTheDocument()
+      patchStatus({ turnStartedAt: at + 10_000 })
+      const view = renderPane('zcode')
+      expect(screen.getByText('Worked for 20s')).toBeInTheDocument()
+
       act(() => {
-        retained.session = transcript('working', false, [
-          ...retained.session!.messages,
-          { ...userTurn, id: 'next', timestamp: now }
-        ])
-        setStatus({ state: 'working' })
-        patchStatus({ turnStartedAt: now, mainAgent: { state: 'working', stateStartedAt: now } })
+        vi.setSystemTime(at + 100_000)
+        retained.session = { ...retained.session!, status: 'working' }
+        setStatus({
+          state: 'working',
+          agentType: 'zcode',
+          prompt: 'Now add tests',
+          mainAgent: { state: 'working', stateStartedAt: Date.now() }
+        })
+        patchStatus({ turnStartedAt: Date.now() })
       })
+      expect(retained.session!.messages).toBe(oldTranscript)
       expect(screen.getByText('Working for 0s')).toBeInTheDocument()
-      expect(screen.queryByText(`${label} 1m 30s`)).toBeNull()
+      act(() => {
+        vi.setSystemTime(at + 110_000)
+        retained.session = { ...retained.session!, status: 'ready' }
+        setStatus({
+          state: 'done',
+          agentType: 'zcode',
+          interrupted: outcome === 'cancellation',
+          prompt: 'Now add tests',
+          mainAgent: { state: 'done', outcome, stateStartedAt: Date.now() }
+        })
+        patchStatus({ turnStartedAt: at + 100_000 })
+      })
+      const canonical = useAppStore.getState().agentStatusByPaneKey[paneKey]!
+      expect(canonical).toMatchObject({
+        turnStartedAt: at + 100_000,
+        prompt: 'Now add tests',
+        mainAgent: { state: 'done', outcome, stateStartedAt: at + 110_000 }
+      })
+      const expectCanonicalOnly = (): void => {
+        expect(useAppStore.getState().agentStatusByPaneKey[paneKey]).toBe(canonical)
+        expect(agentVerdictDisplayMark(canonical)).toBe(mark)
+        expect(screen.queryByText(/^(Interrupted|Failed) after/)).toBeNull()
+        expect(screen.queryByText(NATIVE_CHAT_INTERRUPTED_STATUS_TEXT)).toBeNull()
+        expect(screen.getByText('Renamed successfully.')).toBeInTheDocument()
+      }
+      expect(retained.session!.messages).toBe(oldTranscript)
+      expectCanonicalOnly()
+      // Generic duration is inherited timing, not a claim of success or a joined Stop result.
+      expect(screen.getByText('Worked for 10s')).toBeInTheDocument()
+
+      retained.session = {
+        ...retained.session!,
+        messages: [
+          ...oldTranscript,
+          {
+            ...userTurn,
+            id: 'u2',
+            blocks: [{ type: 'text', text: 'Now add tests' }],
+            timestamp: at + 100_000
+          }
+        ]
+      }
+      renderPane('zcode', view.container)
+      expectCanonicalOnly()
+      expect(screen.getByText('Worked for 20s')).toBeInTheDocument()
+      // Transcript can also lead canonical status, with repeated text and no timestamp.
+      retained.session = {
+        ...retained.session,
+        messages: [
+          ...retained.session.messages,
+          {
+            ...userTurn,
+            id: 'u3',
+            blocks: [{ type: 'text', text: 'Now add tests' }],
+            timestamp: null
+          }
+        ]
+      }
+      renderPane('zcode', view.container)
+      expectCanonicalOnly()
+      cleanup()
+      renderPane('zcode')
+      expectCanonicalOnly()
+      expect(screen.getByText('Worked for 20s')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
     }
-  )
+  })
+
+  it('keeps the real provider interruption visible outside collapsed work', () => {
+    const at = Date.parse('2026-10-25T10:00:00.000Z')
+    const notice = decodeCodexTranscriptLine(
+      JSON.stringify({
+        type: 'event_msg',
+        timestamp: new Date(at + 12_000).toISOString(),
+        payload: { type: 'turn_aborted', reason: 'interrupted', turn_id: 'turn-1' }
+      }),
+      'provider-interruption'
+    )
+    if (!notice) {
+      throw new Error('the provider abort must decode to its actual timeline row')
+    }
+    retained.session = {
+      ...transcript('ready', false, [
+        { ...userTurn, timestamp: at },
+        { ...stepCall, timestamp: at + 5_000 },
+        notice,
+        {
+          ...userTurn,
+          id: 'next',
+          blocks: [{ type: 'text', text: 'Continue' }],
+          timestamp: at + 60_000
+        }
+      ]),
+      agent: 'codex'
+    }
+    setStatus({ state: 'done', agentType: 'codex' })
+    renderPane('codex')
+    const interruption = screen.getByText(NATIVE_CHAT_INTERRUPTED_STATUS_TEXT)
+    expect(interruption).toBeVisible()
+    expect(screen.getAllByText(NATIVE_CHAT_INTERRUPTED_STATUS_TEXT)).toHaveLength(1)
+    expect(screen.getByText('Rename the module').compareDocumentPosition(interruption)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+    expect(interruption.compareDocumentPosition(screen.getByText('Continue'))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+    expect(screen.queryByText('pnpm build')).toBeNull()
+    const fold = screen.getByRole('button', { name: 'Toggle turn details' })
+    expect(fold).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(fold)
+    expect(screen.getByText('pnpm build')).toBeInTheDocument()
+    expect(screen.getAllByText(NATIVE_CHAT_INTERRUPTED_STATUS_TEXT)).toHaveLength(1)
+  })
 
   // Store staleness alone cannot prove an unanswered turn ended.
   it('does not settle a turn the host went quiet on', () => {
