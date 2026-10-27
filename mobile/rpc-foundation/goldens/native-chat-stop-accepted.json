@@ -9,7 +9,7 @@
       "ordinal": 3,
       "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"terminal.send\",\"params\":{\"terminal\":\"terminal-1\",\"text\":\"\\u001b\",\"client\":{\"id\":\"device-token-1\",\"type\":\"mobile\"}}}"
     },
-    "650fdd02bab4": {
+    "5cd6e007c8ca": {
       "name": "terminal.send#2",
       "ordinal": 6,
       "args": [
@@ -32,14 +32,14 @@
           "name": "options",
           "value": {
             "budgetSpansConnect": true,
-            "timeoutMs": 14920
+            "timeoutMs": 14000
           }
         }
       ],
       "settlement": {
         "status": "fulfilled",
-        "startedAt": 80,
-        "settledAt": 120,
+        "startedAt": 1000,
+        "settledAt": 1000,
         "value": {
           "id": "frame-3",
           "ok": true,
@@ -174,7 +174,7 @@
       {
         "id": "settled",
         "observation": {
-          "sender": ["ab0f3d65723e", "fcdecc63b46e", "650fdd02bab4"],
+          "sender": ["ab0f3d65723e", "fcdecc63b46e", "5cd6e007c8ca"],
           "payloads": ["5cd1d4a9aed5", "ef7005279d33", "ef422fa31f61"],
           "settlements": {
             "stop": "eb79a9b3682a"

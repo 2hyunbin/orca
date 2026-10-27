@@ -3255,7 +3255,13 @@
         "historyItemTooLarge": "This part of the chat was too large to show.",
         "historyRepaired": "Part of this chat's history couldn't be loaded.",
         "plan": "Plan",
-        "stoppedBeforeStart": "Stopped manually"
+        "stoppedBeforeStart": "Stopped manually",
+        "orcaStopCanContinue": "You can continue in this conversation.",
+        "orcaStopCrash": "Orca on {{machine}} stopped unexpectedly while this response was in progress.",
+        "orcaStopQuit": "Orca on {{machine}} was closed while this response was in progress.",
+        "orcaStopRemote": "Orca on {{machine}} stopped while this response was in progress.",
+        "orcaStopUnnamedServer": "the remote server",
+        "orcaStopUpdate": "Orca on {{machine}} restarted for an update while this response was in progress."
       },
       "question": {
         "other": "Other…"

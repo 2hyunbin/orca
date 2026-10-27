@@ -701,7 +701,7 @@ describe('useMobileNativeChatController terminal turn', () => {
       agentType: 'claude',
       lastAssistantMessage: 'Partial reply',
       providerSession: { id: 'session-1' },
-      updatedAt: Date.now(),
+      updatedAt: turnStartedAt,
       stateStartedAt: turnStartedAt,
       turnStartedAt
     },
@@ -731,6 +731,9 @@ describe('useMobileNativeChatController terminal turn', () => {
   }
 
   beforeEach(() => {
+    // Hook freshness is read against the clock, so pin it to the hook's own update.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(turnStartedAt)
     viewMode.isTabChatView = () => true
     workingTab.agentStatus.workingMode = undefined
     workingTab.agentStatus.stateStartedAt = turnStartedAt
@@ -745,6 +748,7 @@ describe('useMobileNativeChatController terminal turn', () => {
     controller = null
     viewMode.isTabChatView = () => true
     Reflect.deleteProperty(sessionState, 'transcriptLifecycle')
+    vi.useRealTimers()
   })
 
   it('runs the turn clock and streams the hook preview while the agent works', () => {
