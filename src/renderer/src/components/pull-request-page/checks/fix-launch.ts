@@ -52,7 +52,10 @@ export async function startFixChecksFromDialog(args: {
   item: GitHubWorkItem
   agent: Parameters<typeof launchWorkItemDirect>[0]['agentOverride']
   commandInput: string
-  agentArgs: string
+  /** Omitted when CLI arguments do not apply, so the launch resolves the global Agents setting. */
+  agentArgs?: string
+  sessionOptions?: Readonly<Record<string, string>>
+  sessionOptionsYieldToAgentArgs?: true
 }): Promise<boolean> {
   if (!args.targetRepoId) {
     return false
@@ -65,6 +68,8 @@ export async function startFixChecksFromDialog(args: {
     promptDelivery: 'submit-after-ready',
     agentOverride: args.agent,
     agentArgs: args.agentArgs,
+    ...(args.sessionOptions ? { sessionOptions: args.sessionOptions } : {}),
+    sessionOptionsYieldToAgentArgs: args.sessionOptionsYieldToAgentArgs,
     openModalFallback: () => {
       toast.error(
         translate(

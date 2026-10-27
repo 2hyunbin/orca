@@ -142,5 +142,3 @@ export async function updateMR(
     localGitOptions
   )
 }
-
-/** Re-export so callers don't need to know the gl-utils module split. */

@@ -1,11 +1,12 @@
-import type { RpcClient } from '../transport/rpc-client'
+import type { RpcOperationSender } from '../transport/rpc-operation-sender'
+import { workerTerminalTakeoverReport } from './mobile-terminal-operations'
 
-type ReportClient = Pick<RpcClient, 'sendRequest'>
+type ReportClient = RpcOperationSender
 const REPORT_INTERVAL_MS = 30_000
 const REPORT_RETRY_DELAY_MS = 250
 let reportsByClient = new WeakMap<ReportClient, Map<string, number>>()
 
-// The same logical client owns relay/direct cutover; never reroute a report via active UI state.
+// Keep the same logical client through cutover; active UI state must not reroute the report.
 export function reportWorkerTerminalUserInput(client: ReportClient, terminal: string): void {
   let reports = reportsByClient.get(client)
   if (!reports) {
@@ -24,9 +25,7 @@ export function reportWorkerTerminalUserInput(client: ReportClient, terminal: st
       }
     }
   }
-  // Why the gate ignores the answer: like desktop, one report per terminal per window is the
-  // whole cost of typing into any terminal, worker or not. A result-aware gate that reopened on
-  // "changed nothing" turned every key on an ordinary terminal into an RPC plus a host write.
+  // Gate one report per terminal/window regardless of changed count, or ordinary typing becomes one host transaction per key.
   reports.set(terminal, now)
   void sendTakeoverReport(client, terminal).catch(() => {
     if (reports.get(terminal) === now) {
@@ -37,12 +36,12 @@ export function reportWorkerTerminalUserInput(client: ReportClient, terminal: st
 
 async function sendTakeoverReport(client: ReportClient, terminal: string): Promise<void> {
   const report = async (): Promise<void> => {
-    const response = await client.sendRequest(
-      'orchestration.workerTerminalUserInput',
+    const reply = await workerTerminalTakeoverReport.request(
+      client,
       { terminal },
       { timeoutMs: 5_000, budgetSpansConnect: true, failWhenDisconnected: true }
     )
-    if (!response.ok) {
+    if (!workerTerminalTakeoverReport.interpret(reply).accepted) {
       throw new Error('Worker takeover report rejected')
     }
   }

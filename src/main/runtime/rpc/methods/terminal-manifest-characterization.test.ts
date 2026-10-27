@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import { TERMINAL_METHODS } from './terminal'
+import { eraseRpcMethods } from '../core'
 import {
   TerminalMultiplexLegacyAckFrame,
-  TerminalMultiplexSourceRangeAckFrame,
   TerminalMultiplexSubscribeFrame
 } from './terminal/stream-schemas'
 
@@ -19,7 +19,10 @@ const METHOD_CASES: readonly (readonly [string, unknown, boolean])[] = [
   ['terminal.isRunningAgent', { terminal: 'term' }, false],
   ['terminal.agentStatus', { terminal: 'term' }, false],
   ['terminal.rename', { terminal: 'term', title: null }, false],
+  ['terminal.setPaneTitle', { terminal: 'term', title: '' }, false],
   ['terminal.clearBuffer', { terminal: 'term' }, false],
+  ['terminal.resetInputModes', { terminal: 'term' }, false],
+  ['terminal.readKittyFile', { terminal: 'term', path: '/tmp/image.png' }, false],
   ['terminal.send', { terminal: 'term', text: 'x' }, false],
   ['terminal.wait', { terminal: 'term', for: 'exit' }, false],
   ['terminal.create', {}, false],
@@ -30,6 +33,7 @@ const METHOD_CASES: readonly (readonly [string, unknown, boolean])[] = [
   ['terminal.stopExact', { worktree: 'worktree', expectedPtyIds: ['pty'] }, false],
   ['terminal.resizeForClient', { terminal: 'term', mode: 'restore', clientId: 'client' }, false],
   ['terminal.focus', { terminal: 'term' }, false],
+  ['terminal.reveal', { worktreeId: 'worktree', tabId: 'tab' }, false],
   ['terminal.close', { terminal: 'term' }, false],
   ['terminal.closeTab', { terminal: 'term' }, false],
   ['agentTeams.tmuxCompat', { teamId: 'team', token: 'token', envPane: 'pane', argv: [] }, false],
@@ -46,18 +50,25 @@ const METHOD_CASES: readonly (readonly [string, unknown, boolean])[] = [
   ['terminal.subscribe', { terminal: 'term' }, true],
   ['terminal.unsubscribe', { subscriptionId: 'term' }, false],
   ['terminal.getAutoRestoreFit', {}, false],
-  ['terminal.setAutoRestoreFit', { ms: null }, false]
+  ['terminal.setAutoRestoreFit', { ms: null }, false],
+  ['terminal.setViewerColors', { colors: { foreground: '#ffffff', background: '#000000' } }, false],
+  ['terminal.subscribeClaudeAgentViews', null, true],
+  [
+    'terminal.viewClaudeAgent',
+    { terminal: 'term', sessionId: 'session', client: { id: 'test', type: 'desktop' } },
+    false
+  ]
 ]
 
 function schemaFor(name: string) {
-  const method = TERMINAL_METHODS.find((candidate) => candidate.name === name)
+  const method = eraseRpcMethods(TERMINAL_METHODS).find((candidate) => candidate.name === name)
   if (!method?.params) {
     throw new Error(`Missing terminal schema: ${name}`)
   }
   return method.params
 }
 async function invoke(name: string, params: unknown, runtime: Partial<OrcaRuntimeService>) {
-  const method = TERMINAL_METHODS.find((candidate) => candidate.name === name)
+  const method = eraseRpcMethods(TERMINAL_METHODS).find((candidate) => candidate.name === name)
   if (!method?.params || 'stream' in method) {
     throw new Error(`Missing unary terminal method: ${name}`)
   }
@@ -66,12 +77,16 @@ async function invoke(name: string, params: unknown, runtime: Partial<OrcaRuntim
 
 describe('terminal RPC manifest characterization', () => {
   it('preserves all method names, order, streaming flags, and parseable minimum inputs', () => {
-    expect(TERMINAL_METHODS).toHaveLength(35)
+    expect(TERMINAL_METHODS).toHaveLength(42)
     expect(TERMINAL_METHODS.map((method) => [method.name, 'stream' in method])).toEqual(
       METHOD_CASES.map(([name, _params, stream]) => [name, stream])
     )
-    expect(new Set(TERMINAL_METHODS.map((method) => method.name)).size).toBe(35)
+    expect(new Set(TERMINAL_METHODS.map((method) => method.name)).size).toBe(42)
     for (const [name, params] of METHOD_CASES) {
+      if (params === null) {
+        expect(TERMINAL_METHODS.find((method) => method.name === name)?.params, name).toBeNull()
+        continue
+      }
       expect(() => schemaFor(name).parse(params), name).not.toThrow()
     }
   })
@@ -90,9 +105,16 @@ describe('terminal RPC manifest characterization', () => {
       schemaFor('terminal.updateViewport').parse({
         terminal: 'term',
         client: { id: 'client' },
-        viewport: { cols: 241, rows: 120 }
+        viewport: { cols: 1025, rows: 120 }
       })
     ).toThrow()
+    expect(() =>
+      schemaFor('terminal.updateViewport').parse({
+        terminal: 'term',
+        client: { id: 'client' },
+        viewport: { cols: 1024, rows: 500 }
+      })
+    ).not.toThrow()
     expect(() =>
       schemaFor('terminal.subscribe').parse({
         terminal: 'term',
@@ -112,13 +134,6 @@ describe('terminal RPC manifest characterization', () => {
     expect(TerminalMultiplexLegacyAckFrame.safeParse({ bytes: 1, future: true }).success).toBe(
       false
     )
-    expect(
-      TerminalMultiplexSourceRangeAckFrame.safeParse({
-        streamGeneration: 'generation',
-        ackedEndByte: 1,
-        future: true
-      }).success
-    ).toBe(false)
     expect(
       TerminalMultiplexSubscribeFrame.parse({
         streamId: 1,

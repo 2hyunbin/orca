@@ -1,5 +1,7 @@
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
+import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
+import type { RuntimeGitContext } from '@/runtime/runtime-git-client-context'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -8,17 +10,28 @@ import type {
   SourceControlActionRecipe,
   SourceControlLaunchActionId
 } from '../../../../shared/source-control-ai-actions'
-import type { SourceControlAiWriteTarget } from '../../../../shared/source-control-ai-recipe-save'
+import {
+  saveSourceControlActionRecipe,
+  type SourceControlAiWriteTarget
+} from '../../../../shared/source-control-ai-recipe-save'
+import { resolveSourceControlActionRecipe } from '../../../../shared/source-control-ai-operation-policy'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
-import { sourceControlActionRecipeMatchesTarget } from './source-control-action-recipe-match'
+import { sourceControlActionRecipeSaveMatchesTarget } from './source-control-action-recipe-match'
 import { resolveSourceControlAgentSaveTarget } from './source-control-agent-action-dialog-support'
+import {
+  sourceControlActionAgentArgs,
+  sourceControlActionLaunchOptions
+} from '../../../../shared/source-control-action-launch-preferences'
+import { admitSourceControlRecovery } from './source-control-recovery-admission'
 
 type RunSourceControlAgentActionStartArgs = {
   selectedAgent: TuiAgent
   trimmedCommandInput: string
   agentArgs: string
-  commandTemplate: string
+  /** False when the launch would be structured native chat, which reads no CLI arguments. */
+  agentArgsApply: boolean
+  recipe: SourceControlActionRecipe
   saveTargetValue: string
   actionId: SourceControlLaunchActionId
   repoId?: string | null
@@ -29,22 +42,23 @@ type RunSourceControlAgentActionStartArgs = {
   promptDelivery: 'auto-submit' | 'draft' | 'submit-after-ready'
   launchPlatform?: NodeJS.Platform
   launchSource: LaunchSource
+  recoveryContext?: RuntimeGitContext | null
+  signal?: AbortSignal
   onStart?: (args: {
     agent: TuiAgent
     commandInput: string
-    agentArgs: string
+    /** Omitted when CLI arguments do not apply, so the launch resolves the global setting. */
+    agentArgs?: string
+    /** The action's saved choice, on either route. */
+    sessionOptions?: Readonly<Record<string, string>>
+    sessionOptionsYieldToAgentArgs?: true
   }) => boolean | Promise<boolean>
   onSaveAgentDefault?: (
     target: SourceControlAiWriteTarget,
     actionId: SourceControlLaunchActionId,
     recipe: SourceControlActionRecipe
   ) => void | Promise<void>
-  /**
-   * Fires as soon as the agent tab/session is created, before deferred
-   * submit-after-ready prompt delivery finishes. Reversible bookkeeping only —
-   * irreversible side effects (posting host replies, resolving threads) belong in
-   * onLaunched, which only fires once the prompt actually reached the agent.
-   */
+  /** Tab creation permits reversible bookkeeping; irreversible host writes belong in onLaunched after prompt delivery. */
   onLaunchAccepted?: () => void
   /** Fires when a launch that already reported onLaunchAccepted failed to deliver its prompt. */
   onLaunchAborted?: () => void
@@ -56,7 +70,8 @@ export async function runSourceControlAgentActionStart({
   selectedAgent,
   trimmedCommandInput,
   agentArgs,
-  commandTemplate,
+  agentArgsApply,
+  recipe,
   saveTargetValue,
   actionId,
   repoId,
@@ -67,6 +82,8 @@ export async function runSourceControlAgentActionStart({
   promptDelivery,
   launchPlatform,
   launchSource,
+  recoveryContext,
+  signal,
   onStart,
   onSaveAgentDefault,
   onLaunchAccepted,
@@ -74,9 +91,54 @@ export async function runSourceControlAgentActionStart({
   onLaunched,
   onClose
 }: RunSourceControlAgentActionStartArgs): Promise<boolean> {
+  // Detection and delivery planning can outlive the state that opened the composer.
+  if (signal?.aborted) {
+    return false
+  }
+  if (recoveryContext && !(await admitSourceControlRecovery(recoveryContext, signal))) {
+    return false
+  }
+  if (signal?.aborted) {
+    return false
+  }
   let launched = false
   let launchFailureNotified = false
   let launchAcceptedNotified = false
+  // Undefined selects global agent arguments; empty string would suppress that fallback.
+  let launchAgentArgs = agentArgsApply ? agentArgs : undefined
+  const saveTarget = resolveSourceControlAgentSaveTarget(saveTargetValue, repoId)
+  // The dialog edits agent, arguments and prompt; the model stays the saved one for that agent.
+  // Why: a recipe being saved launches as it will resolve once saved, so the next launch matches.
+  let launchRecipe = recipe
+  let recipeToSave = recipe
+  if (saveTarget && settings) {
+    const saved = saveSourceControlActionRecipe({
+      target: saveTarget,
+      settings,
+      repo,
+      actionId,
+      recipe
+    })
+    recipeToSave =
+      ('sourceControlAi' in saved
+        ? saved.sourceControlAi.actions?.[actionId]
+        : saved.update.sourceControlAi?.actionOverrides?.[actionId]) ?? recipe
+    launchRecipe = resolveSourceControlActionRecipe({
+      settings:
+        'sourceControlAi' in saved
+          ? { ...settings, sourceControlAi: saved.sourceControlAi }
+          : settings,
+      repo:
+        'update' in saved ? { sourceControlAi: saved.update.sourceControlAi ?? undefined } : repo,
+      actionId
+    })
+  }
+  launchAgentArgs = sourceControlActionAgentArgs(
+    { ...launchRecipe, agentArgs: launchAgentArgs },
+    selectedAgent,
+    settings
+  )
+  const launchOptions = sourceControlActionLaunchOptions(launchRecipe, selectedAgent)
   const notifyLaunchAccepted = (): void => {
     if (launchAcceptedNotified) {
       return
@@ -88,28 +150,30 @@ export async function runSourceControlAgentActionStart({
     launched = await onStart({
       agent: selectedAgent,
       commandInput: trimmedCommandInput,
-      agentArgs
+      agentArgs: launchAgentArgs,
+      ...launchOptions
     })
     if (launched) {
       notifyLaunchAccepted()
     }
   } else if (worktreeId) {
     const result = launchAgentInNewTab({
+      requestId: newAgentLaunchRequestId(),
       agent: selectedAgent,
       worktreeId,
       groupId: groupId ?? worktreeId,
       prompt: trimmedCommandInput,
-      agentArgs,
+      agentArgs: launchAgentArgs,
+      ...launchOptions,
       promptDelivery,
       launchPlatform,
       launchSource
     })
     launched = Boolean(result)
-    if (result?.tabId) {
-      focusTerminalTabSurface(result.tabId)
+    if (result?.surface.kind === 'local-terminal') {
+      focusTerminalTabSurface(result.surface.tabId)
     }
-    // Why: lets callers park launch-scoped state before submit-after-ready finishes
-    // (can take tens of seconds); host mutations still wait for delivery below.
+    // Park launch state before slow submit-after-ready completes; host writes still wait for delivery.
     if (launched) {
       notifyLaunchAccepted()
     }
@@ -139,32 +203,27 @@ export async function runSourceControlAgentActionStart({
     return false
   }
 
-  const saveTarget = resolveSourceControlAgentSaveTarget(saveTargetValue, repoId)
-  const launchRecipe = {
-    agentId: selectedAgent,
-    commandInputTemplate: commandTemplate,
-    agentArgs
-  }
   const launchRecipeAlreadySaved = Boolean(
     saveTarget &&
-    sourceControlActionRecipeMatchesTarget({
+    sourceControlActionRecipeSaveMatchesTarget({
       actionId,
       target: saveTarget,
-      recipe: launchRecipe,
+      recipe: recipeToSave,
       settings,
       repo
     })
   )
   if (saveTarget && onSaveAgentDefault && !launchRecipeAlreadySaved) {
     try {
-      await onSaveAgentDefault(saveTarget, actionId, launchRecipe)
+      await onSaveAgentDefault(saveTarget, actionId, recipeToSave)
     } catch (error) {
-      // Why: the prompt already reached the agent; a failed recipe save must not strand the
-      // caller's accepted-launch bookkeeping (neither onLaunched nor onLaunchAborted would fire).
+      // Prompt delivery succeeded; recipe-save failure must not prevent accepted-launch callbacks from settling.
       console.error('onSaveAgentDefault failed', error)
     }
   }
   onLaunched?.()
-  onClose()
+  if (!signal?.aborted) {
+    onClose()
+  }
   return true
 }

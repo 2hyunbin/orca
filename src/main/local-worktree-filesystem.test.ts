@@ -7,9 +7,8 @@ const { runProcessMock, lstatMock, readFileMock, rmMock } = vi.hoisted(() => ({
   rmMock: vi.fn()
 }))
 
-// Why mock the chokepoint: encoding, timeout and the hidden console are its
-// contract now, so this suite asserts what the distro is asked to run.
-vi.mock('../shared/child-process/run-process', () => ({
+// Process-host tests own encoding, timeouts, and console hiding; assert guest commands here.
+vi.mock('@orca/process-host', () => ({
   runProcess: runProcessMock
 }))
 
@@ -25,17 +24,18 @@ import {
   toHostFilesystemPath,
   toHostRemovalPath
 } from './local-worktree-filesystem'
+import { isWorktreePathMissing } from './worktree-removal-safety'
 
 function completeExecFile(stdout = ''): void {
   runProcessMock.mockResolvedValue({ code: 0, signal: null, stdout, stderr: '', timedOut: false })
 }
 
-function failExecFile(exitCode: number): void {
+function failExecFile(exitCode: number, stderr = 'missing'): void {
   runProcessMock.mockResolvedValue({
     code: exitCode,
     signal: null,
     stdout: '',
-    stderr: 'missing',
+    stderr,
     timedOut: false
   })
 }
@@ -92,15 +92,7 @@ describe('local worktree filesystem runtime access', () => {
       await removeLocalWorktreePath(longPath)
 
       expect(toHostRemovalPath(longPath)).toBe(`\\\\?\\${longPath}`)
-      expect(rmMock).toHaveBeenCalledWith(
-        `\\\\?\\${longPath}`,
-        expect.objectContaining({
-          recursive: true,
-          force: true,
-          maxRetries: expect.any(Number),
-          retryDelay: expect.any(Number)
-        })
-      )
+      expect(rmMock).toHaveBeenCalledWith(`\\\\?\\${longPath}`, { recursive: true, force: true })
     })
   })
 
@@ -125,7 +117,7 @@ describe('local worktree filesystem runtime access', () => {
     })
   })
 
-  it('retries transient host removal failures on Windows', async () => {
+  it('retries a transient Windows lock as a whole pass, never per entry', async () => {
     vi.useFakeTimers()
     await withPlatform('win32', async () => {
       const error = Object.assign(new Error('Directory not empty'), { code: 'ENOTEMPTY' })
@@ -135,27 +127,34 @@ describe('local worktree filesystem runtime access', () => {
       await vi.advanceTimersByTimeAsync(250)
 
       await expect(removal).resolves.toBeUndefined()
-      expect(rmMock).toHaveBeenCalledTimes(2)
-      expect(rmMock).toHaveBeenNthCalledWith(
-        1,
-        toHostRemovalPath('C:\\repo\\feature'),
-        expect.objectContaining({
-          recursive: true,
-          force: true,
-          maxRetries: expect.any(Number),
-          retryDelay: expect.any(Number)
+      // Async rm's maxRetries multiplies per directory level when a file stays open.
+      expect(rmMock.mock.calls).toEqual([
+        [toHostRemovalPath('C:\\repo\\feature'), { recursive: true, force: true }],
+        [toHostRemovalPath('C:\\repo\\feature'), { recursive: true, force: true }]
+      ])
+    })
+  })
+
+  it('names the file another program holds open once the retries run out', async () => {
+    vi.useFakeTimers()
+    await withPlatform('win32', async () => {
+      const held = toHostRemovalPath('C:\\repo\\feature\\profile\\lockfile')
+      rmMock.mockRejectedValue(
+        Object.assign(new Error(`EBUSY: resource busy or locked, unlink '${held}'`), {
+          code: 'EBUSY',
+          path: held
         })
       )
-      expect(rmMock).toHaveBeenNthCalledWith(
-        2,
-        toHostRemovalPath('C:\\repo\\feature'),
-        expect.objectContaining({
-          recursive: true,
-          force: true,
-          maxRetries: expect.any(Number),
-          retryDelay: expect.any(Number)
-        })
-      )
+
+      const removal = removeLocalWorktreePath('C:\\repo\\feature').catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(3_750)
+
+      expect(await removal).toMatchObject({
+        code: 'EBUSY',
+        message:
+          'C:\\repo\\feature\\profile\\lockfile is open in another program. Close that program and delete again.'
+      })
+      expect(rmMock).toHaveBeenCalledTimes(5)
     })
   })
 
@@ -171,7 +170,7 @@ describe('local worktree filesystem runtime access', () => {
 
   it('uses the selected WSL distro for stat, read, and removal on Windows', async () => {
     await withPlatform('win32', async () => {
-      completeExecFile('file')
+      completeExecFile('regular file')
       const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
       await expect(access.statPath('/home/me/repo/.git')).resolves.toEqual({ type: 'file' })
 
@@ -189,9 +188,7 @@ describe('local worktree filesystem runtime access', () => {
         expect.objectContaining({
           program: 'wsl.exe',
           args: expect.arrayContaining(['-d', 'Ubuntu']),
-          // Why a concrete directory (#16463): the guest path is inside the
-          // command, and these run while a worktree is being removed -- which is
-          // the cwd an omitted one would inherit.
+          // The inherited cwd may be the worktree being removed (#16463).
           cwd: expect.any(String)
         })
       )
@@ -207,9 +204,7 @@ describe('local worktree filesystem runtime access', () => {
       completeExecFile('file')
       await getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' }).statPath('/home/me/repo/.git')
 
-      // Why: a login/interactive shell is what puts the distro's rc banner on the
-      // stdout these callers parse. cat/stat/rm need nothing from the user's PATH,
-      // so the shell mode is the fix rather than filtering what it prints.
+      // Avoid login-shell banners instead of filtering potentially valid file content.
       const args = runProcessMock.mock.calls[0]?.[0].args as string[]
       expect(args).toContain('-c')
       expect(args).not.toContain('-lc')
@@ -218,14 +213,66 @@ describe('local worktree filesystem runtime access', () => {
     })
   })
 
-  it('reports missing WSL stat targets with an ENOENT-shaped error', async () => {
+  // Captured verbatim from live hosts: GNU coreutils 9.4 (Ubuntu 24.04) and BusyBox v1.36.1.
+  it.each([
+    ['GNU', "stat: cannot statx '/mnt/c/repo/missing/.git': No such file or directory\n"],
+    ['GNU', "stat: cannot statx '/mnt/c/repo/missing/.git': Not a directory\n"],
+    ['BusyBox', "stat: can't stat '/mnt/c/repo/missing/.git': No such file or directory\n"],
+    ['BusyBox', "stat: can't stat '/mnt/c/repo/missing/.git': Not a directory\n"]
+  ])('reports a missing WSL stat target as ENOENT on %s userland', async (_userland, stderr) => {
     await withPlatform('win32', async () => {
-      failExecFile(2)
+      failExecFile(1, stderr)
       const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
 
       await expect(access.statPath('/mnt/c/repo/missing/.git')).rejects.toMatchObject({
         code: 'ENOENT'
       })
+      await expect(isWorktreePathMissing('/mnt/c/repo/missing', access.statPath)).resolves.toBe(
+        true
+      )
+    })
+  })
+
+  it.each([
+    ['GNU', "stat: cannot statx '/mnt/c/repo/locked': Permission denied\n"],
+    ['BusyBox', "stat: can't stat '/mnt/c/repo/locked': Permission denied\n"]
+  ])(
+    'does not treat an unreadable WSL stat target as missing on %s userland',
+    async (_userland, stderr) => {
+      await withPlatform('win32', async () => {
+        failExecFile(1, stderr)
+        const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
+
+        await expect(access.statPath('/mnt/c/repo/locked')).rejects.toThrow('Permission denied')
+        await expect(isWorktreePathMissing('/mnt/c/repo/locked', access.statPath)).resolves.toBe(
+          false
+        )
+      })
+    }
+  )
+
+  it('pins the stat probe to the C locale so its error text stays English', async () => {
+    await withPlatform('win32', async () => {
+      completeExecFile('directory')
+      await getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' }).statPath('/mnt/c/repo/feature')
+
+      const args = runProcessMock.mock.calls[0]?.[0].args as string[]
+      expect(args.at(-1)).toContain('LC_ALL=C stat -c %F --')
+    })
+  })
+
+  it('reports a translated stat failure as a failure rather than as absence', async () => {
+    await withPlatform('win32', async () => {
+      // Synthetic localization verifies that unknown errors cannot prove absence if LC_ALL=C regresses.
+      failExecFile(1, "stat: <translated verb> '/mnt/c/repo/missing': <translated errno>\n")
+      const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
+
+      await expect(access.statPath('/mnt/c/repo/missing')).rejects.not.toMatchObject({
+        code: 'ENOENT'
+      })
+      await expect(isWorktreePathMissing('/mnt/c/repo/missing', access.statPath)).resolves.toBe(
+        false
+      )
     })
   })
 })

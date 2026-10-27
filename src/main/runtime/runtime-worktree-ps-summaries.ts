@@ -1,6 +1,10 @@
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
+import type { Worktree } from '../../shared/worktree/types'
 import { DEFAULT_WORKSPACE_STATUS_ID } from '../../shared/workspace-statuses'
 import type { RuntimeWorktreePsSummary } from '../../shared/runtime-types'
 import { folderWorkspaceToWorktree } from '../../shared/folder-workspace-worktree'
+import { getWorkspaceAttachments } from '../../shared/workspace-attachments'
+import { getWorkspaceRowKindFacts } from '../../shared/worktree/workspace-kinds'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 
@@ -16,20 +20,22 @@ export function buildRuntimeWorktreePsSummaries(args: {
     const meta =
       args.store?.getWorktreeMeta?.(worktree.id) ?? args.store?.getAllWorktreeMeta()[worktree.id]
     const repo = repoById.get(worktree.repoId)
-    let linkedPR: { number: number; state: string } | null = null
+    let linkedPR: RuntimeWorktreePsSummary['linkedPR'] = null
     const branch = worktree.branch.replace(/^refs\/heads\//, '')
     if (branch && ghCache) {
       const cached =
         (repo?.id ? ghCache.pr[`${repo.id}::${branch}`] : undefined) ??
         (repo?.path ? ghCache.pr[`${repo.path}::${branch}`] : undefined)
       if (cached?.data) {
-        linkedPR = { number: cached.data.number, state: cached.data.state }
+        const { number, state, title, url, checksStatus } = cached.data
+        linkedPR = { number, state, title, url, checksStatus }
       }
     }
     if (!linkedPR && meta?.linkedPR != null) {
       linkedPR = { number: meta.linkedPR, state: 'unknown' }
     }
     const lineage = worktree.lineage
+    const priorWorktreeIds = meta?.priorWorktreeIds ?? worktree.priorWorktreeIds
     summaries.set(worktree.id, {
       workspaceKind: 'git',
       worktreeId: worktree.id,
@@ -38,10 +44,14 @@ export function buildRuntimeWorktreePsSummaries(args: {
       terminalPlatform: args.platformByRepoId.get(worktree.repoId) ?? process.platform,
       repo: repo?.displayName ?? worktree.repoId,
       path: worktree.path,
+      // Session history follows a renamed or moved workspace to its older paths.
+      ...(priorWorktreeIds?.length ? { priorWorktreeIds } : {}),
       branch: worktree.branch,
       isArchived: worktree.isArchived,
       isMainWorktree: worktree.isMainWorktree,
       hasHostSidebarActivity: false,
+      ...getWorkspaceRowKindFacts(worktree, repo),
+      ...(worktree.removalError ? { removalError: worktree.removalError } : {}),
       ...(worktree.instanceId !== undefined ? { worktreeInstanceId: worktree.instanceId } : {}),
       ...(lineage?.worktreeInstanceId !== undefined
         ? { lineageWorktreeInstanceId: lineage.worktreeInstanceId }
@@ -56,6 +66,7 @@ export function buildRuntimeWorktreePsSummaries(args: {
       sortOrder: meta?.sortOrder ?? 0,
       ...(meta?.manualOrder !== undefined ? { manualOrder: meta.manualOrder } : {}),
       lastActivityAt: worktree.lastActivityAt,
+      ...sortStampSummaryFields(worktree),
       ...(worktree.createdAt !== undefined ? { createdAt: worktree.createdAt } : {}),
       ...(worktree.creatorProvenance ? { creatorProvenance: worktree.creatorProvenance } : {}),
       linkedIssue: worktree.linkedIssue,
@@ -63,12 +74,14 @@ export function buildRuntimeWorktreePsSummaries(args: {
       linkedLinearIssue: meta?.linkedLinearIssue ?? null,
       linkedGitLabMR: meta?.linkedGitLabMR ?? null,
       linkedGitLabIssue: meta?.linkedGitLabIssue ?? null,
+      linkedItems: getWorkspaceAttachments(meta ?? worktree),
       comment: meta?.comment ?? '',
       isPinned: meta?.isPinned ?? false,
       isActive: false,
       unread: meta?.isUnread ?? false,
       liveTerminalCount: 0,
       hasAttachedPty: false,
+      unverifiableTerminalCount: 0,
       lastOutputAt: null,
       preview: '',
       status: 'inactive',
@@ -94,6 +107,7 @@ export function buildRuntimeWorktreePsSummaries(args: {
       isArchived: worktree.isArchived,
       isMainWorktree: worktree.isMainWorktree,
       hasHostSidebarActivity: false,
+      ...getWorkspaceRowKindFacts(worktree, undefined),
       ...(worktree.instanceId !== undefined ? { worktreeInstanceId: worktree.instanceId } : {}),
       parentWorktreeId: null,
       childWorktreeIds: [],
@@ -102,6 +116,7 @@ export function buildRuntimeWorktreePsSummaries(args: {
       sortOrder: worktree.sortOrder ?? 0,
       ...(worktree.manualOrder !== undefined ? { manualOrder: worktree.manualOrder } : {}),
       lastActivityAt: worktree.lastActivityAt,
+      ...sortStampSummaryFields(worktree),
       ...(worktree.createdAt !== undefined ? { createdAt: worktree.createdAt } : {}),
       ...(worktree.creatorProvenance ? { creatorProvenance: worktree.creatorProvenance } : {}),
       linkedIssue: worktree.linkedIssue ?? null,
@@ -109,12 +124,14 @@ export function buildRuntimeWorktreePsSummaries(args: {
       linkedLinearIssue: worktree.linkedLinearIssue ?? null,
       linkedGitLabMR: worktree.linkedGitLabMR ?? null,
       linkedGitLabIssue: worktree.linkedGitLabIssue ?? null,
+      linkedItems: getWorkspaceAttachments(worktree),
       comment: worktree.comment,
       isPinned: worktree.isPinned,
       isActive: false,
       unread: worktree.isUnread,
       liveTerminalCount: 0,
       hasAttachedPty: false,
+      unverifiableTerminalCount: 0,
       lastOutputAt: null,
       preview: '',
       status: 'inactive',
@@ -122,4 +139,18 @@ export function buildRuntimeWorktreePsSummaries(args: {
     })
   }
   return summaries
+}
+
+function sortStampSummaryFields(
+  worktree: Pick<Worktree, 'smartTier' | 'smartAt'>
+): Pick<RuntimeWorktreePsSummary, 'smartTier' | 'smartAt' | 'sortedByStamps'> {
+  if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+    return {}
+  }
+  return {
+    sortedByStamps: true,
+    ...(worktree.smartTier !== undefined
+      ? { smartTier: worktree.smartTier, smartAt: worktree.smartAt }
+      : {})
+  }
 }

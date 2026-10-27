@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import type {
   SourceControlActionRecipeOverrideField,
   SourceControlActionRecipeOverrideSummary
-} from '@/lib/source-control-launch-agent-selection'
+} from '../../../../shared/source-control-launch-agent-selection'
 import { translate } from '@/i18n/i18n'
 
 type SourceControlActionRepoOverrideNoteProps = {
@@ -32,8 +32,9 @@ function getRecipeOverrideFieldLabel(field: SourceControlActionRecipeOverrideFie
         'auto.components.settings.SourceControlActionRepoOverrideNote.commandTemplate',
         'Command template'
       )
+    case 'launchPreferences':
+      return translate('settings.sourceControl.actionModel.launchOptions', 'Model and permissions')
   }
-  // Fail at compile time if the override-field union grows a new variant.
   const _exhaustive: never = field
   return _exhaustive
 }

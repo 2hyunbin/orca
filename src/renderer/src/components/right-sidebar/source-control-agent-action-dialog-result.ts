@@ -1,6 +1,7 @@
 import type { getAgentCatalog } from '@/lib/agent-catalog'
 import type { useAppStore } from '@/store'
 import type { useRepoById } from '@/store/selectors'
+import type { SourceControlActionRecipe } from '../../../../shared/source-control-ai-actions'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { SourceControlAgentActionDeliveryPlanState } from './SourceControlAgentActionDialogForm'
 
@@ -19,6 +20,9 @@ export type UseSourceControlAgentActionDialogResult = {
   detecting: boolean
   statusCopy: string | null
   agentArgs: string
+  /** False when this launch would be a structured native chat session, which reads no CLI arguments. */
+  agentArgsApply: boolean
+  recipe: SourceControlActionRecipe
   commandTemplate: string
   saveLaunchRecipe: boolean
   saveTargetValue: string
