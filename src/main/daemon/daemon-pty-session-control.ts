@@ -283,7 +283,8 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
    * without this the checkpoint keeps the spawn folder and Wake opens there (e.g. on a Linux host).
    */
   private async readLiveSleepCwd(id: string, deadlineMs?: number): Promise<string | null> {
-    if (!this.activeSessionIds.has(id)) {
+    // Windows has no process-cwd lookup (it would spawn a missing lsof); the snapshot's OSC 7 cwd stands.
+    if (process.platform === 'win32' || !this.activeSessionIds.has(id)) {
       return null
     }
     try {

@@ -8,17 +8,27 @@ import { getHistorySessionDirName } from './history-paths'
 import { createMockSubprocess, startDaemonAdapterHarness } from './daemon-pty-adapter-test-harness'
 import type * as DaemonHealthModule from './daemon-health'
 import type * as DaemonTccAttributionModule from './daemon-tcc-attribution'
+import type * as ProcessCwdModule from '../providers/process-cwd'
 
-const { getMacDaemonSystemResolverHealthMock, getMacDaemonTccAttributionHealthMock } = vi.hoisted(
-  () => ({
-    getMacDaemonSystemResolverHealthMock: vi.fn(
-      async (): Promise<'unknown' | 'unhealthy'> => 'unknown'
-    ),
-    getMacDaemonTccAttributionHealthMock: vi.fn(
-      async (): Promise<'intact' | 'severed' | 'unknown'> => 'unknown'
-    )
-  })
-)
+const {
+  getMacDaemonSystemResolverHealthMock,
+  getMacDaemonTccAttributionHealthMock,
+  resolveProcessCwdSpy
+} = vi.hoisted(() => ({
+  resolveProcessCwdSpy: vi.fn(),
+  getMacDaemonSystemResolverHealthMock: vi.fn(
+    async (): Promise<'unknown' | 'unhealthy'> => 'unknown'
+  ),
+  getMacDaemonTccAttributionHealthMock: vi.fn(
+    async (): Promise<'intact' | 'severed' | 'unknown'> => 'unknown'
+  )
+}))
+
+vi.mock('../providers/process-cwd', async (importOriginal) => {
+  const actual = await importOriginal<typeof ProcessCwdModule>()
+  resolveProcessCwdSpy.mockImplementation(actual.resolveProcessCwd)
+  return { ...actual, resolveProcessCwd: resolveProcessCwdSpy }
+})
 
 vi.mock('./daemon-health', async (importOriginal) => {
   const actual = await importOriginal<typeof DaemonHealthModule>()
@@ -64,6 +74,7 @@ describe('a native shell slept and woken', () => {
   })
 
   afterEach(async () => {
+    resolveProcessCwdSpy.mockClear()
     adapter?.dispose()
     await server?.shutdown()
     rmSync(dir, { recursive: true, force: true })
@@ -86,5 +97,32 @@ describe('a native shell slept and woken', () => {
     await history.spawn({ cols: 80, rows: 24, cwd: dir, sessionId })
     expect(realpathSync(spawnedCwds.at(-1)!)).toBe(shellFolder)
     history.dispose()
+  })
+
+  // The process lookup execFile()s lsof, which Windows lacks; Sleep there keeps only the OSC 7 cwd.
+  it('on Windows, Sleep without OSC 7 never looks up the process', async () => {
+    const realPlatform = process.platform
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+    try {
+      const historyDir = join(dir, 'history')
+      const sessionId = 'wt-1::/project@@sleep-win'
+      const history = new DaemonPtyAdapter({ socketPath, tokenPath, historyPath: historyDir })
+
+      await history.spawn({ cols: 80, rows: 24, cwd: dir, sessionId })
+      lastSubprocess._simulateData('PS C:\\project> cd deep\r\nPS C:\\project\\deep> ')
+      await history.shutdown(sessionId, { immediate: true, keepHistory: true })
+
+      const saved = JSON.parse(
+        readFileSync(
+          join(historyDir, getHistorySessionDirName(sessionId), 'checkpoint.json'),
+          'utf8'
+        )
+      )
+      expect(resolveProcessCwdSpy).not.toHaveBeenCalled()
+      expect(saved.cwd).toBe(dir)
+      history.dispose()
+    } finally {
+      Object.defineProperty(process, 'platform', { value: realPlatform, configurable: true })
+    }
   })
 })
