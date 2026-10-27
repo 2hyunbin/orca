@@ -1,3 +1,4 @@
+import type { GoogleCookieClearOffer } from './browser-google-cookie-clear'
 import { toast } from 'sonner'
 import type { BrowserCookieImportSummary } from '../../../shared/browser-workspace-types'
 import { isHandledWireDiscriminant } from '../../../shared/handled-wire-discriminant'
@@ -154,7 +155,8 @@ function cookieImportLocationDescription(execution: BrowserCookieImportExecution
 
 function emitGoogleCookieImportWarning(
   summary: BrowserCookieImportSummary,
-  execution: BrowserCookieImportExecution
+  execution: BrowserCookieImportExecution,
+  clearGoogleCookies?: GoogleCookieClearOffer
 ): void {
   if (!summary.googleCookiesSkipped) {
     return
@@ -177,7 +179,16 @@ function emitGoogleCookieImportWarning(
           'Google cookies were not imported. Open a browser tab in the {{value0}} workspace with this profile, then sign into Google.',
           { value0: execution.executionHostLabel }
         )
-  toast.warning(message, { duration: 12000 })
+  toast.warning(message, {
+    duration: 12000,
+    action:
+      clearGoogleCookies?.executionMachine === execution.executionMachine
+        ? {
+            label: translate('browser.googleCookieClear.action', 'Clear Google cookies…'),
+            onClick: clearGoogleCookies.onClick
+          }
+        : undefined
+  })
 }
 
 // Skipped partitioned cookies are not downgraded to unpartitioned; warn about loss beyond the success count (STA-4300).
@@ -220,7 +231,8 @@ function emitPartitionSkippedImportWarning(summary: BrowserCookieImportSummary):
 export function emitBrowserCookieImportToast(
   summary: BrowserCookieImportSummary,
   successMessage: string,
-  execution: BrowserCookieImportExecution
+  execution: BrowserCookieImportExecution,
+  clearGoogleCookies?: GoogleCookieClearOffer
 ): void {
   const warning = summary.warning
   if (warning) {
@@ -233,6 +245,6 @@ export function emitBrowserCookieImportToast(
       toast.success(successMessage)
     }
   }
-  emitGoogleCookieImportWarning(summary, execution)
+  emitGoogleCookieImportWarning(summary, execution, clearGoogleCookies)
   emitPartitionSkippedImportWarning(summary)
 }

@@ -63,6 +63,17 @@
     }
   },
   "browser": {
+    "googleCookieClear": {
+      "action": "Clear Google cookies…",
+      "confirmTitle": "Clear Google cookies from {{profile}}?",
+      "confirmDescription": "You'll be signed out of Google in Orca's browser for this profile. Other sites stay signed in.",
+      "clear": "Clear",
+      "cancel": "Cancel",
+      "cleared": "Google cookies cleared from {{profile}}.",
+      "empty": "No Google cookies to clear in {{profile}}.",
+      "remaining": "Some Google cookies couldn't be removed from {{profile}}. Try again.",
+      "unverified": "Couldn't check {{profile}}'s Google cookies. Try again."
+    },
     "loadFailure": {
       "connectionNotSecure": "Connection isn't secure",
       "cantReachHost": "Can't reach {{value0}}",

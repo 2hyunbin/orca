@@ -1,3 +1,4 @@
+import { useGoogleCookieClear } from '@/components/use-google-cookie-clear'
 import { Import, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { emitBrowserCookieImportToast } from '@/lib/browser-cookie-import-toast'
@@ -36,12 +37,14 @@ export function BrowserUseCookieImportStep({
 }: BrowserUseCookieImportStepProps): React.JSX.Element {
   const detectedBrowsers = useAppStore((s) => s.detectedBrowsers)
   const fetchDetectedBrowsers = useAppStore((s) => s.fetchDetectedBrowsers)
+  const googleCookieClear = useGoogleCookieClear('default', undefined)
 
   const handleImportFromBrowser = async (
     browserFamily: string,
     browserProfile?: string
   ): Promise<void> => {
     const profileId = 'default'
+    const clearOffer = googleCookieClear.offer()
     const result = await useAppStore
       .getState()
       .importCookiesFromBrowser(profileId, browserFamily, browserProfile)
@@ -58,7 +61,8 @@ export function BrowserUseCookieImportStep({
             value2: browserProfile ? ` (${browserProfile})` : ''
           }
         ),
-        result
+        result,
+        await clearOffer
       )
     } else {
       toast.error(result.reason)
@@ -66,6 +70,7 @@ export function BrowserUseCookieImportStep({
   }
 
   const handleImportFromFile = async (): Promise<void> => {
+    const clearOffer = googleCookieClear.offer()
     const result = await useAppStore.getState().importCookiesToProfile('default')
     if (result.ok) {
       emitBrowserCookieImportToast(
@@ -75,7 +80,8 @@ export function BrowserUseCookieImportStep({
           'Imported {{value0}} cookies from file.',
           { value0: result.summary.importedCookies }
         ),
-        result
+        result,
+        await clearOffer
       )
     } else if (result.reason !== 'canceled') {
       toast.error(result.reason)
@@ -139,6 +145,7 @@ export function BrowserUseCookieImportStep({
           onOpenChange={(open) => {
             if (open) {
               void fetchDetectedBrowsers()
+              googleCookieClear.refresh()
             }
           }}
         >
@@ -203,7 +210,11 @@ export function BrowserUseCookieImportStep({
             <DropdownMenuItem onSelect={() => void handleImportFromFile()}>
               {translate('auto.components.settings.BrowserUsePane.be6df68384', 'From File…')}
             </DropdownMenuItem>
-            <BrowserCookieImportDisclosure />
+            <BrowserCookieImportDisclosure
+              onClearGoogleCookies={googleCookieClear.menuAction}
+              clearing={googleCookieClear.busy}
+              pending={googleCookieClear.pending}
+            />
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

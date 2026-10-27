@@ -58,6 +58,12 @@ export const BROWSER_PROFILE_METHODS = [
     handler: async (params, { runtime }) => runtime.browserProfileImportFromBrowser(params)
   }),
   defineMethod({
+    name: 'browser.profileClearGoogleCookies',
+    permission: 'workspace',
+    params: ProfileDelete,
+    handler: async (params, { runtime }) => runtime.browserProfileClearGoogleCookies(params)
+  }),
+  defineMethod({
     name: 'browser.profileClearDefaultCookies',
     permission: 'workspace',
     params: null,

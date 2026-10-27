@@ -81,7 +81,7 @@ function settledRoutePartition(request: ClientRouteCookieImportRequest): string 
   }
 }
 
-function bindRoutePartition(
+export function bindRoutePartition(
   routeIdentity: NonNullable<ReturnType<typeof getPairedRuntimeBrowserClientRouteIdentity>>,
   browserProfileId: string
 ): string {

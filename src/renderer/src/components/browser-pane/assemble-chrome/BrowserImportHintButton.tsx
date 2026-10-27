@@ -1,3 +1,4 @@
+import { useGoogleCookieClear } from '@/components/use-google-cookie-clear'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Import } from 'lucide-react'
 import { toast } from 'sonner'
@@ -48,6 +49,7 @@ export function BrowserImportHintButton({
   const openSettingsTarget = useAppStore((s) => s.openSettingsTarget)
 
   const effectiveProfileId = profileId ?? 'default'
+  const googleCookieClear = useGoogleCookieClear(effectiveProfileId, undefined)
   const shouldShow = shouldShowBrowserImportHint({
     persistedUIReady,
     browserImportHintHidden
@@ -86,6 +88,7 @@ export function BrowserImportHintButton({
     async (browserFamily: string, browserProfile?: string): Promise<void> => {
       setOpen(false)
       setImportMenuOpen(false)
+      const clearOffer = googleCookieClear.offer()
       const result = await importCookiesFromBrowser(
         effectiveProfileId,
         browserFamily,
@@ -104,18 +107,20 @@ export function BrowserImportHintButton({
               value2: browserProfile ? ` (${browserProfile})` : ''
             }
           ),
-          result
+          result,
+          await clearOffer
         )
         return
       }
       toast.error(result.reason)
     },
-    [detectedBrowsers, effectiveProfileId, importCookiesFromBrowser]
+    [detectedBrowsers, effectiveProfileId, importCookiesFromBrowser, googleCookieClear]
   )
 
   const handleImportFromFile = useCallback(async (): Promise<void> => {
     setOpen(false)
     setImportMenuOpen(false)
+    const clearOffer = googleCookieClear.offer()
     const result = await importCookiesToProfile(effectiveProfileId)
     if (result.ok) {
       emitBrowserCookieImportToast(
@@ -125,14 +130,15 @@ export function BrowserImportHintButton({
           'Imported {{value0}} cookies from file.',
           { value0: result.summary.importedCookies }
         ),
-        result
+        result,
+        await clearOffer
       )
       return
     }
     if (result.reason !== 'canceled') {
       toast.error(result.reason)
     }
-  }, [effectiveProfileId, importCookiesToProfile])
+  }, [effectiveProfileId, importCookiesToProfile, googleCookieClear])
 
   const handleOpenBrowserSettings = useCallback((): void => {
     openSettingsTarget({ pane: 'browser', repoId: null })

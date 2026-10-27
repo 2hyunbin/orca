@@ -1,3 +1,4 @@
+import { registerGoogleCookieClearHandlers } from './browser-google-cookie-clear-ipc'
 import { BrowserWindow, ipcMain } from 'electron'
 import { browserSessionRegistry } from '../browser/browser-session-registry'
 import { importCookiesIntoClientRoutePartition } from '../browser/browser-client-route-cookie-import'
@@ -179,6 +180,8 @@ export function registerBrowserSessionProfileHandlers(): void {
       return listBrowserSitePermissions(args.profileId)
     }
   )
+
+  registerGoogleCookieClearHandlers()
 
   ipcMain.removeHandler('browser:session:clearDefaultCookies')
 

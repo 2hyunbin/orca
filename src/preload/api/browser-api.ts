@@ -1,3 +1,7 @@
+import type {
+  GoogleCookieClearLocalTarget,
+  GoogleCookieClearResult
+} from '../../shared/browser-google-cookie-clear'
 import type { BrowserDevToolsDockBounds } from '../../shared/browser-devtools-dock'
 import type { BrowserSetAnnotationViewportBridgeArgs } from '../../shared/browser-annotation-viewport-bridge'
 import type {
@@ -256,6 +260,13 @@ export type BrowserApi = {
   sessionClientRouteImportSources: (args: {
     environmentId: string
   }) => Promise<Record<string, BrowserSessionProfileSource>>
+  sessionGoogleCookieClearTarget: (args: {
+    profileId: string
+    environmentId: string | null
+  }) => Promise<GoogleCookieClearLocalTarget | null>
+  sessionClearGoogleCookies: (
+    target: GoogleCookieClearLocalTarget
+  ) => Promise<GoogleCookieClearResult>
   sessionClearDefaultCookies: () => Promise<boolean>
   /** Site permissions are local to this computer and browser profile. */
   sitePermissionsList: (args: { profileId: string }) => Promise<BrowserSitePermissionEntry[]>

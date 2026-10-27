@@ -6,14 +6,23 @@ const {
   createProfileMock,
   routeIdentityMock,
   detectBrowsersMock,
-  setBrowserIdentityModeMock
+  setBrowserIdentityModeMock,
+  clearGoogleMock,
+  googleTargetMock
 } = vi.hoisted(() => ({
+  clearGoogleMock: vi.fn(),
+  googleTargetMock: vi.fn(),
   handleMock: vi.fn(),
   removeHandlerMock: vi.fn(),
   createProfileMock: vi.fn(),
   routeIdentityMock: vi.fn(),
   detectBrowsersMock: vi.fn(() => []),
   setBrowserIdentityModeMock: vi.fn(async () => ({ ok: true }))
+}))
+
+vi.mock('../browser/browser-google-cookie-clear-target', () => ({
+  googleCookieClearLocalTarget: googleTargetMock,
+  clearGoogleCookiesForLocalTarget: clearGoogleMock
 }))
 
 vi.mock('../browser/browser-identity-mode-store', () => ({
@@ -177,5 +186,33 @@ describe('browser session profile IPC', () => {
       createHandler({ sender }, { scope: 'isolated', label: 'Google' })
     ).resolves.toEqual(profile)
     expect(createProfileMock).toHaveBeenCalledWith('isolated', 'Google')
+  })
+
+  it('rejects untrusted and malformed Google-clear requests before reaching a cookie jar', () => {
+    registerBrowserHandlers()
+    const handler = handleMock.mock.calls.find(
+      ([channel]) => channel === 'browser:session:clearGoogleCookies'
+    )?.[1]
+    setTrustedBrowserRendererWebContentsId(92)
+    expect(() => handler({ sender: trustedSender() }, {})).toThrow('Not authorized')
+    setTrustedBrowserRendererWebContentsId(91)
+    expect(() => handler({ sender: trustedSender() }, { profileId: '../other' })).toThrow()
+    expect(clearGoogleMock).not.toHaveBeenCalled()
+  })
+
+  it('passes only a validated frozen target from the trusted renderer', () => {
+    registerBrowserHandlers()
+    setTrustedBrowserRendererWebContentsId(91)
+    const handler = handleMock.mock.calls.find(
+      ([channel]) => channel === 'browser:session:clearGoogleCookies'
+    )?.[1]
+    const target = {
+      profileId: 'work',
+      environmentId: null,
+      partition: 'persist:work',
+      routeIdentity: null
+    }
+    handler({ sender: trustedSender() }, target)
+    expect(clearGoogleMock).toHaveBeenCalledWith(target)
   })
 })

@@ -18,6 +18,7 @@ vi.mock('@/store', () => ({ useAppStore: appStoreStub() }))
 vi.mock('../../store', () => ({ useAppStore: appStoreStub() }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
+import { ConfirmationDialogContext } from './confirmation-dialog-context'
 import { BrowserCookieImportDisclosure } from './BrowserCookieImportDisclosure'
 import { BrowserImportHintButton } from './browser-pane/assemble-chrome/BrowserImportHintButton'
 import { BrowserToolbarMenuDropdown } from './browser-pane/assemble-chrome/browser-toolbar-menu-dropdown'
@@ -103,7 +104,13 @@ describe('cookie-import Google disclosure footer', () => {
       )
     ]
   ] satisfies [string, () => ReactNode][])('is shown in the %s menu', (_name, renderSurface) => {
-    act(() => root.render(renderSurface()))
+    act(() =>
+      root.render(
+        <ConfirmationDialogContext.Provider value={cancelConfirmation}>
+          {renderSurface()}
+        </ConfirmationDialogContext.Provider>
+      )
+    )
 
     expect(container.textContent).toContain(DISCLOSURE_TITLE)
     expect(container.textContent).toContain(DISCLOSURE_DESCRIPTION)
@@ -166,6 +173,8 @@ function appStoreStub(): unknown {
     openSettingsPage: vi.fn(),
     persistedUIReady: true,
     setBrowserImportHintHidden: vi.fn(),
+    browserSessionHostIdOverride: 'local',
+    runtimeStatusByEnvironmentId: new Map(),
     settingsSearchQuery: ''
   }
   const useAppStore = (selector?: (s: typeof state) => unknown): unknown =>
@@ -173,3 +182,5 @@ function appStoreStub(): unknown {
   useAppStore.getState = (): typeof state => state
   return useAppStore
 }
+
+const cancelConfirmation = async () => false

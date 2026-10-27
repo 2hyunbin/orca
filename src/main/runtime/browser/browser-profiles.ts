@@ -1,3 +1,4 @@
+import { clearGoogleCookiesFromPartition } from '../../browser/cookies/browser-google-cookie-clear'
 import { createBrowserTabInRenderer } from './browser-tab-renderer-create'
 import type {
   BrowserDetectProfilesResult,
@@ -299,6 +300,14 @@ export class RuntimeBrowserProfiles {
       importedAt: Date.now()
     })
     return { ...result, profileId: params.profileId }
+  }
+
+  async browserProfileClearGoogleCookies(params: { profileId: string }) {
+    const profile = browserSessionRegistry.getProfile(params.profileId)
+    if (!profile) {
+      throw new BrowserError('invalid_argument', 'Browser profile not found')
+    }
+    return clearGoogleCookiesFromPartition(profile.partition)
   }
 
   async browserProfileClearDefaultCookies(): Promise<BrowserProfileClearDefaultCookiesResult> {

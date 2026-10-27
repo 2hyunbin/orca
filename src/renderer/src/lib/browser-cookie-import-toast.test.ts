@@ -416,3 +416,26 @@ describe('emitBrowserCookieImportToast', () => {
     ])
   })
 })
+
+it('offers the confirmed Google clear only for the jar the import wrote', () => {
+  const onClick = vi.fn()
+  const withGoogle = { ...summary, googleCookiesSkipped: 1 }
+  emitBrowserCookieImportToast(withGoogle, 'Imported.', localExecution, {
+    executionMachine: 'client',
+    onClick
+  })
+  expect(warningToastMock).toHaveBeenLastCalledWith(
+    expect.any(String),
+    expect.objectContaining({
+      action: { label: 'Clear Google cookies…', onClick }
+    })
+  )
+  emitBrowserCookieImportToast(withGoogle, 'Imported.', remoteExecution, {
+    executionMachine: 'client',
+    onClick
+  })
+  expect(warningToastMock).toHaveBeenLastCalledWith(expect.any(String), {
+    duration: 12000,
+    action: undefined
+  })
+})
