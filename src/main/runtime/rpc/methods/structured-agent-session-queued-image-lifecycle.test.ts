@@ -1,3 +1,7 @@
+import {
+  reduceStructuredAgentSession,
+  EMPTY_STRUCTURED_AGENT_SESSION
+} from '../../../../shared/structured-agent-session-reducer'
 import { projectStructuredAgentSessionMessages } from '../../../../shared/structured-agent-session-message-projection'
 import { mobileQueuedMessageCards } from '../../../../../mobile/src/session/mobile-structured-queued-message-cards'
 import { buildMobileNativeChatTransientData } from '../../../../../mobile/src/session/mobile-native-chat-render-data'
@@ -27,7 +31,10 @@ import {
   projectQueuedImageCardHistory
 } from './structured-agent-session-queued-image-capability'
 import type { AgentJournalMessageItem } from '../../../../shared/agent-session-journal-types'
-import type { AgentSessionHistoryRequest } from '../../../../shared/agent-session-wire'
+import type {
+  AgentSessionHistoryRequest,
+  AgentSessionSubscribeEvent
+} from '../../../../shared/agent-session-wire'
 import { agentJournalSubmissionKey } from '../../../../shared/agent-session-journal-item-key'
 
 const OLD = { ...STRUCTURED_MOBILE_CLIENT, clientId: 'old-phone', connectionId: 'old-phone' }
@@ -355,119 +362,170 @@ it('keeps a hidden original pageable beyond1024 rows and preserves edited recove
   ).toBeUndefined()
 })
 
-it('hides an ordinary original after changed Save while retaining its exact live control and independent edited handoff', async () => {
-  rig = await createQueuedMessageTestRig({ restartable: true })
-  setStructuredAgentSessionHost(rig.host)
-  const { id, body, card } = await failedImage()
-  const before = await history()
-  expect(
-    projectStructuredAgentSessionMessages(before.page.items, [], before.page.submissions)
-  ).toContainEqual(expect.objectContaining({ id: agentJournalSubmissionKey(id) }))
-  const messages = projectStructuredAgentSessionMessages(
-    before.page.items,
-    [],
-    before.page.submissions
-  )
-  const transient = buildMobileNativeChatTransientData({
-    messages,
-    folded: messages,
-    streaming: null,
-    pending: [],
-    imagePreviewsByMessageId: {
-      [agentJournalSubmissionKey(id)]: ['file:///device/composer-preview.png']
+it.each([false, true])(
+  'retires the source after changed Save (second failed handoff: %s), retaining its exact live control and independent edited handoff',
+  async (secondFailure) => {
+    rig = await createQueuedMessageTestRig({ restartable: true })
+    setStructuredAgentSessionHost(rig.host)
+    const { id, body, card } = await failedImage()
+    let presentedId = id
+    if (secondFailure) {
+      rig.failNextStart(new Error('second queued start failed'))
+      const fields = { messageId: card.messageId }
+      expect(
+        await call(
+          'agentSession.queuedMessageSend',
+          {
+            envelope: rig.envelope(fields, 'agentSession.queuedMessageSend', hostTestOperationId()),
+            ...fields
+          },
+          OLD
+        )
+      ).toMatchObject({ result: { ok: true } })
+      await eventually(async () =>
+        expect((await rig!.handoff(card.messageId))?.dispatchState).toBe('rejected')
+      )
+      presentedId = (await rig.handoff(card.messageId))!.clientMessageId
+      expect(journal().submission(presentedId)).toMatchObject({ queuedMessageId: card.messageId })
+      expect(journal().submission(presentedId)).not.toHaveProperty('keptAsQueuedMessageId')
     }
-  })
-  expect(JSON.stringify(transient.data)).toContain('file:///device/composer-preview.png')
-  const frames = await openStream('agentSession.subscribe', { sessionId: SESSION }, OLD)
-  const fields = {
-    messageId: card.messageId,
-    expectedBodyFingerprint: card.fingerprint,
-    text: 'edited original'
-  }
-  expect(
-    await call(
-      'agentSession.queuedMessageUpdate',
-      {
-        envelope: rig.envelope(fields, 'agentSession.queuedMessageUpdate', hostTestOperationId()),
-        ...fields
-      },
-      MODERN
+    const before = await history()
+    expect(
+      projectStructuredAgentSessionMessages(before.page.items, [], before.page.submissions)
+    ).toContainEqual(expect.objectContaining({ id: agentJournalSubmissionKey(presentedId) }))
+    const messages = projectStructuredAgentSessionMessages(
+      before.page.items,
+      [],
+      before.page.submissions
     )
-  ).toMatchObject({ result: { ok: true, value: { status: 'updated' } } })
-  const changed = await history()
-  expect(
-    projectStructuredAgentSessionMessages(changed.page.items, [], changed.page.submissions).some(
-      (item) => item.id === agentJournalSubmissionKey(id)
-    )
-  ).toBe(false)
-  expect(
-    mobileQueuedMessageCards(changed.page.queuedMessages ?? [], changed.page.submissions)
-  ).toMatchObject([
-    { messageId: card.messageId, command: true, text: expect.stringContaining('edited original') }
-  ])
-  expect(frames).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        result: expect.objectContaining({
-          type: 'batch',
-          batch: expect.objectContaining({
-            submissions: expect.arrayContaining([
+    const transient = buildMobileNativeChatTransientData({
+      messages,
+      folded: messages,
+      streaming: null,
+      pending: [],
+      imagePreviewsByMessageId: {
+        [agentJournalSubmissionKey(presentedId)]: ['file:///device/composer-preview.png']
+      }
+    })
+    expect(JSON.stringify(transient.data)).toContain('file:///device/composer-preview.png')
+    const frames = await openStream('agentSession.subscribe', { sessionId: SESSION }, OLD)
+    const fields = {
+      messageId: card.messageId,
+      expectedBodyFingerprint: journal().queuedMessages.get(card.messageId)!.fingerprint,
+      text: 'edited original'
+    }
+    expect(
+      await call(
+        'agentSession.queuedMessageUpdate',
+        {
+          envelope: rig.envelope(fields, 'agentSession.queuedMessageUpdate', hostTestOperationId()),
+          ...fields
+        },
+        MODERN
+      )
+    ).toMatchObject({ result: { ok: true, value: { status: 'updated' } } })
+    const changed = await history()
+    expect(
+      projectStructuredAgentSessionMessages(changed.page.items, [], changed.page.submissions).some(
+        (item) => item.id === agentJournalSubmissionKey(presentedId)
+      )
+    ).toBe(false)
+    expect(
+      mobileQueuedMessageCards(changed.page.queuedMessages ?? [], changed.page.submissions)
+    ).toMatchObject([
+      { messageId: card.messageId, command: true, text: expect.stringContaining('edited original') }
+    ])
+    expect(frames).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          result: expect.objectContaining({
+            type: 'batch',
+            batch: expect.objectContaining({
+              submissions: expect.arrayContaining([
+                expect.objectContaining({
+                  clientMessageId: presentedId,
+                  keptAsQueuedMessageId: card.messageId
+                })
+              ])
+            })
+          })
+        }),
+        expect.objectContaining({
+          result: expect.objectContaining({
+            queuedMessages: expect.arrayContaining([
               expect.objectContaining({
-                clientMessageId: id,
-                keptAsQueuedMessageId: card.messageId
+                messageId: card.messageId,
+                body: expect.objectContaining({ command: { name: 'compact' } })
               })
             ])
           })
         })
-      }),
-      expect.objectContaining({
-        result: expect.objectContaining({
-          queuedMessages: expect.arrayContaining([
-            expect.objectContaining({
-              messageId: card.messageId,
-              body: expect.objectContaining({ command: { name: 'compact' } })
-            })
-          ])
-        })
-      })
-    ])
-  )
-  expect(isRenderableImageUri('file:///device/composer-preview.png')).toBe(true)
-  expect(isRenderableImageUri('data:image/png;base64,AA==')).toBe(true)
-  expect(isRenderableImageUri(body.blocks.find((block) => block.type === 'image-ref')?.path)).toBe(
-    false
-  )
-  const send = { messageId: card.messageId }
-  expect(
-    await call(
-      'agentSession.queuedMessageSend',
-      {
-        envelope: rig.envelope(send, 'agentSession.queuedMessageSend', hostTestOperationId()),
-        ...send
-      },
-      OLD
+      ])
     )
-  ).toMatchObject({ result: { ok: true } })
-  await eventually(async () => expect(await rig!.handoff(card.messageId)).toBeDefined())
-  const handed = (await rig.handoff(card.messageId))!
-  expect(handed.clientMessageId).not.toBe(id)
-  const handedBody = journal().submissionBody(handed.clientMessageId)
-  expect(handedBody).toEqual({
-    ...body,
-    blocks: [{ type: 'text', text: 'edited original' }, body.blocks[1]]
-  })
-  expect(handed.options).toEqual({ model: 'default' })
-  await rig.settleAccepted(id, 'old-u-after-edited-v')
-  expect((await rig.handoff(card.messageId))?.dispatchState).toBe(handed.dispatchState)
-  expect((await history()).page.queuedMessages).toEqual([])
-  await rig.quitRestartHostProcess()
-  const reopened = (await history()).page
-  expect(reopened.queuedMessages).toMatchObject([{ messageId: card.messageId, state: 'waiting' }])
-  expect(reopened.queuedMessages).toHaveLength(1)
-  expect(journal().submission(id)?.dispatchState).toBe('rejected')
-  expect(journal().submissionBody(handed.clientMessageId)).toEqual(handedBody)
-  expect(journal().queuedMessages.get(card.messageId)?.body).toEqual(handedBody)
-})
+    const live = frames.reduce((state, frame) => {
+      if (!frame.ok) {
+        throw new Error('subscription failed')
+      }
+      if (!frame.result) {
+        return state
+      }
+      // SAFETY: Only the installed agentSession.subscribe dispatcher writes these test frames.
+      const event = frame.result as AgentSessionSubscribeEvent
+      return reduceStructuredAgentSession(state, { type: 'event', event })
+    }, EMPTY_STRUCTURED_AGENT_SESSION)
+    expect(
+      projectStructuredAgentSessionMessages(live.items, [], live.submissions).some(
+        (item) => item.id === agentJournalSubmissionKey(presentedId)
+      )
+    ).toBe(false)
+    expect(mobileQueuedMessageCards(live.queuedMessages, live.submissions)).toMatchObject([
+      { messageId: card.messageId, command: true, text: expect.stringContaining('edited original') }
+    ])
+    expect(journal().submissionBody(presentedId)).toEqual(body)
+    expect(journal().submissionBody(id)).toEqual(body)
+    expect((await history({ direction: 'tail' }, false)).page.queuedMessages).toMatchObject([
+      {
+        messageId: card.messageId,
+        body: { blocks: [{ type: 'text', text: 'edited original' }, body.blocks[1]] }
+      }
+    ])
+    expect(isRenderableImageUri('file:///device/composer-preview.png')).toBe(true)
+    expect(isRenderableImageUri('data:image/png;base64,AA==')).toBe(true)
+    expect(
+      isRenderableImageUri(body.blocks.find((block) => block.type === 'image-ref')?.path)
+    ).toBe(false)
+    const send = { messageId: card.messageId }
+    expect(
+      await call(
+        'agentSession.queuedMessageSend',
+        {
+          envelope: rig.envelope(send, 'agentSession.queuedMessageSend', hostTestOperationId()),
+          ...send
+        },
+        OLD
+      )
+    ).toMatchObject({ result: { ok: true } })
+    await eventually(async () => expect(await rig!.handoff(card.messageId)).toBeDefined())
+    const handed = (await rig.handoff(card.messageId))!
+    expect(handed.clientMessageId).not.toBe(id)
+    const handedBody = journal().submissionBody(handed.clientMessageId)
+    expect(handedBody).toEqual({
+      ...body,
+      blocks: [{ type: 'text', text: 'edited original' }, body.blocks[1]]
+    })
+    expect(handed.options).toEqual({ model: 'default' })
+    await rig.settleAccepted(id, 'old-u-after-edited-v')
+    expect((await rig.handoff(card.messageId))?.dispatchState).toBe(handed.dispatchState)
+    expect((await history()).page.queuedMessages).toEqual([])
+    await rig.quitRestartHostProcess()
+    const reopened = (await history()).page
+    expect(reopened.queuedMessages).toMatchObject([{ messageId: card.messageId, state: 'waiting' }])
+    expect(reopened.queuedMessages).toHaveLength(1)
+    expect(journal().submission(id)?.dispatchState).toBe('rejected')
+    expect(journal().submissionBody(handed.clientMessageId)).toEqual(handedBody)
+    expect(journal().queuedMessages.get(card.messageId)?.body).toEqual(handedBody)
+  }
+)
 
 it('keeps an image-only waiting queue and pause visible through Resume and a failed queued start', async () => {
   rig = await createQueuedMessageTestRig({ restartable: true })

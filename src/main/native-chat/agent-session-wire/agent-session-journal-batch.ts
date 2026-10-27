@@ -33,6 +33,7 @@ export function projectJournalBatch(input: {
   afterSequence: number
   canonicalItemId?: (itemId: string) => string
   queueSourceIds?: (messageId: string) => readonly string[]
+  readSnapshot?: (touched: ReadonlySet<string>) => AgentJournalSnapshot
 }): JournalBatchProjection {
   const gap = findSequenceGap(
     input.rows.map((row) => row.seq),
@@ -43,7 +44,6 @@ export function projectJournalBatch(input: {
   }
   const aliases = submissionAliases(input.snapshot.submissions)
   const touchedItemIds = new Set<string>()
-  const touchedClientMessageIds = new Set<string>()
   for (const row of input.rows) {
     if (row.kind === 'lifecycle-batch') {
       for (const mutation of row.mutations) {
@@ -67,7 +67,6 @@ export function projectJournalBatch(input: {
     }
     if (row.kind === 'queue') {
       for (const id of input.queueSourceIds?.(row.messageId) ?? []) {
-        touchedClientMessageIds.add(id)
         touchedItemIds.add(agentJournalSubmissionKey(id))
       }
     }
@@ -84,18 +83,18 @@ export function projectJournalBatch(input: {
           : input.snapshot.submissions.find((submission) => submission.clientMessageId === attempt)
               ?.clientMessageId
     if (clientMessageId !== undefined) {
-      touchedClientMessageIds.add(clientMessageId)
       touchedItemIds.add(agentJournalSubmissionKey(clientMessageId))
     }
   }
 
-  const live = liveItemsById(input.snapshot.items)
   const notes = stopNotesByTurn(input.snapshot.items)
   for (const itemId of touchedItemIds) {
     for (const noteId of notes.get(itemId) ?? []) {
       touchedItemIds.add(noteId)
     }
   }
+  const snapshot = input.readSnapshot?.(touchedItemIds) ?? input.snapshot
+  const live = liveItemsById(snapshot.items)
   const items = [...touchedItemIds]
     .map((itemId) => live.get(itemId))
     .filter((item) => item !== undefined)
@@ -106,8 +105,8 @@ export function projectJournalBatch(input: {
       cursor: input.snapshot.cursor,
       items,
       removedItemIds: [...touchedItemIds].filter((itemId) => !live.has(itemId)),
-      submissions: input.snapshot.submissions.filter((submission) =>
-        touchedClientMessageIds.has(submission.clientMessageId)
+      submissions: snapshot.submissions.filter((submission) =>
+        touchedItemIds.has(agentJournalSubmissionKey(submission.clientMessageId))
       )
     }
   }

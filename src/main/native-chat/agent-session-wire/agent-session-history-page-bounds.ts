@@ -14,6 +14,7 @@ import type {
 import { REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES } from '../../../shared/remote-runtime-memory-limits'
 import { MOBILE_BRIDGE_MAX_FRAME_BYTES } from '../../../shared/mobile-bridge-frame-bytes'
 import { agentSessionHostStatusBody } from '../../../shared/agent-session-host-status-rows'
+import { isSubagentBlock } from '../../../shared/native-chat-types'
 import { subagentFoldKey, subagentItemBlock } from '../../../shared/native-chat-subagent-items'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 
@@ -85,7 +86,12 @@ export function measureHistoryItem(item: AgentJournalRenderItem): HistoryItemFor
 export type HistoryReader = {
   form: (item: AgentJournalRenderItem) => HistoryItemForm
   budgetBytes: number
-  snapshot?: (journal: AgentSessionJournal) => AgentJournalSnapshot
+  /** Forward reads project touched identities; cold reads include retained sources before bounds. */
+  snapshot?: (
+    journal: AgentSessionJournal,
+    snapshot?: AgentJournalSnapshot,
+    touched?: ReadonlySet<string>
+  ) => AgentJournalSnapshot
   queueSourceIds?: (journal: AgentSessionJournal, messageId: string) => readonly string[]
 }
 
@@ -199,4 +205,8 @@ export function resolveHistoryLimit(limit: number | undefined): number {
     return AGENT_SESSION_HISTORY_DEFAULT_LIMIT
   }
   return Math.min(AGENT_SESSION_HISTORY_MAX_LIMIT, Math.max(1, Math.floor(limit)))
+}
+
+export function isSubagentRow(item: AgentJournalRenderItem): boolean {
+  return item.body.kind === 'message' && item.body.blocks.some(isSubagentBlock)
 }

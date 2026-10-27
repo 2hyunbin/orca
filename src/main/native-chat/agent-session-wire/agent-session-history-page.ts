@@ -10,7 +10,6 @@
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
 import { latestStructuredAgentSessionTurn } from '../../../shared/structured-agent-session-live-turn'
-import { isSubagentBlock } from '../../../shared/native-chat-types'
 import type {
   AgentJournalCursor,
   AgentJournalRenderItem,
@@ -30,6 +29,7 @@ import { projectJournalBatch } from './agent-session-journal-batch'
 import { CLIENT_HISTORY_READER } from './agent-session-item-wire-form'
 import {
   boundHistoryItemsByBytes,
+  isSubagentRow,
   resolveHistoryLimit,
   type HistoryReader,
   measureHistoryItem,
@@ -80,17 +80,13 @@ function conversationWindow(
   return items.filter((item) => item.sequence >= whole)
 }
 
-function isSubagentRow(item: AgentJournalRenderItem): boolean {
-  return item.body.kind === 'message' && item.body.blocks.some(isSubagentBlock)
-}
-
 export function readAgentSessionHistory(
   journal: AgentSessionJournal,
   request: AgentSessionHistoryRequest,
   {
     scope = 'every-agent',
     reader = CLIENT_HISTORY_READER,
-    snapshot = reader.snapshot?.(journal) ?? journal.snapshot()
+    snapshot = journal.snapshot()
   }: {
     /** Reduced state to read against. A synchronous multi-page catch-up passes one
      *  snapshot for the whole run so each page costs its own rows, not the timeline. */
@@ -106,12 +102,13 @@ export function readAgentSessionHistory(
   const cursor = request.direction === 'before' ? request.cursor : undefined
   if (cursor) {
     if (cursor.epoch !== snapshot.cursor.epoch) {
-      return historyReset(snapshot, 'epoch_changed', reader)
+      return historyReset(journal, 'epoch_changed', reader)
     }
     if (cursor.sequence > snapshot.cursor.sequence) {
-      return historyReset(snapshot, 'cursor_ahead', reader)
+      return historyReset(journal, 'cursor_ahead', reader)
     }
   }
+  snapshot = reader.snapshot?.(journal, snapshot) ?? snapshot
   const scoped =
     scope === 'own-agent' ? snapshot.items.filter(isRootAgentJournalItem) : snapshot.items
   const older = cursor ? scoped.filter((item) => item.sequence < cursor.sequence) : scoped
@@ -149,11 +146,11 @@ export function createAgentSessionCatchUpReader(
   journal: AgentSessionJournal,
   reader: HistoryReader = CLIENT_HISTORY_READER
 ): (request: AgentSessionHistoryRequest) => AgentSessionHistoryResult {
-  let snapshot = reader.snapshot?.(journal) ?? journal.snapshot()
+  let snapshot = journal.snapshot()
   return (request) => {
     const live = journal.cursor()
     if (live.epoch !== snapshot.cursor.epoch || live.sequence !== snapshot.cursor.sequence) {
-      snapshot = reader.snapshot?.(journal) ?? journal.snapshot()
+      snapshot = journal.snapshot()
     }
     return readAgentSessionHistory(journal, request, { snapshot, reader })
   }
@@ -196,14 +193,14 @@ function buildHydrationPage(
 }
 
 function historyReset(
-  snapshot: AgentJournalSnapshot,
+  journal: AgentSessionJournal,
   reset: Extract<AgentSessionHistoryResult, { ok: false }>['reset'],
   reader: HistoryReader
 ): AgentSessionHistoryResult {
   return {
     ok: false,
     reset,
-    page: buildHydrationPage(snapshot, undefined, reader)
+    page: readAgentSessionHydrationPage(journal, undefined, reader)
   }
 }
 
@@ -218,14 +215,14 @@ function readForward(
     // Why: forward paging replays rows after a position; without one there is
     // nothing to be after, and silently serving the tail would hand the client
     // a page it cannot place.
-    return historyReset(snapshot, 'cursor_ahead', reader)
+    return historyReset(journal, 'cursor_ahead', reader)
   }
   // One lookahead preserves hasNewer without rereading the entire remaining journal per page.
   const since = journal.readSince(cursor, limit + 1)
   if (!since.ok) {
-    return historyReset(snapshot, since.reset, reader)
+    return historyReset(journal, since.reset, reader)
   }
-  const submissionBytes = submissionBytesByItemId(snapshot.submissions)
+  let submissionBytes = submissionBytesByItemId(snapshot.submissions)
   // The page cost is EVERYTHING variable it carries: items with their
   // submissions AND removal ids — a legal pre-bounding tombstone id can dwarf
   // every item on the page.
@@ -251,22 +248,25 @@ function readForward(
       snapshot,
       afterSequence: cursor.sequence,
       canonicalItemId: (itemId) => journal.canonicalItemId(itemId),
-      queueSourceIds: reader.queueSourceIds?.bind(undefined, journal)
+      queueSourceIds: reader.queueSourceIds?.bind(undefined, journal),
+      readSnapshot: (ids) => reader.snapshot?.(journal, snapshot, ids) ?? snapshot
     })
-    return result.ok
-      ? { ...result, batch: { ...result.batch, items: result.batch.items.map(reader.form) } }
-      : result
+    if (!result.ok) {
+      return result
+    }
+    submissionBytes = submissionBytesByItemId(result.batch.submissions)
+    return { ...result, batch: { ...result.batch, items: result.batch.items.map(reader.form) } }
   }
   let projected = project(rows)
   if (!projected.ok) {
-    return historyReset(snapshot, projected.reset, reader)
+    return historyReset(journal, projected.reset, reader)
   }
   let contentBytes = pageContentBytes(projected.batch.items, projected.batch.removedItemIds)
   while (rows.length > 1 && contentBytes > reader.budgetBytes) {
     rows = rows.slice(0, Math.ceil(rows.length / 2))
     const shrunk = project(rows)
     if (!shrunk.ok) {
-      return historyReset(snapshot, shrunk.reset, reader)
+      return historyReset(journal, shrunk.reset, reader)
     }
     projected = shrunk
     contentBytes = pageContentBytes(projected.batch.items, projected.batch.removedItemIds)
@@ -288,13 +288,14 @@ function readForward(
     // break the client's keying. A bounded tail replaces the client's state
     // wholesale, which applies the removal without carrying the id, and the
     // client resumes from the live cursor past this row.
-    return historyReset(snapshot, 'cursor_compacted', reader)
+    return historyReset(journal, 'cursor_compacted', reader)
   }
   const lastSequence = rows.at(-1)?.seq ?? cursor.sequence
   return {
     ok: true,
     page: buildPage({
       snapshot,
+      submissions: projected.batch.submissions,
       direction: 'after',
       items: items.map(({ item }) => item),
       removedItemIds: projected.batch.removedItemIds,
@@ -309,6 +310,7 @@ function readForward(
 
 function buildPage(input: {
   snapshot: AgentJournalSnapshot
+  submissions?: AgentJournalSnapshot['submissions']
   direction: AgentSessionHistoryDirection
   items: AgentJournalRenderItem[]
   removedItemIds?: string[]
@@ -330,7 +332,7 @@ function buildPage(input: {
     direction: input.direction,
     items: input.items,
     removedItemIds: input.removedItemIds ?? [],
-    submissions: input.snapshot.submissions.filter((submission) =>
+    submissions: (input.submissions ?? input.snapshot.submissions).filter((submission) =>
       pageItemIds.has(agentJournalSubmissionKey(submission.clientMessageId))
     ),
     window: {

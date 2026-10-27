@@ -280,9 +280,9 @@ it('delivers deferred hidden image sources in bounded semantic batches without r
   ).toBe(false)
 })
 
-it.each([100, 1000])(
-  'adds no unrelated adapter scan on streamed publish over %i retained sends, with and without an active image source',
-  async (n) => {
+it.each([100, 1000].flatMap((n) => ['none', 'visible', 'cut'].map((source) => ({ n, source }))))(
+  'avoids added history population work for $source source and $n visible rows on ten real publishes',
+  async ({ n, source }) => {
     const { AgentSessionSubscribers } =
       await import('../agent-session-wire/structured-agent-session-subscribers')
     const { queuedImageReaderSnapshot, queuedImageReaderEvent, queuedImageSourceIds } =
@@ -297,10 +297,32 @@ it.each([100, 1000])(
       )
     })
     journal.queuedMessages.recoveryWork = () => idleWork
-    for (let i = 0; i < n; i++) {
-      await send(`history-${i}`)
-      await receipt(`history-${i}`)
+    if (source !== 'none') {
+      await send('active-image', true, {
+        kind: 'message',
+        role: 'user',
+        blocks: [
+          { type: 'text', text: 'active' },
+          { type: 'image-ref', url: 'https://example.test/a.png' }
+        ]
+      })
+      if (source === 'cut') {
+        await journal.rollEpoch('unreconcilable_prefix', 7)
+        expect(journal.item(agentJournalSubmissionKey('active-image'))).toBeNull()
+      }
     }
+    async function append(recordId: string) {
+      await journal.appendItem(
+        { provider: 'legacy', agent: 'codex', sessionId: 'thread', recordId },
+        { kind: 'status', text: recordId },
+        { fence: 7 }
+      )
+    }
+    for (let i = 0; i < n; i++) {
+      await append(`seed-${i}`)
+    }
+    const frames: AgentSessionSubscribeEvent[] = []
+    const capable: AgentSessionSubscribeEvent[] = []
     const subscribers = new AgentSessionSubscribers({
       readQueuePublication: () =>
         readQueuePublication(journal, () => ({
@@ -310,74 +332,198 @@ it.each([100, 1000])(
       readCurrentWork: () => idleWork
     })
     subscribers.open({
-      id: 'perf',
+      id: 'perf-old',
       sessionId: identity.sessionId,
       journal,
       fence: 7,
-      emit: () => {},
+      emit: (event) => frames.push(event),
       boundedFrames: true,
       readHistorySnapshot: queuedImageReaderSnapshot,
       readQueueSourceIds: queuedImageSourceIds,
       projectJournalEvent: queuedImageReaderEvent
     })
-    for (const active of [false, true]) {
-      if (active) {
-        await send('active-image', true, {
-          kind: 'message',
-          role: 'user',
-          blocks: [
-            { type: 'text', text: 'active' },
-            { type: 'image-ref', url: 'https://example.test/a.png' }
-          ]
-        })
-        subscribers.publish(identity.sessionId, journal)
-      }
-      let adapterVisits = 0
-      const original = journal.snapshot.bind(journal)
-      function watched<T>(values: T[]): T[] {
-        return new Proxy(values, {
-          get(target, key, receiver) {
-            if (key !== 'map') {
-              return Reflect.get(target, key, receiver)
+    subscribers.open({
+      id: 'perf-current',
+      sessionId: identity.sessionId,
+      journal,
+      fence: 7,
+      emit: (event) => capable.push(event),
+      boundedFrames: true
+    })
+    const sourceKey = agentJournalSubmissionKey('active-image')
+    const cold = queuedImageReaderSnapshot(journal)
+    expect(cold.items.some((item) => item.itemId === sourceKey)).toBe(source !== 'none')
+    const baseline = journal.cursor()
+    frames.length = 0
+    capable.length = 0
+    const operations = { adapter: 0, inherited: 0 }
+    const original = journal.snapshot.bind(journal)
+    function watched<T>(values: T[]): T[] {
+      return new Proxy(values, {
+        get(target, key, receiver) {
+          const adapter =
+            new Error('population read').stack?.includes('queuedImageReaderSnapshot') === true
+          const bucket = adapter ? 'adapter' : 'inherited'
+          if (key === Symbol.iterator) {
+            return function* () {
+              for (const value of target) {
+                operations[bucket]++
+                yield value
+              }
             }
-            const adapter =
-              new Error('adapter operation count').stack?.includes('queuedImageReaderSnapshot') ===
-              true
-            return (fn: (value: T, index: number, rows: T[]) => unknown) =>
-              target.map((value, index) => {
-                if (adapter) {
-                  adapterVisits++
-                }
-                return fn(value, index, target)
-              })
           }
-        })
-      }
-      const spy = vi.spyOn(journal, 'snapshot').mockImplementation(() => {
-        const snapshot = original()
-        return {
-          ...snapshot,
-          items: watched(snapshot.items),
-          submissions: watched(snapshot.submissions)
+          if (typeof key === 'string' && /^\d+$/.test(key)) {
+            operations[bucket]++
+          }
+          // Array methods use the proxy receiver, counting every numeric read, including map/slice/splice.
+          return Reflect.get(target, key, receiver)
         }
       })
+    }
+    const spy = vi.spyOn(journal, 'snapshot').mockImplementation(() => {
+      const snapshot = original()
+      return {
+        ...snapshot,
+        items: watched(snapshot.items),
+        submissions: watched(snapshot.submissions)
+      }
+    })
+    try {
       for (let i = 0; i < 10; i++) {
-        await journal.appendItem(
-          {
-            provider: 'legacy',
-            agent: 'codex',
-            sessionId: 'thread',
-            recordId: `output-${active}-${i}`
-          },
-          { kind: 'status', text: 'token' },
-          { fence: 7 }
-        )
+        await append(`output-${i}`)
         subscribers.publish(identity.sessionId, journal)
       }
+    } finally {
       spy.mockRestore()
-      expect(adapterVisits).toBe(0)
     }
-    await receipt('active-image')
-    expect(journal.queuedMessages.list().filter((row) => row.state === 'returned')).toEqual([])
+    console.info('compatibility operation counts', { n, source, ...operations })
+    expect(operations.adapter).toBe(0)
+    for (const delivered of [frames, capable]) {
+      expect(delivered.every((event) => event.type === 'batch')).toBe(true)
+      const items = delivered.flatMap((event) => (event.type === 'batch' ? event.batch.items : []))
+      expect(
+        items.filter((item) => item.body.kind === 'status' && item.body.text.startsWith('output-'))
+      ).toHaveLength(10)
+      expect(items.some((item) => item.itemId === sourceKey)).toBe(false)
+      expect(delivered.at(-1)?.type === 'batch' && delivered.at(-1)).toMatchObject({
+        batch: { cursor: journal.cursor() }
+      })
+    }
+    expect(journal.cursor().sequence - baseline.sequence).toBe(10)
+    if (source !== 'none') {
+      expect(journal.queuedMessages.list().filter((row) => row.state === 'returned')).toHaveLength(
+        1
+      )
+      await receipt('active-image')
+    }
   }
 )
+
+it('projects a still-active cut source before stateless and middle-page catch-up decisions, with cold reset fallback', async () => {
+  const { queuedImageHistoryReader, queuedImageSubscriber } =
+    await import('../../runtime/rpc/methods/structured-agent-session-queued-image-capability')
+  const { readAgentSessionHistory, createAgentSessionCatchUpReader } =
+    await import('../agent-session-wire/agent-session-history-page')
+  const { AgentSessionSubscribers } =
+    await import('../agent-session-wire/structured-agent-session-subscribers')
+  const idleWork = structuredAgentSessionCurrentWork(journal, {
+    record: agentSessionRecordFixture(
+      agentSessionLeaseFixture({
+        sessionId: identity.sessionId,
+        runtimeFence: 7,
+        claimStatus: 'released'
+      })
+    )
+  })
+  journal.queuedMessages.recoveryWork = () => idleWork
+  await send('cut-touch', true, {
+    kind: 'message',
+    role: 'user',
+    blocks: [
+      { type: 'text', text: 'original immutable' },
+      { type: 'image-ref', url: 'https://example.test/original.png' }
+    ]
+  })
+  await journal.rollEpoch('unreconcilable_prefix', 7)
+  const cursor = journal.cursor()
+  const key = agentJournalSubmissionKey('cut-touch')
+  expect(journal.item(key)).toBeNull()
+  await journal.markPendingSubmissionsUnknown(7)
+  for (let i = 0; i < 3; i++) {
+    await journal.appendItem(
+      { provider: 'legacy', agent: 'codex', sessionId: 'thread', recordId: `later-${i}` },
+      { kind: 'status', text: `later-${i}` },
+      { fence: 7 }
+    )
+  }
+  const reader = queuedImageHistoryReader({ clientKind: 'mobile' })!
+  const request = { sessionId: identity.sessionId, direction: 'after' as const, cursor, limit: 1 }
+  const first = readAgentSessionHistory(journal, request, { reader })
+  expect(first).toMatchObject({
+    ok: true,
+    page: {
+      hasNewer: true,
+      removedItemIds: [],
+      items: [expect.objectContaining({ itemId: key })],
+      submissions: [expect.objectContaining({ clientMessageId: 'cut-touch' })]
+    }
+  })
+  expect(first.page.submissions[0]).not.toHaveProperty('queuedMessageId')
+  const read = createAgentSessionCatchUpReader(journal, reader)
+  const middle = read(request)
+  expect(middle).toEqual(first)
+  const next = read({ ...request, cursor: middle.page.window.nextCursor })
+  expect(next.ok).toBe(true)
+  expect(next.page.removedItemIds).not.toContain(key)
+  expect(next.page.window.nextCursor.sequence).toBeGreaterThan(
+    middle.page.window.nextCursor.sequence
+  )
+  for (const resetCursor of [
+    undefined,
+    { ...cursor, epoch: 'stale' },
+    { ...cursor, sequence: journal.cursor().sequence + 1 }
+  ]) {
+    const reset = readAgentSessionHistory(journal, { ...request, cursor: resetCursor }, { reader })
+    expect(reset.ok).toBe(false)
+    expect(reset.page.items).toContainEqual(expect.objectContaining({ itemId: key }))
+  }
+  const staleBackward = readAgentSessionHistory(
+    journal,
+    {
+      ...request,
+      direction: 'before',
+      cursor: { ...cursor, epoch: 'stale' }
+    },
+    { reader }
+  )
+  expect(staleBackward.ok).toBe(false)
+  expect(staleBackward.page.items.filter((item) => item.itemId === key)).toHaveLength(1)
+  const frames: AgentSessionSubscribeEvent[] = []
+  const subscribers = new AgentSessionSubscribers({
+    readQueuePublication: () =>
+      readQueuePublication(journal, () => ({
+        record: agentSessionRecordFixture(lease),
+        work: idleWork
+      })),
+    readCurrentWork: () => idleWork
+  })
+  subscribers.open({
+    id: 'reconnect',
+    sessionId: identity.sessionId,
+    journal,
+    fence: 7,
+    cursor,
+    boundedFrames: true,
+    snapshotCatchUp: false,
+    emit: (event) => frames.push(event),
+    ...queuedImageSubscriber({ clientKind: 'mobile' })
+  })
+  expect(frames.every((event) => event.type === 'batch')).toBe(true)
+  expect(
+    frames.flatMap((event) => (event.type === 'batch' ? event.batch.removedItemIds : []))
+  ).not.toContain(key)
+  expect(
+    frames.flatMap((event) => (event.type === 'batch' ? event.batch.items : []))
+  ).toContainEqual(expect.objectContaining({ itemId: key }))
+  expect(journal.item(key)).toBeNull()
+})
