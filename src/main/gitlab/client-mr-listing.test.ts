@@ -205,7 +205,6 @@ describe('gitlab client — MR operations', () => {
       expect(result.items[0].isCrossRepository).toBe(true)
     })
 
-    // Why: GitLab omits x-total and x-total-pages past 10,000 rows, so a full page must still offer the next one.
     it('probes one more page when GitLab sends no pagination totals', async () => {
       const mr = (iid: number) => ({
         id: iid,
@@ -235,6 +234,21 @@ describe('gitlab client — MR operations', () => {
         totalPages: 4,
         totalCount: 7
       })
+
+      glabApiWithHeadersMock.mockResolvedValueOnce({
+        body: JSON.stringify([mr(1), mr(2)]),
+        headers: {}
+      })
+      expect((await listMergeRequests('/repo', 'all', 1, 2)).totalPages).toBe(2)
+
+      glabApiWithHeadersMock.mockResolvedValueOnce({ body: '[]', headers: {} })
+      expect((await listMergeRequests('/repo', 'all', 2, 2)).totalPages).toBe(2)
+
+      glabApiWithHeadersMock.mockResolvedValueOnce({
+        body: JSON.stringify([mr(1), mr(2)]),
+        headers: { 'x-total-pages': '5', 'x-total': '7' }
+      })
+      expect((await listMergeRequests('/repo', 'all', 1, 2)).totalPages).toBe(5)
     })
 
     it('falls back to glab mr list when project ref is unresolved', async () => {
