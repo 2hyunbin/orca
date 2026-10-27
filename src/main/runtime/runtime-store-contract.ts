@@ -113,6 +113,8 @@ export type RuntimeStore = {
     codexManagedAccounts?: GlobalSettings['codexManagedAccounts']
     nestedWorkerMaxDepth?: GlobalSettings['nestedWorkerMaxDepth']
     orchestrationChatErrorEscalationEnabled?: GlobalSettings['orchestrationChatErrorEscalationEnabled']
+    orchestrationHeartbeatsEnabled?: GlobalSettings['orchestrationHeartbeatsEnabled']
+    orchestrationHeartbeatIntervalMinutes?: GlobalSettings['orchestrationHeartbeatIntervalMinutes']
     workspaceDir: string
     nestWorkspaces: boolean
     workspaceDirHistory?: GlobalSettings['workspaceDirHistory']
