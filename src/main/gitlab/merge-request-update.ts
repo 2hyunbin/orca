@@ -40,6 +40,7 @@ export async function updateMR(
         return { ok: true }
       }
       await acquire()
+      let readinessApplied = false
       try {
         if (updates.readyForReview && updates.title !== undefined) {
           return { ok: false, error: 'Cannot update the title while marking a merge request ready' }
@@ -48,20 +49,21 @@ export async function updateMR(
         const endpoint = `projects/${encodedProject(projectRef.path)}/merge_requests/${iid}`
         let title = updates.title?.trim()
         const query = `mutation { mergeRequestSetDraft(input: { projectPath: ${JSON.stringify(projectRef.path)}, iid: ${JSON.stringify(String(iid))}, draft: false }) { mergeRequest { iid } errors } }`
-        if (
-          updates.readyForReview &&
-          !(await tryMarkMRReady(
+        if (updates.readyForReview) {
+          readinessApplied = await tryMarkMRReady(
             [
               'api',
               ...glabHostnameArgs(projectRef, connectionId),
               'graphql',
+              '-i',
               '-f',
               `query=${query}`
             ],
             glabRepoExecOptions(repoPath, connectionId, localGitOptions),
             iid
-          ))
-        ) {
+          )
+        }
+        if (updates.readyForReview && !readinessApplied) {
           const response = await glabExecFileAsync(
             ['api', ...glabHostnameArgs(projectRef, connectionId), endpoint],
             glabRepoExecOptions(repoPath, connectionId, localGitOptions)
@@ -110,6 +112,22 @@ export async function updateMR(
         )
         return { ok: true }
       } catch (err) {
+        if (readinessApplied) {
+          const metadata = [
+            updates.body !== undefined ? 'description' : null,
+            [...(updates.addLabels ?? []), ...(updates.removeLabels ?? [])].some((label) =>
+              label.trim()
+            )
+              ? 'labels'
+              : null
+          ]
+            .filter((field) => field !== null)
+            .join(' and ')
+          return {
+            ok: false,
+            error: `GitLab marked the merge request ready, but could not confirm the ${metadata} update. Retry only those edits.`
+          }
+        }
         const msg = err instanceof Error ? err.message : String(err)
         return { ok: false, error: classifyGlabError(msg).message }
       } finally {
