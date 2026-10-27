@@ -1,4 +1,6 @@
+import { stripAnsiEscapeSequences } from '../../shared/ansi-escape-sequences'
 import { runCoalescedProbe, type CoalescedProbes } from '../git/coalesced-probe'
+import { extractExecError } from '../git/exec-error'
 import { NEGATIVE_ENTRY_TTL_MS } from '../git/remote-ref-probe-cache'
 import { glabExecFileAsync } from '../git/runner'
 import { DEFAULT_GITLAB_HOSTS, normalizeGitLabHost } from './project-ref-parser'
@@ -175,20 +177,44 @@ async function probeGlabKnownHosts(
       ...(localGitOptions.admissionTier ? { admissionTier: localGitOptions.admissionTier } : {})
     })
     const hosts = parseGlabAuthStatusHosts(`${stdout}\n${stderr}`)
-    const remembered = knownHostsCacheByExecutionContext.get(key) ?? []
-    const merged = Array.from(new Set([...DEFAULT_GITLAB_HOSTS, ...remembered, ...hosts]))
-    if (ownsKey()) {
-      knownHostsFailureBackoff.delete(key)
-      knownHostsCacheByExecutionContext.set(key, merged)
-      trimKnownHostsCache()
+    return cacheGlabKnownHosts(key, hosts, ownsKey)
+  } catch (error) {
+    const { stdout, stderr } = extractExecError(error)
+    const hosts = parseGlabAuthenticatedHosts(`${stdout}\n${stderr}`)
+    // A failed host still prints its heading and token details; only login results prove success.
+    if (hosts.length > 0) {
+      return cacheGlabKnownHosts(key, hosts, ownsKey)
     }
-    return merged
-  } catch {
     if (ownsKey()) {
       rememberKnownHostsFailure(key)
     }
     return knownHostsCacheByExecutionContext.get(key) ?? [...DEFAULT_GITLAB_HOSTS]
   }
+}
+
+function cacheGlabKnownHosts(
+  key: string,
+  hosts: readonly string[],
+  ownsKey: () => boolean
+): readonly string[] {
+  const remembered = knownHostsCacheByExecutionContext.get(key) ?? []
+  const merged = Array.from(new Set([...DEFAULT_GITLAB_HOSTS, ...remembered, ...hosts]))
+  if (ownsKey()) {
+    knownHostsFailureBackoff.delete(key)
+    knownHostsCacheByExecutionContext.set(key, merged)
+    trimKnownHostsCache()
+  }
+  return merged
+}
+
+function parseGlabAuthenticatedHosts(output: string): string[] {
+  const hosts = new Set<string>()
+  for (const match of stripAnsiEscapeSequences(output).matchAll(
+    /^[\t ]*(?:✓[\t ]+)?Logged in to ([a-zA-Z0-9.-]+(?::\d+)?) as /gim
+  )) {
+    hosts.add(match[1].toLowerCase())
+  }
+  return Array.from(hosts)
 }
 
 function rememberKnownHostsFailure(key: string): void {
