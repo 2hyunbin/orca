@@ -22,12 +22,11 @@ import * as diskFs from 'node:fs/promises'
 import * as nativeRemoval from '../git/windows-worktree-removal'
 import * as graphReader from '../git/worktree-list-reader'
 import { cleanupLocalOrphanedWorktreeDirectory } from '../local-orphaned-worktree-cleanup'
-import { removeWorktreeMetadataAndTransientState } from '../ipc/worktrees/removal/worktree-removal-ownership'
+import * as removalOwnership from '../ipc/worktrees/removal/worktree-removal-ownership'
 import { executeWorktreeRemoval } from '../ipc/worktrees/removal/execute-worktree-removal'
 import { RuntimeWorktreeRemovalInFlight } from './runtime-worktree-removal-in-flight'
 import { OrcaRuntimeWithResolveWorktreeRemovalTarget } from './workspaces/workspace-removal-target'
 import type { WorktreeIpcContext } from '../ipc/worktrees/worktree-ipc-context'
-import { stopPtysForDestructiveWorktreeRemoval } from '../ipc/worktrees/removal/worktree-removal-ownership'
 import * as backgroundRemoval from '../worktree-background-removal'
 import * as worktreeGit from '../git/worktree'
 import * as worktreeRemote from '../ipc/worktree-remote'
@@ -113,7 +112,7 @@ afterEach(async () => {
   _resetPendingWorktreeRemovalsForTests()
   vi.restoreAllMocks()
   vi.mocked(removeHostTree).mockClear()
-  vi.mocked(stopPtysForDestructiveWorktreeRemoval).mockReset()
+  vi.mocked(removalOwnership.stopPtysForDestructiveWorktreeRemoval).mockReset()
   await removeTree(scratchDir)
 })
 
@@ -275,7 +274,7 @@ async function deleteViaEntry(
       emitWorktreeLifecycle: () => {}
     }
   )
-  vi.mocked(stopPtysForDestructiveWorktreeRemoval).mockImplementation(stop)
+  vi.mocked(removalOwnership.stopPtysForDestructiveWorktreeRemoval).mockImplementation(stop)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: native dispatch reads only the fixture-owned context fields below.
   const context = {
     store,
@@ -348,7 +347,7 @@ describe('finishing an interrupted worktree removal after a restart', () => {
     const stat = diskFs.stat
     vi.spyOn(diskFs, 'stat').mockImplementation(async (path, options) => {
       if (String(path) === join(repoPath, '.git')) {
-        throw Object.assign(new Error(`EACCES: permission denied, stat '${path}'`), {
+        throw Object.assign(new Error(`EACCES: permission denied, stat '${String(path)}'`), {
           code: 'EACCES'
         })
       }
@@ -362,7 +361,7 @@ describe('finishing an interrupted worktree removal after a restart', () => {
     ).rejects.toThrow('Refusing to delete unregistered worktree path')
     // Reach both nonnative unregistered consumers after independently checking native admission.
     vi.spyOn(nativeRemoval, 'usesNativeWindowsRemoval').mockReturnValue(false)
-    const metadata = vi.mocked(removeWorktreeMetadataAndTransientState)
+    const metadata = vi.mocked(removalOwnership.removeWorktreeMetadataAndTransientState)
     metadata.mockClear()
     const pushCleanup = vi.spyOn(worktreeRemote, 'cleanupUnusedWorktreePushTargetRemote')
     for (const entry of ['desktop', 'runtime'] as const) {
