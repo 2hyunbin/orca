@@ -219,6 +219,18 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
   readOptions: NonNullable<StructuredAgentSessionAdapter['readOptions']> = async (input) =>
     this.session(input.sessionId, input.fence).readOptions()
   readCommands = (id: string) => this.sessions.get(id)?.startup.commands
+  /** Pi's own /name is `set_session_name` on the running session. Pi has no way to name a session
+   *  it isn't running, so a chat at rest takes the name with its next new conversation. */
+  renameProviderSession: NonNullable<StructuredAgentSessionAdapter['renameProviderSession']> =
+    async ({ record, providerSessionId, name }) => {
+      const session = this.sessions.get(record.sessionId)
+      if (session?.connection.closed !== false) {
+        return
+      }
+      if (session.openedLink?.handle.nativeId === providerSessionId) {
+        await session.connection.request('set_session_name', { name }, { timeoutMs: 5_000 })
+      }
+    }
   holdsDispatch(id: string): boolean {
     return this.sessions.get(id)?.turns.holdsDispatch ?? false
   }

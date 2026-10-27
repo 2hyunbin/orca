@@ -44,6 +44,7 @@ import {
   answerCodexStructuredPrompt,
   cancelCodexStructuredTurn
 } from './codex-structured-prompt-ownership'
+import { renameCodexProviderSession } from './codex-provider-session-rename'
 
 export type {
   CodexStructuredLaunch,
@@ -87,6 +88,10 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
     this.sessions.get(sessionId)?.skillReport?.read()
 
   readonly atRestCommands: CodexStructuredSessionAdapterDeps['atRestCommands']
+
+  renameProviderSession: NonNullable<StructuredAgentSessionAdapter['renameProviderSession']> = (
+    input
+  ) => renameCodexProviderSession({ ...input, session: this.sessions.get(input.record.sessionId) })
 
   permissionModeRequiresAcquisition = (): boolean => false
 

@@ -19,6 +19,10 @@ import {
 } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import { StructuredAgentSessionAdapterRouter } from '../native-chat/agent-session-wire/structured-agent-session-adapter-router'
 import { StructuredAgentRegistry } from '../native-chat/agent-session-wire/structured-agent-registry'
+import {
+  createStructuredAgentSessionProviderNaming,
+  withProviderNaming
+} from '../native-chat/agent-session-wire/structured-agent-session-provider-naming'
 import { setStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import {
   installAgentSessionAttachments,
@@ -244,9 +248,16 @@ async function installOnJournal(
   const adapter = new StructuredAgentSessionAdapterRouter(agents, async () => {
     await Promise.all(registrations.map((registration) => registration.adapter.closeAll()))
   })
+  const providerNaming = createStructuredAgentSessionProviderNaming({
+    store,
+    adapter,
+    logger: deps.logger
+  })
+  const nameProvider = (sessionId: string): void => void providerNaming.push(sessionId)
   host = new StructuredAgentSessionHost({
     store,
     adapter,
+    nameProviderConversation: nameProvider,
     agents,
     recoveryCapsule: new AgentSessionRecoveryCapsule(deps.stateDirectory),
     journalDatabase,
@@ -258,7 +269,9 @@ async function installOnJournal(
     ...(deps.onRequestFailure ? { onRequestFailure: deps.onRequestFailure } : {}),
     ...(deps.onSessionStatusChanged ? { onSessionStatusChanged: deps.onSessionStatusChanged } : {}),
     ...(deps.statusSink ? { statusSink: deps.statusSink } : {}),
-    ...(deps.conversationNaming ? { conversationNaming: deps.conversationNaming } : {}),
+    ...(deps.conversationNaming
+      ? { conversationNaming: withProviderNaming(deps.conversationNaming, nameProvider) }
+      : {}),
     ...(deps.hasOpenDispatch ? { hasOpenDispatch: deps.hasOpenDispatch } : {}),
     ...(deps.startupLimits ? { startupLimits: deps.startupLimits } : {}),
     ...(deps.onSessionTabHidden ? { onSessionTabHidden: deps.onSessionTabHidden } : {}),

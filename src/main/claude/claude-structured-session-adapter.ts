@@ -45,6 +45,7 @@ import {
 import { claudePromptCancelRoute } from './claude-structured-prompt-replies'
 import { claudeForkForRewind } from './claude-rewind-fork'
 import { openClaudeStructuredSession } from './claude-structured-session-open'
+import { renameClaudeProviderSession } from './claude-provider-session-rename'
 
 export type { ClaudeStructuredLaunch } from './claude-structured-launch-resolution'
 export type {
@@ -147,6 +148,14 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
   }
 
   forkForRewind = claudeForkForRewind
+  renameProviderSession: NonNullable<StructuredAgentSessionAdapter['renameProviderSession']> = (
+    input
+  ) =>
+    renameClaudeProviderSession({
+      ...input,
+      session: this.sessions.get(input.record.sessionId),
+      timeoutMs: this.deps.requestTimeoutMs
+    })
   compact: NonNullable<StructuredAgentSessionAdapter['compact']> = (input) =>
     dispatchClaudeCommand(this.session(input.sessionId), input.command)
 

@@ -78,6 +78,15 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
       input
     ) ?? Promise.resolve({ ok: false, reason: 'unsupported' })
 
+  /** Routed by the record's agent so a chat at rest still reaches its adapter. */
+  renameProviderSession: NonNullable<StructuredAgentSessionAdapter['renameProviderSession']> = (
+    input
+  ) =>
+    this.capabilityOwner(
+      input.record.sessionId,
+      input.record.provider
+    )?.adapter.renameProviderSession?.(input) ?? Promise.resolve()
+
   recoverRewind: NonNullable<StructuredAgentSessionAdapter['recoverRewind']> = (input) =>
     this.owner(input.sessionId).recoverRewind?.(input) ??
     Promise.resolve({ ok: false, reason: 'unsupported' })

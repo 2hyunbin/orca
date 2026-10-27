@@ -179,6 +179,8 @@ export type StructuredAgentSessionHostDeps = {
   /** Absent catalog reads return unknown. */
   modelCatalog?: AgentModelCatalogService
   conversationNaming?: StructuredAgentSessionConversationNaming
+  /** Carries the user's chat name into the agent's own conversation; never delays the caller. */
+  nameProviderConversation?: (sessionId: string) => void
 }
 
 export type SetUserConversationName = StructuredAgentSessionConversationNaming['setUserName']
