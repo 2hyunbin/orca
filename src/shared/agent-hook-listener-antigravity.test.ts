@@ -550,6 +550,11 @@ describe('shared agent-hook-listener', () => {
         state: 'done',
         lastAssistantMessage: 'Parent final report'
       })
+      expect(send('PostToolUse', { ...parent, toolCall: subagentCall })).toBeNull()
+      expect(send('PreInvocation', parent)?.state).toBe('working')
+      const nextStop = send('Stop', { ...parent, fullyIdle: false })
+      expect(nextStop?.state).toBe('working')
+      expect(nextStop?.mainAgent).toBeUndefined()
       expect(
         send('PreInvocation', { conversationId: 'next-conversation', lastUserInput: 'next' })?.state
       ).toBe('working')

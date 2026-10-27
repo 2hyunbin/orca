@@ -35,14 +35,6 @@ export function normalizeAntigravityEvent(
     }
     state.antigravitySubagentParentByPaneKey.delete(paneKey)
   }
-  const toolName = readAntigravityToolCall(hookPayload).toolName
-  if (
-    conversationId &&
-    (eventName === 'PreToolUse' || eventName === 'PostToolUse') &&
-    isAntigravitySubagentTool(toolName)
-  ) {
-    state.antigravitySubagentParentByPaneKey.set(paneKey, conversationId)
-  }
   if (eventName === 'PreInvocation') {
     state.antigravityCompletedTranscriptByPaneKey.delete(paneKey)
   } else if (
@@ -52,6 +44,15 @@ export function normalizeAntigravityEvent(
   ) {
     // Ignore bookkeeping PostToolUse after Stop so finished rows do not resurrect.
     return null
+  }
+
+  const toolName = readAntigravityToolCall(hookPayload).toolName
+  if (
+    conversationId &&
+    (eventName === 'PreToolUse' || eventName === 'PostToolUse') &&
+    isAntigravitySubagentTool(toolName)
+  ) {
+    state.antigravitySubagentParentByPaneKey.set(paneKey, conversationId)
   }
 
   const stopStillBusy = eventName === 'Stop' && isAntigravityStopStillBusy(hookPayload)
