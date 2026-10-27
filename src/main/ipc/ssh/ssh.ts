@@ -2,7 +2,10 @@ import { ipcMain, type BrowserWindow } from 'electron'
 import type { Store } from '../../persistence'
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { SshConnectionStore } from '../../ssh/connection/ssh-connection-store'
-import { holdLaunchReconnectOptOuts, resetLaunchReconnectOptOutsForTests } from './ssh-host-user-disconnect'
+import {
+  holdLaunchReconnectOptOuts,
+  resetLaunchReconnectOptOutsForTests
+} from './ssh-host-user-disconnect'
 import {
   connectRegisteredSshTarget,
   getSshTargetRegistryStore,
@@ -22,6 +25,7 @@ import { listUnrestoredPortForwards } from './ssh-port-forward-unrestored'
 import { LEGACY_RELAY_BRIDGE_CHANNELS } from '../../../shared/legacy-relay-bridge-contract'
 import { PLAIN_SSH_TERMINAL_CHANNELS } from '../../../shared/plain-ssh-terminal'
 import { quitTeardownStartGate } from '../../quit-teardown-start-gate'
+import { yieldToEventLoop } from '../../../shared/event-loop-yield'
 import { createSshSubsystemLoader } from './ssh-subsystem-loader'
 import type * as SshImplementation from './ssh-implementation'
 import type * as SshTransport from './ssh-transport'
@@ -73,7 +77,12 @@ let initializedModule: typeof SshImplementation | undefined
 
 function createTransport() {
   const loader = createSshSubsystemLoader(
-    () => import('./ssh-transport'),
+    async (assertRunning) => {
+      await import('ssh2')
+      await yieldToEventLoop()
+      assertRunning()
+      return import('./ssh-transport')
+    },
     (implementation) => {
       if (!registration || transport !== loader) {
         throw new Error('SSH registration was replaced')
@@ -88,12 +97,16 @@ function createTransport() {
 function createSubsystem() {
   const loader = createSshSubsystemLoader(
     // COMPAT(legacy-relay-bridge): install the existing compatibility handlers only on first use.
-    () =>
-      Promise.all([
-        import('./ssh-implementation'),
-        import('../../ssh/legacy-relay/legacy-relay-bridge-ipc'),
-        transport.load()
-      ]),
+    async (assertRunning) => {
+      await transport.load()
+      await yieldToEventLoop()
+      assertRunning()
+      const implementation = await import('./ssh-implementation')
+      await yieldToEventLoop()
+      assertRunning()
+      const compatibility = await import('../../ssh/legacy-relay/legacy-relay-bridge-ipc')
+      return [implementation, compatibility] as const
+    },
     ([implementation, compatibility]) => {
       if (!registration || subsystem !== loader) {
         throw new Error('SSH registration was replaced')

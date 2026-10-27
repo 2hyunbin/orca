@@ -1,7 +1,7 @@
 import { quitTeardownStartGate } from '../../quit-teardown-start-gate'
 
 export function createSshSubsystemLoader<Module, Subsystem>(
-  load: () => Promise<Module>,
+  load: (assertRunning: () => void) => Promise<Module>,
   initialize: (module: Module) => Subsystem
 ) {
   let pending: Promise<Subsystem> | undefined
@@ -22,7 +22,7 @@ export function createSshSubsystemLoader<Module, Subsystem>(
       pending ??= Promise.resolve()
         .then(() => {
           assertRunning()
-          return load()
+          return load(assertRunning)
         })
         .then((module) => {
           assertRunning()

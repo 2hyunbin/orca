@@ -85,4 +85,22 @@ describe('SSH first-use loading', () => {
     expect(subsystem.loaded).toBeUndefined()
     await expect(subsystem.load()).rejects.toThrow('app shutdown')
   })
+
+  it('stops loading later stages when quit wins between event-loop turns', async () => {
+    const resumed = Promise.withResolvers<void>()
+    const nextStage = vi.fn()
+    const initialize = vi.fn()
+    const subsystem = createSshSubsystemLoader(async (assertRunning) => {
+      await resumed.promise
+      assertRunning()
+      nextStage()
+    }, initialize)
+    const pending = subsystem.load()
+    await Promise.resolve()
+    quitTeardownStartGate.tryStart({ preventDefault() {} })
+    resumed.resolve()
+    await expect(pending).rejects.toThrow('app shutdown')
+    expect(nextStage).not.toHaveBeenCalled()
+    expect(initialize).not.toHaveBeenCalled()
+  })
 })

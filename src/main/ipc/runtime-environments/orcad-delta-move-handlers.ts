@@ -8,11 +8,6 @@ import { listEnvironments } from '../../../shared/runtime-environment-store'
 import { requireManagedOrcadInfrastructure } from '../../managed-server/lifecycle/orcad-managed-runtime-context'
 import { ensureOrcadManagedTunnel } from '../../managed-server/lifecycle/orcad-managed-tunnel'
 import { censusHostRelayTerminalsFor } from '../../ssh/legacy-relay/ssh-host-relay-census-for-target'
-import {
-  orcadMigrationDestinationFor,
-  orcadServerAutomationEnablerFor
-} from '../../managed-server/lifecycle/orcad-runtime-conversion-wiring'
-import { enableMovedOrcadAutomationsForTarget } from '../../ssh/orcad-migration-moved-automations'
 import { requiredString } from './orcad-runtime-lifecycle-handlers'
 import { publishResolvedChangedHostStatus } from './runtime-environment-managed-tunnel'
 import { ensureSshConnectionManager } from '../../ssh/targets/ssh-target-registry'
@@ -35,8 +30,10 @@ export function registerOrcadDeltaMoveHandlers(getUserDataPath: () => string): v
     async (_event, args: { sshTargetId: string }): Promise<OrcadDeltaMoveResult> => {
       await ensureSshConnectionManager()
       const { runOrcadDeltaMove } = await import('../../ssh/orcad-migration-delta-move')
-      const { orcadMigrationDestinationFor } =
+      const { orcadMigrationDestinationFor, orcadServerAutomationEnablerFor } =
         await import('../../managed-server/lifecycle/orcad-runtime-conversion-wiring')
+      const { enableMovedOrcadAutomationsForTarget } =
+        await import('../../ssh/orcad-migration-moved-automations')
       const userDataPath = getUserDataPath()
       const { store, claims, target } = requireChangedHost(args)
       const environment = listEnvironments(userDataPath).find(
