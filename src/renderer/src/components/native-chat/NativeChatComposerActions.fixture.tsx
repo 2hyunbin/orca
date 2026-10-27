@@ -38,6 +38,15 @@ function WorkingFollowUp({ blocked = false }: { blocked?: boolean }) {
 
 export const workingDraft = defineFixture({ width: 560, render: () => <WorkingFollowUp /> })
 
+export const focusedStop = defineFixture({
+  width: 560,
+  render: () => <WorkingFollowUp />,
+  interact: (frame) =>
+    frame
+      .querySelector<HTMLButtonElement>('button[data-native-chat-critical-action="stop"]')
+      ?.focus()
+})
+
 export const narrowWorkingDraft = defineFixture({ width: 320, render: () => <WorkingFollowUp /> })
 
 export const blockedWorkingDraft = defineFixture({

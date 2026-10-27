@@ -74,6 +74,9 @@ export function NativeChatComposerActions({
 }: NativeChatComposerActionsProps): React.JSX.Element {
   const stops = isWorking && !hasDraft
   const cannotStop = stopDisabled || !onStop || isStopping
+  const stopLabel = isStopping
+    ? translate('components.native-chat.status.stopping', 'Stopping…')
+    : translate('components.native-chat.stop', 'Stop the agent')
   const handleStop = (event: React.MouseEvent<HTMLButtonElement>): void => {
     if (event.detail <= 1) {
       onStop?.()
@@ -100,9 +103,7 @@ export function NativeChatComposerActions({
       data-native-chat-critical-action={stops ? 'stop' : undefined}
       aria-label={
         stops
-          ? isStopping
-            ? translate('components.native-chat.status.stopping', 'Stopping…')
-            : translate('components.native-chat.stop', 'Stop the agent')
+          ? stopLabel
           : (sendReason ?? translate('components.native-chat.composer.send', 'Send'))
       }
       disabled={stops ? cannotStop : sendDisabled}
@@ -201,23 +202,26 @@ export function NativeChatComposerActions({
         </Tooltip>
         <DraftNotSavedIcon shown={draftNotSaved === true} />
         {isWorking && hasDraft ? (
-          <Button
-            type="button"
-            data-native-chat-critical-action="stop"
-            aria-label={
-              isStopping
-                ? translate('components.native-chat.status.stopping', 'Stopping…')
-                : translate('components.native-chat.stop', 'Stop the agent')
-            }
-            disabled={cannotStop}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={handleStop}
-            variant="secondary"
-            size="icon"
-            className="size-8 rounded-full pointer-coarse:size-10"
-          >
-            <Square className="size-3.5 fill-current" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                data-native-chat-critical-action="stop"
+                aria-label={stopLabel}
+                disabled={cannotStop}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={handleStop}
+                variant="secondary"
+                size="icon"
+                className="size-8 rounded-full pointer-coarse:size-10"
+              >
+                <Square className="size-3.5 fill-current" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={4}>
+              {stopLabel}
+            </TooltipContent>
+          </Tooltip>
         ) : null}
         {sendReason ? (
           <Tooltip>
