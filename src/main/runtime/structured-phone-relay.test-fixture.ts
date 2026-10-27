@@ -79,7 +79,7 @@ export async function phoneRelayFlow() {
     agentTaskComplete: true,
     terminalBell: true,
     suppressWhenFocused: false,
-    customSoundId: 'system',
+    customSoundId: 'system' as const,
     customSoundPath: null,
     customSoundVolume: 1,
     mutedNotificationSourceIds: [],

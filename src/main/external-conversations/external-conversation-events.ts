@@ -84,6 +84,9 @@ export class ConversationEvents {
       const unsubscribe = this.deps.onAgentPaneChange((change) => {
         this.settleRejected(change.paneKey)
         news.observe(change)
+        if (change.kind === 'moved' && change.to === 'rest') {
+          return
+        }
         // A working row's stamp is told once, whether or not news reported its start.
         const stamp = workingStampedTurn(this.deps.readHookRow(change.paneKey))
         if (stamp !== null && change.workspace) {

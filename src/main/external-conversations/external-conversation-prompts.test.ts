@@ -559,6 +559,57 @@ describe('ExternalConversationSeam watch', () => {
     expect(seam.replyTarget(PANE)).toEqual({ key: KEY, turnId: null })
   })
 
+  it('announces a moved pane’s new working stamp under its current workspace, once', async () => {
+    const h = await linked()
+    const consumers = terminalConsumers(h)
+    try {
+      const seen: ConversationEvent[] = []
+      h.seam.watch(h.host, (event) => {
+        if (event.kind !== 'snapshot') {
+          seen.push(event)
+        }
+      })
+      const working = hookRow({
+        worktreeId: WORKTREE,
+        state: 'working',
+        stateStartedAt: 100,
+        turnStartedAt: 100,
+        receivedAt: 101
+      })
+      consumers.report(working)
+      const currentWorkspace = 'repo-1::/work/b'
+      const current = {
+        ...working,
+        worktreeId: currentWorkspace,
+        stateStartedAt: 200,
+        turnStartedAt: 200,
+        receivedAt: 201
+      }
+      consumers.report(current)
+      expect(consumers.changes.slice(-3)).toMatchObject([
+        { kind: 'moved', workspace: { worktreeId: WORKTREE }, from: 'working', to: 'rest' },
+        { kind: 'observed', workspace: { worktreeId: currentWorkspace }, phase: 'working' },
+        { kind: 'moved', workspace: { worktreeId: currentWorkspace }, from: 'rest', to: 'working' }
+      ])
+      const starts = seen.filter((event) => event.kind === 'turn-started')
+      expect(starts).toEqual([
+        { kind: 'turn-started', conversation: KEY, paneKey: PANE, worktreeId: WORKTREE, at: 100 },
+        {
+          kind: 'turn-started',
+          conversation: KEY,
+          paneKey: PANE,
+          worktreeId: currentWorkspace,
+          at: 200
+        }
+      ])
+      consumers.report({ ...current, receivedAt: 202 })
+      expect(seen.filter((event) => event.kind === 'turn-started')).toEqual(starts)
+    } finally {
+      h.seam.dispose('connectors_disabled')
+      consumers.dispose()
+    }
+  })
+
   it('tells a watcher of a conversation linked while it watches', async () => {
     const h = harness()
     const host = {
