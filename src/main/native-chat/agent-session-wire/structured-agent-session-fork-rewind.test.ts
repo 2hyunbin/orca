@@ -97,7 +97,9 @@ beforeEach(async () => {
             linkId: `acquire-${input.fence}`,
             mintedAtFence: input.fence,
             observedAt: HOST_TEST_NOW,
-            origin: input.identity.providerHandle ? 'resumed' : 'created',
+            origin: store.getRecord(HOST_TEST_SESSION)!.providerHandleChain.length
+              ? 'resumed'
+              : 'created',
             handle: input.identity.providerHandle ?? claudeProviderHandle(SOURCE, 'answer-2')
           }
         }

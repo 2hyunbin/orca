@@ -29,7 +29,7 @@ it('sends Pi the current session name and accepts its success response without d
       name: 'Release notes'
     })
     // Pi 1.1.0 rpc-mode set_session_name returns success(id, command), with no data field.
-    input.write('{"type":"response","command":"set_session_name","success":true}\n')
+    input.write('{"id":"orca-1","type":"response","command":"set_session_name","success":true}\n')
     await expect(done).resolves.toBeUndefined()
   } finally {
     request.mockRestore()
