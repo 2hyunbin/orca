@@ -135,7 +135,7 @@ describe('GitHub Tasks preset highlight follows the applied query', () => {
     expectActive('Open', false)
   })
 
-  it.each(['runtime:server', 'enterprise'] as const)(
+  it.each(['runtime:server', 'enterprise', 'unknown'] as const)(
     'does not use the default viewer for a different source (%s)',
     async (source) => {
       fixture.sources = [
@@ -144,17 +144,20 @@ describe('GitHub Tasks preset highlight follows the applied query', () => {
           repoPath: '/repo',
           sourceKey: 'repo',
           error: null,
-          hostId: source === 'enterprise' ? 'local' : source,
-          sources: {
-            issues: null,
-            prs: {
-              owner: 'org',
-              repo: 'repo',
-              host: source === 'enterprise' ? 'github.example.com' : 'github.com'
-            },
-            originCandidate: null,
-            upstreamCandidate: null
-          }
+          hostId: source === 'runtime:server' ? source : 'local',
+          sources:
+            source === 'unknown'
+              ? null
+              : {
+                  issues: null,
+                  prs: {
+                    owner: 'org',
+                    repo: 'repo',
+                    host: source === 'enterprise' ? 'github.example.com' : 'github.com'
+                  },
+                  originCandidate: null,
+                  upstreamCandidate: null
+                }
         }
       ]
       await renderFilters()
@@ -175,9 +178,14 @@ describe('GitHub Tasks preset highlight follows the applied query', () => {
         repoId: String(index),
         repoPath: '/repo',
         sourceKey: String(index),
-        sources: null,
+        sources: {
+          issues: null,
+          prs: { owner: 'org', repo: 'repo', host: 'github.com' },
+          originCandidate: null,
+          upstreamCandidate: null
+        },
         error: null,
-        get hostId() {
+        get hostId(): TaskPageRepoSourceState['hostId'] {
           reads += 1
           return 'local'
         }

@@ -11,7 +11,7 @@ export function getTaskPresetViewerLogin(
   // The existing viewer lookup identifies only this runtime's default GitHub account.
   return sources.some((state) => {
     const source = kind === 'prs' ? state.sources?.prs : state.sources?.issues
-    return state.hostId !== 'local' || (source?.host && source.host !== 'github.com')
+    return state.hostId !== 'local' || !source || (source.host ?? 'github.com') !== 'github.com'
   })
     ? null
     : viewerLogin
