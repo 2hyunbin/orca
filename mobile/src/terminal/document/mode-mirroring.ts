@@ -23,7 +23,16 @@ export function emitModesIfChanged(scope: TerminalDocumentScope) {
     modifyOtherKeys: scope.keyboardModes.modifyOtherKeys
   }
   const last = scope.lastEmittedModes
-  if (Object.entries(modes).some(([key, value]) => value !== Reflect.get(last, key))) {
+  if (
+    modes.bracketedPasteMode !== last.bracketedPasteMode ||
+    modes.altScreen !== last.altScreen ||
+    modes.mouseTrackingMode !== last.mouseTrackingMode ||
+    modes.sgrMouseMode !== last.sgrMouseMode ||
+    modes.sgrMousePixelsMode !== last.sgrMousePixelsMode ||
+    modes.applicationCursorKeysMode !== last.applicationCursorKeysMode ||
+    modes.kittyKeyboardFlags !== last.kittyKeyboardFlags ||
+    modes.modifyOtherKeys !== last.modifyOtherKeys
+  ) {
     scope.lastEmittedModes = modes
     notify(scope, { type: 'modes', ...modes })
   }
