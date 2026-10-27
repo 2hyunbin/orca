@@ -6,7 +6,8 @@ import { chmod, mkdir, rename, rm, statfs } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import {
   excerptAgentFailureOutput,
-  sanitizeAgentFailureDetail
+  sanitizeAgentFailureDetail,
+  stripAnsiControlSequences
 } from '../../shared/commit-message-agent-output'
 import type { ManagedRuntimeOperation } from '../../shared/managed-runtime-install'
 import { getMainHttpClient, type MainHttpClient } from '../network/http-client'
@@ -157,14 +158,17 @@ function startFailureText(failure: ManagedRuntimeStartFailure): string {
   switch (failure.kind) {
     case 'timeout':
       return `It timed out after ${Math.round(failure.timeoutMs / 1000)} seconds.`
-    case 'version':
-      return `It answered as version ${sanitizeAgentFailureDetail(redactString(failure.answered))}, expected ${failure.expected}.`
+    case 'version': {
+      const answered = sanitizeAgentFailureDetail(
+        redactString(stripAnsiControlSequences(failure.answered))
+      )
+      return `It answered as version ${answered ?? 'unknown'}, expected ${failure.expected}.`
+    }
     case 'exit': {
       const { code, signal } = failure.exit
       const status = code !== null ? `code ${code}` : `signal ${signal ?? 'unknown'}`
-      const detail = sanitizeAgentFailureDetail(
-        redactString(excerptAgentFailureOutput('', failure.stderr) ?? '')
-      )
+      const stderr = redactString(stripAnsiControlSequences(failure.stderr))
+      const detail = sanitizeAgentFailureDetail(excerptAgentFailureOutput('', stderr))
       return detail ? `It exited with ${status}: ${detail}` : `It exited with ${status}.`
     }
   }
