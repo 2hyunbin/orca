@@ -1,6 +1,61 @@
-import type { ConnectorSource } from '../../shared/external-conversation-link'
+import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
+import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
+import type { AgentPromptExpectedBinding } from '../runtime/runtime-terminal-contracts'
+import type { ExternalConversationLinkStore } from './external-conversation-links'
+import type { PendingPrompt } from '../../shared/agent-pending-prompt'
+import type { AgentTurnOutcome } from '../../shared/agent-turn-outcome'
+import type {
+  ConnectorAgent,
+  ConnectorSource,
+  ExternalConversationLink
+} from '../../shared/external-conversation-link'
 
 export type ConversationKey = { source: ConnectorSource; externalId: string }
+
+export type ConversationPane = {
+  conversation: ConversationKey
+  worktreeId: string
+  paneKey: string
+}
+
+export type ConversationEvent =
+  | (ConversationPane & { kind: 'linked'; agent: ConnectorAgent })
+  | (ConversationPane & { kind: 'prompt'; prompt: PendingPrompt })
+  | (ConversationPane & { kind: 'turn-started'; at: number })
+  | (ConversationPane & {
+      kind: 'turn-ended'
+      /** The ended turn's turn-started `at`; null when its start predates this watch and the row kept none. */
+      turnId: number | null
+      /** Host verdict; null means none was recorded. */
+      stopReason: AgentTurnOutcome | null
+      lastAssistantMessage?: string
+      at: number
+    })
+
+export type ConversationSnapshot = {
+  kind: 'snapshot'
+  conversations: (ConversationPane & {
+    agent: ConnectorAgent
+    working: boolean
+    prompt: PendingPrompt | null
+    /** The pane's latest turn, as its turn events name it; null before any. */
+    turnId: number | null
+    /** When the conversation last showed activity: its link, or its agent's latest hook report. */
+    activeAt: number
+  })[]
+}
+
+export type ConversationWatchListener = (event: ConversationSnapshot | ConversationEvent) => void
+
+export type ConversationEventsDeps = {
+  store: ExternalConversationLinkStore
+  readHookRow: (paneKey: string) => AgentStatusIpcPayload | null
+  readBinding: (paneKey: string) => AgentPromptExpectedBinding | null
+  onAgentPaneChange: (listener: (change: AgentPaneChange) => void) => () => void
+  pendingPrompt: (link: ExternalConversationLink) => PendingPrompt | null
+  setTimer: (run: () => void, delayMs: number) => { cancel: () => void }
+  now: () => number
+}
 
 export const CONNECTOR_REFUSALS = [
   'connectors_disabled',

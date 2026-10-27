@@ -81,6 +81,9 @@ vi.mock('./use-mobile-session-view-mode', () => ({
     toggleTabChatView: vi.fn()
   })
 }))
+vi.mock('./use-mobile-structured-session-commands', () => ({
+  useMobileStructuredSessionCommands: () => ({ commands: undefined, refresh: vi.fn() })
+}))
 vi.mock('./use-mobile-native-chat-session', () => ({
   useMobileNativeChatSession: () => sessionState
 }))
@@ -104,7 +107,7 @@ vi.mock('./use-mobile-structured-agent-session', () => ({
     invokeStructuredOption: structuredInvokeOption
   })
 }))
-vi.mock('./use-mobile-native-chat-drafts', () => ({
+vi.mock('./native-chat/composer/use-mobile-native-chat-drafts', () => ({
   useMobileNativeChatDrafts: () => {
     return {
       composerText: '',

@@ -1,7 +1,6 @@
 /** Single-writer records/operation ledger in the host chat-journal database. */
 
 import { backfillAgentSessionPermissionModes } from './agent-session/ownership/agent-session-permission-backfill'
-import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import { createAgentSessionConversationReceipts } from './agent-session-conversation-receipts'
 import { pinAgentSessionRecordLaunchDirectory } from './agent-session-record-launch-directory'
 import {
@@ -60,7 +59,15 @@ import {
   type AgentSessionReserveRequest,
   type AgentSessionReserveResult
 } from './agent-session/ownership/agent-session-reservation-admission'
-import { heldAgentSessionIds, type AgentSessionStoreState } from './agent-session-store-state'
+import {
+  applyAgentSessionRecordMutation,
+  getAgentSessionConversation,
+  selectWritableAgentSessionRecord,
+  listAgentSessionConversations,
+  requireWritableAgentSessionRecord,
+  heldAgentSessionIds,
+  type AgentSessionStoreState
+} from './agent-session-store-state'
 import {
   agentSessionVisibleTabIndex,
   listVisibleAgentSessionIds,
@@ -122,6 +129,13 @@ export class AgentSessionRecordStore {
   getRecord = (sessionId: string): AgentSessionRecord | null =>
     this.state.records.get(sessionId) ?? null
 
+  getConversation = (sessionId: string) => getAgentSessionConversation(this.state, sessionId)
+  listConversations = () => listAgentSessionConversations(this.state)
+  selectWritableRecord = (sessionId: string) =>
+    selectWritableAgentSessionRecord(this.state, sessionId)
+  requireWritableRecord = (sessionId: string) =>
+    requireWritableAgentSessionRecord(this.state, sessionId)
+
   listRecords = (): AgentSessionRecord[] => [...this.state.records.values()]
 
   /** Replaced runtimes captured at load; absent for sessions this runtime created. */
@@ -166,8 +180,8 @@ export class AgentSessionRecordStore {
   setUserConversationName = (sessionId: string, name: string, write: AgentSessionUserNameWrite) =>
     setAgentSessionRecordUserNameThrough((apply) => this.mutate(sessionId, apply), name, write)
 
-  compareAndSetConversationName: CompareAndSetConversationName = (sessionId, name, expected) =>
-    compareAndSetAgentSessionRecordName((apply) => this.mutate(sessionId, apply), name, expected)
+  compareAndSetConversationName: CompareAndSetConversationName = (id, name, expected, context) =>
+    compareAndSetAgentSessionRecordName((apply) => this.mutate(id, apply), name, expected, context)
 
   /** Launch history is metadata and does not contend with the writer lease. */
   pinLaunchDirectory = (sessionId: string, launchDirectory: string): Promise<AgentSessionRecord> =>
@@ -245,9 +259,7 @@ export class AgentSessionRecordStore {
   ): Promise<AgentSessionRecord> => this.mutate(sessionId, transition)
 
   /** Reconcile loaded leases before writer admission. Newer databases keep verdicts in memory only and cannot grant writers. */
-  async reconcileOnRestart(
-    args: AgentSessionRestartProbeArgs
-  ): Promise<Map<string, AgentSessionRecord>> {
+  async reconcileOnRestart(args: AgentSessionRestartProbeArgs) {
     const probes = await collectAgentSessionRestartProbes(this, args)
     return this.transact((draft) => applyAgentSessionRestartProbes(draft, probes, args.now), {
       inMemoryWhenReadOnly: true
@@ -320,17 +332,7 @@ export class AgentSessionRecordStore {
     sessionId: string,
     apply: (record: AgentSessionRecord) => AgentSessionRecord
   ): Promise<AgentSessionRecord> {
-    return this.transact((draft) => {
-      const record = draft.records.get(sessionId)
-      if (!record) {
-        throw draft.unreadableRecords.has(sessionId)
-          ? agentSessionRefusalError('execution_owner_reconciling', { reason: 'recordUnreadable' })
-          : agentSessionRefusalError('agent_session_identity_required', { reason: 'recordMissing' })
-      }
-      const next = apply(record)
-      draft.records.set(sessionId, next)
-      return next
-    })
+    return this.transact((draft) => applyAgentSessionRecordMutation(draft, sessionId, apply))
   }
 
   /** Notify committed death evidence from every transition; listeners must not throw. */
