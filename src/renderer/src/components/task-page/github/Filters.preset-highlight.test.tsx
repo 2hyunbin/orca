@@ -10,26 +10,24 @@ import { useAppStore } from '@/store'
 import TaskPage from '../TaskPage'
 import type { TaskPageComposerActionsModel } from '../use-task-page-composer-actions'
 import { TaskPageGitHubFilters } from './Filters'
-import type { TaskPageRepoSourceState } from '../task-page-cache-selectors'
-import { getTaskPresetViewerLogin } from './task-page-preset-highlight'
-
-const fixture = vi.hoisted((): { sources: TaskPageRepoSourceState[] } => ({ sources: [] }))
+import { createGlobalSettingsFixture } from '../../../../../shared/global-settings-test-fixture'
+import type { Repo } from '../../../../../shared/repo-types'
 
 vi.mock('../Surface', () => ({
   TaskPageSurface: ({ model }: { model: TaskPageComposerActionsModel }) => (
     <TooltipProvider>
       <button onClick={() => model.handleSelectGithubTaskKind('prs')}>PRs</button>
-      <TaskPageGitHubFilters model={{ ...model, perRepoSourceState: fixture.sources }} />
+      <TaskPageGitHubFilters model={model} />
     </TooltipProvider>
   )
 }))
 vi.mock('@/components/github/PRFilterDropdowns', () => ({
   default: ({ onChange }: ComponentProps<typeof PRFilterDropdowns>) => (
     <>
-      <button onClick={() => onChange({ author: 'OCTOCAT' })}>Own author</button>
+      <button onClick={() => onChange({ labels: ['bug'] })}>Bug label</button>
       <button onClick={() => onChange({ author: 'hubot' })}>Other author</button>
-      <button onClick={() => onChange({ assignee: 'octocat' })}>Own assignee</button>
-      <button onClick={() => onChange({ reviewer: { kind: 'requested', login: 'octocat' } })}>
+      <button onClick={() => onChange({ assignee: '@me' })}>Own assignee</button>
+      <button onClick={() => onChange({ reviewer: { kind: 'requested', login: '@me' } })}>
         Own reviewer
       </button>
       <button onClick={() => onChange({ state: 'closed' })}>Closed</button>
@@ -43,7 +41,6 @@ const initialApiDescriptor = Object.getOwnPropertyDescriptor(window, 'api')
 const viewer = vi.fn<typeof window.api.gh.viewer>()
 
 beforeEach(() => {
-  fixture.sources = []
   viewer.mockReset().mockResolvedValue({ login: 'octocat', email: null })
   useAppStore.setState(
     { ...initialStore, settings: null, persistedUIReady: false, repos: [], taskPageData: {} },
@@ -64,11 +61,16 @@ afterEach(() => {
   }
 })
 
+function submitQuery(query: string) {
+  const search = screen.getByRole('textbox')
+  fireEvent.change(search, { target: { value: query } })
+  fireEvent.keyDown(search, { key: 'Enter' })
+}
 function click(name: string) {
-  fireEvent.click(screen.getByRole('button', { name, exact: true }))
+  fireEvent.click(screen.getByRole('button', { name }))
 }
 function expectActive(name: string, active = true) {
-  const button = screen.getByRole('button', { name, exact: true })
+  const button = screen.getByRole('button', { name })
   if (active) {
     expect(button).toHaveClass('bg-foreground/90')
   } else {
@@ -76,19 +78,18 @@ function expectActive(name: string, active = true) {
   }
 }
 async function renderFilters() {
-  // Let the existing viewer lookup finish before using its login in a filter.
   await act(async () => {
     render(<TaskPage />)
   })
 }
 
 describe('GitHub Tasks preset highlight follows the applied query', () => {
-  it('keeps Mine for an equivalent author and restores it after reopening', async () => {
+  it('keeps Mine after a label edit and restores it after reopening', async () => {
     await renderFilters()
     click('PRs')
     click('Mine')
     expectActive('Mine')
-    click('Own author')
+    click('Bug label')
     expectActive('Mine')
     click('Closed')
     expectActive('Mine', false)
@@ -124,74 +125,84 @@ describe('GitHub Tasks preset highlight follows the applied query', () => {
     expectActive('Mine', false)
   })
 
-  it('recognizes @me without a viewer and does not guess an unresolved login', async () => {
-    viewer.mockResolvedValue(null)
+  it('does not equate absent state with the open presets', async () => {
     await renderFilters()
-    click('PRs')
-    click('Mine')
-    expectActive('Mine')
-    click('Own author')
-    expectActive('Mine', false)
-    expectActive('Open', false)
+    for (const query of ['is:pr', 'is:pr author:@me', 'is:issue', 'is:issue assignee:@me']) {
+      submitQuery(query)
+      expectActive('Open', false)
+      expectActive(query.includes('is:pr') ? 'Mine' : 'Assigned to me', false)
+    }
   })
 
-  it.each(['runtime:server', 'enterprise', 'unknown'] as const)(
-    'does not use the default viewer for a different source (%s)',
-    async (source) => {
-      fixture.sources = [
-        {
-          repoId: 'repo',
-          repoPath: '/repo',
-          sourceKey: 'repo',
-          error: null,
-          hostId: source === 'runtime:server' ? source : 'local',
-          sources:
-            source === 'unknown'
-              ? null
-              : {
-                  issues: null,
-                  prs: {
-                    owner: 'org',
-                    repo: 'repo',
-                    host: source === 'enterprise' ? 'github.example.com' : 'github.com'
-                  },
-                  originCandidate: null,
-                  upstreamCandidate: null
-                }
-        }
-      ]
-      await renderFilters()
-      click('PRs')
-      click('Mine')
-      expectActive('Mine')
-      click('Own author')
-      expectActive('Mine', false)
+  it('matches @me tokens without treating literal logins as personal presets', async () => {
+    await renderFilters()
+    for (const [query, preset] of [
+      ['is:pr is:open author:', 'Mine'],
+      ['is:pr is:open review-requested:', 'Needs review'],
+      ['is:issue is:open assignee:', 'Assigned to me']
+    ]) {
+      submitQuery(`${query}octocat`)
+      expectActive(preset, false)
       expectActive('Open', false)
-      expect(viewer).toHaveBeenCalledTimes(1)
+      submitQuery(`${query}@ME label:bug`)
+      expectActive(preset)
+    }
+    expect(viewer).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps @me source-relative when the existing viewer lookup fails', async () => {
+    viewer.mockRejectedValue(new Error('viewer unavailable'))
+    await renderFilters()
+    submitQuery('is:pr is:open author:@me label:bug')
+    expectActive('Mine')
+    click('Bug label')
+    expectActive('Mine')
+    expect(viewer).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([null, 'my-prs'] as const)(
+    'restores hydrated saved query/preset without deriving back into saved state (%s)',
+    async (preset) => {
+      const savedQuery = 'is:pr is:open author:@me label:bug'
+      const prefetchWorkItems = vi.fn()
+      useAppStore.setState({
+        repos: [
+          {
+            id: 'repo',
+            path: '/repo',
+            displayName: 'repo',
+            badgeColor: 'gray',
+            addedAt: 0
+          } satisfies Repo
+        ],
+        prefetchWorkItems,
+        settings: createGlobalSettingsFixture({ defaultTaskSource: 'github' }),
+        taskResumeState: { githubItemsPreset: preset, githubItemsQuery: savedQuery }
+      })
+      const restoredQuery = preset === null ? savedQuery : 'author:@me is:pr is:open'
+      useAppStore.getState().openTaskPage()
+      expect(prefetchWorkItems).toHaveBeenCalledWith(
+        'repo',
+        '/repo',
+        expect.any(Number),
+        restoredQuery,
+        { sourceContext: null }
+      )
+      useAppStore.setState({ repos: [] })
+      await renderFilters()
+      await act(async () => {
+        useAppStore.setState({ persistedUIReady: true })
+      })
+      expect(screen.getByRole('textbox')).toHaveValue(restoredQuery)
+      expectActive('Mine')
+      expect(useAppStore.getState().taskResumeState?.githubItemsPreset).toBe(preset)
+      expect(useAppStore.getState().taskResumeState?.githubItemsQuery).toBe(savedQuery)
+      click('Bug label')
+      expectActive('Mine')
+      expect(useAppStore.getState().taskResumeState?.githubItemsPreset).toBeNull()
+      expect(window.api.ui.set).toHaveBeenCalledWith({
+        taskResumeState: expect.objectContaining({ githubItemsPreset: null })
+      })
     }
   )
-
-  it('checks each source at most once at ordinary and large selection sizes', () => {
-    for (const size of [100, 1000]) {
-      let reads = 0
-      const sources: TaskPageRepoSourceState[] = Array.from({ length: size }, (_, index) => ({
-        repoId: String(index),
-        repoPath: '/repo',
-        sourceKey: String(index),
-        sources: {
-          issues: null,
-          prs: { owner: 'org', repo: 'repo', host: 'github.com' },
-          originCandidate: null,
-          upstreamCandidate: null
-        },
-        error: null,
-        get hostId(): TaskPageRepoSourceState['hostId'] {
-          reads += 1
-          return 'local'
-        }
-      }))
-      expect(getTaskPresetViewerLogin('prs', sources, 'octocat')).toBe('octocat')
-      expect(reads).toBe(size)
-    }
-  })
 })
