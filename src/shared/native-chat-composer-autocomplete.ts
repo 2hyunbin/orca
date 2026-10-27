@@ -174,7 +174,9 @@ export function nativeChatPickerScannedSkills(
     return []
   }
   const namePrefix = profile.skillNamePrefix
-  return namePrefix ? skills.map((skill) => ({ ...skill, name: `${namePrefix}${skill.name}` })) : skills
+  return namePrefix
+    ? skills.map((skill) => ({ ...skill, name: `${namePrefix}${skill.name}` }))
+    : skills
 }
 
 /** Replacing across an entire dismissed token starts a new occurrence; typing/deleting within it does not. */

@@ -93,10 +93,7 @@ export function useMobileNativeChatLaunchDraftSeed(args: {
     if (!seeded) {
       return
     }
-    if (
-      !launchDraftResolved(seeded.createdAt, messages, seeded.baseline) &&
-      launchDraft?.trim()
-    ) {
+    if (!launchDraftResolved(seeded.createdAt, messages, seeded.baseline) && launchDraft?.trim()) {
       return
     }
     mobileNativeChatLaunchDraftSeeds.set(draftKey, null)

@@ -5,7 +5,10 @@ import { cn } from '@/lib/utils'
 import type { SkillSourceKind } from '../../../../shared/skills'
 import { FilenameFirstPath } from '@/components/file-path-cursor-tooltip'
 import { FileTypeIcon } from '@/components/FileTypeIcon'
-import type { ComposerAutocomplete, NativeChatPickerItem } from '../../../../shared/native-chat-composer-autocomplete'
+import type {
+  ComposerAutocomplete,
+  NativeChatPickerItem
+} from '../../../../shared/native-chat-composer-autocomplete'
 import type { NativeChatMentionFiles } from './use-native-chat-mention-files'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 
