@@ -379,6 +379,7 @@ describe('NativeChatComposer', () => {
         paneKey="tab-1:structured"
         targetPtyId={null}
         agent="codex"
+        isWorking
         structuredTransport={{
           capturePresentation: () => () => true,
           send,
@@ -398,6 +399,7 @@ describe('NativeChatComposer', () => {
       />
     )
 
+    expect(mocks.fieldProps?.sendButtonDisabled).toBe(false)
     await act(async () => mocks.fieldProps?.onSend?.())
 
     expect(send).toHaveBeenCalledWith('', mocks.imageAttachments)

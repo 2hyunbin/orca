@@ -51,6 +51,82 @@ afterEach(() => {
 })
 
 describe('NativeChatComposerActions', () => {
+  describe('working follow-ups', () => {
+    const props = {
+      attachDisabled: false,
+      dictationDisabled: false,
+      sendDisabled: false,
+      isWorking: true,
+      hasDraft: true,
+      isDictating: false,
+      isDictationHoldMode: false,
+      onAttach: vi.fn(),
+      onDictationToggle: vi.fn(),
+      onDictationHoldStart: vi.fn(),
+      onDictationHoldEnd: vi.fn(),
+      onSend: vi.fn(),
+      onStop: vi.fn(),
+      sessionOptionsSurface: null,
+      sessionOptionsSnapshot: []
+    }
+
+    it('sends the follow-up without stopping, with Stop still available separately', () => {
+      render(<NativeChatComposerActions {...props} />)
+
+      const send = screen.getByRole('button', { name: 'Send' })
+      expect(fireEvent.mouseDown(send)).toBe(false)
+      fireEvent.click(send)
+      expect(props.onSend).toHaveBeenCalledOnce()
+      expect(props.onStop).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Stop the agent' }))
+      expect(props.onStop).toHaveBeenCalledOnce()
+    })
+
+    it('keeps Stop enabled when an attachment blocks sending the follow-up', () => {
+      render(
+        <NativeChatComposerActions
+          {...props}
+          sendDisabled
+          sendBlockedReason="Remove the unavailable image to send."
+        />
+      )
+
+      expect(
+        screen
+          .getByRole('button', { name: 'Remove the unavailable image to send.' })
+          .hasAttribute('disabled')
+      ).toBe(true)
+      fireEvent.click(screen.getByRole('button', { name: 'Stop the agent' }))
+      expect(props.onStop).toHaveBeenCalledOnce()
+      expect(props.onSend).not.toHaveBeenCalled()
+    })
+
+    it('can queue a follow-up while Stop is pending or unavailable', () => {
+      const { rerender } = render(<NativeChatComposerActions {...props} isStopping />)
+      expect(screen.getByRole('button', { name: 'Stopping…' }).hasAttribute('disabled')).toBe(true)
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+      expect(props.onSend).toHaveBeenCalledOnce()
+
+      rerender(<NativeChatComposerActions {...props} stopDisabled />)
+      expect(screen.getByRole('button', { name: 'Stop the agent' }).hasAttribute('disabled')).toBe(
+        true
+      )
+      expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false)
+    })
+
+    it('returns to Stop only after the draft is sent and ignores a second click', () => {
+      const { rerender } = render(<NativeChatComposerActions {...props} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }), { detail: 1 })
+
+      rerender(<NativeChatComposerActions {...props} hasDraft={false} sendDisabled />)
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Stop the agent' }), { detail: 2 })
+      expect(props.onSend).toHaveBeenCalledOnce()
+      expect(props.onStop).not.toHaveBeenCalled()
+    })
+  })
+
   it.each(['starting', 'listening'])('blocks new dictation but preserves %s Stop', (state) => {
     const input = document.createElement('textarea')
     const focus = vi.spyOn(input, 'focus')

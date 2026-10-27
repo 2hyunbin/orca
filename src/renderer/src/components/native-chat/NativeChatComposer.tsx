@@ -168,9 +168,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       structuredTransport?.sendOut === true ||
       imageBlock.holdsSend ||
       structuredTransport?.sendBlockedReason !== undefined
-    const sendButtonDisabled = isWorking
-      ? !hasPty || !onStop
-      : sendHeld || (draft.trim() === '' && imageAttachments.length === 0)
+    const sendButtonDisabled = sendHeld || (draft.trim() === '' && imageAttachments.length === 0)
 
     const { pickAttachments, attachExternalPaths, captureCopiedFiles, resolveAttachmentOwner } =
       useNativeChatFileDrops({
@@ -364,6 +362,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         numberImages={Boolean(structuredTransport)}
         attachmentEnvironmentId={structuredTransport?.runtimeEnvironmentId ?? undefined}
         sendButtonDisabled={sendButtonDisabled}
+        stopButtonDisabled={!hasPty || !onStop}
         sendBlockedReason={sendBlockedReason}
         isWorking={isWorking}
         isStopping={isStopping}

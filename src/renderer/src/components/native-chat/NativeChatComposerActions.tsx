@@ -17,6 +17,8 @@ export type NativeChatComposerActionsProps = {
   attachDisabled: boolean
   dictationDisabled: boolean
   sendDisabled: boolean
+  stopDisabled?: boolean
+  hasDraft?: boolean
   /** Shown on the disabled send button: what the user can do to send. */
   sendBlockedReason?: string | null
   /** Storage refused this draft; it is held in memory only. */
@@ -48,6 +50,8 @@ export function NativeChatComposerActions({
   attachDisabled,
   dictationDisabled,
   sendDisabled,
+  stopDisabled = false,
+  hasDraft = false,
   sendBlockedReason,
   draftNotSaved,
   isWorking,
@@ -68,7 +72,13 @@ export function NativeChatComposerActions({
   focusComposer,
   agent
 }: NativeChatComposerActionsProps): React.JSX.Element {
-  const stops = isWorking
+  const stops = isWorking && !hasDraft
+  const cannotStop = stopDisabled || !onStop || isStopping
+  const handleStop = (event: React.MouseEvent<HTMLButtonElement>): void => {
+    if (event.detail <= 1) {
+      onStop?.()
+    }
+  }
   const handleCriticalAction = (event: React.MouseEvent<HTMLButtonElement>): void => {
     // Ignore a double-click’s second press after Send becomes Stop so it cannot cancel the newly started turn.
     if (event.detail > 1) {
@@ -95,7 +105,7 @@ export function NativeChatComposerActions({
             : translate('components.native-chat.stop', 'Stop the agent')
           : (sendReason ?? translate('components.native-chat.composer.send', 'Send'))
       }
-      disabled={sendDisabled || (isWorking && isStopping)}
+      disabled={stops ? cannotStop : sendDisabled}
       // A press keeps focus where it was; a focused button drops it to <body> when it disables.
       onMouseDown={(event) => event.preventDefault()}
       onClick={handleCriticalAction}
@@ -190,6 +200,25 @@ export function NativeChatComposerActions({
           </TooltipContent>
         </Tooltip>
         <DraftNotSavedIcon shown={draftNotSaved === true} />
+        {isWorking && hasDraft ? (
+          <Button
+            type="button"
+            data-native-chat-critical-action="stop"
+            aria-label={
+              isStopping
+                ? translate('components.native-chat.status.stopping', 'Stopping…')
+                : translate('components.native-chat.stop', 'Stop the agent')
+            }
+            disabled={cannotStop}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={handleStop}
+            variant="secondary"
+            size="icon"
+            className="size-8 rounded-full pointer-coarse:size-10"
+          >
+            <Square className="size-3.5 fill-current" />
+          </Button>
+        ) : null}
         {sendReason ? (
           <Tooltip>
             <TooltipTrigger asChild>

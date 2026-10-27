@@ -5,8 +5,12 @@ import { changePrompt, promptValue } from './native-chat-prompt-editor.test-supp
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as nativeChatAgentProfiles from '../../../../shared/native-chat-agent-profiles'
-import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
+import type {
+  NativeChatComposerProps,
+  NativeChatStructuredComposerTransport
+} from './native-chat-composer-types'
 import type * as RemoteRuntimePtyIdModule from '../../../../shared/remote-runtime/remote-runtime-pty-id'
+import type * as NativeChatComposerActionsModule from './NativeChatComposerActions'
 
 vi.mock('@/i18n/i18n', () => ({
   i18n: { language: 'en' },
@@ -14,11 +18,20 @@ vi.mock('@/i18n/i18n', () => ({
 }))
 const actions = vi.hoisted((): { sendDisabled: boolean | null } => ({ sendDisabled: null }))
 
-vi.mock('./NativeChatComposerActions', () => ({
-  NativeChatComposerActions: (props: { sendDisabled: boolean }) => {
-    actions.sendDisabled = props.sendDisabled
-    return <div data-testid="composer-actions" />
+vi.mock('./NativeChatComposerActions', async (importOriginal) => {
+  const original = await importOriginal<typeof NativeChatComposerActionsModule>()
+  return {
+    NativeChatComposerActions: (
+      props: React.ComponentProps<typeof original.NativeChatComposerActions>
+    ) => {
+      actions.sendDisabled = props.sendDisabled
+      return <original.NativeChatComposerActions {...props} />
+    }
   }
+})
+vi.mock('./NativeChatSessionOptionPickers', () => ({ NativeChatSessionOptionPickers: () => null }))
+vi.mock('./NativeChatPermissionModePicker', () => ({
+  NativeChatComposerPermissionPicker: () => null
 }))
 vi.mock('./NativeChatAutocompleteMenus', () => ({
   NativeChatMentionMenu: () => null,
@@ -75,6 +88,7 @@ vi.mock('../dictation/dictation-control-events', () => ({
 }))
 
 import { NativeChatComposer } from './NativeChatComposer'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { appendNativeChatDraftCache, readNativeChatDraftCache } from './native-chat-draft-cache'
 
 type Dispatched = { handled: boolean; accepted: boolean; error: string | null }
@@ -121,16 +135,22 @@ function pressEnter(input: HTMLTextAreaElement): void {
 
 let paneCounter = 0
 
-function renderComposer(structuredTransport: NativeChatStructuredComposerTransport) {
+function renderComposer(
+  structuredTransport: NativeChatStructuredComposerTransport,
+  props: Pick<NativeChatComposerProps, 'isWorking' | 'onStop'> = {}
+) {
   paneCounter += 1
   return render(
-    <NativeChatComposer
-      terminalTabId={`tab-${paneCounter}`}
-      paneKey={`tab-${paneCounter}:structured`}
-      targetPtyId={null}
-      agent="codex"
-      structuredTransport={structuredTransport}
-    />
+    <TooltipProvider>
+      <NativeChatComposer
+        terminalTabId={`tab-${paneCounter}`}
+        paneKey={`tab-${paneCounter}:structured`}
+        targetPtyId={null}
+        agent="codex"
+        structuredTransport={structuredTransport}
+        {...props}
+      />
+    </TooltipProvider>
   )
 }
 
@@ -145,6 +165,50 @@ beforeEach(() => {
 })
 
 afterEach(() => cleanup())
+
+describe('working structured follow-up buttons', () => {
+  it.each(['local', 'remote'] as const)(
+    'queues through the %s transport without Stop',
+    async (runtime) => {
+      const onStop = vi.fn()
+      const structured = transport({ runtime, send: vi.fn(() => 'queued' as const) })
+      renderComposer(structured, { isWorking: true, onStop })
+      const input = textarea()
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
+
+      changePrompt(input, 'Check queue cancellation as well.')
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Send' })))
+
+      expect(structured.send).toHaveBeenCalledExactlyOnceWith(
+        'Check queue cancellation as well.',
+        []
+      )
+      expect(onStop).not.toHaveBeenCalled()
+      expect(promptValue(input)).toBe('')
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
+      expect(screen.getByRole('button', { name: 'Stop the agent' }).hasAttribute('disabled')).toBe(
+        false
+      )
+    }
+  )
+
+  it('retains a rejected follow-up draft and does not stop the active turn', async () => {
+    const onStop = vi.fn()
+    const structured = transport({ send: vi.fn(() => false) })
+    renderComposer(structured, { isWorking: true, onStop })
+    const input = textarea()
+    changePrompt(input, 'Keep this follow-up.')
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Send' })))
+
+    expect(structured.send).toHaveBeenCalledExactlyOnceWith('Keep this follow-up.', [])
+    expect(promptValue(input)).toBe('Keep this follow-up.')
+    expect(onStop).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false)
+    expect(screen.getByRole('button', { name: 'Stop the agent' }).hasAttribute('disabled')).toBe(
+      false
+    )
+  })
+})
 
 describe('structured send racing the next IME composition', () => {
   // Replay accepted clears after the next IME composition; otherwise settlement can restore sent text (#17359).
@@ -346,13 +410,15 @@ describe('a structured send while the chat has one out', () => {
     expect(promptValue(input)).toBe('next one')
 
     view.rerender(
-      <NativeChatComposer
-        terminalTabId={`tab-${paneCounter}`}
-        paneKey={`tab-${paneCounter}:structured`}
-        targetPtyId={null}
-        agent="codex"
-        structuredTransport={{ ...structured, sendOut: false }}
-      />
+      <TooltipProvider>
+        <NativeChatComposer
+          terminalTabId={`tab-${paneCounter}`}
+          paneKey={`tab-${paneCounter}:structured`}
+          targetPtyId={null}
+          agent="codex"
+          structuredTransport={{ ...structured, sendOut: false }}
+        />
+      </TooltipProvider>
     )
     expect(actions.sendDisabled).toBe(false)
   })

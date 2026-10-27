@@ -45,6 +45,7 @@ export type NativeChatComposerFieldProps = {
   /** The paired server a structured chat runs on, which reads back files stored there. */
   attachmentEnvironmentId?: string
   sendButtonDisabled: boolean
+  stopButtonDisabled?: boolean
   /** Why the send button is disabled, when the user can do something about it. */
   sendBlockedReason?: string | null
   isWorking: boolean
@@ -129,6 +130,7 @@ export function NativeChatComposerField({
   numberImages = false,
   attachmentEnvironmentId,
   sendButtonDisabled,
+  stopButtonDisabled,
   sendBlockedReason,
   isWorking,
   isStopping = false,
@@ -333,6 +335,8 @@ export function NativeChatComposerField({
                 attachDisabled={attachDisabled}
                 dictationDisabled={dictationDisabled}
                 sendDisabled={sendButtonDisabled}
+                stopDisabled={stopButtonDisabled}
+                hasDraft={draft.trim() !== '' || imageAttachments.length > 0}
                 sendBlockedReason={sendBlockedReason}
                 draftNotSaved={draftNotSaved}
                 isWorking={isWorking}
