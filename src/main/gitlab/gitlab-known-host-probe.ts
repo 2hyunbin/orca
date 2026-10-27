@@ -238,7 +238,7 @@ function isCompletedGlabFailure(error: unknown): boolean {
 function parseGlabAuthenticatedHosts(output: string): string[] {
   const hosts = new Set<string>()
   for (const match of stripAnsiEscapeSequences(output).matchAll(
-    /^[\t ]*(?:✓[\t ]+)?Logged in to ([a-zA-Z0-9.-]+(?::\d+)?)[\t ]+as[\t ]+[^\s(]+/gim
+    /^[\t ]*(?:\u2713[\t ]+)?Logged in to ([a-zA-Z0-9.-]+(?::\d+)?)[\t ]+as[\t ]+[^\s(]+/gim
   )) {
     hosts.add(match[1].toLowerCase())
   }
