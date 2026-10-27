@@ -2,6 +2,7 @@ import { INLINE_TEXT_SELECTION } from './inline-text-selection'
 import { memo, useContext, useMemo, type ReactNode } from 'react'
 import { Text as NativeText, View } from 'react-native'
 import { MARKDOWN_TONES, scaledMarkdownText, styles } from './mobile-markdown-styles'
+import { useMobileColorScheme } from '../theme/use-mobile-color-scheme'
 import { renderBlocks, type MarkdownBlockContext } from './mobile-markdown-blocks'
 import { MarkdownText } from './mobile-markdown-text'
 import { MarkdownTextContext, type MarkdownTextSetup } from './mobile-markdown-text-setup'
@@ -40,6 +41,7 @@ function MobileMarkdownContent({
   growing = false,
   tone: toneName = 'default'
 }: Props) {
+  useMobileColorScheme()
   // Interactive children own their touches and must forward the row action.
   const setup = useContext(MarkdownTextContext)
   const text = content?.trim() ?? ''

@@ -1,6 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 import { MobileSegmentedControl } from '../../../components/MobileSegmentedControl'
 import { colors, spacing, typography } from '../../../theme/mobile-theme'
+import { themedStyleSheet } from '../../../theme/themed-styles'
+import { useMobileColorScheme } from '../../../theme/use-mobile-color-scheme'
 import {
   sessionOptionDispatchUnconfirmed,
   type SessionOptionDescriptor,
@@ -30,6 +32,7 @@ export function SessionOptionSegments({
   disabled: boolean
   onSetOption: (value: SessionOptionValue) => void
 }): React.JSX.Element | null {
+  useMobileColorScheme()
   if (descriptor.kind.type !== 'select') {
     return null
   }
@@ -52,7 +55,7 @@ export function SessionOptionSegments({
   )
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyleSheet(() => ({
   block: {
     marginTop: spacing.md
   },
@@ -62,4 +65,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     paddingBottom: 6
   }
-})
+}))

@@ -44,6 +44,7 @@ import { MobileNativeChatSubagentGroup } from './MobileNativeChatSubagentGroup'
 import { ToolRun } from './MobileNativeChatToolRun'
 import type { NativeChatTurnStatus } from './use-mobile-native-chat-turn-status'
 import { styles } from './mobile-native-chat-message-styles'
+import { useMobileColorScheme } from '../theme/use-mobile-color-scheme'
 import { agentMessageAttribution } from './mobile-agent-message-attribution'
 import { MobileNativeChatVisualContext } from './mobile-native-chat-visual-context'
 import { useMobileNativeChatFullMessage } from './MobileNativeChatFullContent'
@@ -118,6 +119,7 @@ function MobileNativeChatMessageImpl({
   userMessageOpen?: boolean
   onToggleUserMessage?: (messageId: string) => void
 }): React.JSX.Element {
+  useMobileColorScheme()
   const { shown: message, showFull, recovery } = useMobileNativeChatFullMessage(rowMessage)
   const attribution = agentMessageAttribution('Message from', message.from)
   const isUser = message.role === 'user' && attribution === null

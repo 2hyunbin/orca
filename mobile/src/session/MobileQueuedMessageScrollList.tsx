@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Platform, ScrollView, StyleSheet, View, type LayoutRectangle } from 'react-native'
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg'
 import { colors, spacing } from '../theme/mobile-theme'
+import { useMobileColorScheme } from '../theme/use-mobile-color-scheme'
 
 export const QUEUE_LIST_MAX_HEIGHT = 160
 
@@ -81,6 +82,7 @@ export function MobileQueuedMessageScrollList({
 }
 
 function ListEdgeFade({ edge }: { edge: 'top' | 'bottom' }): React.JSX.Element {
+  useMobileColorScheme()
   const id = `queued-list-fade-${edge}`
   const top = edge === 'top'
   return (

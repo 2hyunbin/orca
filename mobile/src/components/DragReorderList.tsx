@@ -15,6 +15,8 @@ import Animated, {
   type SharedValue
 } from 'react-native-reanimated'
 import { colors, spacing } from '../theme/mobile-theme'
+import { themedStyleSheet } from '../theme/themed-styles'
+import { useMobileColorScheme } from '../theme/use-mobile-color-scheme'
 import { triggerMediumImpact, triggerSelection } from '../platform/haptics'
 import {
   clampDragReorderIndex,
@@ -256,6 +258,7 @@ function DragReorderRow({
   onAccessibilityMove: (key: string, delta: number) => void
   children: ReactNode
 }): React.JSX.Element {
+  useMobileColorScheme()
   const {
     positions,
     dragStartPositions,
@@ -266,6 +269,9 @@ function DragReorderRow({
     dragTranslationY,
     dragPointerAbsY
   } = shared
+  // Read on the JS thread: capturing the live `colors` in a worklet would freeze it.
+  const activeBackground = colors.bgRaised
+  const restingBackground = colors.bgPanel
 
   const pan = Gesture.Pan()
     .activateAfterLongPress(LONG_PRESS_ACTIVATION_MS)
@@ -312,7 +318,7 @@ function DragReorderRow({
         zIndex: 2,
         elevation: 4,
         shadowOpacity: 0.3,
-        backgroundColor: colors.bgRaised,
+        backgroundColor: activeBackground,
         transform: [{ scale: 1.02 }]
       }
     }
@@ -321,10 +327,10 @@ function DragReorderRow({
       zIndex: 0,
       elevation: 0,
       shadowOpacity: 0,
-      backgroundColor: colors.bgPanel,
+      backgroundColor: restingBackground,
       transform: [{ scale: 1 }]
     }
-  }, [positions, activeKey, activeTop, rowKey, rowHeight])
+  }, [positions, activeKey, activeTop, rowKey, rowHeight, activeBackground, restingBackground])
 
   return (
     <Animated.View style={[styles.row, { height: rowHeight }, rowStyle]}>
@@ -357,7 +363,7 @@ function DragReorderRow({
   )
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyleSheet(() => ({
   row: {
     position: 'absolute',
     left: 0,
@@ -384,4 +390,4 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.borderSubtle
   }
-})
+}))

@@ -4,8 +4,10 @@ import { hostScreenStyles } from '../host-screen/host-screen-styles'
 import { loadHosts } from '../transport/host-store'
 import type { HostProfile } from '../transport/types'
 import { useHostDisplay } from '../transport/use-host-display'
+import { useMobileColorScheme } from './mobile-tasks-dependencies'
 
 export function MobileTasksHostSubtitle({ hostId }: { hostId: string }) {
+  useMobileColorScheme()
   const [host, setHost] = useState<HostProfile | null>(null)
   useEffect(() => {
     let stale = false

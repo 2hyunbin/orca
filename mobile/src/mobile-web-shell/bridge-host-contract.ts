@@ -2,7 +2,7 @@ import type { TerminalBacklogEnd, TerminalBacklogTimers } from './bridge-termina
 import type { RpcClient } from '../transport/rpc-client'
 import type { BridgeSessionBack } from './bridge-host-back'
 import type { BridgeRefusal } from './bridge/bridge-caps'
-import type { BridgeInitHost, BridgeInitRoute } from './bridge/bridge-envelope'
+import type { BridgeColorScheme, BridgeInitHost, BridgeInitRoute } from './bridge/bridge-envelope'
 import type { BridgeClearableRouteParam } from './bridge/bridge-route-update'
 import type { BridgeSafeAreaInsets } from './bridge/bridge-safe-area-insets'
 import type { BridgeHapticsKind } from './bridge/bridge-haptics-notify'
@@ -69,6 +69,8 @@ export type BridgeHostOptions = {
   safeAreaInsets?: BridgeSafeAreaInsets
   // Default to zero; publishKeyboardInset moves native keyboard height later.
   keyboardInset?: number
+  // Default to dark; publishColorScheme moves the app's resolved scheme later.
+  colorScheme?: BridgeColorScheme
   // Read identity at forward time because this host outlives renders; replace the page placeholder as init promised or the desktop refuses spoofed sends.
   readClientIdentity: () => string | null
   // Read allowlisted storage synchronously for every init so document reloads include writes made since mount.

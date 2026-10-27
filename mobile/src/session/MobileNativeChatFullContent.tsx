@@ -13,6 +13,7 @@ import type {
   AgentJournalItemBody
 } from '../../../src/shared/agent-session-journal-types'
 import { INLINE_TEXT_SELECTION } from '../components/inline-text-selection'
+import { useMobileColorScheme } from '../theme/use-mobile-color-scheme'
 import { styles } from './mobile-native-chat-message-styles'
 import { toolStyles } from './mobile-native-chat-tool-styles'
 import { MobileNativeChatOwnedScrollView } from './MobileNativeChatOwnedScrollView'
@@ -34,6 +35,7 @@ function ShowFull({
   load: Load
   onPress: () => void
 }): React.JSX.Element {
+  useMobileColorScheme()
   return (
     <Pressable
       style={styles.showFull}
@@ -67,6 +69,7 @@ export function MobileNativeChatToolOutput({
   rootIdentity: string
   positionKey: string
 }): React.JSX.Element {
+  useMobileColorScheme()
   const source = useContext(MobileNativeChatItemSourceContext)
   const { output, isError, fullOutputItemId } = body
   const client = source?.client,
@@ -146,6 +149,7 @@ export function useMobileNativeChatFullMessage(message: NativeChatMessage): {
   showFull: React.JSX.Element | null
   recovery: { load: Load; onPress: () => void } | null
 } {
+  useMobileColorScheme()
   const source = useContext(MobileNativeChatItemSourceContext)
   const detail = source?.messageDetail
   const client = source?.client,

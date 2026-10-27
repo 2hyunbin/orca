@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import type {
   MobileWebShellBridgeMessagePayload,
   OrcaMobileWebShellViewHandle
@@ -7,7 +7,7 @@ import { useHostClient } from '../transport/host-client-hooks'
 import { createBridgeDiagnosticReporter } from './bridge-diagnostic-log'
 import { bridgeDiagnosticLine, frameWithoutHostLine } from './shell-bridge-log-lines'
 import { recordShellLifecycleLine } from './shell-lifecycle-line-recorder'
-import type { BridgeInitRoute } from './bridge/bridge-envelope'
+import type { BridgeColorScheme, BridgeInitRoute } from './bridge/bridge-envelope'
 import type { BridgeClearableRouteParam } from './bridge/bridge-route-update'
 import type { BridgeSafeAreaInsets } from './bridge/bridge-safe-area-insets'
 import type { BridgeHapticsKind } from './bridge/bridge-haptics-notify'
@@ -57,6 +57,7 @@ export type MobileWebShellBridgeArgs = {
   route: BridgeInitRoute
   safeAreaInsets: BridgeSafeAreaInsets
   keyboardInset: number
+  colorScheme: BridgeColorScheme
   pageRoutes: readonly string[]
   pageRouteGrants: readonly { pathname: string; grants: readonly string[] }[]
   // Effective session grants include the served-route union when this page owns the host area.
@@ -119,6 +120,7 @@ export function useMobileWebShellBridge(args: MobileWebShellBridgeArgs): MobileW
       route: latest.route,
       safeAreaInsets: latest.safeAreaInsets,
       keyboardInset: latest.keyboardInset,
+      colorScheme: latest.colorScheme,
       pageRoutes: latest.pageRoutes,
       pageRouteGrants: latest.pageRouteGrants,
       routeGrants: latest.routeGrants,
@@ -166,6 +168,15 @@ export function useMobileWebShellBridge(args: MobileWebShellBridgeArgs): MobileW
       host.dispose()
     }
   }, [buildId, client, sessionId, snapshot])
+
+  // A rebuilt host already starts from the latest scheme; this re-sends init when it changes under a live page.
+  const colorScheme = args.colorScheme
+  useEffect(() => {
+    const mounted = hostRef.current
+    if (mounted !== null && mounted.sessionId === sessionId) {
+      mounted.host.publishColorScheme(colorScheme)
+    }
+  }, [colorScheme, sessionId])
 
   return {
     bridgeEnabled: ready !== null,

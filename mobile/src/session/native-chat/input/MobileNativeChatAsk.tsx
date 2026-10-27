@@ -4,6 +4,8 @@ import { Check } from 'lucide-react-native'
 import type { AskAnswerSelection } from '../../../../../src/shared/native-chat-ask-answer'
 import type { AskPrompt } from '../../../../../src/shared/native-chat-ask-types'
 import { colors, radii, spacing, typography } from '../../../theme/mobile-theme'
+import { themedStyleSheet } from '../../../theme/themed-styles'
+import { useMobileColorScheme } from '../../../theme/use-mobile-color-scheme'
 import { TEXT_INPUT_FONT_SIZE } from '../../../platform/text-input-font-size'
 import { MobileNativeChatCardHeaderAction } from '../../MobileNativeChatCardHeaderAction'
 import { useMobileNativeChatAskAutoAdvance } from './use-mobile-native-chat-ask-auto-advance'
@@ -26,6 +28,7 @@ export function MobileNativeChatAsk({
   onCancel,
   onCollapse
 }: Props): React.JSX.Element {
+  useMobileColorScheme()
   const [index, setIndex] = useState(0)
   const [selections, setSelections] = useState<number[][]>(() => prompt.questions.map(() => []))
   const [otherText, setOtherText] = useState<string[]>(() => prompt.questions.map(() => ''))
@@ -241,6 +244,7 @@ function OptionRow({
   disabled: boolean
   onPress: () => void
 }): React.JSX.Element {
+  useMobileColorScheme()
   return (
     <Pressable
       style={[styles.option, selected && styles.optionSelected]}
@@ -269,7 +273,7 @@ function OptionRow({
   )
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyleSheet(() => ({
   card: {
     maxHeight: 380,
     backgroundColor: colors.bgPanel,
@@ -414,4 +418,4 @@ const styles = StyleSheet.create({
   nextTextDisabled: {
     color: colors.textMuted
   }
-})
+}))
