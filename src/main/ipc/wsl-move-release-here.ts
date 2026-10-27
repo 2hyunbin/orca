@@ -103,23 +103,33 @@ async function releaseWslMovesHere(
   let failure: Extract<WslMoveUseLocallyResult, { released: false }> | null = null
   for (const move of newestFirst) {
     const moveRefusal = move === first ? null : wslMoveReleaseRefusal(userDataPath, move)
+    if (moveRefusal) {
+      failure = moveRefusal
+      break
+    }
     const ports = createUndoPorts()
-    // The host's copies stop first, or an agent the move resumed there runs beside this one.
-    const stop = moveRefusal ? null : await ports.stopHostCopies(move)
-    if (moveRefusal || stop !== 'stopped') {
-      failure = moveRefusal ?? {
+    // Automations first, as they undo cleanly: a refusal must leave the host's terminals running (X1).
+    const automations = (await ports.stopHostAutomations?.(move)) ?? {
+      outcome: 'stopped',
+      restore: async () => {}
+    }
+    if (automations.outcome !== 'stopped') {
+      failure = {
         released: false,
-        reason: stop === 'unreachable' ? 'host-unreachable' : 'host-still-running'
+        reason: automations.outcome === 'unreachable' ? 'host-unreachable' : 'failed',
+        detail: 'host-automations'
       }
       break
     }
-    // Its automations run here again once released; the host's copies turn off first.
-    const automations = (await ports.stopHostAutomations?.(move)) ?? 'stopped'
-    if (automations !== 'stopped') {
+    // The host's copies stop next, or an agent the move resumed there runs beside this one.
+    const stop = await ports.stopHostCopies(move)
+    if (stop !== 'stopped') {
+      await automations.restore().catch((error: unknown) => {
+        console.warn('[wsl-move] Could not turn host automations back on:', error)
+      })
       failure = {
         released: false,
-        reason: automations === 'unreachable' ? 'host-unreachable' : 'failed',
-        detail: 'host-automations'
+        reason: stop === 'unreachable' ? 'host-unreachable' : 'host-still-running'
       }
       break
     }

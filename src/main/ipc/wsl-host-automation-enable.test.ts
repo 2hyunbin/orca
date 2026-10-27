@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const hostRows = vi.hoisted(() => new Map<string, { enabled: boolean; updatedAt: number }>())
 const updates = vi.hoisted((): string[] => [])
 const failNextUpdate = vi.hoisted(() => ({ value: false }))
+const failOnUpdateOf = vi.hoisted((): { id: string | null } => ({ id: null }))
 
 vi.mock('../wsl/wsl-host-service-instance', () => ({
   getWslHostService: () => ({
@@ -30,8 +31,9 @@ vi.mock('../ssh/orcad-migration-catalog-client', () => ({
         ? { ok: true, result: { automation: row } }
         : { ok: false, error: { message: 'Automation not found.' } }
     }
-    if (failNextUpdate.value) {
+    if (failNextUpdate.value || failOnUpdateOf.id === params.id) {
       failNextUpdate.value = false
+      failOnUpdateOf.id = null
       return { ok: false, error: { message: 'busy' } }
     }
     updates.push(params.id)
@@ -43,7 +45,7 @@ vi.mock('../ssh/orcad-migration-catalog-client', () => ({
 }))
 
 import { enableWslHostAutomations } from './wsl-host-automation-enable'
-import { disableWslHostAutomations } from './wsl-host-automation-disable'
+import { disableWslHostAutomations, restoreWslHostAutomations } from './wsl-host-automation-disable'
 
 beforeEach(() => {
   hostRows.clear()
@@ -79,21 +81,28 @@ describe('disableWslHostAutomations', () => {
   it("turns off the host's copies that are on, and skips ones it has off or no longer has", async () => {
     hostRows.set('on', { enabled: true, updatedAt: 10 })
     hostRows.set('off', { enabled: false, updatedAt: 10 })
-    await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', ['on', 'off', 'deleted-on-host'])
+    expect(
+      await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', ['on', 'off', 'deleted-on-host'])
+    ).toEqual(['on'])
     expect(updates).toEqual(['on'])
     expect(hostRows.get('on')?.enabled).toBe(false)
+    await restoreWslHostAutomations('/user-data', 'wsl:Ubuntu', ['on'])
+    expect(hostRows.get('on')?.enabled).toBe(true)
   })
 
-  it('throws when the host refuses one, so undo refuses rather than run it twice', async () => {
+  it('turns back on what it turned off before throwing, so a refused undo changes nothing', async () => {
     hostRows.set('a', { enabled: true, updatedAt: 1 })
-    failNextUpdate.value = true
-    await expect(disableWslHostAutomations('/user-data', 'wsl:Ubuntu', ['a'])).rejects.toThrow(
+    hostRows.set('b', { enabled: true, updatedAt: 1 })
+    failOnUpdateOf.id = 'b'
+    await expect(disableWslHostAutomations('/user-data', 'wsl:Ubuntu', ['a', 'b'])).rejects.toThrow(
       'wsl_move_automation_disable_failed:busy'
     )
+    expect(hostRows.get('a')?.enabled).toBe(true)
+    expect(hostRows.get('b')?.enabled).toBe(true)
   })
 
   it('asks the host nothing when no automation needs turning off', async () => {
-    await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', [])
+    expect(await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', [])).toEqual([])
     expect(updates).toEqual([])
   })
 })

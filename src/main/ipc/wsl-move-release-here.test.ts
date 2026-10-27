@@ -145,39 +145,61 @@ describe('releasing moved projects here', () => {
     expect(refocusHere.mock.calls.map(([released]) => released.migrationId)).toEqual(['m2'])
   })
 
-  it("turns each move's host automations off before releasing that move", async () => {
-    const stopHostAutomations = vi.fn(async (stopped: Move) => {
-      // Not released yet when its automations go off on the host.
-      expect(journal.released).not.toContain(stopped.migrationId)
-      return 'stopped' as const
-    })
-    const result = await releaseWslMoveChainHere('/user-data', 'Ubuntu', [], () => ({
-      stopHostCopies: vi.fn(async () => 'stopped' as const),
-      stopHostAutomations
-    }))
-    expect(result).toMatchObject({ released: true })
-    // Partial chains stay per move: each call names only the move being released.
-    expect(stopHostAutomations.mock.calls.map(([stopped]) => stopped.migrationId)).toEqual([
-      'm2',
-      'm1'
-    ])
+  const automationsOff = (onRestore = vi.fn(async () => {})) => ({
+    outcome: 'stopped' as const,
+    restore: onRestore
   })
 
-  it('refuses, releasing nothing, when the host cannot turn its automations off', async () => {
-    for (const [stop, reason] of [
+  it("turns each move's host automations off, then stops its terminals, then releases it", async () => {
+    const steps: string[] = []
+    const result = await releaseWslMoveChainHere('/user-data', 'Ubuntu', [], () => ({
+      stopHostAutomations: vi.fn(async (stopped: Move) => {
+        steps.push(`automations ${stopped.migrationId}`)
+        return automationsOff()
+      }),
+      stopHostCopies: vi.fn(async (stopped: Move) => {
+        expect(journal.released).not.toContain(stopped.migrationId)
+        steps.push(`terminals ${stopped.migrationId}`)
+        return 'stopped' as const
+      })
+    }))
+    expect(result).toMatchObject({ released: true })
+    // Partial chains stay per move: each step names only the move being released.
+    expect(steps).toEqual(['automations m2', 'terminals m2', 'automations m1', 'terminals m1'])
+  })
+
+  // X1: a refused undo leaves the host's copies running.
+  it('refuses with the host terminals untouched when the automations cannot go off', async () => {
+    for (const [outcome, reason] of [
       ['unreachable', 'host-unreachable'],
       ['failed', 'failed']
     ] as const) {
       journal.chain = [move('m1', 'r1'), move('m2', 'r2')]
       journal.released = []
       window.reloads = 0
+      let operatorCloses = 0
       const result = await releaseWslMovedProjectHere('/user-data', { repoId: 'r2' }, [], () => ({
-        stopHostCopies: vi.fn(async () => 'stopped' as const),
-        stopHostAutomations: vi.fn(async () => stop)
+        stopHostAutomations: vi.fn(async () => ({ outcome })),
+        stopHostCopies: vi.fn(async () => {
+          operatorCloses++
+          return 'stopped' as const
+        })
       }))
       expect(result).toMatchObject({ released: false, reason, detail: 'host-automations' })
+      expect(operatorCloses).toBe(0)
       expect(journal.released).toEqual([])
       expect(window.reloads).toBe(0)
     }
+  })
+
+  it('turns the automations back on when the terminals then fail to stop', async () => {
+    const restore = vi.fn(async () => {})
+    const result = await releaseWslMovedProjectHere('/user-data', { repoId: 'r2' }, [], () => ({
+      stopHostAutomations: vi.fn(async () => automationsOff(restore)),
+      stopHostCopies: vi.fn(async () => 'still-running' as const)
+    }))
+    expect(result).toMatchObject({ released: false, reason: 'host-still-running' })
+    expect(restore).toHaveBeenCalledOnce()
+    expect(journal.released).toEqual([])
   })
 })

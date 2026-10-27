@@ -16,7 +16,9 @@ vi.mock('../../shared/runtime-environment-store', () => ({
 vi.mock('./wsl-host-automation-disable', () => ({
   disableWslHostAutomations: async (_userData: string, _environmentId: string, ids: string[]) => {
     host.disabled.push([...ids])
-  }
+    return [...ids]
+  },
+  restoreWslHostAutomations: async () => {}
 }))
 
 const MOVED = wslMoverProfile('mixed-windows-wsl', 'source').session.activeWorktreeId ?? ''
@@ -84,18 +86,18 @@ describe("undo's host automation port", () => {
   it("turns off the host's copies of this move's automations that are on here", async () => {
     host.disabled = []
     host.listed = true
-    expect(await createWslMoveUndoPorts(store, '/user-data').stopHostAutomations?.(move)).toBe(
-      'stopped'
-    )
+    expect(
+      (await createWslMoveUndoPorts(store, '/user-data').stopHostAutomations?.(move))?.outcome
+    ).toBe('stopped')
     expect(host.disabled).toEqual([['moved-on']])
   })
 
   it('asks a removed host nothing', async () => {
     host.disabled = []
     host.listed = false
-    expect(await createWslMoveUndoPorts(store, '/user-data').stopHostAutomations?.(move)).toBe(
-      'stopped'
-    )
+    expect(
+      (await createWslMoveUndoPorts(store, '/user-data').stopHostAutomations?.(move))?.outcome
+    ).toBe('stopped')
     expect(host.disabled).toEqual([])
   })
 })

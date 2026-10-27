@@ -5,7 +5,9 @@
  */
 import type { Automation } from '../../../shared/automations-types'
 
-export type WslMoveHostAutomationStop = 'stopped' | 'unreachable' | 'failed'
+export type WslMoveHostAutomationStop =
+  /** `restore` turns back on what was turned off, when a later undo step refuses. */
+  { outcome: 'stopped'; restore: () => Promise<void> } | { outcome: 'unreachable' | 'failed' }
 
 /** The released move's own automations that are on here; none of another move's. */
 export function wslMoveAutomationsToTurnOffOnHost(
@@ -21,16 +23,19 @@ export function wslMoveAutomationsToTurnOffOnHost(
 /** A host that answered but refused is `failed`; anything else that throws is `unreachable`. */
 export async function stopWslMoveHostAutomations(
   automationIds: readonly string[],
-  disable: (automationIds: readonly string[]) => Promise<void>
+  host: {
+    disable: (automationIds: readonly string[]) => Promise<string[]>
+    restore: (automationIds: readonly string[]) => Promise<void>
+  }
 ): Promise<WslMoveHostAutomationStop> {
   if (automationIds.length === 0) {
-    return 'stopped'
+    return { outcome: 'stopped', restore: async () => {} }
   }
   try {
-    await disable(automationIds)
-    return 'stopped'
+    const turnedOff = await host.disable(automationIds)
+    return { outcome: 'stopped', restore: () => host.restore(turnedOff) }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    return message.startsWith('wsl_move_automation_') ? 'failed' : 'unreachable'
+    return { outcome: message.startsWith('wsl_move_automation_') ? 'failed' : 'unreachable' }
   }
 }

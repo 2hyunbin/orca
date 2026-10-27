@@ -21,11 +21,11 @@ import {
   wslMoveAutomationsToTurnOffOnHost,
   type WslMoveHostAutomationStop
 } from '../persistence/moving-wsl-projects/wsl-move-undo-host-automations'
-import { disableWslHostAutomations } from './wsl-host-automation-disable'
+import { disableWslHostAutomations, restoreWslHostAutomations } from './wsl-host-automation-disable'
 
 export type WslMoveUndoPorts = {
   stopHostCopies: (move: WslMoveCutover) => Promise<WslMoveHostCopyStop>
-  /** Before the release: the host's copies of the move's automations that are on here turn off. */
+  /** First, before the terminals stop: the host's copies of the move's automations that are on here turn off. */
   stopHostAutomations?: (move: WslMoveCutover) => Promise<WslMoveHostAutomationStop>
   /** After the release, with window writes held: focus on the host copy returns here. */
   refocusHere?: (move: WslMoveCutover) => void
@@ -92,11 +92,15 @@ export function createWslMoveUndoPorts(
     stopHostAutomations: async (move) => {
       // A removed host took its automations with it.
       if (!listEnvironments(userDataPath).some((env) => env.id === move.destinationEnvironmentId)) {
-        return 'stopped'
+        return { outcome: 'stopped', restore: async () => {} }
       }
+      const environmentId = move.destinationEnvironmentId
       return stopWslMoveHostAutomations(
         wslMoveAutomationsToTurnOffOnHost(move, store.listAutomations()),
-        (ids) => disableWslHostAutomations(userDataPath, move.destinationEnvironmentId, ids)
+        {
+          disable: (ids) => disableWslHostAutomations(userDataPath, environmentId, ids),
+          restore: (ids) => restoreWslHostAutomations(userDataPath, environmentId, ids)
+        }
       )
     },
     refocusHere: (move) => {
