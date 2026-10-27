@@ -1,6 +1,7 @@
 import type {
   GitHubProjectFieldValue,
   GitHubProjectLabel,
+  GitHubProjectLinkedPullRequests,
   GitHubProjectRow,
   GitHubProjectRowItemType,
   GitHubProjectUser
@@ -10,6 +11,7 @@ import { driftError } from './project-error-classification'
 import {
   normalizeFieldValue,
   normalizeLabel,
+  normalizeLinkedPullRequests,
   normalizeUser,
   type RawFieldValue,
   type RawLabel,
@@ -124,8 +126,13 @@ export function normalizeItem(raw: RawItem, position: number): NormalizedItemOut
             typeof content.issueType.description === 'string' ? content.issueType.description : null
         }
       : null
+  let linkedPullRequests: GitHubProjectLinkedPullRequests | null = null
   const fieldValuesByFieldId: Record<string, GitHubProjectFieldValue> = {}
   for (const fv of raw.fieldValues?.nodes ?? []) {
+    if (fv.__typename === 'ProjectV2ItemFieldPullRequestValue') {
+      linkedPullRequests = normalizeLinkedPullRequests(fv)
+      continue
+    }
     const normalized = normalizeFieldValue(fv)
     if (normalized) {
       fieldValuesByFieldId[normalized.fieldId] = normalized
@@ -155,6 +162,7 @@ export function normalizeItem(raw: RawItem, position: number): NormalizedItemOut
       assignees,
       labels,
       parentIssue,
+      linkedPullRequests,
       subIssuesProgress,
       issueType
     },

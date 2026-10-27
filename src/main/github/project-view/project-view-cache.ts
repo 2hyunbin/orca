@@ -34,7 +34,8 @@ function getProjectViewCacheEntry<K, V>(cache: Map<K, V>, key: K): V | undefined
 // Module reloads must discard stale capability results.
 const ownerTypeCache = new Map<string, GitHubProjectOwnerType | null>()
 // One owner's unsupported parent field must not poison another owner's capability.
-const parentFieldRetriedByOwner = new Map<string, true>()
+export type OptionalProjectItemField = 'parent' | 'subIssuesSummary' | 'linkedPullRequests'
+const unsupportedItemFieldsByOwner = new Map<string, ReadonlySet<OptionalProjectItemField>>()
 const parentFieldWarningLoggedByOwner = new Map<string, true>()
 // Share first-page capability probes per owner.
 export const parentFieldProbeInFlight = new Map<string, Promise<void>>()
@@ -68,12 +69,25 @@ export function getCachedOwnerType(
   return getProjectViewCacheEntry(ownerTypeCache, ownerTypeCacheKey(owner, host))
 }
 
+export function markItemFieldsUnsupported(
+  scopeKey: string,
+  fields: readonly OptionalProjectItemField[]
+): void {
+  const unsupported = new Set(getUnsupportedItemFields(scopeKey))
+  fields.forEach((field) => unsupported.add(field))
+  rememberProjectViewCacheEntry(unsupportedItemFieldsByOwner, scopeKey, unsupported)
+}
+
+export function getUnsupportedItemFields(scopeKey: string): ReadonlySet<OptionalProjectItemField> {
+  return getProjectViewCacheEntry(unsupportedItemFieldsByOwner, scopeKey) ?? new Set()
+}
+
 export function markParentFieldRetried(scopeKey: string): void {
-  rememberProjectViewCacheEntry(parentFieldRetriedByOwner, scopeKey, true)
+  markItemFieldsUnsupported(scopeKey, ['parent'])
 }
 
 export function hasParentFieldRetried(scopeKey: string): boolean {
-  return getProjectViewCacheEntry(parentFieldRetriedByOwner, scopeKey) === true
+  return getUnsupportedItemFields(scopeKey).has('parent')
 }
 
 export function markParentFieldWarningLogged(scopeKey: string): void {
@@ -86,7 +100,7 @@ export function hasParentFieldWarningLogged(scopeKey: string): boolean {
 
 export function _resetProjectViewCachesForTests(): void {
   ownerTypeCache.clear()
-  parentFieldRetriedByOwner.clear()
+  unsupportedItemFieldsByOwner.clear()
   parentFieldWarningLoggedByOwner.clear()
   parentFieldProbeInFlight.clear()
 }
@@ -99,7 +113,7 @@ export function _getProjectViewCacheSizesForTests(): {
 } {
   return {
     ownerTypes: ownerTypeCache.size,
-    parentFieldRetries: parentFieldRetriedByOwner.size,
+    parentFieldRetries: unsupportedItemFieldsByOwner.size,
     parentFieldWarnings: parentFieldWarningLoggedByOwner.size,
     parentFieldProbes: parentFieldProbeInFlight.size
   }

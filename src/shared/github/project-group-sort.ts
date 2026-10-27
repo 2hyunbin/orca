@@ -22,14 +22,12 @@ export const EMPTY_PROJECT_GROUP_KEY = '__empty__'
 
 type ProjectFieldValue = GitHubProjectRow['fieldValuesByFieldId'][string]
 
-/** Read-only relations stay outside grouping/sorting; absent and blank values sort last. */
+/** False for anything that renders as an empty cell — absent, or present with a blank payload. */
 function hasNonEmptyFieldValue(value: ProjectFieldValue | undefined): boolean {
   if (!value) {
     return false
   }
   switch (value.kind) {
-    case 'pull-requests':
-      return false
     case 'users':
       return Boolean(value.users[0]?.login)
     case 'labels':
@@ -118,8 +116,6 @@ function labelForEmpty(field: GitHubProjectField): string {
 
 function deriveStringValue(value: GitHubProjectRow['fieldValuesByFieldId'][string]): string {
   switch (value.kind) {
-    case 'pull-requests':
-      return ''
     case 'text':
       return value.text
     case 'number':

@@ -1,3 +1,4 @@
+import type { OptionalProjectItemField } from './project-view-cache'
 import type { GitHubProjectOwnerType } from '../../../shared/github/project-types'
 import type { GitHubProjectViewError } from '../../../shared/github/project-result-types'
 import {
@@ -38,7 +39,7 @@ export async function fetchItemsPageWithRaw(args: {
   query: string
   first: number
   after: string | null
-  includeParent: boolean
+  unsupportedFields: ReadonlySet<OptionalProjectItemField>
   host?: string
 }): Promise<
   | { ok: true; page: RawItemsPage }
@@ -68,9 +69,9 @@ export async function fetchItemsPageWithRaw(args: {
               type
               updatedAt
               content {
-                ${itemContentSelection(args.includeParent)}
+                ${itemContentSelection(!args.unsupportedFields.has('parent'), !args.unsupportedFields.has('subIssuesSummary'))}
               }
-              ${fieldValuesSelection(args.includeParent)}
+              ${fieldValuesSelection(!args.unsupportedFields.has('linkedPullRequests'))}
             }
           }
         }

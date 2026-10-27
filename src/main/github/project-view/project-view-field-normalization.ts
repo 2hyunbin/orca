@@ -1,6 +1,7 @@
 import type {
   GitHubProjectField,
   GitHubProjectFieldValue,
+  GitHubProjectLinkedPullRequests,
   GitHubProjectIteration,
   GitHubProjectLabel,
   GitHubProjectSingleSelectOption,
@@ -176,28 +177,35 @@ export function normalizeFieldValue(
         .filter((u): u is GitHubProjectUser => u !== null)
       return { kind: 'users', fieldId, users }
     }
-    case 'ProjectV2ItemFieldPullRequestValue': {
-      const pullRequests = (raw.pullRequests?.nodes ?? [])
-        .map((node) => {
-          if (!node || typeof node.number !== 'number') {
-            return null
-          }
-          return {
-            number: node.number,
-            title: typeof node.title === 'string' ? node.title : '',
-            url: typeof node.url === 'string' ? node.url : ''
-          }
-        })
-        .filter((pr): pr is { number: number; title: string; url: string } => pr !== null)
-      const totalCount =
-        typeof raw.pullRequests?.totalCount === 'number'
-          ? raw.pullRequests.totalCount
-          : pullRequests.length
-      return { kind: 'pull-requests', fieldId, pullRequests, totalCount }
-    }
     case undefined:
     default:
       // Ignore future field types rather than treating compatible schema additions as drift.
       return null
+  }
+}
+
+export function normalizeLinkedPullRequests(
+  raw: RawFieldValue
+): GitHubProjectLinkedPullRequests | null {
+  if (raw.__typename !== 'ProjectV2ItemFieldPullRequestValue') {
+    return null
+  }
+  const pullRequests = (raw.pullRequests?.nodes ?? []).flatMap((node) =>
+    !node || typeof node.number !== 'number'
+      ? []
+      : [
+          {
+            number: node.number,
+            title: typeof node.title === 'string' ? node.title : '',
+            url: typeof node.url === 'string' ? node.url : ''
+          }
+        ]
+  )
+  return {
+    pullRequests,
+    totalCount:
+      typeof raw.pullRequests?.totalCount === 'number'
+        ? raw.pullRequests.totalCount
+        : pullRequests.length
   }
 }

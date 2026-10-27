@@ -22,9 +22,12 @@ fragment FieldConfig on ProjectV2FieldConfiguration {
 }
 `
 
-export function itemContentSelection(includeParent: boolean): string {
+export function itemContentSelection(
+  includeParent: boolean,
+  includeSubIssuesSummary: boolean
+): string {
   const parentFrag = includeParent ? 'parent { number title url }' : ''
-  const subIssuesSummaryFrag = includeParent
+  const subIssuesSummaryFrag = includeSubIssuesSummary
     ? 'subIssuesSummary { completed total percentCompleted }'
     : ''
   return `
