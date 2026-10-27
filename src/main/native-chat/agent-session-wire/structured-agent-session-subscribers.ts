@@ -45,6 +45,11 @@ export type AgentSessionSubscribeInput = {
   boundedFrames?: boolean
   projectQueuePublication?: SubscriberFieldState['projectQueuePublication']
   readHistorySnapshot?: HistoryReader['snapshot']
+  readQueueSourceIds?: HistoryReader['queueSourceIds']
+  projectJournalEvent?: (
+    journal: AgentSessionJournal,
+    ...args: Parameters<NonNullable<SubscriberFieldState['projectJournalEvent']>>
+  ) => AgentSessionSubscribeEvent
   readsCurrentRequests?: boolean
   /** False for desktops that need exact replay to keep send echoes and current requests. */
   snapshotCatchUp?: boolean
@@ -56,6 +61,7 @@ export type Subscriber = {
   cursor: AgentJournalCursor
   fence: number
   readHistorySnapshot?: HistoryReader['snapshot']
+  readQueueSourceIds?: HistoryReader['queueSourceIds']
   snapshotCatchUp?: boolean
   /** The current-work view the last frame's fields were read under
    *  (`StructuredAgentSessionCurrentWork.viewKey`); a change with no row still owes a frame. */
@@ -97,16 +103,13 @@ export class AgentSessionSubscribers {
   open(
     input: AgentSessionSubscribeInput & { journal: AgentSessionJournal; fence: number }
   ): () => void {
-    const liveCursor = input.journal.cursor()
+    const { journal, ...fields } = input
+    const liveCursor = journal.cursor()
     const subscriber: Subscriber = {
-      id: input.id,
-      sessionId: input.sessionId,
-      emit: input.emit,
+      ...fields,
       cursor: input.cursor ?? { epoch: liveCursor.epoch, sequence: 0 },
-      fence: input.fence,
       boundedFrames: input.boundedFrames === true,
-      projectQueuePublication: input.projectQueuePublication,
-      readHistorySnapshot: input.readHistorySnapshot,
+      projectJournalEvent: input.projectJournalEvent?.bind(undefined, journal),
       readsCurrentRequests: input.readsCurrentRequests === true,
       snapshotCatchUp: input.snapshotCatchUp !== false
     }

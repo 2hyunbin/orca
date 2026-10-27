@@ -117,7 +117,9 @@ export function finishFirstRecoveryPresentation(
 const listMemos = new WeakMap<AgentSessionJournal, ListMemo>()
 const publications = new WeakMap<AgentSessionJournal, QueuePublication>()
 
-function readPublishedQueuedMessages(journal: AgentSessionJournal): AgentSessionQueuedMessage[] {
+export function readPublishedQueuedMessages(
+  journal: AgentSessionJournal
+): AgentSessionQueuedMessage[] {
   const deferred = firstReplay.has(journal)
   const key = `${journal.queuedMessages.revision()}:${deferred}`
   const memo = listMemos.get(journal)

@@ -32,6 +32,7 @@ export function projectJournalBatch(input: {
   /** Sequence the subscriber has already applied. */
   afterSequence: number
   canonicalItemId?: (itemId: string) => string
+  queueSourceIds?: (messageId: string) => readonly string[]
 }): JournalBatchProjection {
   const gap = findSequenceGap(
     input.rows.map((row) => row.seq),
@@ -63,6 +64,12 @@ export function projectJournalBatch(input: {
         input.canonicalItemId?.(row.itemId) ?? aliases.get(row.itemId) ?? row.itemId
       )
       continue
+    }
+    if (row.kind === 'queue') {
+      for (const id of input.queueSourceIds?.(row.messageId) ?? []) {
+        touchedClientMessageIds.add(id)
+        touchedItemIds.add(agentJournalSubmissionKey(id))
+      }
     }
     // A card's row naming its hand-off can change how that send reads (`foldQueuedHandOffInDoubt`).
     const attempt =

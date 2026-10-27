@@ -31,10 +31,15 @@ const BOUNDED_FRAME_READER: HistoryReader = {
 export function subscriberHistoryReader(subscriber: {
   boundedFrames: boolean
   readHistorySnapshot?: HistoryReader['snapshot']
+  readQueueSourceIds?: HistoryReader['queueSourceIds']
 }): HistoryReader {
   const reader = subscriber.boundedFrames ? BOUNDED_FRAME_READER : CLIENT_HISTORY_READER
   return subscriber.readHistorySnapshot
-    ? { ...reader, snapshot: subscriber.readHistorySnapshot }
+    ? {
+        ...reader,
+        snapshot: subscriber.readHistorySnapshot,
+        queueSourceIds: subscriber.readQueueSourceIds
+      }
     : reader
 }
 
@@ -146,10 +151,34 @@ type BoundedSideLists = {
  *  side list it would have carried. An empty history batch is one already, so the first rides it. */
 export function boundedFrames(
   event: AgentSessionSubscribeEvent,
-  side: BoundedSideLists
+  side: BoundedSideLists,
+  previousCursor?: AgentJournalCursor
 ): AgentSessionSubscribeEvent[] {
   if (event.type === 'end') {
     return [event]
+  }
+  if (event.type === 'batch' && jsonBytes(event.batch) > BOUNDED_FRAME_CONTENT_BUDGET_BYTES) {
+    const split = <T>(values: T[], first: boolean): T[] => {
+      const middle = Math.ceil(values.length / 2)
+      return first ? values.slice(0, middle) : values.slice(middle)
+    }
+    const half = (first: boolean): BatchFrame => ({
+      ...event,
+      batch: {
+        cursor: first ? (previousCursor ?? event.batch.cursor) : event.batch.cursor,
+        items: split(event.batch.items, first),
+        submissions: split(event.batch.submissions, first),
+        removedItemIds: split(event.batch.removedItemIds, first)
+      }
+    })
+    return [
+      ...boundedFrames(
+        half(true),
+        { queued: undefined, backgroundTasks: undefined },
+        previousCursor
+      ),
+      ...boundedFrames(half(false), side, previousCursor)
+    ]
   }
   const lists: SideFields[] = [
     ...(side.queued === undefined ? [] : [boundedQueuePublication(side.queued)]),

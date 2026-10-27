@@ -17,7 +17,6 @@ import type {
   AgentJournalSnapshot
 } from '../../../shared/agent-session-journal-types'
 import {
-  AGENT_SESSION_HISTORY_DEFAULT_LIMIT,
   AGENT_SESSION_HISTORY_MAX_LIMIT,
   type AgentSessionHistoryDirection,
   type AgentSessionHistoryPage,
@@ -31,6 +30,7 @@ import { projectJournalBatch } from './agent-session-journal-batch'
 import { CLIENT_HISTORY_READER } from './agent-session-item-wire-form'
 import {
   boundHistoryItemsByBytes,
+  resolveHistoryLimit,
   type HistoryReader,
   measureHistoryItem,
   newestWholeSequenceGroups,
@@ -44,12 +44,7 @@ export { AGENT_SESSION_HISTORY_MAX_PAGE_BYTES } from './agent-session-history-pa
 
 /** Clamped, never rejected: a client asking for more than the host will serve
  *  should get a smaller page and keep paging, not an error mid-scroll. */
-export function resolveHistoryLimit(limit: number | undefined): number {
-  if (limit === undefined || !Number.isFinite(limit)) {
-    return AGENT_SESSION_HISTORY_DEFAULT_LIMIT
-  }
-  return Math.min(AGENT_SESSION_HISTORY_MAX_LIMIT, Math.max(1, Math.floor(limit)))
-}
+export { resolveHistoryLimit } from './agent-session-history-page-bounds'
 
 /** Whose rows a backward read serves. Both window over the session's own rows; a
  *  reader of the session's own agent alone gets only those. In-process only: no wire
@@ -255,7 +250,8 @@ function readForward(
       rows: window,
       snapshot,
       afterSequence: cursor.sequence,
-      canonicalItemId: (itemId) => journal.canonicalItemId(itemId)
+      canonicalItemId: (itemId) => journal.canonicalItemId(itemId),
+      queueSourceIds: reader.queueSourceIds?.bind(undefined, journal)
     })
     return result.ok
       ? { ...result, batch: { ...result.batch, items: result.batch.items.map(reader.form) } }

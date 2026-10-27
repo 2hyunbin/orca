@@ -1,4 +1,5 @@
 import type { AgentSessionPublishedWork } from './agent-session-published-work'
+import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
 import type { Subscriber } from './structured-agent-session-subscribers'
 // Which per-emit fields ride one subscriber frame: the provider command catalog,
 // the queue publication (the draft list with the queue's pause) and the strip's
@@ -16,9 +17,16 @@ import { boundedFrames } from './agent-session-bounded-frames'
 
 export type SubscriberFieldState = {
   sessionId: string
+  cursor?: AgentJournalCursor
   /** Every frame to fit a phone's bridge frame; see `boundedFrames`. */
   boundedFrames: boolean
   projectQueuePublication?: (publication: QueuePublication) => QueuePublication
+  projectJournalEvent?: (
+    event: AgentSessionSubscribeEvent,
+    previous: QueuePublication | undefined,
+    current: QueuePublication | undefined,
+    work?: AgentSessionPublishedWork
+  ) => AgentSessionSubscribeEvent
   commands?: AgentSessionSlashCommand[] | null
   /** Canonical publication last sent, before reader projection. */
   queuePublication?: QueuePublication
@@ -54,7 +62,8 @@ export function buildSubscriberFrame(
   hooks: SubscriberFieldHooks,
   subscriber: SubscriberFieldState,
   event: AgentSessionSubscribeEvent,
-  withholdQueued: boolean
+  withholdQueued: boolean,
+  work?: AgentSessionPublishedWork
 ): SubscriberFrame {
   const commands = subscriber.boundedFrames
     ? undefined
@@ -70,13 +79,15 @@ export function buildSubscriberFrame(
     queued !== undefined &&
     event.type !== 'end' &&
     (event.type !== 'batch' || queued !== subscriber.queuePublication)
+  event =
+    subscriber.projectJournalEvent?.(event, subscriber.queuePublication, queued, work) ?? event
   const backgroundTasks = subscriberBackgroundTasks(hooks, subscriber, event)
   const sideQueued = attachedQueued
     ? (subscriber.projectQueuePublication?.(queued) ?? queued)
     : undefined
   return {
     frames: subscriber.boundedFrames
-      ? boundedFrames(event, { queued: sideQueued, backgroundTasks })
+      ? boundedFrames(event, { queued: sideQueued, backgroundTasks }, subscriber.cursor)
       : [
           {
             ...event,
@@ -161,7 +172,8 @@ export function emitSubscriberFrame(
     hooks,
     subscriber,
     includeMarker && event.type !== 'end' ? { ...event, currentRequests: marker } : event,
-    options?.withholdQueued === true
+    options?.withholdQueued === true,
+    options?.currentWork
   )
   for (const outgoing of built.frames) {
     subscriber.emit(outgoing)
