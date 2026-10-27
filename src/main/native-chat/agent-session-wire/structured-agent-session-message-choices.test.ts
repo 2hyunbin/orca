@@ -31,6 +31,10 @@ import {
 } from './structured-agent-session-host-test-data'
 import { AgentSessionOptionRejectedError } from './structured-agent-session-option-error'
 
+const { agentSessionWriteNoticeText } = await vi.importActual<{
+  agentSessionWriteNoticeText: typeof agentSessionWriteNoticeEnglish
+}>('../../../renderer/src/components/native-chat/agent-session-write-notice-text')
+
 let rig: QueuedMessageTestRig
 
 beforeEach(async () => {
@@ -132,9 +136,6 @@ it('rejects a refused choice before prompt input and leaves the next pick saved'
 })
 
 it('carries Claude effort validation through the SDK queue and saved desktop/phone rejection, then recovers', async () => {
-  const { agentSessionWriteNoticeText } = await vi.importActual<{
-    agentSessionWriteNoticeText: typeof agentSessionWriteNoticeEnglish
-  }>('../../../renderer/src/components/native-chat/agent-session-write-notice-text')
   await rig.dispose()
   rig = await createQueuedMessageTestRig({ agent: 'claude', restartable: true })
   const queue = createClaudeUserMessageQueue()
