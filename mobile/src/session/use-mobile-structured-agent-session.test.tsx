@@ -4,7 +4,7 @@ import {
   fieldsOf,
   mutationOk,
   ok
-} from './use-mobile-structured-agent-session-queued.test-fixture.ts'
+} from './use-mobile-structured-agent-session-queued.test-fixture'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
@@ -16,7 +16,7 @@ import type { RpcClient } from '../transport/rpc-client'
 import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
 import { formatQuestionFreeTextAnswer } from './native-chat/input/mobile-native-chat-question'
 import type { MobileNativeChatSendOutcome } from './native-chat/mobile-native-chat-send'
-import { structuredSendResultFixture } from './structured-agent-send-result.test-fixture.ts'
+import { structuredSendResultFixture } from './structured-agent-send-result.test-fixture'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'
 
 const asyncStorage = vi.hoisted(() => ({

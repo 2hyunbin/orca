@@ -18,7 +18,7 @@ import {
   NEVER_OPENED,
   STOP_JOURNAL_SESSION,
   stopJournal
-} from './mobile-native-chat-stop-journal.test-fixture.ts'
+} from './mobile-native-chat-stop-journal.test-fixture'
 import { useMobileNativeChatDrafts } from './native-chat/composer/use-mobile-native-chat-drafts'
 import type { MobileNativeChatController } from './mobile-native-chat-controller-contract'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'

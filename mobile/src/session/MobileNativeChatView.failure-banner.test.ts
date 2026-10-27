@@ -10,17 +10,17 @@ import {
   render,
   root,
   update
-} from './MobileNativeChatView.harness.test-fixture.ts'
+} from './MobileNativeChatView.harness.test-fixture'
 
 vi.mock('react-native', async () => {
-  const { reactNativeStub } = await import('./MobileNativeChatView.render-stubs.test-fixture.ts')
+  const { reactNativeStub } = await import('./MobileNativeChatView.render-stubs.test-fixture')
   return reactNativeStub()
 })
 vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 })
 }))
 vi.mock('react-native-gesture-handler', async () => {
-  const { gestureHandlerStub } = await import('./MobileNativeChatView.render-stubs.test-fixture.ts')
+  const { gestureHandlerStub } = await import('./MobileNativeChatView.render-stubs.test-fixture')
   return gestureHandlerStub()
 })
 vi.mock('lucide-react-native', () => ({
@@ -40,7 +40,7 @@ vi.mock('./native-chat/input/MobileNativeChatQuestion', () => ({
 }))
 vi.mock('../components/ActionSheetModal', () => ({ ActionSheetModal: 'ActionSheetModal' }))
 vi.mock('./native-chat/composer/MobileNativeChatComposer', async () => {
-  const { composerStub } = await import('./MobileNativeChatView.render-stubs.test-fixture.ts')
+  const { composerStub } = await import('./MobileNativeChatView.render-stubs.test-fixture')
   return composerStub()
 })
 
