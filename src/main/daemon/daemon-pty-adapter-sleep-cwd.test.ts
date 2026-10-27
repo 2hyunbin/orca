@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { join } from 'node:path'
 import { readFileSync, realpathSync, rmSync } from 'node:fs'
 import { DaemonPtyAdapter } from './daemon-pty-adapter'
+import { DaemonClient } from './client'
 import type { DaemonServer } from './daemon-server'
 import { getHistorySessionDirName } from './history-paths'
 import { createMockSubprocess, startDaemonAdapterHarness } from './daemon-pty-adapter-test-harness'
@@ -131,15 +132,13 @@ describe('a native shell slept and woken', () => {
     const history = new DaemonPtyAdapter({ socketPath, tokenPath, historyPath: historyDir })
     await history.spawn({ cols: 80, rows: 24, cwd: dir, sessionId })
     lastSubprocess._simulateData('user@host:~/project$ ')
-    const startedAt = Date.now()
     await history.shutdown(sessionId, { immediate: true, keepHistory: true, deadlineMs })
-    const sleepMs = Date.now() - startedAt
     const saved = JSON.parse(
       readFileSync(join(historyDir, getHistorySessionDirName(sessionId), 'checkpoint.json'), 'utf8')
     )
     await history.spawn({ cols: 80, rows: 24, cwd: dir, sessionId })
     history.dispose()
-    return { savedCwd: saved.cwd, wokeCwd: spawnedCwds.at(-1), sleepMs }
+    return { savedCwd: saved.cwd, wokeCwd: spawnedCwds.at(-1) }
   }
 
   it('wakes in the spawn folder when the shell folder was deleted', async () => {
@@ -159,14 +158,22 @@ describe('a native shell slept and woken', () => {
   })
 
   it('gives a hung folder read a quarter of the Sleep deadline, then checkpoints', async () => {
-    resolveProcessCwdSpy.mockImplementationOnce(() => new Promise<string>(() => {}))
-    const { savedCwd, sleepMs } = await sleepAndWake(
-      'wt-1::/project@@sleep-hung',
-      Date.now() + 2_000
-    )
-    expect(resolveProcessCwdSpy).toHaveBeenCalled()
-    expect(savedCwd).toBe(dir)
-    // ~500ms read budget plus the checkpoint; without the cap the read takes the whole 2s.
-    expect(sleepMs).toBeLessThan(1_500)
+    // Freeze only the clock, so the read's budget is exact while socket timers stay real.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const requestSpy = vi.spyOn(DaemonClient.prototype, 'request')
+    try {
+      const now = Date.now()
+      resolveProcessCwdSpy.mockImplementationOnce(() => new Promise<string>(() => {}))
+      const { savedCwd } = await sleepAndWake('wt-1::/project@@sleep-hung', now + 2_000)
+      expect(resolveProcessCwdSpy).toHaveBeenCalled()
+      const cwdTimeouts = requestSpy.mock.calls
+        .filter(([type]) => type === 'getCwd')
+        .map((c) => c[2])
+      expect(cwdTimeouts).toEqual([500])
+      expect(savedCwd).toBe(dir)
+    } finally {
+      requestSpy.mockRestore()
+      vi.useRealTimers()
+    }
   })
 })
