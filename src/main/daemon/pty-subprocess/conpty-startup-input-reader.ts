@@ -109,6 +109,14 @@ async function decideConptyStartup(
   }
 }
 
+type NodePtyWindowsAgentView = pty.IPty & { _agent?: { _useConpty?: unknown } }
+
+// node-pty picks winpty below Windows build 18309; winpty never announces, and its agent cannot be killed twice.
+function isWinptyBacked(proc: pty.IPty): boolean {
+  const pane: NodePtyWindowsAgentView = proc
+  return pane._agent?._useConpty === false
+}
+
 function discardConpty(proc: pty.IPty, watch: Pick<ConptyStartupWatch, 'claim'>): void {
   watch.claim()
   // Handle-based only: a pid may already be recycled if the shell exited during startup.
@@ -149,7 +157,7 @@ export async function spawnConptyWithInputReader(
   }
 ): Promise<{ proc: pty.IPty; claimStartupEvents: () => ConptyStartupEvents }> {
   const first = await spawn()
-  if (announcementUntrusted) {
+  if (announcementUntrusted || isWinptyBacked(first)) {
     return { proc: first, claimStartupEvents: () => ({ data: [], exit: null }) }
   }
   const firstStartup = await decideConptyStartup(first, opts.signal)
