@@ -33,7 +33,7 @@ export function AntigravityAccountsSection({
 }): React.JSX.Element {
   const [state, setState] = useState<AntigravityAccountState | null>(null)
   const [usageSnapshot, setUsageSnapshot] = useState<{
-    subject: string
+    subject: string | null
     authMethod: string
     limits: ProviderRateLimits | null
   } | null>(null)
@@ -108,17 +108,19 @@ export function AntigravityAccountsSection({
         if (mounted.current) {
           setState(after)
         }
+        const reader = before.currentAccount
+        // Two unidentified logins look alike, so only a change of known identity is detectable.
         if (
-          !before.currentAccount?.subject ||
-          before.currentAccount.subject !== after.currentAccount?.subject ||
-          before.currentAccount.authMethod !== after.currentAccount.authMethod
+          !reader ||
+          reader.subject !== after.currentAccount?.subject ||
+          reader.authMethod !== after.currentAccount.authMethod
         ) {
           throw new Error('The native account changed while reading usage. Refresh usage again.')
         }
         if (mounted.current) {
           setUsageSnapshot({
-            subject: before.currentAccount.subject,
-            authMethod: before.currentAccount.authMethod,
+            subject: reader.subject,
+            authMethod: reader.authMethod,
             limits: snapshot.rateLimits.antigravity
           })
         }

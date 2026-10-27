@@ -118,6 +118,21 @@ describe('native Antigravity Accounts', () => {
     expect(screen.queryByText('Session: 31% · Weekly: —')).toBeNull()
   })
 
+  it('shows usage for an unidentified login instead of reporting an account change', async () => {
+    vi.mocked(callAntigravityAccounts).mockResolvedValue({
+      accounts: [],
+      activeAccountId: null,
+      selectedAccountId: null,
+      currentAccount: { email: null, subject: null, authMethod: 'consumer', identityKnown: false }
+    })
+    vi.mocked(callRuntimeRpc).mockResolvedValue(usage)
+    render(<AntigravityAccountsSection owner={owner} target={target} label="This device" />)
+    await screen.findByText('Signed-in identity unavailable')
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh usage' }))
+    await screen.findByText('Session: 31% · Weekly: —')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('shows the native identity and supported CLI sign-in instructions without inventing a login', async () => {
     render(<AntigravityAccountsSection owner={owner} target={target} label="This device" />)
     await screen.findByText('Native account')
