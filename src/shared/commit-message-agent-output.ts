@@ -1,3 +1,5 @@
+import { redactString } from './secret-redaction'
+
 /** jcode's `run --json` envelope, narrowed to the field the answer lives in. */
 type JcodeJsonResult = { text?: unknown }
 
@@ -162,10 +164,10 @@ const FAILURE_EXCERPT_HEAD_BUDGET = 100
 const FAILURE_EXCERPT_TAIL_BUDGET = 130
 const FAILURE_EXCERPT_SINGLE_BUDGET = 240
 
-// CLI error formats drift; excerpt first/last lines without interpreting vendor wording. Callers must sanitize before display/persistence.
+// Redact intact lines and tokens before excerpting; callers still sanitize paths before display.
 export function excerptAgentFailureOutput(stdout: string, stderr: string): string | null {
   // Prefer stderr diagnostics; stdout is fallback and may echo the prompt.
-  const source = /\S/.test(stderr) ? stderr : stdout
+  const source = redactString(stripAnsiIfPresent(/\S/.test(stderr) ? stderr : stdout))
   if (!/\S/.test(source)) {
     return null
   }
