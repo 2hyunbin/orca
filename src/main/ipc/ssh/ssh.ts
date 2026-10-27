@@ -78,7 +78,8 @@ let initializedModule: typeof SshImplementation | undefined
 function createTransport() {
   const loader = createSshSubsystemLoader(
     async (assertRunning) => {
-      await import('ssh2')
+      // Avoid Node's ESM interop scan of this CommonJS SDK before yielding.
+      require('ssh2')
       await yieldToEventLoop()
       assertRunning()
       return import('./ssh-transport')
