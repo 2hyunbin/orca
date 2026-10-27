@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DaemonClient } from './client'
 import { DaemonPtyAdapter } from './daemon-pty-adapter'
 import { DaemonPtyRouter } from './daemon-pty-router'
 import type { DaemonServer } from './daemon-server'
@@ -125,6 +126,38 @@ describe('closing a kept host-loss tab after a relaunch', () => {
     newerHold.held = true
     await expect(close(relaunchedAdapter())).rejects.toThrow('Session not found')
     expect(historyKept()).toBe(true)
+  })
+
+  it('holds a spawn of the same id until the close has decided, in one lock', async () => {
+    const adapter = relaunchedAdapter()
+    let answer!: (listed: boolean) => void
+    vi.spyOn(adapter, 'listsSession').mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        answer = resolve
+      })
+    )
+    const closing = close(adapter)
+    await vi.waitFor(() => expect(adapter.listsSession).toHaveBeenCalled())
+    const spawning = adapter.spawn({ cols: 80, rows: 24, sessionId: lostId })
+    const spawned = vi.fn()
+    void spawning.then(spawned, spawned)
+    // A spawn that slipped in here would make the close find a live session.
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(spawned).not.toHaveBeenCalled()
+    answer(false)
+    await expect(closing).resolves.toBeUndefined()
+    // The closed id is tombstoned, so the queued spawn cannot revive its history.
+    await expect(spawning).rejects.toThrow()
+    expect(historyKept()).toBe(false)
+  })
+
+  it('never connects a daemon just to ask whether it lists the id', async () => {
+    const unconnected = relaunchedAdapter()
+    const connect = vi.spyOn(DaemonClient.prototype, 'ensureConnected')
+    const connectWithin = vi.spyOn(DaemonClient.prototype, 'ensureConnectedWithin')
+    await expect(unconnected.listsSession(lostId)).resolves.toBeNull()
+    expect(connect).not.toHaveBeenCalled()
+    expect(connectWithin).not.toHaveBeenCalled()
   })
 
   it('still refuses an id with no unended history', async () => {

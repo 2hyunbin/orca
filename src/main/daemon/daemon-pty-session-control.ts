@@ -94,8 +94,11 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
 
   /** Whether this daemon lists the session at all, alive or not; null when it can't answer. */
   async listsSession(id: string): Promise<boolean | null> {
+    // Never start or respawn a daemon just to list it: unconnected cannot answer.
+    if (!this.client.isConnected()) {
+      return null
+    }
     try {
-      await this.ensureConnected()
       const { sessions } = await this.client.request<ListSessionsResult>(
         'listSessions',
         undefined,
