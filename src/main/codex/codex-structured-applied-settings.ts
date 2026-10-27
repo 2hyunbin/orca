@@ -111,7 +111,8 @@ export class CodexAppliedSettings {
     timeoutMs = 30_000,
     signal?: AbortSignal,
     onApplied?: () => void,
-    onRefused?: () => void
+    onRefused?: () => void,
+    onWriting?: () => void
   ): Promise<{ ok: true } | { ok: false; rejected: string }> {
     throwIfSignalAborted(signal)
     if (this.unsupported || this.equivalent(choices)) {
@@ -139,6 +140,7 @@ export class CodexAppliedSettings {
     try {
       const work = (async () => {
         try {
+          onWriting?.()
           await connection.request(
             'thread/settings/update',
             { threadId, ...choices },

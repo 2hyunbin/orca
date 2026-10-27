@@ -4,6 +4,7 @@ import { CodexAppliedSettings } from './codex-structured-applied-settings'
 import { CodexAppServerRequestError } from './app-server/codex-app-server-request-error'
 import { changeCodexThreadGoal, codexThreadGoalRequests } from './codex-structured-thread-goal'
 import type { CodexSession } from './codex-structured-session-state'
+import { waitsForCodexTurnOptions } from '../native-chat/agent-session-wire/structured-agent-session-message-options'
 
 const THREAD = 'thread-1'
 
@@ -210,6 +211,31 @@ describe('direct goal settings application', () => {
         body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'Continue' }] },
         executionOptions: choices
       })
+    const held = (options = choices) =>
+      waitsForCodexTurnOptions(
+        { provider: 'codex', sessionId: 'session-1' },
+        {
+          newestTurn: () => ({ turnId: 'goal-turn', state: 'running' }),
+          itemBody: () => ({
+            kind: 'message',
+            role: 'user',
+            blocks: [{ type: 'text', text: 'Continue' }]
+          })
+        },
+        {
+          clientMessageId: 'follow-up',
+          fence: 7,
+          payloadFingerprint: 'fingerprint',
+          dispatchState: 'pending',
+          providerItemId: null,
+          reason: null,
+          submittedAt: 1,
+          resolvedAt: null,
+          options
+        },
+        { fence: 7, generation: acquisition.acquisitionGeneration, phase: 'ready' },
+        adapter
+      )
     const proof = () =>
       adapter.readAppliedInputOptions({
         sessionId: 'session-1',
@@ -245,11 +271,40 @@ describe('direct goal settings application', () => {
       expect(
         codex.connections[0].calls.filter((call) => call.method === 'thread/goal/set')
       ).toHaveLength(1)
+      apply('observation-only-c', 'medium')
+      const callsBeforeEquivalent = codex.connections[0].calls.filter(
+        (call) => call.method === 'thread/settings/update'
+      ).length
+      expect(await goal('observation-only-c', 'medium')).toEqual({ ok: true })
+      expect(proof()).toEqual({ active: appliedGoal, next: choices })
+      expect(held(appliedGoal)).toBe(false)
+      expect(held({ model: 'observation-only-c', effort: 'medium' })).toBe(true)
+      expect(
+        codex.connections[0].calls.filter((call) => call.method === 'thread/settings/update')
+      ).toHaveLength(callsBeforeEquivalent)
+      codex.routes['thread/settings/update'] = () => {
+        throw new Error('reply lost after settings enqueue')
+      }
+      expect(await goal('uncertain-model', 'low')).toMatchObject({ ok: false })
+      expect(proof()).toEqual({ active: { effort: 'low' }, next: choices })
+      expect(held()).toBe(true)
+      expect(await dispatch()).toMatchObject({ state: 'admitted' })
+      expect(proof()).toEqual({ active: choices, next: choices })
       codex.routes['thread/settings/update'] = () => {
         throw new CodexAppServerRequestError('thread/settings/update', -32601, 'method not found')
       }
-      expect(await goal('unsupported-method-fallback', 'high')).toEqual({ ok: true })
-      expect(proof()).toEqual({ active: appliedGoal, next: choices })
+      expect(await goal('unlisted-model-b', 'low')).toEqual({ ok: true })
+      expect(proof()).toEqual({ active: choices, next: choices })
+      const callsBeforeCached = codex.connections[0].calls.filter(
+        (call) => call.method === 'thread/settings/update'
+      ).length
+      expect(await goal('unlisted-model-b', 'low')).toEqual({ ok: true })
+      expect(proof()).toEqual({ active: choices, next: choices })
+      expect(held()).toBe(false)
+      expect(held(appliedGoal)).toBe(true)
+      expect(
+        codex.connections[0].calls.filter((call) => call.method === 'thread/settings/update')
+      ).toHaveLength(callsBeforeCached)
       expect(await dispatch()).toMatchObject({ state: 'admitted' })
       expect(proof()).toEqual({ active: choices, next: choices })
     } finally {
