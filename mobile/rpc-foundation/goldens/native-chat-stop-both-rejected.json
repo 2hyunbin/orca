@@ -9,6 +9,12 @@
       "ordinal": 3,
       "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"terminal.send\",\"params\":{\"terminal\":\"terminal-1\",\"text\":\"\\u001b\",\"client\":{\"id\":\"device-token-1\",\"type\":\"mobile\"}}}"
     },
+    "6b21adc16f94": {
+      "status": "fulfilled",
+      "startedAt": 0,
+      "settledAt": 1000,
+      "value": false
+    },
     "75263c07c807": {
       "name": "cancel-pending",
       "ordinal": 1,
@@ -105,14 +111,6 @@
     },
     "e6e087b39540": {
       "errors": ["Stop not sent"]
-    },
-    "eb79a9b3682a": {
-      "status": "fulfilled",
-      "startedAt": 0,
-      "settledAt": 0,
-      "value": {
-        "$rpc": "undefined"
-      }
     }
   },
   "recording": {
@@ -124,7 +122,7 @@
           "sender": ["81225cffe7a1", "db139841535a"],
           "payloads": ["5cd1d4a9aed5", "d5972c43f562"],
           "settlements": {
-            "stop": "eb79a9b3682a"
+            "stop": "6b21adc16f94"
           },
           "state": "e6e087b39540",
           "effects": ["75263c07c807"]

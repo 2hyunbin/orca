@@ -4,6 +4,12 @@
   "family": "session.native-chat-stop",
   "namedDeltas": [],
   "values": {
+    "3e2d28f3728b": {
+      "status": "fulfilled",
+      "startedAt": 0,
+      "settledAt": 1000,
+      "value": true
+    },
     "5cd1d4a9aed5": {
       "name": "terminal.send#1",
       "ordinal": 3,
@@ -97,14 +103,6 @@
       "name": "terminal.send#2",
       "ordinal": 5,
       "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"terminal.send\",\"params\":{\"terminal\":\"terminal-1\",\"text\":\"\\u001b\",\"client\":{\"id\":\"device-token-1\",\"type\":\"mobile\"}}}"
-    },
-    "eb79a9b3682a": {
-      "status": "fulfilled",
-      "startedAt": 0,
-      "settledAt": 0,
-      "value": {
-        "$rpc": "undefined"
-      }
     }
   },
   "recording": {
@@ -116,7 +114,7 @@
           "sender": ["a9ec80c50d30", "619592d7bf39"],
           "payloads": ["5cd1d4a9aed5", "d5972c43f562"],
           "settlements": {
-            "stop": "eb79a9b3682a"
+            "stop": "3e2d28f3728b"
           },
           "state": "9fe5713ca2d1",
           "effects": ["75263c07c807"]
