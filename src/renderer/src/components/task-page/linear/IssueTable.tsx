@@ -15,7 +15,7 @@ export function TaskPageLinearIssueTable({
 }: {
   model: TaskPageComposerActionsModel
 }): React.JSX.Element | null {
-  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(new Set())
+  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(() => new Set())
   const {
     selectedLinearWorkspaceId,
     linearTaskSourceContext,
@@ -35,9 +35,10 @@ export function TaskPageLinearIssueTable({
           const collapsed = collapsedSections.has(row.key)
           sectionCollapsed = collapsed
           return (
-            <button
+            <Button
               key={row.key}
               type="button"
+              variant="ghost"
               aria-expanded={!collapsed}
               onClick={() => {
                 setCollapsedSections((current) => {
@@ -48,7 +49,7 @@ export function TaskPageLinearIssueTable({
                   return next
                 })
               }}
-              className="flex h-9 w-full cursor-pointer items-center gap-2 bg-muted/35 px-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+              className="flex h-9 w-full justify-start rounded-none bg-muted/35 px-3 text-left focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <ChevronDown
                 className={cn('size-3 shrink-0 text-muted-foreground', collapsed && '-rotate-90')}
@@ -57,7 +58,7 @@ export function TaskPageLinearIssueTable({
                 {row.label}
               </span>
               <span className="shrink-0 text-[11px] text-muted-foreground">{row.count}</span>
-            </button>
+            </Button>
           )
         }
         if (sectionCollapsed) {
