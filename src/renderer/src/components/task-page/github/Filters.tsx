@@ -16,7 +16,7 @@ import IssueSourceIndicator from '@/components/github/IssueSourceIndicator'
 import IssueSourceSelector, { issueSourceChipClass } from '@/components/github/IssueSourceSelector'
 import RepoBadgeLabel from '@/components/repo/RepoBadgeLabel'
 import { repoMatchesHostIdentity } from '@/store/slices/repo-host-identity'
-import { deriveGitHubTaskPreset } from './task-page-preset-highlight'
+import { deriveGitHubTaskPreset, getTaskPresetViewerLogin } from './task-page-preset-highlight'
 export function TaskPageGitHubFilters({
   model
 }: {
@@ -57,7 +57,7 @@ export function TaskPageGitHubFilters({
   const highlightedPreset = deriveGitHubTaskPreset(
     activeGithubTaskKind,
     appliedTaskQuery,
-    githubViewerLogin
+    getTaskPresetViewerLogin(activeGithubTaskKind, perRepoSourceState, githubViewerLogin)
   )
   // Why: filter metadata for the primary slug is read from the host that owns the repo it came from.
   const primaryGithubFilterSource = perRepoSourceState.find((state) =>

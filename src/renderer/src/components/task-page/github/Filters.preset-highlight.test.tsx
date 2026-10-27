@@ -10,12 +10,16 @@ import { useAppStore } from '@/store'
 import TaskPage from '../TaskPage'
 import type { TaskPageComposerActionsModel } from '../use-task-page-composer-actions'
 import { TaskPageGitHubFilters } from './Filters'
+import type { TaskPageRepoSourceState } from '../task-page-cache-selectors'
+import { getTaskPresetViewerLogin } from './task-page-preset-highlight'
+
+const fixture = vi.hoisted((): { sources: TaskPageRepoSourceState[] } => ({ sources: [] }))
 
 vi.mock('../Surface', () => ({
   TaskPageSurface: ({ model }: { model: TaskPageComposerActionsModel }) => (
     <TooltipProvider>
       <button onClick={() => model.handleSelectGithubTaskKind('prs')}>PRs</button>
-      <TaskPageGitHubFilters model={model} />
+      <TaskPageGitHubFilters model={{ ...model, perRepoSourceState: fixture.sources }} />
     </TooltipProvider>
   )
 }))
@@ -39,6 +43,7 @@ const initialApiDescriptor = Object.getOwnPropertyDescriptor(window, 'api')
 const viewer = vi.fn<typeof window.api.gh.viewer>()
 
 beforeEach(() => {
+  fixture.sources = []
   viewer.mockReset().mockResolvedValue({ login: 'octocat', email: null })
   useAppStore.setState(
     { ...initialStore, settings: null, persistedUIReady: false, repos: [], taskPageData: {} },
@@ -128,5 +133,57 @@ describe('GitHub Tasks preset highlight follows the applied query', () => {
     click('Own author')
     expectActive('Mine', false)
     expectActive('Open', false)
+  })
+
+  it.each(['runtime:server', 'enterprise'] as const)(
+    'does not use the default viewer for a different source (%s)',
+    async (source) => {
+      fixture.sources = [
+        {
+          repoId: 'repo',
+          repoPath: '/repo',
+          sourceKey: 'repo',
+          error: null,
+          hostId: source === 'enterprise' ? 'local' : source,
+          sources: {
+            issues: null,
+            prs: {
+              owner: 'org',
+              repo: 'repo',
+              host: source === 'enterprise' ? 'github.example.com' : 'github.com'
+            },
+            originCandidate: null,
+            upstreamCandidate: null
+          }
+        }
+      ]
+      await renderFilters()
+      click('PRs')
+      click('Mine')
+      expectActive('Mine')
+      click('Own author')
+      expectActive('Mine', false)
+      expectActive('Open', false)
+      expect(viewer).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('checks each source at most once at ordinary and large selection sizes', () => {
+    for (const size of [100, 1000]) {
+      let reads = 0
+      const sources: TaskPageRepoSourceState[] = Array.from({ length: size }, (_, index) => ({
+        repoId: String(index),
+        repoPath: '/repo',
+        sourceKey: String(index),
+        sources: null,
+        error: null,
+        get hostId() {
+          reads += 1
+          return 'local'
+        }
+      }))
+      expect(getTaskPresetViewerLogin('prs', sources, 'octocat')).toBe('octocat')
+      expect(reads).toBe(size)
+    }
   })
 })
