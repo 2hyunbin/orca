@@ -72,6 +72,18 @@ describe('guardWslUncPathAccess', () => {
     expect(probe).toHaveBeenCalledTimes(1)
   })
 
+  it('without a stop signal, trusts a running read for a minute (about one wsl.exe a minute)', async () => {
+    await guardWslUncPathAccess(UNC, async () => 'read')
+    const now = performance.now()
+    const clock = vi.spyOn(performance, 'now')
+    for (const later of [10_000, 30_000, WSL_UNC_RUNNING_LEASE_MS - 1_000]) {
+      clock.mockReturnValue(now + later)
+      await guardWslUncPathAccess(UNC, async () => 'read')
+    }
+    expect(WSL_UNC_RUNNING_LEASE_MS).toBeGreaterThanOrEqual(60_000)
+    expect(probe).toHaveBeenCalledTimes(1)
+  })
+
   it('re-reads once the lease expires', async () => {
     await guardWslUncPathAccess(UNC, async () => 'read')
     const now = performance.now()

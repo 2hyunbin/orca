@@ -2,8 +2,9 @@ import { parseWslUncPath } from '../../shared/wsl-paths'
 import { isWslDistroRunning, noteWslDistrosRunning } from '../wsl-background-distro-gate'
 
 // Any 9P touch of `\\wsl.localhost\<distro>` boots a stopped distro, so background reads ask first.
-// A running read this recent answers for a burst; one started before a stop signal never does.
-export const WSL_UNC_RUNNING_LEASE_MS = 5_000
+// Stops are signalled (watcher or relay exit), so a running read is trusted this long without one,
+// keeping wsl.exe spawns to about one a minute; a read started before a stop signal never counts.
+export const WSL_UNC_RUNNING_LEASE_MS = 60_000
 
 const mayHaveStoppedAt = new Map<string, number>()
 
