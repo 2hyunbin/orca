@@ -248,16 +248,17 @@ describe('gitlab client — MR operations', () => {
     })
 
     it.each([
-      ['malformed JSON', 'not-json', 'Malformed GitLab GraphQL response'],
+      ['malformed JSON', 'not-json', 'GitLab could not mark the merge request ready. Try again.'],
+      ['null response', 'null', 'GitLab could not mark the merge request ready. Try again.'],
       [
         'missing mutation payload',
         JSON.stringify({ data: {} }),
-        'GitLab rejected the merge request readiness mutation'
+        'GitLab could not mark the merge request ready. Try again.'
       ],
       [
         'invalid draft-success field',
         JSON.stringify({ data: { mergeRequestSetDraft: { errors: [], mergeRequest: null } } }),
-        'GitLab rejected the merge request readiness mutation'
+        'GitLab could not mark the merge request ready. Try again.'
       ],
       [
         'GraphQL top-level errors',
@@ -265,14 +266,14 @@ describe('gitlab client — MR operations', () => {
           errors: [{ message: 'boom' }],
           data: { mergeRequestSetDraft: { errors: [], mergeRequest: { iid: '12' } } }
         }),
-        'GitLab GraphQL mutation failed'
+        'GitLab could not mark the merge request ready. Try again.'
       ],
       [
         'payload errors',
         JSON.stringify({
           data: { mergeRequestSetDraft: { errors: ['denied'], mergeRequest: { iid: '12' } } }
         }),
-        'GitLab rejected the merge request readiness mutation'
+        'GitLab could not mark the merge request ready. Try again.'
       ]
     ])('rejects ready mutation with %s and releases admission', async (_label, stdout, error) => {
       glabExecFileAsyncMock.mockResolvedValueOnce({ stdout })
@@ -292,37 +293,16 @@ describe('gitlab client — MR operations', () => {
       expect(releaseMock).toHaveBeenCalledTimes(1)
     })
 
-    it('uses one atomic semantic mutation during same MR title edit race', async () => {
-      glabExecFileAsyncMock.mockResolvedValueOnce({
-        stdout: JSON.stringify({
-          data: { mergeRequestSetDraft: { errors: [], mergeRequest: { iid: '12' } } }
-        })
-      })
+    it('retains the existing rejection of title edits combined with readiness', async () => {
       await expect(
-        updateMR('/repo', 12, { readyForReview: true }, 'upstream', 'conn-1')
-      ).resolves.toEqual({ ok: true })
-      expect(glabExecFileAsyncMock).toHaveBeenCalledTimes(1)
-      expect((glabExecFileAsyncMock.mock.calls[0][0] as string[]).join(' ')).toContain(
-        'mergeRequestSetDraft'
-      )
-      expect((glabExecFileAsyncMock.mock.calls[0][0] as string[]).join(' ')).not.toContain(
-        'merge_requests/12'
-      )
+        updateMR('/repo', 12, { readyForReview: true, title: 'New title' }, 'upstream', 'conn-1')
+      ).resolves.toEqual({
+        ok: false,
+        error: 'Cannot update the title while marking a merge request ready'
+      })
+      expect(glabExecFileAsyncMock).not.toHaveBeenCalled()
+      expect(releaseMock).toHaveBeenCalledOnce()
     })
-
-    it.each([{ addLabels: [] }, { removeLabels: [] }, { body: '' }, { title: 'New title' }])(
-      'rejects ready combined with update %s',
-      async (update) => {
-        await expect(
-          updateMR('/repo', 12, { readyForReview: true, ...update }, 'upstream', 'conn-1')
-        ).resolves.toEqual({
-          ok: false,
-          error: 'Cannot update the title while marking a merge request ready'
-        })
-
-        expect(glabExecFileAsyncMock).not.toHaveBeenCalled()
-      }
-    )
   })
 
   describe('resolveMRDiscussion', () => {

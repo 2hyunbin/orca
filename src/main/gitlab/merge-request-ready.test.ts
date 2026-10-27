@@ -91,4 +91,85 @@ describe('GitLab readiness title ownership', () => {
       )
     ).toBe(true)
   })
+
+  it.each(['schema response', 'nonzero glab exit', 'absent endpoint'])(
+    'preserves legacy readiness and combined metadata for an explicit %s',
+    async (failure) => {
+      const stdout = JSON.stringify({
+        errors: [
+          {
+            message: "Field 'mergeRequestSetDraft' doesn't exist on type 'Mutation'",
+            extensions: {
+              code: 'undefinedField',
+              typeName: 'Mutation',
+              fieldName: 'mergeRequestSetDraft'
+            }
+          }
+        ]
+      })
+      if (failure === 'schema response') {
+        execute.mockResolvedValueOnce({ stdout })
+      } else {
+        execute.mockRejectedValueOnce(
+          Object.assign(new Error('glab failed'), {
+            stdout: failure === 'absent endpoint' ? '{"message":"404 Not Found"}' : stdout,
+            stderr:
+              failure === 'absent endpoint'
+                ? 'glab: 404 Not Found (HTTP 404)'
+                : 'glab: Field unsupported'
+          })
+        )
+      }
+      execute.mockResolvedValueOnce({ stdout: '{"title":"Draft: Current title"}' })
+      execute.mockResolvedValueOnce({ stdout: '{}' })
+
+      await expect(
+        updateMR('/repo', 12, {
+          readyForReview: true,
+          body: 'Description',
+          addLabels: ['review']
+        })
+      ).resolves.toEqual({ ok: true })
+      expect(execute).toHaveBeenCalledTimes(3)
+      expect(execute.mock.calls[1][0]).toEqual([
+        'api',
+        '--hostname',
+        'git.internal',
+        'projects/group%2Fproject/merge_requests/12'
+      ])
+      expect(execute.mock.calls[2][0]).toEqual([
+        'api',
+        '--hostname',
+        'git.internal',
+        '-X',
+        'PUT',
+        'projects/group%2Fproject/merge_requests/12',
+        '-f',
+        'title=Current title',
+        '-f',
+        'description=Description',
+        '-f',
+        'add_labels=review'
+      ])
+      expect(release).toHaveBeenCalledOnce()
+    }
+  )
+
+  it.each([
+    new Error('timeout while contacting GitLab'),
+    Object.assign(new Error('unauthorized'), {
+      stdout: '{"message":"401 Unauthorized"}',
+      stderr: 'glab: HTTP 401'
+    }),
+    Object.assign(new Error('write outcome unknown'), {
+      stdout: '{"data":{"mergeRequestSetDraft":{"mergeRequest":{"iid":"12"},"errors":[]}}}'
+    })
+  ])('does not fall back or accept success after a failed command: %s', async (error) => {
+    execute.mockRejectedValueOnce(error)
+    await expect(updateMR('/repo', 12, { readyForReview: true })).resolves.toMatchObject({
+      ok: false
+    })
+    expect(execute).toHaveBeenCalledOnce()
+    expect(release).toHaveBeenCalledOnce()
+  })
 })
