@@ -25,7 +25,7 @@ function reportingCredentialChanges(
     async read() {
       const current = await backend.read()
       const contents = current?.contents ?? null
-      if (lastSeen !== undefined && lastSeen !== contents) {
+      if (contents !== null && lastSeen !== undefined && lastSeen !== contents) {
         credentialChangeListener()
       }
       lastSeen = contents

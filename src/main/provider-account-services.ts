@@ -135,7 +135,9 @@ export function createProviderAccountServices(
   rateLimits.setAntigravityUsageEnabledResolver(() =>
     store.getUI().statusBarItems.includes('antigravity')
   )
-  setAntigravityNativeCredentialChangeListener(() => rateLimits.releaseAntigravitySignInHold())
+  setAntigravityNativeCredentialChangeListener(() =>
+    rateLimits.invalidateAntigravityCredentialState()
+  )
   rateLimits.setNetworkProxySettingsResolver(() => store.getSettings())
   rateLimits.setInactiveClaudeAccountsResolver(() => {
     const settings = store.getSettings()

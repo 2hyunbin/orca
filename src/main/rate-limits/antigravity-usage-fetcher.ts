@@ -164,7 +164,7 @@ export async function fetchAntigravityRateLimits(
   }
 
   const reading = parseAntigravityUsageStdout(result.stdout)
-  // Why: a completed browser sign-in still yields a reading; only a failed read cools down.
+  // A completed browser sign-in still yields a reading; only a failed read holds future polls.
   if (
     !reading &&
     (result.timedOut || result.code !== 0) &&
