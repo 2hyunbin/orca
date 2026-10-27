@@ -11,6 +11,7 @@ import {
 import type { InternalTextGenerationResult } from './source-control-text-generation-types'
 import { parseOpenCodeGenerationOutput } from '../../shared/opencode-generation-output'
 import { parseAntigravityGenerationOutput } from '../../shared/antigravity-generation-stream'
+import { parseKimiGenerationOutput } from '../../shared/kimi-generation-output'
 import type { CommitMessagePlan } from '../../shared/commit-message-plan'
 
 export function formatAgentCliFailureMessage(
@@ -56,7 +57,9 @@ export function finalizeFromAgentOutput(args: {
       ? parseOpenCodeGenerationOutput(stdout)
       : args.outputFormat === 'antigravity-stream-json'
         ? parseAntigravityGenerationOutput(stdout)
-        : null
+        : args.outputFormat === 'kimi-stream-json'
+          ? parseKimiGenerationOutput(stdout)
+          : null
   if (code !== 0) {
     console.error('[commit-message] Generator failed:', { label, exitCode: code, stdout, stderr })
     return {
@@ -66,6 +69,7 @@ export function finalizeFromAgentOutput(args: {
         stdout,
         parsed &&
           !parsed.ok &&
+          args.outputFormat !== 'kimi-stream-json' &&
           (args.outputFormat === 'opencode-json'
             ? parsed.error !== 'OpenCode returned invalid JSON events.'
             : parsed.error !== 'Antigravity returned invalid JSON events.' &&
@@ -74,7 +78,11 @@ export function finalizeFromAgentOutput(args: {
           ? parsed.error
           : stderr,
         code,
-        args
+        {
+          ...args,
+          includeStdoutDetail:
+            args.outputFormat === 'kimi-stream-json' ? false : args.includeStdoutDetail
+        }
       ),
       failureOutput: captureFailureOutput(label, code, stdout, stderr)
     }

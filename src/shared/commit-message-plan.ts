@@ -34,7 +34,7 @@ export type CommitMessagePlan = {
   label: string
   /** Leading command assignments, applied on the execution host. */
   env?: Record<string, string>
-  outputFormat?: 'opencode-json' | 'antigravity-stream-json'
+  outputFormat?: 'opencode-json' | 'antigravity-stream-json' | 'kimi-stream-json'
 }
 
 export type CommitMessagePlanResult =
@@ -57,6 +57,17 @@ function planAdditionalAgentArgs(
 }
 
 const DEFAULT_SINGLETON_OPTIONS: readonly (readonly string[])[] = [['--model']]
+const KIMI_VALUE_OPTIONS = [
+  '--prompt',
+  '-p',
+  '--model',
+  '-m',
+  '--output-format',
+  '--skills-dir',
+  '--agent',
+  '--agent-file',
+  '--add-dir'
+]
 const ANTIGRAVITY_FORMAT_OPTIONS = [
   '--input-format',
   '-input-format',
@@ -64,13 +75,33 @@ const ANTIGRAVITY_FORMAT_OPTIONS = [
   '-output-format'
 ]
 
+function findRecipeOption(
+  tokens: readonly string[],
+  aliases: readonly string[],
+  valueOptions: readonly string[],
+  startIndex = 0,
+  stopAtTerminator = true
+) {
+  return findOptionOccurrence(
+    tokens,
+    aliases,
+    stopAtTerminator,
+    valueOptions,
+    startIndex,
+    valueOptions.length ? 'required' : true
+  )
+}
+
 function applyRecipeOptionOverride(args: {
   generatedArgs: string[]
   recipeArgs: string[]
   aliases: readonly string[]
+  valueOptions: readonly string[]
 }): { generatedArgs: string[]; recipeArgs: string[] } {
-  const recipeOption = findOptionOccurrence(args.recipeArgs, args.aliases, true)
-  const generatedOption = findOptionOccurrence(args.generatedArgs, args.aliases, false)
+  const recipeOption = findRecipeOption(args.recipeArgs, args.aliases, args.valueOptions)
+  const generatedOption = findRecipeOption(
+    args.generatedArgs, args.aliases, args.valueOptions, 0, false
+  )
   if (!recipeOption || !generatedOption) {
     return { generatedArgs: args.generatedArgs, recipeArgs: args.recipeArgs }
   }
@@ -92,10 +123,14 @@ function applyRecipeOptionOverride(args: {
   }
 }
 
-function removeAllOptionOccurrences(tokens: string[], aliases: readonly string[]): string[] {
+function removeAllOptionOccurrences(
+  tokens: string[],
+  aliases: readonly string[],
+  valueOptions: readonly string[] = []
+): string[] {
   let result = tokens
   while (true) {
-    const found = findOptionOccurrence(result, aliases, true)
+    const found = findRecipeOption(result, aliases, valueOptions)
     if (!found) {
       return result
     }
@@ -104,22 +139,24 @@ function removeAllOptionOccurrences(tokens: string[], aliases: readonly string[]
 }
 
 /** Keep the first user singleton occurrence so repeated flags cannot create rejected argv. */
-function keepFirstOptionOccurrence(tokens: string[], aliases: readonly string[]): string[] {
+function keepFirstOptionOccurrence(
+  tokens: string[],
+  aliases: readonly string[],
+  valueOptions: readonly string[]
+): string[] {
   let result = tokens
   while (true) {
-    const first = findOptionOccurrence(result, aliases, true)
+    const first = findRecipeOption(result, aliases, valueOptions)
     if (!first) {
       return result
     }
-    const tail = result.slice(first.index + first.consumed)
-    const duplicate = findOptionOccurrence(tail, aliases, true)
+    const duplicate = findRecipeOption(result, aliases, valueOptions, first.index + first.consumed)
     if (!duplicate) {
       return result
     }
-    const offset = first.index + first.consumed
     result = [
-      ...result.slice(0, offset + duplicate.index),
-      ...result.slice(offset + duplicate.index + duplicate.consumed)
+      ...result.slice(0, duplicate.index),
+      ...result.slice(duplicate.index + duplicate.consumed)
     ]
   }
 }
@@ -130,21 +167,23 @@ function applySingletonOptionOverrides(args: {
   prefixArgs: string[]
   recipeArgs: string[]
   singletonOptions: readonly (readonly string[])[]
+  valueOptions: readonly string[]
 }): { generatedArgs: string[]; prefixArgs: string[]; recipeArgs: string[] } {
   let generatedArgs = args.generatedArgs
   let prefixArgs = args.prefixArgs
   let recipeArgs = args.recipeArgs
 
   for (const aliases of args.singletonOptions) {
-    recipeArgs = keepFirstOptionOccurrence(recipeArgs, aliases)
-    prefixArgs = keepFirstOptionOccurrence(prefixArgs, aliases)
-    const recipeOption = findOptionOccurrence(recipeArgs, aliases, true)
-    const prefixOption = findOptionOccurrence(prefixArgs, aliases, true)
-    const prefixHasTerminator = prefixArgs.includes('--')
+    recipeArgs = keepFirstOptionOccurrence(recipeArgs, aliases, args.valueOptions)
+    prefixArgs = keepFirstOptionOccurrence(prefixArgs, aliases, args.valueOptions)
+    const recipeOption = findRecipeOption(recipeArgs, aliases, args.valueOptions)
+    const prefixOption = findRecipeOption(prefixArgs, aliases, args.valueOptions)
+    const prefixHasTerminator =
+      findOptionOccurrence(prefixArgs, ['--'], false, args.valueOptions, 0, false) !== null
     if (recipeOption && !prefixHasTerminator) {
-      prefixArgs = removeAllOptionOccurrences(prefixArgs, aliases)
+      prefixArgs = removeAllOptionOccurrences(prefixArgs, aliases, args.valueOptions)
     } else if (prefixOption && !prefixHasTerminator) {
-      const generatedOption = findOptionOccurrence(generatedArgs, aliases, false)
+      const generatedOption = findRecipeOption(generatedArgs, aliases, args.valueOptions, 0, false)
       if (generatedOption) {
         generatedArgs = [
           ...generatedArgs.slice(0, generatedOption.index),
@@ -153,7 +192,9 @@ function applySingletonOptionOverrides(args: {
       }
       continue
     }
-    const withRecipe = applyRecipeOptionOverride({ generatedArgs, recipeArgs, aliases })
+    const withRecipe = applyRecipeOptionOverride({
+      generatedArgs, recipeArgs, aliases, valueOptions: args.valueOptions
+    })
     generatedArgs = withRecipe.generatedArgs
     recipeArgs = withRecipe.recipeArgs
   }
@@ -277,14 +318,18 @@ export function planCommitMessageGeneration(
     generatedArgs: baseArgs,
     prefixArgs,
     recipeArgs,
-    singletonOptions: spec.singletonOptions ?? DEFAULT_SINGLETON_OPTIONS
+    singletonOptions: spec.singletonOptions ?? DEFAULT_SINGLETON_OPTIONS,
+    valueOptions: input.agentId === 'kimi' ? KIMI_VALUE_OPTIONS : []
   })
-  const args = insertAdditionalAgentArgs({
-    baseArgs: merged.generatedArgs,
-    agentArgs: merged.recipeArgs,
-    promptDelivery: spec.promptDelivery,
-    prompt: argvPrompt
-  })
+  const args =
+    input.agentId === 'kimi'
+      ? [...merged.generatedArgs, ...merged.recipeArgs]
+      : insertAdditionalAgentArgs({
+          baseArgs: merged.generatedArgs,
+          agentArgs: merged.recipeArgs,
+          promptDelivery: spec.promptDelivery,
+          prompt: argvPrompt
+        })
   const generationArgs = mergeOpenCodeGenerationArgs(
     input.agentId,
     command.binary,
@@ -294,6 +339,10 @@ export function planCommitMessageGeneration(
   const formatOption =
     input.agentId === 'opencode' || input.agentId === 'opencode2'
       ? findOptionOccurrence(generationArgs, ['--format'], true)
+      : null
+  const kimiFormatOption =
+    input.agentId === 'kimi'
+      ? findRecipeOption(generationArgs, ['--output-format'], KIMI_VALUE_OPTIONS)
       : null
   return {
     ok: true,
@@ -308,6 +357,9 @@ export function planCommitMessageGeneration(
             : null,
       label: spec.label,
       ...(formatOption?.value === 'json' ? { outputFormat: 'opencode-json' as const } : {}),
+      ...(kimiFormatOption?.value === 'stream-json'
+        ? { outputFormat: 'kimi-stream-json' as const }
+        : {}),
       ...(input.agentId === 'antigravity'
         ? { outputFormat: 'antigravity-stream-json' as const }
         : {}),

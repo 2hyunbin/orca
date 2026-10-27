@@ -11,6 +11,7 @@ import { planModelDiscovery } from './commit-message-model-discovery-policy'
 import { planCommitMessageGeneration } from '../../shared/commit-message-plan'
 import type { CommitMessagePlan } from '../../shared/commit-message-plan'
 import { generateJiraIssueSummaryFromContext } from './jira-issue-summary-text-generation'
+import { sourceShapedKimiOutput } from '../../shared/__fixtures__/kimi-generation-source-shaped'
 
 function remoteTarget(execute: (plan: CommitMessagePlan) => Promise<string>) {
   return {
@@ -27,6 +28,18 @@ function remoteTarget(execute: (plan: CommitMessagePlan) => Promise<string>) {
 }
 
 describe('generateJiraIssueSummaryFromContext', () => {
+  it('decodes the selected Kimi answer before sanitizing a Jira summary', async () => {
+    const result = await generateJiraIssueSummaryFromContext(
+      { description: 'Login crashes when retried offline.' },
+      { agentId: 'kimi', model: 'default' },
+      remoteTarget(async (plan) => {
+        expect(plan.outputFormat).toBe('kimi-stream-json')
+        return sourceShapedKimiOutput('"Fix offline login retry crash"\nExtra commentary')
+      })
+    )
+    expect(result).toEqual({ success: true, summary: 'Fix offline login retry crash', agentLabel: 'Kimi' })
+  })
+
   it('sanitizes agent output into a single-line summary', async () => {
     const result = await generateJiraIssueSummaryFromContext(
       { description: 'Login crashes when retried offline.' },

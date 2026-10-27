@@ -139,58 +139,6 @@ describe('cleanGeneratedCommitMessage', () => {
     expect(cleanGeneratedCommitMessage('1. Add numbered entry')).toBe('Add numbered entry')
   })
 
-  it('reads the answer from Kimi stream-json, where the last assistant message is the commit', () => {
-    // Why: Kimi Code's text mode bullets hook output, thinking and the answer alike, so the
-    // recipe asks for stream-json and the last assistant message is the message (#33556).
-    const raw = [
-      '{"role":"assistant","content":"Ran UserPromptSubmit hook"}',
-      '{"role":"assistant","content":"Let me look at the diff.","tool_calls":[{"type":"function","id":"tc_1","function":{"name":"Shell","arguments":"{}"}}]}',
-      '{"role":"tool","tool_call_id":"tc_1","content":"file1.ts"}',
-      '{"role":"assistant","content":"docs: add README.md"}'
-    ].join('\n')
-    expect(cleanGeneratedCommitMessage(raw)).toBe('docs: add README.md')
-  })
-
-  it('ignores an assistant message that asked for a tool when the stream ends there', () => {
-    // Why: a message that requests a tool is narration, not the commit. When the run
-    // stops before a later assistant message, that narration must not become the subject.
-    const raw = [
-      '{"role":"assistant","content":"Let me look at the diff.","tool_calls":[{"type":"function","id":"tc_1","function":{"name":"Shell","arguments":"{}"}}]}',
-      '{"role":"tool","tool_call_id":"tc_1","content":"file1.ts"}'
-    ].join('\n')
-    expect(cleanGeneratedCommitMessage(raw)).toBe('')
-  })
-
-  it('keeps a multi-line Kimi stream-json answer intact', () => {
-    const raw = [
-      '{"role":"assistant","content":"hook output"}',
-      '{"role":"assistant","content":"feat: add parser\\n\\n- handles nesting\\n- keeps order"}'
-    ].join('\n')
-    expect(cleanGeneratedCommitMessage(raw)).toBe(
-      'feat: add parser\n\n- handles nesting\n- keeps order'
-    )
-  })
-
-  it('reports no answer when the stream carries only tool records', () => {
-    // A recognized stream with no assistant message is a failed run, not text to keep.
-    expect(cleanGeneratedCommitMessage('{"role":"tool","content":"no answer"}')).toBe('')
-    expect(
-      cleanGeneratedCommitMessage(
-        '{"role":"tool","tool_call_id":"tc_1","content":"a"}\n{"role":"tool","tool_call_id":"tc_2","content":"b"}'
-      )
-    ).toBe('')
-  })
-
-  it('keeps a plain answer that merely contains a stream record line', () => {
-    // Why: a matching line alone does not make the body stream output; another agent can
-    // legitimately print JSON inside a commit message (#33556 review).
-    const raw = 'fix: document the payload\n{"role":"assistant","content":"example"}'
-    expect(cleanGeneratedCommitMessage(raw)).toBe(raw)
-    expect(cleanGeneratedCommitMessage('docs: show a sample\n{"role":"tool","content":"x"}')).toBe(
-      'docs: show a sample\n{"role":"tool","content":"x"}'
-    )
-  })
-
   it('returns empty string when input is whitespace', () => {
     expect(cleanGeneratedCommitMessage('   \n\t')).toBe('')
   })
