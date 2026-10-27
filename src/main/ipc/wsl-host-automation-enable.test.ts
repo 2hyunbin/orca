@@ -83,7 +83,11 @@ describe('disableWslHostAutomations', () => {
     hostRows.set('off', { enabled: false, updatedAt: 10 })
     expect(
       await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', ['on', 'off', 'deleted-on-host'])
-    ).toEqual(['on'])
+    ).toEqual({
+      turnedOff: ['on'],
+      // Deleted on the host since the move reads as off: the user's latest choice.
+      hostEnabled: { on: true, off: false, 'deleted-on-host': false }
+    })
     expect(updates).toEqual(['on'])
     expect(hostRows.get('on')?.enabled).toBe(false)
     await restoreWslHostAutomations('/user-data', 'wsl:Ubuntu', ['on'])
@@ -102,7 +106,10 @@ describe('disableWslHostAutomations', () => {
   })
 
   it('asks the host nothing when no automation needs turning off', async () => {
-    expect(await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', [])).toEqual([])
+    expect(await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', [])).toEqual({
+      turnedOff: [],
+      hostEnabled: {}
+    })
     expect(updates).toEqual([])
   })
 })

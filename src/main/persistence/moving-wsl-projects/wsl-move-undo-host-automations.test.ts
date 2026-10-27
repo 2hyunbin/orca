@@ -11,7 +11,8 @@ import {
   recordWslMoveHostAutomationsLeftOff,
   retryWslMoveHostAutomationsLeftOff,
   stopWslMoveHostAutomations,
-  wslMoveAutomationsToTurnOffOnHost
+  wslMoveLocalAutomationStateUpdates,
+  wslMoveMovedAutomationIds
 } from './wsl-move-undo-host-automations'
 
 const moveOf = (...ids: string[]) => ({
@@ -20,31 +21,49 @@ const moveOf = (...ids: string[]) => ({
 const noLeftOff = () => {}
 
 describe("undo's host automation step", () => {
-  it("picks only this move's automations, and only those on here", () => {
+  it("reads every one of this move's automations, and only this move's", () => {
+    expect(wslMoveMovedAutomationIds(moveOf('a', 'b'))).toEqual(['a', 'b'])
+    expect(wslMoveMovedAutomationIds({ manifest: { payload: {} } })).toEqual([])
+  })
+
+  // d3a: undo kept the pre-move state and dropped what the user chose on the host since.
+  it("gives the copies here the host's state, the user's latest choice", () => {
     const local = [
-      { id: 'moved-on', enabled: true },
-      { id: 'moved-off', enabled: false },
-      // Another move's automation (partial undo leaves it to its own move).
-      { id: 'other-move-on', enabled: true }
+      { id: 'off-on-host', enabled: true },
+      { id: 'on-on-host', enabled: false },
+      { id: 'same', enabled: true },
+      { id: 'not-moved', enabled: true }
     ]
-    expect(wslMoveAutomationsToTurnOffOnHost(moveOf('moved-on', 'moved-off'), local)).toEqual([
-      'moved-on'
+    expect(
+      wslMoveLocalAutomationStateUpdates(local, {
+        'off-on-host': false,
+        'on-on-host': true,
+        same: true
+      })
+    ).toEqual([
+      { id: 'off-on-host', enabled: false },
+      { id: 'on-on-host', enabled: true }
     ])
-    expect(wslMoveAutomationsToTurnOffOnHost({ manifest: { payload: {} } }, local)).toEqual([])
   })
 
   it('reports a refusal as failed and anything else as unreachable', async () => {
     const restore = vi.fn(async () => {})
-    const host = (disable: () => Promise<string[]>) => ({ disable, restore, leftOff: noLeftOff })
-    const refusing = async (): Promise<string[]> => {
+    type TurnedOff = { turnedOff: string[]; hostEnabled: Record<string, boolean> }
+    const host = (disable: () => Promise<TurnedOff>) => ({
+      disable,
+      restore,
+      leftOff: noLeftOff,
+      applyHere: () => {}
+    })
+    const refusing = async (): Promise<TurnedOff> => {
       throw new Error('wsl_move_automation_disable_failed:busy')
     }
-    const unreachable = async (): Promise<string[]> => {
+    const unreachable = async (): Promise<TurnedOff> => {
       throw new Error('Ubuntu was stopped')
     }
     expect((await stopWslMoveHostAutomations(['a'], host(refusing))).outcome).toBe('failed')
     expect((await stopWslMoveHostAutomations(['a'], host(unreachable))).outcome).toBe('unreachable')
-    const disable = vi.fn(async () => [])
+    const disable = vi.fn(async () => ({ turnedOff: [], hostEnabled: {} }))
     expect((await stopWslMoveHostAutomations([], host(disable))).outcome).toBe('stopped')
     expect(disable).not.toHaveBeenCalled()
   })
@@ -54,9 +73,10 @@ describe("undo's host automation step", () => {
     const leftOff = vi.fn()
     const stopped = await stopWslMoveHostAutomations(['a', 'b'], {
       // `b` was already off on the host: not this attempt's to turn back on.
-      disable: async () => ['a'],
+      disable: async () => ({ turnedOff: ['a'], hostEnabled: { a: true, b: false } }),
       restore,
-      leftOff
+      leftOff,
+      applyHere: () => {}
     })
     if (stopped.outcome !== 'stopped') {
       throw new Error('expected stopped')

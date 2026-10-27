@@ -19,7 +19,8 @@ import { callRuntimeEnvironment } from './runtime-environments/runtime-environme
 import {
   recordWslMoveHostAutomationsLeftOff,
   stopWslMoveHostAutomations,
-  wslMoveAutomationsToTurnOffOnHost,
+  wslMoveLocalAutomationStateUpdates,
+  wslMoveMovedAutomationIds,
   type WslMoveHostAutomationStop
 } from '../persistence/moving-wsl-projects/wsl-move-undo-host-automations'
 import { scheduleWslMoveRewriteRetry } from '../persistence/moving-wsl-projects/wsl-move-rewrite-retry'
@@ -28,7 +29,7 @@ import { disableWslHostAutomations, restoreWslHostAutomations } from './wsl-host
 
 export type WslMoveUndoPorts = {
   stopHostCopies: (move: WslMoveCutover) => Promise<WslMoveHostCopyStop>
-  /** First, before the terminals stop: the host's copies of the move's automations that are on here turn off. */
+  /** First, before the terminals stop: the host's copies of the move's automations turn off. */
   stopHostAutomations?: (move: WslMoveCutover) => Promise<WslMoveHostAutomationStop>
   /** After the release, with window writes held: focus on the host copy returns here. */
   refocusHere?: (move: WslMoveCutover) => void
@@ -43,7 +44,10 @@ const SLEEP_TIMEOUT_MS = 60_000
 const LIST_TIMEOUT_MS = 10_000
 
 export function createWslMoveUndoPorts(
-  store: Pick<Store, 'getWorkspaceSession' | 'patchWorkspaceSession' | 'listAutomations'>,
+  store: Pick<
+    Store,
+    'getWorkspaceSession' | 'patchWorkspaceSession' | 'listAutomations' | 'updateAutomation'
+  >,
   userDataPath: string
 ): WslMoveUndoPorts {
   return {
@@ -99,24 +103,33 @@ export function createWslMoveUndoPorts(
         if (
           !listEnvironments(userDataPath).some((env) => env.id === move.destinationEnvironmentId)
         ) {
-          return { outcome: 'stopped', restore: async () => {} }
+          return { outcome: 'stopped', restore: async () => {}, applyHere: () => {} }
         }
         // E11: a Remove that could not prove the server stopped; the host is not to be touched.
         if (wslHostRemovalPending(userDataPath, move.manifest.source.distro)) {
           return { outcome: 'removal-pending' }
         }
         const environmentId = move.destinationEnvironmentId
-        return await stopWslMoveHostAutomations(
-          wslMoveAutomationsToTurnOffOnHost(move, store.listAutomations()),
-          {
-            disable: (ids) => disableWslHostAutomations(userDataPath, environmentId, ids),
-            restore: (ids) => restoreWslHostAutomations(userDataPath, environmentId, ids),
-            leftOff: (ids) => {
-              recordWslMoveHostAutomationsLeftOff(userDataPath, move.migrationId, ids)
-              scheduleWslMoveRewriteRetry(userDataPath)
+        return await stopWslMoveHostAutomations(wslMoveMovedAutomationIds(move), {
+          disable: (ids) => disableWslHostAutomations(userDataPath, environmentId, ids),
+          restore: (ids) => restoreWslHostAutomations(userDataPath, environmentId, ids),
+          leftOff: (ids) => {
+            recordWslMoveHostAutomationsLeftOff(userDataPath, move.migrationId, ids)
+            scheduleWslMoveRewriteRetry(userDataPath)
+          },
+          applyHere: (hostEnabled) => {
+            for (const { id, enabled } of wslMoveLocalAutomationStateUpdates(
+              store.listAutomations(),
+              hostEnabled
+            )) {
+              try {
+                store.updateAutomation(id, { enabled })
+              } catch (error) {
+                console.warn('[wsl-move] Could not give an automation here its host state:', error)
+              }
             }
           }
-        )
+        })
       } catch (error) {
         console.warn('[wsl-move] Could not read what undo turns off on the host:', error)
         return { outcome: 'failed' }

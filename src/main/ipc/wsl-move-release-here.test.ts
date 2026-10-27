@@ -158,9 +158,10 @@ describe('releasing moved projects here', () => {
     expect(refocusHere.mock.calls.map(([released]) => released.migrationId)).toEqual(['m2'])
   })
 
-  const automationsOff = (onRestore = vi.fn(async () => {})) => ({
+  const automationsOff = (onRestore = vi.fn(async () => {}), applyHere = vi.fn()) => ({
     outcome: 'stopped' as const,
-    restore: onRestore
+    restore: onRestore,
+    applyHere
   })
 
   it("turns each move's host automations off, then stops its terminals, then releases it", async () => {
@@ -254,5 +255,26 @@ describe('releasing moved projects here', () => {
     expect(window.fences).toBe(1)
     expect(window.fencesReleased).toBe(1)
     expect(window.reloads).toBe(0)
+  })
+
+  it('applies the host automation states here with the release, and never on a refusal', async () => {
+    const applyHere = vi.fn(() => {
+      // With the release: the move is already gone from the journal.
+      expect(journal.released).toContain('m2')
+    })
+    await releaseWslMovedProjectHere('/user-data', { repoId: 'r2' }, [], () => ({
+      stopHostAutomations: vi.fn(async () => automationsOff(undefined, applyHere)),
+      stopHostCopies: vi.fn(async () => 'stopped' as const)
+    }))
+    expect(applyHere).toHaveBeenCalledOnce()
+
+    journal.chain = [move('m1', 'r1'), move('m2', 'r2')]
+    journal.released = []
+    const refusedApply = vi.fn()
+    await releaseWslMovedProjectHere('/user-data', { repoId: 'r2' }, [], () => ({
+      stopHostAutomations: vi.fn(async () => automationsOff(undefined, refusedApply)),
+      stopHostCopies: vi.fn(async () => 'still-running' as const)
+    }))
+    expect(refusedApply).not.toHaveBeenCalled()
   })
 })

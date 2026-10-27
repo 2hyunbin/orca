@@ -11,6 +11,7 @@ vi.mock('./runtime-environments/runtime-environment-transport-routing', () => ({
 }))
 const host = vi.hoisted(() => ({
   disabled: new Array<string[]>(),
+  enabledOnHost: new Map<string, boolean>(),
   listed: true,
   unreadable: false,
   removalPending: false
@@ -29,7 +30,10 @@ vi.mock('./wsl-move-host-connect', () => ({
 vi.mock('./wsl-host-automation-disable', () => ({
   disableWslHostAutomations: async (_userData: string, _environmentId: string, ids: string[]) => {
     host.disabled.push([...ids])
-    return [...ids]
+    const hostEnabled = Object.fromEntries(
+      ids.map((id) => [id, host.enabledOnHost.get(id) ?? false])
+    )
+    return { turnedOff: ids.filter((id) => hostEnabled[id]), hostEnabled }
   },
   restoreWslHostAutomations: async () => {}
 }))
@@ -57,6 +61,7 @@ describe("undo's return of focus", () => {
     const store = {
       getWorkspaceSession: () => session,
       listAutomations: () => [],
+      updateAutomation: vi.fn(),
       patchWorkspaceSession: vi.fn((patch: Partial<WorkspaceSessionState>, hostId?: string) => {
         expect(hostId).toBe(LOCAL_EXECUTION_HOST_ID)
         session = { ...session, ...patch }
@@ -82,32 +87,58 @@ describe("undo's host automation port", () => {
     {},
     { repoIds: ['repo-a'] },
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the port reads only the moved automations' ids.
-    { automations: [{ id: 'moved-on' }, { id: 'moved-off' }] } as never
+    { automations: [{ id: 'off-on-host' }, { id: 'on-on-host' }, { id: 'same' }] } as never
   )
-  const store = {
-    getWorkspaceSession: () => getDefaultWorkspaceSession(),
-    patchWorkspaceSession: vi.fn(),
-    listAutomations: () =>
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the port reads only `id` and `enabled`.
-      [
-        { id: 'moved-on', enabled: true },
-        { id: 'moved-off', enabled: false },
-        { id: 'not-moved', enabled: true }
-      ] as never
+  const localRows = () => [
+    // d3a case 1: turned off on the host after the move, still on here.
+    { id: 'off-on-host', enabled: true },
+    // d3a case 2: off here before the move, turned on on the host after.
+    { id: 'on-on-host', enabled: false },
+    { id: 'same', enabled: true },
+    { id: 'not-moved', enabled: true }
+  ]
+  const storeWith = () => {
+    const updateAutomation = vi.fn()
+    return {
+      store: {
+        getWorkspaceSession: () => getDefaultWorkspaceSession(),
+        patchWorkspaceSession: vi.fn(),
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the port reads only `id` and `enabled`.
+        listAutomations: () => localRows() as never,
+        updateAutomation
+      },
+      updateAutomation
+    }
   }
 
-  it("turns off the host's copies of this move's automations that are on here", async () => {
+  it("turns off every host copy of the move's automations, then carries the host's states here", async () => {
     host.disabled = []
     host.listed = true
-    expect(
-      (await createWslMoveUndoPorts(store, '/user-data').stopHostAutomations?.(move))?.outcome
-    ).toBe('stopped')
-    expect(host.disabled).toEqual([['moved-on']])
+    host.enabledOnHost = new Map([
+      ['off-on-host', false],
+      ['on-on-host', true],
+      ['same', true]
+    ])
+    const { store, updateAutomation } = storeWith()
+    const stopped = await createWslMoveUndoPorts(store, '/user-data').stopHostAutomations?.(move)
+    // Every moved automation is read on the host, whatever its state here.
+    expect(host.disabled).toEqual([['off-on-host', 'on-on-host', 'same']])
+    if (stopped?.outcome !== 'stopped') {
+      throw new Error('expected stopped')
+    }
+    // Nothing changes here until the release applies it.
+    expect(updateAutomation).not.toHaveBeenCalled()
+    stopped.applyHere()
+    expect(updateAutomation.mock.calls).toEqual([
+      ['off-on-host', { enabled: false }],
+      ['on-on-host', { enabled: true }]
+    ])
   })
 
   it('asks a removed host nothing', async () => {
     host.disabled = []
     host.listed = false
+    const { store } = storeWith()
     expect(
       (await createWslMoveUndoPorts(store, '/user-data').stopHostAutomations?.(move))?.outcome
     ).toBe('stopped')
@@ -120,7 +151,8 @@ describe("undo's host automation port, refusing", () => {
   const store = {
     getWorkspaceSession: () => getDefaultWorkspaceSession(),
     patchWorkspaceSession: vi.fn(),
-    listAutomations: () => []
+    listAutomations: () => [],
+    updateAutomation: vi.fn()
   }
 
   it('fails, without throwing past the spawn fence, when the environment store is unreadable', async () => {

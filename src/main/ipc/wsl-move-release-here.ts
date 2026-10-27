@@ -113,7 +113,8 @@ async function releaseWslMovesHere(
       // Automations first, as they undo cleanly: a refusal must leave the host's terminals running (X1).
       const automations = (await ports.stopHostAutomations?.(move)) ?? {
         outcome: 'stopped',
-        restore: async () => {}
+        restore: async () => {},
+        applyHere: () => {}
       }
       if (automations.outcome !== 'stopped') {
         failure = {
@@ -136,6 +137,12 @@ async function releaseWslMovesHere(
           reason: stop === 'unreachable' ? 'host-unreachable' : 'host-still-running'
         }
         break
+      }
+      // Part of the release, so a refused undo changes nothing here.
+      try {
+        automations.applyHere()
+      } catch (error) {
+        console.warn('[wsl-move] Could not give the automations here their host state:', error)
       }
       released.push(move)
       repoIds.push(...release.repoIds)
