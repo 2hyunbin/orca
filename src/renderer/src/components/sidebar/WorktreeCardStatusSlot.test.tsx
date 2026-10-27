@@ -3,14 +3,14 @@ import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorktreeCardStatusSlot } from './WorktreeCardStatusSlot'
 import { getWorktreeCardPrDisplay, type WorktreeCardPrDisplay } from './worktree-card-pr-display'
-import { derivePipelineStatus, mapMRInfo } from '../../../../main/gitlab/mappers'
-import { mapGitLabReview } from '../../../../main/source-control/forge-review-mappers'
+import { gitlabMrCheckCases } from '../../../../shared/gitlab-mr-checks.test-fixture'
 import { buildParentPrChecksProjection } from '../right-sidebar/parent-pr-checks-rows'
 import { FolderWorkspacePrChecksRow } from '../right-sidebar/FolderWorkspacePrChecksRow'
 import { presentGitLabMRMergeState } from '../right-sidebar/gitlab-mr-merge-state'
 import { getActiveChecksStatus } from '../right-sidebar/active-checks-status'
 import { ReviewChecksBadge, ReviewChecksIndicator } from './WorktreeCardMetadataStatusBadges'
 import { WorktreeReferenceStack } from './WorktreeReferenceStack'
+import type { WorkspaceReferenceDetailsMap } from './workspace-reference-details'
 import { getFolderWorkspaceCardPrDisplay } from './folder-workspace-card-pr-display'
 import { formatHostedReviewLabel } from '../status-bar/hosted-review-label'
 import { reviewRefreshIntervalMs } from '../../../../shared/review-refresh-policy'
@@ -65,46 +65,10 @@ describe('WorktreeCardStatusSlot', () => {
     status: 'pending'
   }
 
-  it.each([
-    [
-      'failed',
-      'ci_must_pass',
-      'failure',
-      'MR checks: Failed',
-      'text-rose-500/85',
-      'Checks failing',
-      'Checks must pass'
-    ],
-    [
-      'manual',
-      'mergeable',
-      'neutral',
-      'MR: Open',
-      'text-emerald-500/80',
-      'No check signal',
-      'Able to merge'
-    ],
-    [
-      'manual',
-      'ci_must_pass',
-      'pending',
-      'MR checks: Pending',
-      'text-amber-500/85',
-      'Checks pending',
-      'Checks must pass'
-    ]
-  ] as const)(
-    'carries raw %s / %s MR detail through review presentations without claiming passing',
-    (pipeline, detailedMergeStatus, status, cardLabel, tone, rowSummary, mergeLabel) => {
-      const raw = {
-        iid: 7,
-        title: 'Release',
-        state: 'opened',
-        has_conflicts: false,
-        head_pipeline: { status: pipeline },
-        detailed_merge_status: detailedMergeStatus
-      }
-      const mapped = mapGitLabReview(mapMRInfo(raw, derivePipelineStatus(raw.head_pipeline)))
+  it.each(gitlabMrCheckCases)(
+    'presents the normalized $name without claiming passing',
+    ({ review: mapped, cardLabel, tone, rowSummary, mergeLabel, directMergeAvailable }) => {
+      const { status } = mapped
       const worktree = { ...referenceWorkspace, linkedPR: null, linkedGitLabMR: 7 }
       const hostedReviewCache = {
         'local::repo::feature': { data: mapped, fetchedAt: 1, linkedReviewHintKey: 'gitlab:7' }
@@ -147,7 +111,7 @@ describe('WorktreeCardStatusSlot', () => {
       expect(projection.summary.passing).toBe(0)
       expect(presentGitLabMRMergeState(mapped)).toMatchObject({
         label: mergeLabel,
-        directMergeAvailable: detailedMergeStatus === 'mergeable'
+        directMergeAvailable
       })
       expect(
         getActiveChecksStatus({
@@ -157,7 +121,9 @@ describe('WorktreeCardStatusSlot', () => {
         })
       ).toBe(status)
       const item = { provider: 'gitlab', type: 'mr', number: 7 } as const
-      const details = { [getWorkspaceAttachmentKey(item)]: { review: mapped } }
+      const details = {
+        [getWorkspaceAttachmentKey(item)]: { title: mapped.title, url: mapped.url, review: mapped }
+      } satisfies WorkspaceReferenceDetailsMap
       expect(summarizeWorkspaceReviewChecks([item], details)).toMatchObject({
         state: status,
         passed: 0

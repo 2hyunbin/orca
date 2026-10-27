@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as GlUtils from './gl-utils'
-import type { mapMRInfo } from './mappers'
+import { derivePipelineStatus, mapMRInfo } from './mappers'
+import { gitlabMrCheckCases } from '../../shared/gitlab-mr-checks.test-fixture'
 import { mapGitLabReview } from '../source-control/forge-review-mappers'
 import {
   __resetHostedReviewBranchCacheForTests,
@@ -89,6 +90,12 @@ describe('gitlab client — MR operations', () => {
     // Strict lookup preserves unavailable transport as distinct from a confirmed missing review.
     await expect(getMergeRequestForBranchOrThrow('/repo', 'feature/x')).rejects.toThrow(
       /connection refused/
+    )
+  })
+
+  it.each(gitlabMrCheckCases)('maps $name to the shared consumer review', ({ raw, review }) => {
+    expect(mapGitLabReview(mapMRInfo(raw, derivePipelineStatus(raw.head_pipeline)))).toStrictEqual(
+      review
     )
   })
 
