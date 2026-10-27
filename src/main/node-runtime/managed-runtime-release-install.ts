@@ -4,14 +4,21 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { chmod, mkdir, rename, rm, statfs } from 'node:fs/promises'
 import { basename, join } from 'node:path'
+import {
+  excerptAgentFailureOutput,
+  sanitizeAgentFailureDetail
+} from '../../shared/commit-message-agent-output'
 import type { ManagedRuntimeOperation } from '../../shared/managed-runtime-install'
 import { getMainHttpClient, type MainHttpClient } from '../network/http-client'
+import { redactString } from '../observability/redactor'
 import {
   resolveInstalledRuntimeRelease,
+  ManagedRuntimeStartError,
   RUNTIME_RELEASE_RECEIPT,
   writeRuntimeReleaseReceipt,
   type ManagedRuntime,
-  type ManagedRuntimePin
+  type ManagedRuntimePin,
+  type ManagedRuntimeStartFailure
 } from './managed-runtime-release'
 import { verifyFileSha256 } from './pinned-runtime-materializer'
 import { extractPinnedZipMembers } from './pinned-zip-members'
@@ -138,11 +145,29 @@ async function validate(input: RuntimeReleaseInstall, folder: string): Promise<v
   await runtime.validate?.(folder, pin, signal).catch((error: unknown) => {
     signal.throwIfAborted()
     console.warn(`[managed-runtime] ${input.agent} did not start from ${folder}:`, error)
+    const observed = error instanceof ManagedRuntimeStartError ? error.failure : null
     throw new Error(
-      `${runtime.label} couldn't start on this host, so it wasn't installed. This host may not support it.`,
+      `${runtime.label} couldn't start on this host, so it wasn't installed. This host may not support it.${observed ? ` ${startFailureText(observed)}` : ''}`,
       { cause: error }
     )
   })
+}
+
+function startFailureText(failure: ManagedRuntimeStartFailure): string {
+  switch (failure.kind) {
+    case 'timeout':
+      return `It timed out after ${Math.round(failure.timeoutMs / 1000)} seconds.`
+    case 'version':
+      return `It answered as version ${sanitizeAgentFailureDetail(redactString(failure.answered))}, expected ${failure.expected}.`
+    case 'exit': {
+      const { code, signal } = failure.exit
+      const status = code !== null ? `code ${code}` : `signal ${signal ?? 'unknown'}`
+      const detail = sanitizeAgentFailureDetail(
+        redactString(excerptAgentFailureOutput('', failure.stderr) ?? '')
+      )
+      return detail ? `It exited with ${status}: ${detail}` : `It exited with ${status}.`
+    }
+  }
 }
 
 async function verifyMembers(

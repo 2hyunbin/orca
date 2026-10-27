@@ -41,6 +41,24 @@ it.skipIf(process.platform === 'win32')(
     const pinned = probeAntigravityAcpServer(await fakeServer(), '1.3.0', signal)
     await expect(pinned).resolves.toBeUndefined()
     const other = probeAntigravityAcpServer(await fakeServer(), '1.4.0', signal)
-    await expect(other).rejects.toThrow('Antigravity could not start on this host.')
+    await expect(other).rejects.toMatchObject({
+      message: 'Antigravity could not start on this host.',
+      failure: { kind: 'version', answered: '1.3.0', expected: '1.4.0' }
+    })
+  }
+)
+
+it.skipIf(process.platform === 'win32')(
+  'a server that exits reports its code and stderr',
+  async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'orca-antigravity-probe-test-'))
+    folders.push(folder)
+    const server = join(folder, 'agy_acp_server.par')
+    await writeFile(server, '#!/bin/sh\necho "libfoo.so: not found" >&2\nexit 3\n')
+    await chmod(server, 0o755)
+    const failed = probeAntigravityAcpServer(server, '1.3.0', new AbortController().signal)
+    await expect(failed).rejects.toMatchObject({
+      failure: { kind: 'exit', exit: { code: 3 }, stderr: 'libfoo.so: not found' }
+    })
   }
 )
