@@ -91,6 +91,42 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
     }
   }
 
+  /** Whether this daemon lists the session at all, alive or not; null when it can't answer. */
+  async listsSession(id: string): Promise<boolean | null> {
+    try {
+      await this.ensureConnected()
+      const { sessions } = await this.client.request<ListSessionsResult>(
+        'listSessions',
+        undefined,
+        LIVENESS_PROBE_TIMEOUT_MS
+      )
+      return sessions.some((session) => session.sessionId === id)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Closes a session no daemon runs any more but whose history was left unended (a kept host-loss
+   * tab closed after a relaunch). Refuses while any daemon lists the id or cannot answer.
+   */
+  async closeUnlistedSession(
+    id: string,
+    daemons: readonly DaemonPtySessionControl[]
+  ): Promise<boolean> {
+    return this.withHistorySpawnLock(id, async () => {
+      if (this.historyReader?.probeRestorableHistory(id).status !== 'restorable') {
+        return false
+      }
+      const listings = await Promise.all(daemons.map((daemon) => daemon.listsSession(id)))
+      if (listings.some((listed) => listed !== false)) {
+        return false
+      }
+      await this.completeShutdownWithHistoryLock(id, { keepHistory: false })
+      return true
+    })
+  }
+
   async shutdown(
     id: string,
     opts: { immediate?: boolean; keepHistory?: boolean; deadlineMs?: number }

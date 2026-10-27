@@ -167,7 +167,8 @@ export class DaemonPtyRouter implements IPtyProvider {
       this.adapterFor(id),
       this.current,
       this.sessionAdapters,
-      this.ownerResolver
+      this.ownerResolver,
+      this.allAdapters()
     )
 
   async sendSignal(id: string, signal: string): Promise<void> {

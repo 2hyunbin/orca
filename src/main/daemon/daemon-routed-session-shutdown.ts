@@ -2,6 +2,7 @@ import type { DaemonPtyAdapter } from './daemon-pty-adapter'
 import type { IPtyProvider } from '../providers/pty-provider-contract'
 import type { DaemonSessionOwnerResolver } from './daemon-session-owner-resolution'
 import { shouldHandoffDaemonHistory } from './daemon-history-handoff'
+import { SessionNotFoundError } from './types'
 
 export async function shutdownRoutedDaemonSession(
   id: string,
@@ -9,10 +10,22 @@ export async function shutdownRoutedDaemonSession(
   adapter: DaemonPtyAdapter,
   current: DaemonPtyAdapter,
   routes: ReadonlyMap<string, DaemonPtyAdapter>,
-  resolver: DaemonSessionOwnerResolver<DaemonPtyAdapter>
+  resolver: DaemonSessionOwnerResolver<DaemonPtyAdapter>,
+  daemons: readonly DaemonPtyAdapter[]
 ): Promise<void> {
   const migrateHistory = shouldHandoffDaemonHistory(options.keepHistory, adapter, current)
-  await adapter.shutdown(id, options)
+  try {
+    await adapter.shutdown(id, options)
+  } catch (error) {
+    // A host-loss tab kept across a relaunch is in no daemon; closing it must still end its history.
+    if (
+      options.keepHistory ||
+      !(error instanceof SessionNotFoundError) ||
+      !(await adapter.closeUnlistedSession(id, daemons))
+    ) {
+      throw error
+    }
+  }
   if (!options.keepHistory || migrateHistory) {
     if (migrateHistory) {
       adapter.ackColdRestore(id)
