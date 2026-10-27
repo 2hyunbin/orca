@@ -119,6 +119,7 @@ describe('scoped pending browser cookie imports', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
@@ -165,7 +166,8 @@ describe('scoped pending browser cookie imports', () => {
     ).close()
     createScopedStage()
     expect(existsSync(`${stagedPath}-wal`)).toBe(false)
-    const dormant = new Date(Date.now() - 30 * 24 * 60 * 60 * 1_000)
+    vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 31))
+    const dormant = new Date(Date.UTC(2026, 0, 1))
     utimesSync(stagedPath, dormant, dormant)
 
     const changedLive = new DatabaseSync(livePath)
@@ -357,7 +359,8 @@ describe('scoped pending browser cookie imports', () => {
     ]).close()
     createScopedStage()
     markPending()
-    const old = new Date(Date.now() - 15 * 24 * 60 * 60 * 1_000)
+    vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 31))
+    const old = new Date(Date.UTC(2026, 0, 16))
     utimesSync(stagedPath, old, old)
     const locked = new DatabaseSync(livePath)
     locked.exec('BEGIN IMMEDIATE')
@@ -439,7 +442,8 @@ describe('scoped pending browser cookie imports', () => {
       createChromiumCookieTestDatabase(stagedPath, [
         { domain: '.legacy.example', name: 'legacy', value: 'pending' }
       ]).close()
-      const old = new Date(Date.now() - 15 * 24 * 60 * 60 * 1_000)
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 31))
+      const old = new Date(Date.UTC(2026, 0, 16))
       utimesSync(stagedPath, old, old)
       persistBrowserSessionMeta(() => metaPath, PARTITION, {
         pendingCookieImports: format === 'string' ? { [PARTITION]: stagedPath } : {},

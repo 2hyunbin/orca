@@ -170,7 +170,7 @@ describe('writeImportedCookies', () => {
       [
         sourceCookie({
           name: 'sid',
-          expirationDate: Date.now() / 1_000 - 1,
+          expirationDate: 1,
           partition: { status: 'unpartitioned' }
         })
       ],

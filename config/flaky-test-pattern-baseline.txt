@@ -1269,7 +1269,6 @@
 1 test-timeout-needs-reason:src/main/browser/cookies/browser-cookie-import-partition-rollback.electron.test.ts
 1 test-timeout-needs-reason:src/main/browser/cookies/browser-cookie-import-partition-success.electron.test.ts
 1 test-timeout-needs-reason:src/main/browser/cookies/browser-cookie-import-partition.electron.test.ts
-2 test-timeout-needs-reason:src/main/browser/cookies/browser-cookie-import-replace-partition-rollback.electron.test.ts
 1 test-timeout-needs-reason:src/main/browser/cookies/browser-cookie-import-validated-partition.electron.test.ts
 5 test-timeout-needs-reason:src/main/claude-usage/scanner-incremental-reader.test.ts
 4 test-timeout-needs-reason:src/main/claude/claude-agent-sdk-exit-proof.test.ts
