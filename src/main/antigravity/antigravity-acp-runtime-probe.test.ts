@@ -48,6 +48,14 @@ it.skipIf(process.platform === 'win32')(
   }
 )
 
+it('does not report a missing executable as a runtime exit', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'orca-antigravity-probe-test-'))
+  folders.push(folder)
+  await expect(
+    probeAntigravityAcpServer(join(folder, 'missing-server'), '1.3.0', new AbortController().signal)
+  ).rejects.toMatchObject({ failure: null })
+})
+
 it.skipIf(process.platform === 'win32')(
   'a server that exits reports its code and stderr',
   async () => {

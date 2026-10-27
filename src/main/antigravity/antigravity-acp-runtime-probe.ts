@@ -15,6 +15,7 @@ import {
 } from '../node-runtime/managed-runtime-release'
 import type { ProviderProcessExit } from '../provider-process/managed-provider-process'
 import { providerRequestTimeoutOf } from '../provider-process/provider-request-timeout'
+import { supervisedProviderSpawnFailure } from '../provider-process/provider-spawn-failure-report'
 import { ANTIGRAVITY_ACP_ENV, scrubAntigravityAcpEnvironment } from './antigravity-acp-environment'
 
 const PROBE_TIMEOUT_MS = 90_000
@@ -41,8 +42,7 @@ export async function probeAntigravityAcpServer(
   // Keep the server’s home and extracted runtime together for cleanup.
   const home = await mkdtemp(join(tmpdir(), 'orca-antigravity-probe-'))
   const probe: { connection?: AcpAgentConnection; exit?: ProviderProcessExit } = {}
-  let answer: unknown = null
-  let observed: ManagedRuntimeStartFailure | null = null
+  let failure: { cause: unknown; observed: ManagedRuntimeStartFailure | null } | null = null
   try {
     const initialized = await runAgentModelCatalogSession(
       () => {
@@ -68,27 +68,27 @@ export async function probeAntigravityAcpServer(
       { label: 'Antigravity', timeoutMs: PROBE_TIMEOUT_MS, signal }
     )
     if (!isPinnedServer(initialized, version)) {
-      answer = new Error(`It did not answer as Antigravity ${version}`)
       const answered = initialized.agentInfo?.version
-      observed =
-        typeof answered === 'string' && answered !== version
-          ? { kind: 'version', answered, expected: version }
-          : null
+      failure = {
+        cause: new Error(`It did not answer as Antigravity ${version}`),
+        observed:
+          typeof answered === 'string' && answered !== version
+            ? { kind: 'version', answered, expected: version }
+            : null
+      }
     }
   } catch (error) {
-    answer = error
-    observed = observedFailure(error, probe)
+    failure = { cause: error, observed: observedFailure(error, probe) }
   }
-  const failure =
-    probe.connection && !probe.connection.exited
-      ? new Error('Its exit was not proven after the check')
-      : answer
+  if (probe.connection && !probe.connection.exited) {
+    failure = { cause: new Error('Its exit was not proven after the check'), observed: null }
+  }
   await rm(home, { recursive: true, force: true })
   if (failure !== null) {
     throw new ManagedRuntimeStartError(
       'Antigravity could not start on this host.',
-      failure === answer ? observed : null,
-      { cause: failure }
+      failure.observed,
+      { cause: failure.cause }
     )
   }
 }
@@ -105,7 +105,11 @@ function observedFailure(
   if (error instanceof AgentModelCatalogProbeError && error.reason === 'timeout') {
     return { kind: 'timeout', timeoutMs: PROBE_TIMEOUT_MS }
   }
-  return probe.exit && probe.connection
-    ? { kind: 'exit', exit: probe.exit, stderr: probe.connection.stderrTail() }
-    : null
+  if (!probe.exit || !probe.connection) {
+    return null
+  }
+  const stderr = probe.connection.stderrTail()
+  return supervisedProviderSpawnFailure(probe.exit.code, stderr)
+    ? null
+    : { kind: 'exit', exit: probe.exit, stderr }
 }
