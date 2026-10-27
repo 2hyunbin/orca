@@ -605,7 +605,7 @@ describe('importCookiesFromBrowser Chromium', () => {
     }
   })
 
-  it('leaves pending compatibility records untouched after a successful live import', async () => {
+  it('retires pending replay once after native live completion', async () => {
     const sourceCookiesPath = join(tmpDir, 'Chrome', 'Default', 'Network', 'Cookies')
     const targetCookiesPath = join(tmpDir, 'userData', 'Partitions', 'test', 'Network', 'Cookies')
     createChromiumCookieTestDatabase(sourceCookiesPath, [
@@ -622,14 +622,14 @@ describe('importCookiesFromBrowser Chromium', () => {
 
       expect(result.ok).toBe(true)
       expect(setPendingCookieImportMock).not.toHaveBeenCalled()
-      expect(clearPendingCookieImportMock).not.toHaveBeenCalled()
+      expect(clearPendingCookieImportMock).toHaveBeenCalledExactlyOnceWith('persist:test')
       expect(result.ok && result.summary?.warning).toBeUndefined()
     } finally {
       platformSpy.mockRestore()
     }
   })
 
-  it('skips an oversized rejected row on a fresh target without producing or invalidating replay', async () => {
+  it('skips an oversized rejected row on a fresh target without producing replay', async () => {
     const sourceCookiesPath = join(tmpDir, 'Chrome', 'Default', 'Network', 'Cookies')
     createChromiumCookieTestDatabase(sourceCookiesPath, [
       { name: 'oversized', value: 'v'.repeat(4096) },
@@ -653,7 +653,7 @@ describe('importCookiesFromBrowser Chromium', () => {
     expect(cookieWriteMock).toHaveBeenCalledTimes(2)
     expect(cookiesFlushStoreMock).toHaveBeenCalledOnce()
     expect(setPendingCookieImportMock).not.toHaveBeenCalled()
-    expect(clearPendingCookieImportMock).not.toHaveBeenCalled()
+    expect(clearPendingCookieImportMock).toHaveBeenCalledExactlyOnceWith('persist:test')
     expect(existsSync(join(tmpDir, 'userData', 'cookie-import-staging'))).toBe(false)
     expect(copyFileSyncMock.mock.calls.every(([source]) => source === sourceCookiesPath)).toBe(true)
   })

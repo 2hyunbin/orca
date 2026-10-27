@@ -168,3 +168,30 @@ export function applyPendingBrowserCookieImports({
     })
   } catch {}
 }
+
+// Even a degraded import must prevent older staged cookies from overwriting it on restart.
+export function clearPendingBrowserCookieImport({
+  resolveMetadataPath,
+  defaultPartition,
+  partition
+}: PendingCookieImportTarget & { partition: string }): void {
+  const meta = loadBrowserSessionMeta(resolveMetadataPath, defaultPartition)
+  if (!(partition in meta.pendingCookieImports)) {
+    return
+  }
+  const pendingCookieImports = { ...meta.pendingCookieImports }
+  const pendingEntry = pendingCookieImports[partition]
+  const stagedPath = typeof pendingEntry === 'string' ? pendingEntry : pendingEntry.path
+  // File consumption and metadata removal each provide a fallback against stale replay.
+  if (existsSync(stagedPath)) {
+    try {
+      consumeStagedCookieImport(stagedPath)
+    } catch {}
+  }
+  delete pendingCookieImports[partition]
+  persistBrowserSessionMeta(resolveMetadataPath, defaultPartition, {
+    pendingCookieImports,
+    pendingCookieDbPath: legacyPendingPath(pendingCookieImports[defaultPartition])
+  })
+  unlinkStagedCookieDb(stagedPath)
+}

@@ -189,6 +189,7 @@ describe('Chromium import snapshot ownership', () => {
     expect(writeCookieIdentityMock).not.toHaveBeenCalled()
     expect(cookiesRemoveMock).not.toHaveBeenCalled()
     expect(setPendingCookieImportMock).not.toHaveBeenCalled()
+    expect(clearPendingCookieImportMock).not.toHaveBeenCalled()
     expect(cleanupStates.every((states) => states.every((open) => !open))).toBe(true)
   }
 
@@ -270,7 +271,7 @@ describe('Chromium import snapshot ownership', () => {
     expect(snapshotDirectories()).toEqual([])
     expect(cleanupStates).toEqual([[false]])
     expect(setPendingCookieImportMock).not.toHaveBeenCalled()
-    expect(clearPendingCookieImportMock).not.toHaveBeenCalled()
+    expect(clearPendingCookieImportMock).toHaveBeenCalledExactlyOnceWith(PARTITION)
     expect(existsSync(stagingRoot)).toBe(false)
   })
 
@@ -361,6 +362,7 @@ describe('Chromium import snapshot ownership', () => {
     })
     const targetSession = sessionFromPartitionMock()
     targetSession.cookies.flushStore.mockImplementationOnce(async () => {
+      expect(clearPendingCookieImportMock).toHaveBeenCalledExactlyOnceWith(PARTITION)
       reachedFlush()
       await flushing
     })

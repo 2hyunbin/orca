@@ -41,7 +41,7 @@ export async function importChromiumCookies(
         if (scanResult) {
           return scanResult
         }
-        return await finalizeChromiumCookieImport(context)
+        return await finalizeChromiumCookieImport(context, targetPartition)
       } catch (err) {
         diag(`  SQLite import failed: ${String(err)}`)
         return {

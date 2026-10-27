@@ -115,7 +115,7 @@ afterEach(() => {
 
 describe('importCookiesFromBrowser into a client-hosted route partition', () => {
   // Route partitions have no startup replay consumer; do not leave plaintext staged cookies.
-  it('counts rejected rows without staging or invalidating pending records', async () => {
+  it('counts rejected rows without producing staged replay', async () => {
     const sourceCookiesPath = join(tmpDir, 'Chrome', 'Default', 'Network', 'Cookies')
     const targetCookiesPath = join(
       tmpDir,
@@ -140,7 +140,7 @@ describe('importCookiesFromBrowser into a client-hosted route partition', () => 
 
       expect(result.ok).toBe(true)
       expect(setPendingCookieImportMock).not.toHaveBeenCalled()
-      expect(clearPendingCookieImportMock).not.toHaveBeenCalled()
+      expect(clearPendingCookieImportMock).toHaveBeenCalledExactlyOnceWith(routePartition)
       expect(existsSync(join(tmpDir, 'userData', 'cookie-import-staging'))).toBe(false)
       // Verify that plaintext copies were never written, rather than merely cleaned up.
       expect(

@@ -2,6 +2,7 @@ import type {
   BrowserCookieImportResult,
   BrowserCookieImportSummary
 } from '../../../../shared/browser-workspace-types'
+import { browserSessionRegistry } from '../../browser-session-registry'
 import { summarizePartitionSkips } from '../browser-cookie-partition-summary'
 import { openCookieClearStore } from '../browser-cookie-clear-store'
 import { writeImportedCookies, type SourceCookieToWrite } from '../browser-cookie-import-write'
@@ -10,7 +11,8 @@ import { diag } from '../browser-cookie-import-diagnostics'
 import type { ChromiumImportContext } from './import-context'
 
 export async function finalizeChromiumCookieImport(
-  context: ChromiumImportContext
+  context: ChromiumImportContext,
+  targetPartition: string
 ): Promise<BrowserCookieImportResult> {
   if (context.decryptedCookies.length === 0) {
     const zeroPathWarning = context.undecryptableWarning
@@ -54,6 +56,8 @@ export async function finalizeChromiumCookieImport(
   } finally {
     cookieClearStore.dispose()
   }
+
+  browserSessionRegistry.clearPendingCookieImport(targetPartition)
 
   diag(
     `  memory load: ${context.memoryLoaded} OK, ${context.memoryFailed} failed, ${context.partitionSkipped} partition-unreadable`
