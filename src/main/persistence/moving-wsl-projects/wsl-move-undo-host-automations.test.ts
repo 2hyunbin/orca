@@ -4,7 +4,11 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { wslMoveCutoverFixture } from '../__fixtures__/wsl-mover/wsl-move-cutover-fixture'
 import { seedWslMoveCutover } from '../__fixtures__/wsl-mover/wsl-move-journal-seeding'
-import { listWslMoveCutovers, removeCommittedWslMoveCutover } from './wsl-move-cutover-journal'
+import {
+  listWslMoveCutovers,
+  removeCommittedWslMoveCutover,
+  writeWslMoveCutover
+} from './wsl-move-cutover-journal'
 import { listUnfinishedWslMoves } from './wsl-move-host-automations-rewrite'
 import { resetWslMoveDesktopRewriteStoresForTests } from './wsl-move-desktop-rewrite-stores'
 import {
@@ -271,7 +275,74 @@ describe('undo of a move with automations', () => {
     await stopWslMoveHostAutomations(userDataPath, MOVE, ['a', 'b'], w.ports)
     // Crash here: the host copies are off, the record holds the choice.
     settleInterruptedWslMoveUndos(userDataPath)
-    expect(cutover()?.undoHostAutomationIntent).toBeUndefined()
+    // The left-off one keeps its choice for a later undo; the rest clears.
+    expect(cutover()?.undoHostAutomationIntent).toEqual({ a: true })
     expect(cutover()?.hostAutomationsLeftOff).toEqual(['a'])
+  })
+
+  // d3a: a restart cleared the record, so a later undo read the left-off one as the user's "off".
+  it('a later undo after a restart and failed retries still keeps a left-off one on here', async () => {
+    const w = world({ a: true }, { a: true })
+    w.fail.restore = true
+    const refused = await stopWslMoveHostAutomations(userDataPath, MOVE, ['a'], w.ports)
+    if (refused.outcome === 'stopped') {
+      await refused.restore()
+    }
+    settleInterruptedWslMoveUndos(userDataPath)
+    const unreachable = {
+      restore: async () => {
+        throw new Error('unreachable')
+      },
+      disable: async () => {}
+    }
+    expect(await retryWslMoveHostAutomationsLeftOff(userDataPath, unreachable)).toBe(true)
+    expect(await retryWslMoveHostAutomationsLeftOff(userDataPath, unreachable)).toBe(true)
+    expect(w.host.get('a')).toBe(false)
+    w.fail.restore = false
+    const later = await stopWslMoveHostAutomations(userDataPath, MOVE, ['a'], w.ports)
+    if (later.outcome !== 'stopped') {
+      throw new Error('expected stopped')
+    }
+    later.applyHere()
+    expect(w.local.get('a')).toBe(true)
+  })
+
+  it('treats a left-off one as on even when only the left-off list survives', async () => {
+    const seeded = cutover()
+    if (!seeded) {
+      throw new Error('expected the move')
+    }
+    // Only the left-off list survives (an older build dropped the recorded choice).
+    writeWslMoveCutover(userDataPath, { ...seeded, hostAutomationsLeftOff: ['a'] })
+    const w = world({ a: false }, { a: true })
+    const stop = await stopWslMoveHostAutomations(userDataPath, MOVE, ['a'], w.ports)
+    if (stop.outcome !== 'stopped') {
+      throw new Error('expected stopped')
+    }
+    stop.applyHere()
+    expect(w.local.get('a')).toBe(true)
+  })
+
+  it('a revert that fails for one copy here still puts the others back', async () => {
+    const w = world({ a: false, b: false }, { a: true, b: true })
+    const failRevertOf: { id: string | null } = { id: null }
+    const ports = {
+      ...w.ports,
+      setHere: (id: string, enabled: boolean) => {
+        if (id === failRevertOf.id) {
+          throw new Error('store busy')
+        }
+        w.local.set(id, enabled)
+      }
+    }
+    const stop = await stopWslMoveHostAutomations(userDataPath, MOVE, ['a', 'b'], ports)
+    if (stop.outcome !== 'stopped') {
+      throw new Error('expected stopped')
+    }
+    const revert = stop.applyHere()
+    expect(Object.fromEntries(w.local)).toEqual({ a: false, b: false })
+    failRevertOf.id = 'a'
+    revert()
+    expect(Object.fromEntries(w.local)).toEqual({ a: false, b: true })
   })
 })

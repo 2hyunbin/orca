@@ -183,8 +183,12 @@ async function releaseOneMoveHere(
   const revertHere = automations.applyHere()
   const release = releaseWslMove(userDataPath, move)
   if (!release.released) {
-    revertHere()
-    await automations.restore()
+    try {
+      revertHere()
+    } finally {
+      // The host's copies go back on even if putting the copies here back failed.
+      await automations.restore()
+    }
   }
   return release
 }

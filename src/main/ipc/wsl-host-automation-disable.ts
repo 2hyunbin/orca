@@ -91,20 +91,23 @@ export async function restoreWslHostAutomations(
   }
 }
 
-/** The ids it could not turn on; a host that stops answering leaves the rest off too. */
+/**
+ * The ids it could not turn on. A refusal skips just that one; a host that stops answering ends
+ * the pass, leaving the rest off, rather than hold undo's turn waiting on each.
+ */
 async function turnOnEach(
   request: WslHostAutomationApi,
   ids: readonly string[]
 ): Promise<string[]> {
   const leftOff: string[] = []
-  for (const id of ids) {
+  for (const [index, id] of ids.entries()) {
     try {
       const updated = await request('automation.update', { id, updates: { enabled: true } })
       if (!updated.ok) {
         leftOff.push(id)
       }
     } catch {
-      leftOff.push(id)
+      return [...leftOff, ...ids.slice(index)]
     }
   }
   return leftOff

@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const hostRows = vi.hoisted(() => new Map<string, { enabled: boolean; updatedAt: number }>())
 const updates = vi.hoisted((): string[] => [])
 const failNextUpdate = vi.hoisted(() => ({ value: false }))
+const throwOnUpdate = vi.hoisted(() => ({ value: false }))
+const updateAttempts = vi.hoisted(() => ({ count: 0 }))
 const failOnUpdateOf = vi.hoisted((): { id: string | null; thenAlso: string | null } => ({
   id: null,
   thenAlso: null
@@ -34,6 +36,10 @@ vi.mock('../ssh/orcad-migration-catalog-client', () => ({
         ? { ok: true, result: { automation: row } }
         : { ok: false, error: { message: 'Automation not found.' } }
     }
+    updateAttempts.count++
+    if (throwOnUpdate.value) {
+      throw new Error('connect ECONNREFUSED')
+    }
     if (failNextUpdate.value || failOnUpdateOf.id === params.id) {
       failNextUpdate.value = false
       // Then the host drops: the next update (turning one back on) fails too.
@@ -59,6 +65,8 @@ import {
 beforeEach(() => {
   hostRows.clear()
   updates.length = 0
+  throwOnUpdate.value = false
+  updateAttempts.count = 0
 })
 
 describe('enableWslHostAutomations', () => {
@@ -130,5 +138,19 @@ describe('undo on the host', () => {
   it('asks the host nothing when no automation needs turning off', async () => {
     expect(await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', [])).toEqual([])
     expect(updates).toEqual([])
+  })
+
+  it('stops at a host that stops answering, leaving the rest off rather than wait on each', async () => {
+    for (const id of ['a', 'b', 'c']) {
+      hostRows.set(id, { enabled: false, updatedAt: 1 })
+    }
+    throwOnUpdate.value = true
+    const error = await restoreWslHostAutomations('/user-data', 'wsl:Ubuntu', [
+      'a',
+      'b',
+      'c'
+    ]).catch((thrown: unknown) => thrown)
+    expect(error).toMatchObject({ leftOff: ['a', 'b', 'c'] })
+    expect(updateAttempts.count).toBe(1)
   })
 })

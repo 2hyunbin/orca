@@ -122,7 +122,11 @@ export async function stopWslMoveHostAutomations(
       }
       return () => {
         for (const { id, enabled } of applied) {
-          ports.setHere(id, !enabled)
+          try {
+            ports.setHere(id, !enabled)
+          } catch (error) {
+            console.warn('[wsl-move] Could not put an automation here back:', error)
+          }
         }
       }
     }
@@ -140,7 +144,11 @@ function recordUndoIntent(
   hostStates: Readonly<Record<string, boolean>>
 ): { intent: Record<string, boolean>; recorded: string[] } {
   const cutover = readMove(userDataPath, migrationId)
-  const earlier = cutover?.undoHostAutomationIntent ?? {}
+  // Left off by an earlier undo: on is the choice, whatever the host shows now.
+  const earlier = {
+    ...Object.fromEntries((cutover?.hostAutomationsLeftOff ?? []).map((id) => [id, true])),
+    ...cutover?.undoHostAutomationIntent
+  }
   const recorded = Object.keys(hostStates).filter((id) => !Object.hasOwn(earlier, id))
   const intent = { ...hostStates, ...earlier }
   if (cutover && recorded.length > 0) {
@@ -184,7 +192,7 @@ function withUndoAutomationFields(
 
 /**
  * At startup no undo is running, so a recorded choice is an undo a crash interrupted: what it
- * read as on goes back on through the retry, and the record clears.
+ * read as on goes back on through the retry and keeps its choice for a later undo; the rest clears.
  */
 export function settleInterruptedWslMoveUndos(userDataPath: string): void {
   for (const cutover of listWslMoveCutovers(userDataPath)) {
@@ -194,7 +202,8 @@ export function settleInterruptedWslMoveUndos(userDataPath: string): void {
     }
     const on = Object.entries(intent).flatMap(([id, enabled]) => (enabled ? [id] : []))
     const left = [...new Set([...(cutover.hostAutomationsLeftOff ?? []), ...on])].sort()
-    writeWslMoveCutover(userDataPath, withUndoAutomationFields(cutover, {}, left))
+    const kept = Object.fromEntries(on.map((id) => [id, true]))
+    writeWslMoveCutover(userDataPath, withUndoAutomationFields(cutover, kept, left))
   }
 }
 

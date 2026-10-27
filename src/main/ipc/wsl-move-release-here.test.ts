@@ -289,4 +289,24 @@ describe('releasing moved projects here', () => {
     }))
     expect(refusedApply).not.toHaveBeenCalled()
   })
+
+  it('still turns the host automations back on when putting the copies here back throws', async () => {
+    releaseFails.value = true
+    const restore = vi.fn(async () => {})
+    await expect(
+      releaseWslMovedProjectHere('/user-data', { repoId: 'r2' }, [], () => ({
+        stopHostAutomations: vi.fn(async () =>
+          automationsOff(
+            restore,
+            vi.fn(() => () => {
+              throw new Error('store busy')
+            })
+          )
+        ),
+        stopHostCopies: vi.fn(async () => 'stopped' as const)
+      }))
+    ).rejects.toThrow('store busy')
+    expect(restore).toHaveBeenCalledOnce()
+    expect(window.fencesReleased).toBe(1)
+  })
 })
