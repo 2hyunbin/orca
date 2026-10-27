@@ -1,8 +1,8 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { RpcClient } from '../transport/rpc-client'
-import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
+import type { RpcClient } from '../../../transport/rpc-client'
+import { markRpcDeliveryUnknown } from '../../../transport/rpc-delivery-ambiguity'
 import { useMobileNativeChatCancelAsk } from './use-mobile-native-chat-cancel-ask'
 
 let renderer: ReactTestRenderer | undefined

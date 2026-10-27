@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { ChevronUp } from 'lucide-react-native'
-import { colors, spacing, typography } from '../theme/mobile-theme'
+import { colors, spacing, typography } from '../../../theme/mobile-theme'
 
 export function MobileNativeChatPromptStrip({
   title,

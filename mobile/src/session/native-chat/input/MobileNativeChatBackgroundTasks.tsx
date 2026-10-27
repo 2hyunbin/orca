@@ -16,14 +16,14 @@ import {
   SquareTerminal,
   Workflow
 } from 'lucide-react-native'
-import type { AgentChildRowModel } from '../../../src/shared/agent-child-row-model'
-import type { AgentSessionBackgroundTask } from '../../../src/shared/agent-session-wire'
-import { sayBackgroundTaskEnglish as say } from '../../../src/shared/background-task-copy'
+import type { AgentChildRowModel } from '../../../../../src/shared/agent-child-row-model'
+import type { AgentSessionBackgroundTask } from '../../../../../src/shared/agent-session-background-task-wire'
+import { sayBackgroundTaskEnglish as say } from '../../../../../src/shared/background-task-copy'
 import {
   backgroundTasksHeaderContent,
   backgroundTasksHeaderText,
   NARROW_BACKGROUND_TASKS_STRIP_REM
-} from '../../../src/shared/background-task-header-content'
+} from '../../../../../src/shared/background-task-header-content'
 import {
   backgroundTaskGroupLabel,
   backgroundTaskRowMeta,
@@ -31,16 +31,16 @@ import {
   backgroundTasksStripTicks,
   buildBackgroundTaskGroups,
   buildBackgroundTaskGroupsFromViews
-} from '../../../src/shared/background-task-roster'
-import { AGENT_WORKING_COLOR, AgentStateDot } from '../components/AgentStateDot'
-import { useNow } from '../hooks/use-now'
-import { colors, radii, spacing, typography } from '../theme/mobile-theme'
-import type { MobileStructuredBackgroundTasks } from './use-mobile-structured-background-tasks'
+} from '../../../../../src/shared/background-task-roster'
+import { AGENT_WORKING_COLOR, AgentStateDot } from '../../../components/AgentStateDot'
+import { useNow } from '../../../hooks/use-now'
+import { colors, radii, spacing, typography } from '../../../theme/mobile-theme'
+import type { MobileStructuredBackgroundTasks } from '../../use-mobile-structured-background-tasks'
 import {
   useMobileBackgroundTaskStops,
   type MobileBackgroundTaskStopping as Stopping
-} from './use-mobile-background-task-stops'
-import { mobileAgentChildRowName, mobileAgentChildRowText } from './mobile-agent-child-row-text'
+} from '../../use-mobile-background-task-stops'
+import { mobileAgentChildRowName, mobileAgentChildRowText } from '../../mobile-agent-child-row-text'
 
 type TaskKind = AgentSessionBackgroundTask['kind']
 

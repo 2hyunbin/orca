@@ -1,28 +1,28 @@
-vi.mock('../terminal/worker-terminal-takeover-report', () => ({
+vi.mock('../../../terminal/worker-terminal-takeover-report', () => ({
   reportWorkerTerminalUserInput: vi.fn()
 }))
 
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AskPrompt } from '../../../src/shared/native-chat-ask'
-import type { AgentType } from '../../../src/shared/native-chat-types'
-import type { RpcClient } from '../transport/rpc-client'
-import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
+import type { AskPrompt } from '../../../../../src/shared/native-chat-ask-types'
+import type { AgentType } from '../../../../../src/shared/agent-status-types'
+import type { RpcClient } from '../../../transport/rpc-client'
+import { markRpcDeliveryUnknown } from '../../../transport/rpc-delivery-ambiguity'
 import { MOBILE_NATIVE_CHAT_QUESTION_STEP_MS } from './mobile-native-chat-answer-stepping'
 import {
   isMobileNativeChatInputStale,
   markMobileNativeChatInputStale,
   resetMobileNativeChatStaleInputForTests
-} from './native-chat/mobile-native-chat-stale-input'
+} from '../mobile-native-chat-stale-input'
 import {
   acquireMobileNativeChatTerminalWrite,
   releaseMobileNativeChatTerminalWrite,
   resetMobileNativeChatTerminalWritesForTests
-} from './native-chat/mobile-native-chat-terminal-write-lock'
+} from '../mobile-native-chat-terminal-write-lock'
 import { useMobileNativeChatAnswerSend } from './use-mobile-native-chat-answer-send'
-import { useNativeChatAcceptedAction } from './use-native-chat-action-outcomes'
-import { stubRpcClient } from '../transport/rpc-client-test-stub'
+import { useNativeChatAcceptedAction } from '../../use-native-chat-action-outcomes'
+import { stubRpcClient } from '../../../transport/rpc-client-test-stub'
 
 type AnswerSend = ReturnType<typeof useMobileNativeChatAnswerSend>
 

@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MobileNativeChatQuestion } from './MobileNativeChatQuestion'
-import { findByHostType } from '../test-support/react-test-renderer-host-nodes'
+import { findByHostType } from '../../../test-support/react-test-renderer-host-nodes'
 
 vi.mock('react-native', () => ({
   Pressable: 'Pressable',

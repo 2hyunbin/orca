@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { ArrowUp, Check, CircleHelp } from 'lucide-react-native'
-import { MobileNativeChatCardHeaderAction } from './MobileNativeChatCardHeaderAction'
-import { colors, radii, spacing, typography } from '../theme/mobile-theme'
-import { mobileNativeChatInputStyles } from './native-chat/composer/mobile-native-chat-input-styles'
+import { MobileNativeChatCardHeaderAction } from '../../MobileNativeChatCardHeaderAction'
+import { colors, radii, spacing, typography } from '../../../theme/mobile-theme'
+import { mobileNativeChatInputStyles } from '../composer/mobile-native-chat-input-styles'
 import {
   formatQuestionAnswerByIndexes,
   formatQuestionAnswerWithOtherByIndexes,

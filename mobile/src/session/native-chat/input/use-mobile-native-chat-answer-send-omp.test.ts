@@ -1,18 +1,18 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AskPrompt } from '../../../src/shared/native-chat-ask'
-import type { RpcClient } from '../transport/rpc-client'
+import type { AskPrompt } from '../../../../../src/shared/native-chat-ask-types'
+import type { RpcClient } from '../../../transport/rpc-client'
 import { useMobileNativeChatAnswerSend } from './use-mobile-native-chat-answer-send'
-import { useNativeChatAcceptedAction } from './use-native-chat-action-outcomes'
+import { useNativeChatAcceptedAction } from '../../use-native-chat-action-outcomes'
 import {
   isMobileNativeChatInputStale,
   markMobileNativeChatInputStale,
   resetMobileNativeChatStaleInputForTests
-} from './native-chat/mobile-native-chat-stale-input'
-import { resetMobileNativeChatTerminalWritesForTests } from './native-chat/mobile-native-chat-terminal-write-lock'
+} from '../mobile-native-chat-stale-input'
+import { resetMobileNativeChatTerminalWritesForTests } from '../mobile-native-chat-terminal-write-lock'
 
-vi.mock('../terminal/worker-terminal-takeover-report', () => ({
+vi.mock('../../../terminal/worker-terminal-takeover-report', () => ({
   reportWorkerTerminalUserInput: vi.fn()
 }))
 

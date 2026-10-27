@@ -1,9 +1,9 @@
 import { createElement } from 'react'
 import TestRenderer, { type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AgentStatusEntry } from '../../../src/shared/agent-status-types'
-import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
-import { buildOmpPlanReviewAnswer } from '../../../src/shared/omp-plan-review-prompt'
+import type { AgentStatusEntry } from '../../../../../src/shared/agent-status-types'
+import type { NativeChatMessage } from '../../../../../src/shared/native-chat-types'
+import { buildOmpPlanReviewAnswer } from '../../../../../src/shared/omp-plan-review-prompt'
 import { useMobileNativeChatPrompts } from './use-mobile-native-chat-prompts'
 
 const renderers: ReactTestRenderer[] = []

@@ -1,6 +1,6 @@
 // Parse terminal choice text conservatively so ordinary prose cannot become an actionable question.
 
-import type { AgentJournalFreeTextInput } from '../../../src/shared/agent-session-journal-types'
+import type { AgentJournalFreeTextInput } from '../../../../../src/shared/agent-session-journal-types'
 
 export type MobileChatQuestion = {
   question: string

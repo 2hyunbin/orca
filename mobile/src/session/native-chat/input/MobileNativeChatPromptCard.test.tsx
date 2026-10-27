@@ -21,7 +21,7 @@ vi.mock('lucide-react-native', () => ({
   ShieldQuestion: 'ShieldQuestion',
   X: 'X'
 }))
-vi.mock('../components/MobileMarkdown', () => ({ MobileMarkdown: 'Markdown' }))
+vi.mock('../../../components/MobileMarkdown', () => ({ MobileMarkdown: 'Markdown' }))
 
 const textInput = (root: ReactTestInstance) =>
   root.find((node) => node.props.placeholder === 'Type your answer')

@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Check } from 'lucide-react-native'
-import type { AskAnswerSelection, AskPrompt } from '../../../src/shared/native-chat-ask'
-import { colors, radii, spacing, typography } from '../theme/mobile-theme'
-import { TEXT_INPUT_FONT_SIZE } from '../platform/text-input-font-size'
-import { MobileNativeChatCardHeaderAction } from './MobileNativeChatCardHeaderAction'
+import type { AskAnswerSelection } from '../../../../../src/shared/native-chat-ask-answer'
+import type { AskPrompt } from '../../../../../src/shared/native-chat-ask-types'
+import { colors, radii, spacing, typography } from '../../../theme/mobile-theme'
+import { TEXT_INPUT_FONT_SIZE } from '../../../platform/text-input-font-size'
+import { MobileNativeChatCardHeaderAction } from '../../MobileNativeChatCardHeaderAction'
 import { useMobileNativeChatAskAutoAdvance } from './use-mobile-native-chat-ask-auto-advance'
 
 type Props = {

@@ -1,6 +1,6 @@
-import { parseNativeChatApprovalEnvelope } from '../../../src/shared/native-chat-approval-envelope'
-import type { AgentJournalApprovalSubject } from '../../../src/shared/agent-session-journal-types'
-import { parseOmpPlanReviewPrompt } from '../../../src/shared/omp-plan-review-prompt'
+import { parseNativeChatApprovalEnvelope } from '../../../../../src/shared/native-chat-approval-envelope'
+import type { AgentJournalApprovalSubject } from '../../../../../src/shared/agent-session-journal-types'
+import { parseOmpPlanReviewPrompt } from '../../../../../src/shared/omp-plan-review-prompt'
 
 // Use conservative paused-state heuristics only for terminal prompts; working-agent prose must never receive an approval response.
 

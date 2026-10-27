@@ -1,13 +1,13 @@
 import { useCallback, type MutableRefObject } from 'react'
-import type { RpcClient } from '../transport/rpc-client'
+import type { RpcClient } from '../../../transport/rpc-client'
 import {
   sendMobileNativeChatMessageWithOutcome,
   type MobileNativeChatSendOutcome
-} from './native-chat/mobile-native-chat-send'
+} from '../mobile-native-chat-send'
 import {
   acquireMobileNativeChatTerminalWrite,
   releaseMobileNativeChatTerminalWrite
-} from './native-chat/mobile-native-chat-terminal-write-lock'
+} from '../mobile-native-chat-terminal-write-lock'
 
 export function sendMobileNativeChatPermissionResponse(args: {
   client: RpcClient

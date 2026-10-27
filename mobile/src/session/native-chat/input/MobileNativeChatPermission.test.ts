@@ -3,7 +3,10 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MobileNativeChatPermission } from './MobileNativeChatPermission'
 import type { MobileChatPermission } from './mobile-native-chat-permission'
-import { findAllByHostType, findByHostType } from '../test-support/react-test-renderer-host-nodes'
+import {
+  findAllByHostType,
+  findByHostType
+} from '../../../test-support/react-test-renderer-host-nodes'
 
 vi.mock('react-native', () => ({
   Pressable: 'Pressable',
@@ -19,7 +22,7 @@ vi.mock('lucide-react-native', () => ({
   ShieldQuestion: 'ShieldQuestion',
   X: 'X'
 }))
-vi.mock('../components/MobileMarkdown', () => ({ MobileMarkdown: 'MobileMarkdown' }))
+vi.mock('../../../components/MobileMarkdown', () => ({ MobileMarkdown: 'MobileMarkdown' }))
 
 describe('MobileNativeChatPermission', () => {
   let renderer: ReactTestRenderer | null = null

@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
-import type { AgentStatusEntry } from '../../../src/shared/agent-status-types'
-import { parseAskFromStatus, resolveNativeChatAsk } from '../../../src/shared/native-chat-ask'
-import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
-import { resolveNativeChatTranscriptAgent } from '../../../src/shared/native-chat-agent-support'
+import type { AgentStatusEntry } from '../../../../../src/shared/agent-status-types'
+import { parseAskFromStatus, resolveNativeChatAsk } from '../../../../../src/shared/native-chat-ask'
+import type { NativeChatMessage } from '../../../../../src/shared/native-chat-types'
+import { resolveNativeChatTranscriptAgent } from '../../../../../src/shared/native-chat-agent-support'
 import {
   detectAgentPermission,
   parseApprovalFromStatus,
@@ -12,7 +12,7 @@ import { parseAgentQuestion } from './mobile-native-chat-question'
 import {
   useMobileStructuredAsyncQuestion,
   type MobileStructuredAskSession
-} from './use-mobile-structured-async-question'
+} from '../../use-mobile-structured-async-question'
 
 export type MobileNativeChatPrompts = {
   permission: ReturnType<typeof detectAgentPermission>
