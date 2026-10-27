@@ -9,6 +9,7 @@ import { runWslMoveStartupRewrite } from './wsl-move-startup-rewrite'
 import { installWslMoveRetention } from './wsl-move-retention'
 import { registerWslMoveDesktopRewriteRegistry } from './wsl-move-desktop-rewrite-registry'
 import { sweepOrphanedWslMoveSleptSpools } from './wsl-move-slept-spool-sweep'
+import { settleInterruptedWslMoveUndos } from './wsl-move-undo-host-automations'
 import { enableWslHostAutomations } from '../../ipc/wsl-host-automation-enable'
 import {
   scheduleWslMoveRewriteRetry,
@@ -41,6 +42,7 @@ export function startWslMoveStartup(userDataPath: string, store: Store): Promise
           isWslDistroRegistered(distro, distroGuid)
         )
         sweepOrphanedWslMoveSleptSpools(userDataPath)
+        settleInterruptedWslMoveUndos(userDataPath)
       }
     }
   )

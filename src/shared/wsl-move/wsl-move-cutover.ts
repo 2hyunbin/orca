@@ -72,6 +72,13 @@ const WslMoveCutoverSchema = z.object({
     .max(10_000)
     .optional()
     .catch(undefined),
+  // Each moved automation's host state as an undo first read it, before turning any off: the
+  // user's choice, which the copy here takes on release. Kept so a crash or a refusal that left
+  // one off never reads that off as the choice. Lenient, like the list above.
+  undoHostAutomationIntent: z
+    .record(z.string().min(1).max(1_024), z.boolean())
+    .optional()
+    .catch(undefined),
   manifest: z.unknown()
 })
 

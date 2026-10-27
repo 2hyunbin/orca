@@ -28,12 +28,11 @@ vi.mock('./wsl-move-host-connect', () => ({
   wslHostRemovalPending: () => host.removalPending
 }))
 vi.mock('./wsl-host-automation-disable', () => ({
+  readWslHostAutomationStates: async (_userData: string, _environmentId: string, ids: string[]) =>
+    Object.fromEntries(ids.map((id) => [id, host.enabledOnHost.get(id) ?? false])),
   disableWslHostAutomations: async (_userData: string, _environmentId: string, ids: string[]) => {
     host.disabled.push([...ids])
-    const hostEnabled = Object.fromEntries(
-      ids.map((id) => [id, host.enabledOnHost.get(id) ?? false])
-    )
-    return { turnedOff: ids.filter((id) => hostEnabled[id]), hostEnabled }
+    return [...ids]
   },
   restoreWslHostAutomations: async () => {}
 }))
@@ -121,8 +120,8 @@ describe("undo's host automation port", () => {
     ])
     const { store, updateAutomation } = storeWith()
     const stopped = await createWslMoveUndoPorts(store, '/user-data').stopHostAutomations?.(move)
-    // Every moved automation is read on the host, whatever its state here.
-    expect(host.disabled).toEqual([['off-on-host', 'on-on-host', 'same']])
+    // Every moved automation is read on the host; those on there are turned off.
+    expect(host.disabled).toEqual([['on-on-host', 'same']])
     if (stopped?.outcome !== 'stopped') {
       throw new Error('expected stopped')
     }

@@ -23,6 +23,7 @@ import {
   reloadWslMoveWindowWithWritesHeld
 } from '../persistence/moving-wsl-projects/wsl-move-window-write-hold'
 import type { WslMoveUndoPorts } from './wsl-move-undo-wiring'
+import { runWslMoveHostAutomationsExclusive } from '../persistence/moving-wsl-projects/wsl-move-undo-host-automations'
 
 const COMMITTED_FROM = WSL_MOVE_CUTOVER_PHASES.indexOf('destination-committed')
 
@@ -109,44 +110,17 @@ async function releaseWslMovesHere(
         failure = moveRefusal
         break
       }
-      const ports = createUndoPorts()
-      // Automations first, as they undo cleanly: a refusal must leave the host's terminals running (X1).
-      const automations = (await ports.stopHostAutomations?.(move)) ?? {
-        outcome: 'stopped',
-        restore: async () => {},
-        applyHere: () => {}
-      }
-      if (automations.outcome !== 'stopped') {
-        failure = {
-          released: false,
-          reason: automations.outcome === 'unreachable' ? 'host-unreachable' : 'failed',
-          detail:
-            automations.outcome === 'removal-pending' ? 'host-removal-pending' : 'host-automations'
-        }
+      // A left-off retry must not turn a host copy back on between this move's steps.
+      const step = await runWslMoveHostAutomationsExclusive(() =>
+        releaseOneMoveHere(userDataPath, move, createUndoPorts())
+      )
+      if (!step.released) {
+        failure = step
         break
-      }
-      // The host's copies stop next, or an agent the move resumed there runs beside this one.
-      const stop = await ports.stopHostCopies(move).catch(() => 'unreachable' as const)
-      const release: WslMoveUseLocallyResult | null =
-        stop === 'stopped' ? releaseWslMove(userDataPath, move) : null
-      if (!release?.released) {
-        // Refused after the automations went off: this attempt turns them back on.
-        await automations.restore()
-        failure = release ?? {
-          released: false,
-          reason: stop === 'unreachable' ? 'host-unreachable' : 'host-still-running'
-        }
-        break
-      }
-      // Part of the release, so a refused undo changes nothing here.
-      try {
-        automations.applyHere()
-      } catch (error) {
-        console.warn('[wsl-move] Could not give the automations here their host state:', error)
       }
       released.push(move)
-      repoIds.push(...release.repoIds)
-      folderWorkspaceIds.push(...release.folderWorkspaceIds)
+      repoIds.push(...step.repoIds)
+      folderWorkspaceIds.push(...step.folderWorkspaceIds)
     }
     if (repoIds.length === 0 && folderWorkspaceIds.length === 0) {
       return failure ?? { released: false, reason: 'not-moved' }
@@ -174,4 +148,43 @@ async function releaseWslMovesHere(
       releaseSpawnFence()
     }
   }
+}
+
+/** One move: host automations off, host terminals stopped, then released; refused, all undone. */
+async function releaseOneMoveHere(
+  userDataPath: string,
+  move: WslMoveCutover,
+  ports: WslMoveUndoPorts
+): Promise<WslMoveUseLocallyResult> {
+  // Automations first, as they undo cleanly: a refusal must leave the host's terminals running (X1).
+  const automations = (await ports.stopHostAutomations?.(move)) ?? {
+    outcome: 'stopped',
+    restore: async () => {},
+    applyHere: () => () => {}
+  }
+  if (automations.outcome !== 'stopped') {
+    return {
+      released: false,
+      reason: automations.outcome === 'unreachable' ? 'host-unreachable' : 'failed',
+      detail:
+        automations.outcome === 'removal-pending' ? 'host-removal-pending' : 'host-automations'
+    }
+  }
+  // The host's copies stop next, or an agent the move resumed there runs beside this one.
+  const stop = await ports.stopHostCopies(move).catch(() => 'unreachable' as const)
+  if (stop !== 'stopped') {
+    await automations.restore()
+    return {
+      released: false,
+      reason: stop === 'unreachable' ? 'host-unreachable' : 'host-still-running'
+    }
+  }
+  // Written here just before the release (the record keeps the choice), and undone if it refuses.
+  const revertHere = automations.applyHere()
+  const release = releaseWslMove(userDataPath, move)
+  if (!release.released) {
+    revertHere()
+    await automations.restore()
+  }
+  return release
 }

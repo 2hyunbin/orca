@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const hostRows = vi.hoisted(() => new Map<string, { enabled: boolean; updatedAt: number }>())
 const updates = vi.hoisted((): string[] => [])
 const failNextUpdate = vi.hoisted(() => ({ value: false }))
-const failOnUpdateOf = vi.hoisted((): { id: string | null } => ({ id: null }))
+const failOnUpdateOf = vi.hoisted((): { id: string | null; thenAlso: string | null } => ({
+  id: null,
+  thenAlso: null
+}))
 
 vi.mock('../wsl/wsl-host-service-instance', () => ({
   getWslHostService: () => ({
@@ -33,7 +36,9 @@ vi.mock('../ssh/orcad-migration-catalog-client', () => ({
     }
     if (failNextUpdate.value || failOnUpdateOf.id === params.id) {
       failNextUpdate.value = false
-      failOnUpdateOf.id = null
+      // Then the host drops: the next update (turning one back on) fails too.
+      failOnUpdateOf.id = failOnUpdateOf.thenAlso
+      failOnUpdateOf.thenAlso = null
       return { ok: false, error: { message: 'busy' } }
     }
     updates.push(params.id)
@@ -45,7 +50,11 @@ vi.mock('../ssh/orcad-migration-catalog-client', () => ({
 }))
 
 import { enableWslHostAutomations } from './wsl-host-automation-enable'
-import { disableWslHostAutomations, restoreWslHostAutomations } from './wsl-host-automation-disable'
+import {
+  disableWslHostAutomations,
+  readWslHostAutomationStates,
+  restoreWslHostAutomations
+} from './wsl-host-automation-disable'
 
 beforeEach(() => {
   hostRows.clear()
@@ -77,18 +86,19 @@ describe('enableWslHostAutomations', () => {
   })
 })
 
-describe('disableWslHostAutomations', () => {
-  it("turns off the host's copies that are on, and skips ones it has off or no longer has", async () => {
+describe('undo on the host', () => {
+  it("reads each automation's state there; one deleted there reads as off", async () => {
     hostRows.set('on', { enabled: true, updatedAt: 10 })
     hostRows.set('off', { enabled: false, updatedAt: 10 })
     expect(
-      await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', ['on', 'off', 'deleted-on-host'])
-    ).toEqual({
-      turnedOff: ['on'],
-      // Deleted on the host since the move reads as off: the user's latest choice.
-      hostEnabled: { on: true, off: false, 'deleted-on-host': false }
-    })
-    expect(updates).toEqual(['on'])
+      await readWslHostAutomationStates('/user-data', 'wsl:Ubuntu', ['on', 'off', 'deleted'])
+    ).toEqual({ on: true, off: false, deleted: false })
+    expect(updates).toEqual([])
+  })
+
+  it('turns them off, and restore turns them back on', async () => {
+    hostRows.set('on', { enabled: true, updatedAt: 10 })
+    expect(await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', ['on'])).toEqual(['on'])
     expect(hostRows.get('on')?.enabled).toBe(false)
     await restoreWslHostAutomations('/user-data', 'wsl:Ubuntu', ['on'])
     expect(hostRows.get('on')?.enabled).toBe(true)
@@ -105,11 +115,20 @@ describe('disableWslHostAutomations', () => {
     expect(hostRows.get('b')?.enabled).toBe(true)
   })
 
+  it('carries what it could not turn back on on the error', async () => {
+    hostRows.set('a', { enabled: true, updatedAt: 1 })
+    hostRows.set('b', { enabled: true, updatedAt: 1 })
+    failOnUpdateOf.id = 'b'
+    failOnUpdateOf.thenAlso = 'a'
+    const error = await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', ['a', 'b']).catch(
+      (thrown: unknown) => thrown
+    )
+    expect(error).toMatchObject({ leftOff: ['a'] })
+    expect(hostRows.get('a')?.enabled).toBe(false)
+  })
+
   it('asks the host nothing when no automation needs turning off', async () => {
-    expect(await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', [])).toEqual({
-      turnedOff: [],
-      hostEnabled: {}
-    })
+    expect(await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', [])).toEqual([])
     expect(updates).toEqual([])
   })
 })
