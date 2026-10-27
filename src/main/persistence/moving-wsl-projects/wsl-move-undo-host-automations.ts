@@ -198,10 +198,15 @@ export function settleInterruptedWslMoveUndos(userDataPath: string): void {
   }
 }
 
+export type WslMoveHostAutomationRetryHost = {
+  restore: (environmentId: string, automationIds: readonly string[]) => Promise<void>
+  disable: (environmentId: string, automationIds: readonly string[]) => Promise<unknown>
+}
+
 /** Turns back on what refused undos left off; true while any is still left off. */
 export async function retryWslMoveHostAutomationsLeftOff(
   userDataPath: string,
-  restore: (environmentId: string, automationIds: readonly string[]) => Promise<void>
+  host: WslMoveHostAutomationRetryHost
 ): Promise<boolean> {
   let remaining = false
   for (const { migrationId } of listWslMoveCutovers(userDataPath)) {
@@ -214,15 +219,19 @@ export async function retryWslMoveHostAutomationsLeftOff(
       }
       let stillOff: string[] = []
       try {
-        await restore(cutover.destinationEnvironmentId, ids)
+        await host.restore(cutover.destinationEnvironmentId, ids)
       } catch (error) {
         stillOff = leftOffOf(error).length > 0 ? leftOffOf(error) : ids
       }
+      const turnedOn = new Set(ids.filter((id) => !stillOff.includes(id)))
       const current = readMove(userDataPath, migrationId)
       if (!current) {
+        // Released meanwhile: the project is local again, so what this turned on goes back off.
+        await host.disable(cutover.destinationEnvironmentId, [...turnedOn]).catch((error) => {
+          console.warn("[wsl-move] Could not turn a released move's host automations off:", error)
+        })
         return 0
       }
-      const turnedOn = new Set(ids.filter((id) => !stillOff.includes(id)))
       const leftOff = (current.hostAutomationsLeftOff ?? []).filter((id) => !turnedOn.has(id))
       const intent = Object.fromEntries(
         Object.entries(current.undoHostAutomationIntent ?? {}).filter(([id]) => !turnedOn.has(id))

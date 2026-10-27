@@ -176,13 +176,19 @@ describe('undo of a move with automations', () => {
     if (stop.outcome === 'stopped') {
       await stop.restore()
     }
+    const disable = async () => {}
     expect(
-      await retryWslMoveHostAutomationsLeftOff(userDataPath, async () => {
-        throw new Error('unreachable')
+      await retryWslMoveHostAutomationsLeftOff(userDataPath, {
+        restore: async () => {
+          throw new Error('unreachable')
+        },
+        disable
       })
     ).toBe(true)
     const turnedOn = vi.fn(async () => {})
-    expect(await retryWslMoveHostAutomationsLeftOff(userDataPath, turnedOn)).toBe(false)
+    expect(
+      await retryWslMoveHostAutomationsLeftOff(userDataPath, { restore: turnedOn, disable })
+    ).toBe(false)
     expect(turnedOn).toHaveBeenCalledWith('wsl:Ubuntu', ['a'])
     expect(cutover()?.hostAutomationsLeftOff).toBeUndefined()
     expect(cutover()?.undoHostAutomationIntent).toBeUndefined()
@@ -199,14 +205,17 @@ describe('undo of a move with automations', () => {
     w.fail.restore = false
     const order: string[] = []
     let finishRestore = () => {}
-    const retry = retryWslMoveHostAutomationsLeftOff(userDataPath, async (_env, ids) => {
-      order.push('retry restore')
-      await new Promise<void>((resolve) => {
-        finishRestore = resolve
-      })
-      for (const id of ids) {
-        w.host.set(id, true)
-      }
+    const retry = retryWslMoveHostAutomationsLeftOff(userDataPath, {
+      restore: async (_env, ids) => {
+        order.push('retry restore')
+        await new Promise<void>((resolve) => {
+          finishRestore = resolve
+        })
+        for (const id of ids) {
+          w.host.set(id, true)
+        }
+      },
+      disable: async () => {}
     })
     // The undo waits for the retry's turn, then turns the host copy off and releases.
     const undo = runWslMoveHostAutomationsExclusive(async () => {
@@ -226,19 +235,35 @@ describe('undo of a move with automations', () => {
     expect(listWslMoveCutovers(userDataPath)).toEqual([])
   })
 
-  it('a retry finding the move released writes nothing back', async () => {
+  it('a retry finding the move released writes nothing back and turns its host copies off again', async () => {
     const w = world({ a: true }, { a: true })
     w.fail.restore = true
     const stop = await stopWslMoveHostAutomations(userDataPath, MOVE, ['a'], w.ports)
     if (stop.outcome === 'stopped') {
       await stop.restore()
     }
+    expect(w.host.get('a')).toBe(false)
+    const disable = vi.fn(async (_env: string, ids: readonly string[]) => {
+      for (const id of ids) {
+        w.host.set(id, false)
+      }
+    })
     expect(
-      await retryWslMoveHostAutomationsLeftOff(userDataPath, async () => {
-        removeCommittedWslMoveCutover(userDataPath, MOVE)
+      await retryWslMoveHostAutomationsLeftOff(userDataPath, {
+        restore: async (_env, ids) => {
+          for (const id of ids) {
+            w.host.set(id, true)
+          }
+          // The move is released by another route during the host round trip.
+          removeCommittedWslMoveCutover(userDataPath, MOVE)
+        },
+        disable
       })
     ).toBe(false)
     expect(listWslMoveCutovers(userDataPath)).toEqual([])
+    // The project is local again: the host copy this retry turned on goes back off.
+    expect(disable).toHaveBeenCalledWith('wsl:Ubuntu', ['a'])
+    expect(w.host.get('a')).toBe(false)
   })
 
   it('at startup, an undo a crash interrupted sends what it read as on back on', async () => {

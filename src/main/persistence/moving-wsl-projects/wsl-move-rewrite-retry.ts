@@ -7,20 +7,19 @@ import { wslHostsGateOpen } from '../../wsl/wsl-host-gate'
 import { listWslMoveCutovers } from './wsl-move-cutover-journal'
 import { runWslMoveDesktopRewritePass } from './wsl-move-desktop-rewrite'
 import { pendingWslMoveDesktopRewriteStores } from './wsl-move-desktop-rewrite-stores'
-import { retryWslMoveHostAutomationsLeftOff } from './wsl-move-undo-host-automations'
+import {
+  retryWslMoveHostAutomationsLeftOff,
+  type WslMoveHostAutomationRetryHost
+} from './wsl-move-undo-host-automations'
 
 export const WSL_MOVE_REWRITE_RETRY_DELAYS_MS = [30_000, 2 * 60_000, 10 * 60_000]
 
 let timer: ReturnType<typeof setTimeout> | null = null
-let restoreHostAutomations:
-  | ((environmentId: string, automationIds: readonly string[]) => Promise<void>)
-  | null = null
+let restoreHostAutomations: WslMoveHostAutomationRetryHost | null = null
 
 /** How a retry turns back on host automations a refused undo left off (main wires the host). */
-export function setWslMoveHostAutomationRestorer(
-  restore: (environmentId: string, automationIds: readonly string[]) => Promise<void>
-): void {
-  restoreHostAutomations = restore
+export function setWslMoveHostAutomationRestorer(host: WslMoveHostAutomationRetryHost): void {
+  restoreHostAutomations = host
 }
 
 function hasUnfinishedMove(userDataPath: string): boolean {
