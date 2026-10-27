@@ -49,9 +49,10 @@ vi.mock('@/lib/runtime-workspace-file-route', () => ({
 installTerminalLinkTestEnvironment(doubles)
 
 describe('handleOscLink', () => {
-  it('opens local .html file paths in Orca browser tabs when links route to Orca', async () => {
+  // Why: link routing governs http(s) links only; the default (system browser) must not move workspace HTML files out of Orca.
+  it('opens local .html file paths in Orca browser tabs even when links route to the system browser', async () => {
     setPlatform('Macintosh')
-    storeState.settings = { openLinksInApp: true }
+    storeState.settings = { openLinksInApp: false }
 
     openDetectedFilePath('/tmp/report.html', null, null, deps)
 
@@ -72,9 +73,8 @@ describe('handleOscLink', () => {
     })
   })
 
-  it('also opens local .htm paths in Orca browser tabs when links route to Orca', async () => {
+  it('also opens local .htm paths in Orca browser tabs with the platform modifier', async () => {
     setPlatform('Macintosh')
-    storeState.settings = { openLinksInApp: true }
 
     openDetectedFilePath('/tmp/legacy.HTM', null, null, deps)
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -89,26 +89,17 @@ describe('handleOscLink', () => {
     expect(openFilePathMock).not.toHaveBeenCalled()
   })
 
-  it('opens local .html file paths in the system browser when links route there', async () => {
+  it('opens local .html file paths with the OS default app on Shift under either link routing', async () => {
     setPlatform('Macintosh')
-    storeState.settings = { openLinksInApp: false }
+    for (const openLinksInApp of [false, true]) {
+      storeState.settings = { openLinksInApp }
+      openDetectedFilePath('/tmp/report.html', null, null, { ...deps, openWithSystemDefault: true })
+      await flushAsyncWork()
+    }
 
-    openDetectedFilePath('/tmp/report.html', null, null, deps)
-    await flushAsyncWork()
-
+    expect(openFilePathMock).toHaveBeenCalledTimes(2)
     expect(openFilePathMock).toHaveBeenCalledWith('/tmp/report.html', 'local')
     expect(createBrowserTabMock).not.toHaveBeenCalled()
-
-    // Shift takes the other destination, as it does for http links.
-    openDetectedFilePath('/tmp/report.html', null, null, { ...deps, openWithSystemDefault: true })
-    await flushAsyncWork()
-
-    expect(openFilePathMock).toHaveBeenCalledTimes(1)
-    expect(createBrowserTabMock).toHaveBeenCalledWith(
-      'wt-1',
-      'file:///tmp/report.html',
-      expect.objectContaining({ title: 'report.html', activate: true })
-    )
   })
 
   it('opens local file paths in Orca and reveals default column 1 with the platform modifier', async () => {

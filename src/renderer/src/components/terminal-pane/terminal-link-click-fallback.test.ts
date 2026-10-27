@@ -201,7 +201,6 @@ describe('createFilePathLinkProvider range bounds', () => {
 
   it('opens a wrapped continuation-row html path from a direct modifier-click fallback', async () => {
     setPlatform('Macintosh')
-    storeState.settings = { openLinksInApp: true }
     const rows = [
       makeBufferLine('open mobile/mock-'),
       makeBufferLine('homepage.html', { isWrapped: true })

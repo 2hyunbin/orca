@@ -1,6 +1,5 @@
 import type { LinkActionRequest } from '@/components/link-actions/link-action-request'
 import type { HttpLinkSourceOwner } from '@/lib/http-link-routing'
-import { buildHttpLinkActions } from '@/lib/http-link-destinations'
 import {
   getTerminalFileContext,
   mapTerminalFilePath,
@@ -9,7 +8,6 @@ import {
   terminalLinkWslDistro,
   type FileOpenFailure
 } from './terminal-file-open-routing'
-import { isHtmlFilePath, localHtmlFileDestinations } from './local-html-file-destinations'
 import { isTerminalLinkDirectActivation } from './terminal-link-activation'
 import {
   requestTerminalLinkAction,
@@ -167,30 +165,22 @@ export function buildFileLinkActions(
         }
       : null
   const secondaryActions = [openInGroupRow, revealRow].filter((row) => row !== null)
-  const rows =
-    !worktreeRoot && canOpenWithSystemDefault && isHtmlFilePath(mappedPath)
-      ? buildHttpLinkActions(localHtmlFileDestinations(), (browserDestination) =>
-          openDetectedFilePath(filePath, line, column, { ...deps, browserDestination })
-        )
-      : {
-          primary: {
-            label: worktreeRoot
-              ? translate(
-                  'auto.components.terminal.pane.TerminalLinkActionPopover.switchWorkspace',
-                  'Switch workspace'
-                )
-              : translate(
-                  'auto.components.terminal.pane.TerminalLinkActionPopover.openFile',
-                  'Open file'
-                ),
-            run: () => openDetectedFilePath(filePath, line, column, deps)
-          },
-          ...(systemDefaultRow ? { alternate: systemDefaultRow } : {})
-        }
   return {
     destination: mappedPath,
     kind: worktreeRoot ? 'workspace' : 'file',
-    ...rows,
+    primary: {
+      label: worktreeRoot
+        ? translate(
+            'auto.components.terminal.pane.TerminalLinkActionPopover.switchWorkspace',
+            'Switch workspace'
+          )
+        : translate(
+            'auto.components.terminal.pane.TerminalLinkActionPopover.openFile',
+            'Open file'
+          ),
+      run: () => openDetectedFilePath(filePath, line, column, deps)
+    },
+    ...(systemDefaultRow ? { alternate: systemDefaultRow } : {}),
     ...(secondaryActions.length > 0 ? { secondaryActions } : {})
   }
 }
