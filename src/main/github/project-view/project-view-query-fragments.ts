@@ -22,21 +22,9 @@ fragment FieldConfig on ProjectV2FieldConfiguration {
 }
 `
 
-export function supportsProjectExtendedFields(host?: string): boolean {
-  const hostname = host
-    ?.toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/\/$/, '')
-  // Why: older GitHub Enterprise schemas may not expose these GitHub.com fields.
-  return !hostname || hostname === 'github.com'
-}
-
-export function itemContentSelection(
-  includeParent: boolean,
-  includeSubIssuesSummary: boolean
-): string {
+export function itemContentSelection(includeParent: boolean): string {
   const parentFrag = includeParent ? 'parent { number title url }' : ''
-  const subIssuesSummaryFrag = includeSubIssuesSummary
+  const subIssuesSummaryFrag = includeParent
     ? 'subIssuesSummary { completed total percentCompleted }'
     : ''
   return `
@@ -70,6 +58,7 @@ export function itemContentSelection(
   `
 }
 
+// At 100 items × 100 fields, ten linked PRs add at most 100k nodes to the 500k query budget.
 export function fieldValuesSelection(includeLinkedPullRequests: boolean): string {
   const linkedPullRequestsFrag = includeLinkedPullRequests
     ? `
@@ -77,7 +66,6 @@ export function fieldValuesSelection(includeLinkedPullRequests: boolean): string
         field { ...FieldConfig }
         pullRequests(first:10) {
           totalCount
-          pageInfo { hasNextPage }
           nodes { number title url }
         }
       }

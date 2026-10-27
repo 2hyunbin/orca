@@ -140,7 +140,6 @@ export type GitHubProjectFieldValue =
       kind: 'pull-requests'
       fieldId: string
       pullRequests: { number: number; title: string; url: string }[]
-      truncated: boolean
       totalCount: number
     }
 

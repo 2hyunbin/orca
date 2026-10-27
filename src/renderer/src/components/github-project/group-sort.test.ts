@@ -442,3 +442,29 @@ it('uses the first iteration ordering and metadata when legacy field IDs repeat'
     completed: true
   })
 })
+
+it('preserves position and unsupported grouping for linked PR relation values', () => {
+  const field: GitHubProjectField = {
+    kind: 'field',
+    id: 'linked',
+    name: 'Linked pull requests',
+    dataType: 'LINKED_PULL_REQUESTS'
+  }
+  const rows = [
+    makeRow('empty', 1, {}),
+    makeRow('linked', 0, {
+      linked: {
+        kind: 'pull-requests',
+        fieldId: 'linked',
+        totalCount: 1,
+        pullRequests: [{ number: 42, title: 'Change', url: 'https://github.com/o/r/pull/42' }]
+      }
+    })
+  ]
+  const table = makeTable(
+    { ...makeView(field, { field, direction: 'DESC' }), groupByFields: [field] },
+    rows
+  )
+  expect(sortRows(table, rows).map((row) => row.id)).toEqual(['linked', 'empty'])
+  expect(groupRows(table, rows)).toMatchObject([{ key: '__empty__', rows }])
+})

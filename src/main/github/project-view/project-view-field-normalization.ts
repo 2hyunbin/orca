@@ -114,7 +114,6 @@ export type RawFieldValue = {
   users?: { nodes?: RawUser[] }
   pullRequests?: {
     totalCount?: number
-    pageInfo?: { hasNextPage?: boolean }
     nodes?: ({ number?: number; title?: string; url?: string } | null)[]
   }
 }
@@ -194,9 +193,7 @@ export function normalizeFieldValue(
         typeof raw.pullRequests?.totalCount === 'number'
           ? raw.pullRequests.totalCount
           : pullRequests.length
-      const truncated =
-        raw.pullRequests?.pageInfo?.hasNextPage === true || totalCount > pullRequests.length
-      return { kind: 'pull-requests', fieldId, pullRequests, truncated, totalCount }
+      return { kind: 'pull-requests', fieldId, pullRequests, totalCount }
     }
     case undefined:
     default:

@@ -85,7 +85,7 @@ export async function fetchAllItems(args: {
     parentFieldDropped = true
     if (!hasParentFieldWarningLogged(scopeKey)) {
       console.warn(
-        `[project-view] Issue.parent is not available for ${args.owner} on this token — retrying without the parent selection.`
+        `[project-view] Optional project item fields are not available for ${args.owner} on this token — retrying without those selections.`
       )
       markParentFieldWarningLogged(scopeKey)
     }

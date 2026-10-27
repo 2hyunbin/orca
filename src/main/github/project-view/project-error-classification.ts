@@ -33,18 +33,16 @@ export function errorsIndicateParentField(errors: GhGraphqlError[], stderr: stri
     return true
   }
   return errors.some((e) => {
-    const type = (e.type ?? '').toUpperCase()
-    if (type === 'FIELD_NOT_FOUND' || type === 'UNDEFINED_FIELD' || type === 'FIELD_ERRORS') {
-      const tail = e.path?.at(-1)
-      if (tail === 'parent') {
-        return true
-      }
-      // FIELD_ERRORS often omits `path`; match on message for the parent field.
-      if ((e.message ?? '').toLowerCase().includes('parent')) {
-        return true
-      }
+    const code = (e.type ?? e.extensions?.code ?? '').replace(/_/g, '').toUpperCase()
+    if (!['FIELDNOTFOUND', 'UNDEFINEDFIELD', 'FIELDERRORS', 'UNDEFINEDTYPE'].includes(code)) {
+      return false
     }
-    return false
+    const tail = e.path?.at(-1)
+    return (
+      tail === 'parent' ||
+      tail === 'subIssuesSummary' ||
+      /\b(parent|subIssuesSummary|ProjectV2ItemFieldPullRequestValue)\b/i.test(e.message ?? '')
+    )
   })
 }
 

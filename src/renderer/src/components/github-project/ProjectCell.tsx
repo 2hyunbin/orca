@@ -99,8 +99,8 @@ export default function ProjectCell({
     }
     const labels = value.pullRequests.map((pr) => `#${pr.number}`)
     const overflow =
-      value.truncated || value.totalCount > value.pullRequests.length
-        ? ` +${Math.max(value.totalCount - value.pullRequests.length, 1)}`
+      value.totalCount > value.pullRequests.length
+        ? ` +${value.totalCount - value.pullRequests.length}`
         : ''
     return (
       <span className="truncate text-xs text-muted-foreground">
