@@ -107,21 +107,16 @@ describe('GitLab readiness title ownership', () => {
           }
         ]
       })
-      if (failure === 'unsupported field') {
-        execute.mockRejectedValueOnce(
-          Object.assign(new Error('glab failed'), { stdout, stderr: 'glab: Field unsupported' })
-        )
-      } else {
-        execute.mockRejectedValueOnce(
-          Object.assign(new Error('glab failed'), {
-            stdout: failure === 'absent endpoint' ? '{"message":"404 Not Found"}' : stdout,
-            stderr:
-              failure === 'absent endpoint'
-                ? 'glab: 404 Not Found (HTTP 404)'
-                : 'glab: Field unsupported'
-          })
-        )
-      }
+      const unsupported = failure === 'unsupported field'
+      execute.mockRejectedValueOnce(
+        Object.assign(new Error('glab failed'), {
+          code: 1,
+          stdout: unsupported ? stdout : '{"message":"404 Not Found"}',
+          stderr: unsupported
+            ? "glab: Field 'mergeRequestSetDraft' doesn't exist on type 'Mutation'\n"
+            : 'glab: 404 Not Found (HTTP 404)'
+        })
+      )
       execute.mockResolvedValueOnce({ stdout: '{"title":"Draft: Current title"}' })
       execute.mockResolvedValueOnce({ stdout: '{}' })
 
