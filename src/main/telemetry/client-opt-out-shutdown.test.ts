@@ -8,6 +8,9 @@ import {
   type MockPostHog
 } from './client-test-harness'
 
+const { waitForCaptureEnqueue } =
+  await vi.importActual<typeof posthogTransport>('./posthog-transport')
+
 describe('in-flight opt-out shutdown budget', () => {
   let client: typeof telemetryClient
   let sdk: MockPostHog
@@ -43,8 +46,6 @@ describe('in-flight opt-out shutdown budget', () => {
     const moduleGate = new Promise<void>((resolve) => {
       releaseImport = resolve
     })
-    const { waitForCaptureEnqueue } =
-      await vi.importActual<typeof posthogTransport>('./posthog-transport')
     vi.doMock('./posthog-transport', async () => {
       await moduleGate
       return { createPostHogClient: createClient, waitForCaptureEnqueue }
