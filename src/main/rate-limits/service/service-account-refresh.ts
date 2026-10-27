@@ -43,6 +43,16 @@ export abstract class RateLimitServiceAccountRefresh extends RateLimitServiceIna
     })
   }
 
+  // A new agy credential may have finished sign-in; the next poll may check once.
+  releaseAntigravitySignInHold(): void {
+    const current = this.state.antigravity
+    if (!current?.usageMetadata?.retryAtMs) {
+      return
+    }
+    const { retryAtMs: _retryAtMs, ...usageMetadata } = current.usageMetadata
+    this.updateState({ ...this.state, antigravity: { ...current, usageMetadata } })
+  }
+
   invalidateMiniMaxCredentialState(): void {
     this.minimaxFetchGeneration += 1
     // Clear before an old-cookie fetch can return.

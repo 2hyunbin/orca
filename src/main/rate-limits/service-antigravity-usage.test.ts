@@ -194,19 +194,21 @@ describe('Antigravity usage gating', () => {
     expect(fetchAntigravityRateLimits).toHaveBeenCalledTimes(1)
   })
 
-  it('waits out the browser sign-in cooldown, then recovers on the next poll', async () => {
+  it('holds browser sign-in reads until a credential change or refresh', async () => {
     vi.useFakeTimers()
     try {
       mockFreshBackgroundProviderFetches()
       vi.mocked(fetchClaudeRateLimits).mockResolvedValue(okProvider('claude', 7))
+      const signInRequired = async () => ({
+        ...unavailableProvider('antigravity', 'Sign in with `agy`'),
+        usageMetadata: {
+          failureKind: 'missing-credentials' as const,
+          retryAtMs: Number.MAX_SAFE_INTEGER
+        }
+      })
       vi.mocked(fetchAntigravityRateLimits)
-        .mockImplementationOnce(async () => ({
-          ...unavailableProvider('antigravity', 'Sign in with `agy`'),
-          usageMetadata: {
-            failureKind: 'missing-credentials',
-            retryAtMs: Date.now() + 60 * 60 * 1000
-          }
-        }))
+        .mockImplementationOnce(signInRequired)
+        .mockImplementationOnce(signInRequired)
         .mockImplementation(async () => okProvider('antigravity', 30))
       const service = new RateLimitService()
       const window = new FakeRateLimitWindow()
@@ -216,14 +218,21 @@ describe('Antigravity usage gating', () => {
       await vi.advanceTimersByTimeAsync(1000)
       expect(fetchAntigravityRateLimits).toHaveBeenCalledTimes(1)
 
-      // Why: each read inside the cooldown would open another browser sign-in page (#26484).
+      // Why: each automated read would open another browser sign-in page (#26484).
       window.emit('focus')
-      await vi.advanceTimersByTimeAsync(58 * 60 * 1000)
+      await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000)
       expect(vi.mocked(fetchCodexRateLimits).mock.calls.length).toBeGreaterThan(1)
       expect(fetchAntigravityRateLimits).toHaveBeenCalledTimes(1)
 
-      await vi.advanceTimersByTimeAsync(32 * 60 * 1000)
-      expect(vi.mocked(fetchAntigravityRateLimits).mock.calls.length).toBeGreaterThan(1)
+      service.releaseAntigravitySignInHold()
+      await vi.advanceTimersByTimeAsync(15 * 60 * 1000)
+      expect(fetchAntigravityRateLimits).toHaveBeenCalledTimes(2)
+
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000)
+      expect(fetchAntigravityRateLimits).toHaveBeenCalledTimes(2)
+
+      await service.refresh()
+      expect(fetchAntigravityRateLimits).toHaveBeenCalledTimes(3)
       expect(service.getState().antigravity?.status).toBe('ok')
 
       service.stop()
