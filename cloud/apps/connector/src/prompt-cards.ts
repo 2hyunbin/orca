@@ -1,5 +1,5 @@
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
-import type { ConnectorSource, NoticeTarget, ThreadPlace } from './connector-adapter.js'
+import type { ConnectorSource, Notice, NoticeTarget, ThreadPlace } from './connector-adapter.js'
 import { lockConnectorHost } from './connector-hosts.js'
 import { applyOwnerAction, type AnswerablePrompt, type OwnerAction } from './owner-controls.js'
 import type { QueueInTransaction } from './queue-delivery.js'
@@ -44,38 +44,42 @@ export async function refreshPromptCards(
 }
 
 // A press of an answer button on a prompt card. What it answers is found from the message it is
-// on (its messageRef); the button only says which option.
+// on (its messageRef, in channelId: the container, or the thread where threads are channels); the
+// button only says which option.
 export type CardPress = {
   workspaceId: string
-  containerId: string
+  channelId: string
   messageRef: string
   userId: string
   optionId: string
   paused: boolean
 }
 
+// What to tell the person who pressed, privately; the source's ingress delivers it.
+export type PressReply = { target: NoticeTarget; postId: string; notice: Notice }
+
 // Decisions §1: only the conversation's owner answers; anyone else is told so privately.
 export async function answerPromptCard(
   deps: { database: CloudDatabase; queue: QueueInTransaction; threadPosts: ThreadPosts },
   press: CardPress
-): Promise<void> {
+): Promise<PressReply | null> {
   const { queue, threadPosts } = deps
   const { adapter, posts } = threadPosts
   const source: ConnectorSource = adapter.source
-  await deps.database.transaction(async (transaction) => {
+  return await deps.database.transaction(async (transaction): Promise<PressReply | null> => {
     const [message] = await transaction.query(
-      `SELECT post_id, thread_id, body FROM connector_posts
-       WHERE source = ? AND workspace_id = ? AND container_id = ? AND message_ref = ?
-         AND kind = 'status'`,
-      [source, press.workspaceId, press.containerId, press.messageRef]
+      `SELECT post_id, container_id, thread_id, body FROM connector_posts
+       WHERE source = ? AND workspace_id = ? AND message_ref = ? AND kind = 'status'
+         AND (container_id = ? OR thread_id = ?)`,
+      [source, press.workspaceId, press.messageRef, press.channelId, press.channelId]
     )
     if (!message) {
-      return
+      return null
     }
     const postId = String(message.post_id)
     const place = {
       workspaceId: press.workspaceId,
-      containerId: press.containerId,
+      containerId: String(message.container_id),
       threadId: String(message.thread_id)
     }
     const threads = await transaction.query(
@@ -87,18 +91,16 @@ export async function answerPromptCard(
       postId.startsWith(promptCardId(String(row.external_id), ''))
     )
     if (!thread) {
-      return
+      return null
     }
     const externalId = String(thread.external_id)
-    const target: NoticeTarget = { place, userId: press.userId, direct: false, inThread: true }
+    const target: NoticeTarget = { place, userId: press.userId, direct: false }
     if (press.paused) {
-      await threadPosts.notify(
-        transaction,
+      return {
         target,
-        `paused:${place.workspaceId}:${place.containerId}:${place.threadId}:${press.userId}`,
-        { kind: 'paused' }
-      )
-      return
+        postId: `paused:${place.workspaceId}:${place.containerId}:${place.threadId}:${press.userId}`,
+        notice: { kind: 'paused' }
+      }
     }
     // Cards close only under the host lock (events, presses), so this read holds until commit.
     await lockConnectorHost(transaction, String(thread.host_id))
@@ -106,10 +108,13 @@ export async function answerPromptCard(
       'SELECT body FROM connector_posts WHERE source = ? AND post_id = ?',
       [source, postId]
     )
-    const movedOn = `moved-on:${postId}:${press.userId}`
+    const movedOn: PressReply = {
+      target,
+      postId: `moved-on:${postId}:${press.userId}`,
+      notice: { kind: 'already_answered' }
+    }
     if (!adapter.isOpenCard(JSON.parse(String(card?.body ?? '{}')))) {
-      await threadPosts.notify(transaction, target, movedOn, { kind: 'already_answered' })
-      return
+      return movedOn
     }
     const action: OwnerAction = {
       kind: 'answer',
@@ -120,14 +125,13 @@ export async function answerPromptCard(
     const outcome = await applyOwnerAction(transaction, queue, conversation, press.userId, action)
     switch (outcome?.kind) {
       case 'not_owner':
-        await threadPosts.notify(transaction, target, `only-owner:${postId}:${press.userId}`, {
-          kind: 'only_owner',
-          ownerUserId: outcome.ownerUserId
-        })
-        return
+        return {
+          target,
+          postId: `only-owner:${postId}:${press.userId}`,
+          notice: { kind: 'only_owner', ownerUserId: outcome.ownerUserId }
+        }
       case 'moved_on':
-        await threadPosts.notify(transaction, target, movedOn, { kind: 'already_answered' })
-        return
+        return movedOn
       case 'answered':
         await threadPosts.lockStatus(transaction, externalId)
         await posts.setStatus(transaction, {
@@ -140,6 +144,9 @@ export async function answerPromptCard(
           })
         })
         await threadPosts.refresh(transaction, String(thread.host_id), externalId)
+        return null
+      default:
+        return null
     }
   })
 }
