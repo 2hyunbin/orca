@@ -34,16 +34,27 @@ async function isWslDistroRunningForUncAccess(distro: string): Promise<boolean> 
   return isWslDistroRunning(distro, { startedAfter })
 }
 
-/** The distro a background touch of `path` would boot, or null when the touch is safe. */
-export async function stoppedWslDistroForPath(path: string): Promise<string | null> {
+/** The distro a touch of `path` (or Git run for it) would run in; null off Windows or for a host path. */
+export function wslDistroForPath(path: string, wslDistro?: string | null): string | null {
   if (process.platform !== 'win32') {
     return null
   }
-  const parsed = parseWslUncPath(path)
-  if (!parsed || (await isWslDistroRunningForUncAccess(parsed.distro))) {
+  return parseWslUncPath(path)?.distro ?? wslDistro ?? null
+}
+
+/**
+ * The distro a background touch of `path` would boot, or null when the touch is safe. `wslDistro`
+ * covers a non-UNC path whose Git still runs through `wsl.exe` in that distro.
+ */
+export async function stoppedWslDistroForPath(
+  path: string,
+  wslDistro?: string | null
+): Promise<string | null> {
+  const distro = wslDistroForPath(path, wslDistro)
+  if (!distro || (await isWslDistroRunningForUncAccess(distro))) {
     return null
   }
-  return parsed.distro
+  return distro
 }
 
 /**
@@ -67,9 +78,12 @@ export async function guardWslUncPathAccess<T>(
   return access()
 }
 
-/** Throws WslDistroStoppedError when a background touch of `path` would boot its distro. */
-export async function assertWslUncPathRunning(path: string): Promise<void> {
-  const stopped = await stoppedWslDistroForPath(path)
+/** Throws WslDistroStoppedError when a background touch of `path` (or its Git) would boot a distro. */
+export async function assertWslUncPathRunning(
+  path: string,
+  wslDistro?: string | null
+): Promise<void> {
+  const stopped = await stoppedWslDistroForPath(path, wslDistro)
   if (stopped) {
     throw new WslDistroStoppedError(stopped)
   }

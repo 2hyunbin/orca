@@ -9,6 +9,7 @@ vi.mock('../wsl', () => wslMocks)
 
 import {
   _resetWslUncAccessGateForTests,
+  assertWslUncPathRunning,
   guardWslUncPathAccess,
   noteWslDistroMayHaveStopped,
   WSL_UNC_RUNNING_LEASE_MS,
@@ -135,5 +136,16 @@ describe('guardWslUncPathAccess', () => {
       )
     ).rejects.toThrow('EIO')
     expect(resumed).not.toHaveBeenCalled()
+  })
+})
+
+describe('assertWslUncPathRunning for Git', () => {
+  it('covers a host path whose Git runs through wsl.exe in a distro', async () => {
+    running = []
+    await expect(assertWslUncPathRunning('C:\\repo', 'Ubuntu')).rejects.toBeInstanceOf(
+      WslDistroStoppedError
+    )
+    await expect(assertWslUncPathRunning('C:\\repo')).resolves.toBeUndefined()
+    expect(probe).toHaveBeenCalledTimes(1)
   })
 })
