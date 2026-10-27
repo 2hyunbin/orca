@@ -11,7 +11,9 @@ import {
   type ProjectRef
 } from './gl-utils'
 import { encodedProject } from './project-path-encoding'
+import { stripGitLabDraftTitlePrefix } from './merge-request-draft-title'
 import { withProjectRef } from './merge-request-project-resolution'
+import { tryMarkMRReady } from './merge-request-ready'
 
 export async function updateMR(
   repoPath: string,
@@ -39,60 +41,36 @@ export async function updateMR(
       }
       await acquire()
       try {
-        if (
-          updates.readyForReview &&
-          (updates.title !== undefined ||
-            updates.body !== undefined ||
-            updates.addLabels !== undefined ||
-            updates.removeLabels !== undefined)
-        ) {
+        if (updates.readyForReview && updates.title !== undefined) {
           return { ok: false, error: 'Cannot update the title while marking a merge request ready' }
         }
 
         const endpoint = `projects/${encodedProject(projectRef.path)}/merge_requests/${iid}`
-        const title = updates.title?.trim()
-        // GitLab owns the draft/title transition atomically; a REST title read followed by PUT
-        // races with concurrent title edits on the same MR.
-        if (updates.readyForReview) {
-          const query = `mutation UpdateMergeRequest($input: MergeRequestSetDraftInput!) { mergeRequestSetDraft(input: $input) { mergeRequest { iid } errors } }`
-          const variables = JSON.stringify({
-            input: { projectPath: projectRef.path, iid: String(iid), draft: false }
-          })
-          const response = await glabExecFileAsync(
+        let title = updates.title?.trim()
+        const query = `mutation { mergeRequestSetDraft(input: { projectPath: ${JSON.stringify(projectRef.path)}, iid: ${JSON.stringify(String(iid))}, draft: false }) { mergeRequest { iid } errors } }`
+        if (
+          updates.readyForReview &&
+          !(await tryMarkMRReady(
             [
               'api',
               ...glabHostnameArgs(projectRef, connectionId),
               'graphql',
               '-f',
-              `query=${query}`,
-              '-f',
-              `variables=${variables}`
+              `query=${query}`
             ],
+            glabRepoExecOptions(repoPath, connectionId, localGitOptions),
+            iid
+          ))
+        ) {
+          const response = await glabExecFileAsync(
+            ['api', ...glabHostnameArgs(projectRef, connectionId), endpoint],
             glabRepoExecOptions(repoPath, connectionId, localGitOptions)
           )
-          let payload: unknown
-          try {
-            payload = JSON.parse(response.stdout)
-          } catch {
-            return { ok: false, error: 'Malformed GitLab GraphQL response' }
+          const currentTitle = (JSON.parse(response.stdout) as { title?: unknown }).title
+          if (typeof currentTitle !== 'string') {
+            return { ok: false, error: 'Could not read the current merge request title' }
           }
-          const root = payload as {
-            errors?: unknown
-            data?: { mergeRequestSetDraft?: { errors?: unknown; mergeRequest?: unknown } }
-          }
-          if (Array.isArray(root.errors) && root.errors.length > 0) {
-            return { ok: false, error: 'GitLab GraphQL mutation failed' }
-          }
-          const mutation = root.data?.mergeRequestSetDraft
-          if (
-            !mutation ||
-            !Array.isArray(mutation.errors) ||
-            mutation.errors.length > 0 ||
-            !mutation.mergeRequest
-          ) {
-            return { ok: false, error: 'GitLab rejected the merge request readiness mutation' }
-          }
-          return { ok: true }
+          title = stripGitLabDraftTitlePrefix(currentTitle) ?? undefined
         }
 
         const fields: string[] = []

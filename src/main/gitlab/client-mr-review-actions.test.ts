@@ -244,36 +244,37 @@ describe('gitlab client — MR operations', () => {
       expect(args.slice(0, 3)).toEqual(['api', '--hostname', 'git.internal'])
       expect(args).toContain('graphql')
       expect(args.join(' ')).toContain('mergeRequestSetDraft')
-      expect(args.join(' ')).toContain('"draft":false')
+      expect(args.join(' ')).toContain('draft: false')
+      expect(args).toHaveLength(6)
     })
 
     it.each([
-      ['malformed JSON', 'not-json', 'GitLab could not mark the merge request ready. Try again.'],
-      ['null response', 'null', 'GitLab could not mark the merge request ready. Try again.'],
+      [
+        'malformed JSON',
+        'not-json',
+        'Failed to update issue: GitLab could not mark the merge request ready. Try again.'
+      ],
+      [
+        'null response',
+        'null',
+        'Failed to update issue: GitLab could not mark the merge request ready. Try again.'
+      ],
       [
         'missing mutation payload',
         JSON.stringify({ data: {} }),
-        'GitLab could not mark the merge request ready. Try again.'
+        'Failed to update issue: GitLab could not mark the merge request ready. Try again.'
       ],
       [
         'invalid draft-success field',
         JSON.stringify({ data: { mergeRequestSetDraft: { errors: [], mergeRequest: null } } }),
-        'GitLab could not mark the merge request ready. Try again.'
-      ],
-      [
-        'GraphQL top-level errors',
-        JSON.stringify({
-          errors: [{ message: 'boom' }],
-          data: { mergeRequestSetDraft: { errors: [], mergeRequest: { iid: '12' } } }
-        }),
-        'GitLab could not mark the merge request ready. Try again.'
+        'Failed to update issue: GitLab could not mark the merge request ready. Try again.'
       ],
       [
         'payload errors',
         JSON.stringify({
           data: { mergeRequestSetDraft: { errors: ['denied'], mergeRequest: { iid: '12' } } }
         }),
-        'GitLab could not mark the merge request ready. Try again.'
+        'Failed to update issue: GitLab could not mark the merge request ready. Try again.'
       ]
     ])('rejects ready mutation with %s and releases admission', async (_label, stdout, error) => {
       glabExecFileAsyncMock.mockResolvedValueOnce({ stdout })

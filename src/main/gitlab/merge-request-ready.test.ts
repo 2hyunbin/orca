@@ -92,7 +92,7 @@ describe('GitLab readiness title ownership', () => {
     ).toBe(true)
   })
 
-  it.each(['schema response', 'nonzero glab exit', 'absent endpoint'])(
+  it.each(['unsupported field', 'absent endpoint'])(
     'preserves legacy readiness and combined metadata for an explicit %s',
     async (failure) => {
       const stdout = JSON.stringify({
@@ -107,8 +107,10 @@ describe('GitLab readiness title ownership', () => {
           }
         ]
       })
-      if (failure === 'schema response') {
-        execute.mockResolvedValueOnce({ stdout })
+      if (failure === 'unsupported field') {
+        execute.mockRejectedValueOnce(
+          Object.assign(new Error('glab failed'), { stdout, stderr: 'glab: Field unsupported' })
+        )
       } else {
         execute.mockRejectedValueOnce(
           Object.assign(new Error('glab failed'), {
@@ -157,6 +159,17 @@ describe('GitLab readiness title ownership', () => {
 
   it.each([
     new Error('timeout while contacting GitLab'),
+    Object.assign(new Error('invalid GraphQL input'), {
+      stdout: JSON.stringify({
+        errors: [
+          {
+            message: 'Invalid MergeRequestSetDraftInput',
+            extensions: { code: 'variableRequiresValidType' }
+          }
+        ]
+      }),
+      code: 1
+    }),
     Object.assign(new Error('unauthorized'), {
       stdout: '{"message":"401 Unauthorized"}',
       stderr: 'glab: HTTP 401'
@@ -171,5 +184,20 @@ describe('GitLab readiness title ownership', () => {
     })
     expect(execute).toHaveBeenCalledOnce()
     expect(release).toHaveBeenCalledOnce()
+  })
+
+  it('reports a metadata failure after readiness without repeating the transition', async () => {
+    execute.mockResolvedValueOnce({
+      stdout: JSON.stringify({
+        data: { mergeRequestSetDraft: { mergeRequest: { iid: '12' }, errors: [] } }
+      })
+    })
+    execute.mockRejectedValueOnce(new Error('metadata update failed'))
+    await expect(
+      updateMR('/repo', 12, { readyForReview: true, body: 'Description' })
+    ).resolves.toMatchObject({ ok: false })
+    expect(execute).toHaveBeenCalledTimes(2)
+    expect(execute.mock.calls[0][0]).toContain('graphql')
+    expect(execute.mock.calls[1][0]).toContain('description=Description')
   })
 })
