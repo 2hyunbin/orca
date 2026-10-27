@@ -759,6 +759,7 @@ describe('MobileNativeChatQueuedMessages', () => {
         body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: messageId }] }
       })
     )
+    messages[2]!.body.from = { kind: 'agent', senders: [], orchestration: null }
     type MoveReply = StructuredAgentSessionMutationResult<AgentSessionQueuedMessageMoveResult>
     const first = Promise.withResolvers<MoveReply>()
     const second = Promise.withResolvers<MoveReply>()
@@ -796,9 +797,8 @@ describe('MobileNativeChatQueuedMessages', () => {
     })
     expect(mutate).toHaveBeenCalledTimes(1)
     expect(ids()).toEqual(['c', 'a', 'b', 'd'])
-    expect(
-      list().props.items.every((entry: MobileQueuedMessageCard) => list().props.canMove(entry))
-    ).toBe(true)
+    expect(list().props.canMove).toBeUndefined()
+    expect(list().props.items[0].automatic).toBe(true)
     expect(
       list().props.items.every((entry: MobileQueuedMessageCard) =>
         list().props.isMoveDisabled(entry)

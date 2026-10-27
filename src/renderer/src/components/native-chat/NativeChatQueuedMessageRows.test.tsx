@@ -41,6 +41,53 @@ vi.mock('@/components/ui/tooltip', () => ({
   TooltipContent: () => null
 }))
 
+it('gives mixed unsettled senders grips and neighbors while excluding sending placeholders and old hosts', () => {
+  const cards: QueuedMessageCard[] = ['a', 'sending', 'mail'].map((messageId, position) => ({
+    messageId,
+    position,
+    text: messageId,
+    state: messageId === 'mail' ? 'returned' : 'waiting',
+    hold: messageId === 'sending' ? 'sending' : 'queue-paused',
+    ...(messageId === 'mail'
+      ? { from: { kind: 'agent' as const, senders: [], orchestration: null } }
+      : {})
+  }))
+  const move = vi.fn(async () => {})
+  const renderCard: ComponentProps<typeof NativeChatQueuedMessageRows>['renderCard'] = (
+    card,
+    drag
+  ) => (
+    <li key={card.messageId} ref={drag?.rowRef}>
+      {card.text}
+      {drag?.grip}
+    </li>
+  )
+  const mounted = render(
+    <ul>
+      <NativeChatQueuedMessageRows
+        cards={cards}
+        reorder={{ pending: false, move }}
+        renderCard={renderCard}
+      />
+    </ul>
+  )
+  const rows = mounted.container.querySelectorAll('li')
+  expect(rows[0]!.querySelector('button')).not.toBeNull()
+  expect(rows[1]!.querySelector('button')).toBeNull()
+  const mailGrip = rows[2]!.querySelector('button')!
+  expect(mailGrip).not.toBeNull()
+  fireEvent.keyDown(mailGrip, { key: 'ArrowUp' })
+  expect(move).toHaveBeenCalledExactlyOnceWith('mail', { beforeMessageId: 'a' })
+  mounted.rerender(
+    <ul>
+      <NativeChatQueuedMessageRows cards={cards} renderCard={renderCard} />
+    </ul>
+  )
+  expect(mounted.container.querySelectorAll('li')).toHaveLength(3)
+  expect(mounted.container.querySelectorAll('button')).toHaveLength(0)
+  mounted.unmount()
+})
+
 it('keeps actual sortable metadata stable across unchanged visible and collapsed publications at N and 10N', () => {
   for (const count of [100, 1000]) {
     const originalIndexOf = Array.prototype.indexOf
@@ -79,7 +126,10 @@ it('keeps actual sortable metadata stable across unchanged visible and collapsed
         position,
         text: 'queued',
         state: 'waiting',
-        hold: 'queue-paused'
+        hold: 'queue-paused',
+        ...(position === count - 1
+          ? { from: { kind: 'agent' as const, senders: [], orchestration: null } }
+          : {})
       }))
       const move = vi.fn(async () => {})
       const action = vi.fn()
@@ -104,6 +154,7 @@ it('keeps actual sortable metadata stable across unchanged visible and collapsed
         </ul>
       )
       // The real installed library's cold suffix construction is the instrumentation control.
+      expect(mounted.container.querySelectorAll('button')).toHaveLength(count)
       expect(copies).toBeGreaterThanOrEqual((count * (count + 1)) / 2)
       scans = copies = 0
       mounted.rerender(
@@ -239,7 +290,10 @@ it('only lets a live sortable owner commit pointer completion, including deferre
         position,
         text: `row-${position}`,
         state: 'waiting',
-        hold: 'queue-paused'
+        hold: 'queue-paused',
+        ...(position === 0
+          ? { from: { kind: 'agent' as const, senders: [], orchestration: null } }
+          : {})
       }))
       const oldMove = vi.fn(async () => {})
       const latestMove = vi.fn(async () => {})

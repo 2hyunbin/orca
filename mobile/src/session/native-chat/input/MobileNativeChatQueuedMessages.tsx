@@ -197,7 +197,6 @@ export function MobileNativeChatQueuedMessages({
                 <DragReorderList
                   items={cards}
                   itemKey={(card) => card.messageId}
-                  canMove={(card) => !card.automatic}
                   isMoveDisabled={(card) => busyIds.has(MOVE_KEY) || busyIds.has(card.messageId)}
                   rowPresentation="plain"
                   renderRow={renderRow}

@@ -80,12 +80,12 @@ function SortableQueuedMessages({
     () => ({ screenReaderInstructions: { draggable: reorderHint } }),
     [reorderHint]
   )
-  const users = useShallow((input: QueuedMessageCard[]) =>
-    input.filter((card) => !card.from && card.hold !== 'sending').map((card) => card.messageId)
+  const movableIds = useShallow((input: QueuedMessageCard[]) =>
+    input.filter((card) => card.hold !== 'sending').map((card) => card.messageId)
   )(cards)
   const [drag, setDrag] = useState<{ from: string; over: string } | null>(null)
-  const fromIndex = drag ? users.indexOf(drag.from) : -1
-  const overIndex = drag ? users.indexOf(drag.over) : -1
+  const fromIndex = drag ? movableIds.indexOf(drag.from) : -1
+  const overIndex = drag ? movableIds.indexOf(drag.over) : -1
   const renderer = useMemo(() => ({ renderCard, move: reorder.move }), [renderCard, reorder.move])
   return (
     <QueuedMessageRenderer.Provider value={renderer}>
@@ -103,8 +103,8 @@ function SortableQueuedMessages({
           if (!mounted.current || !over || active.id === over.id) {
             return
           }
-          const from = users.indexOf(String(active.id))
-          const to = users.indexOf(String(over.id))
+          const from = movableIds.indexOf(String(active.id))
+          const to = movableIds.indexOf(String(over.id))
           if (from !== -1 && to !== -1) {
             void reorder.move(
               String(active.id),
@@ -113,12 +113,12 @@ function SortableQueuedMessages({
           }
         }}
       >
-        <SortableContext items={users} strategy={verticalListSortingStrategy}>
+        <SortableContext items={movableIds} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
             <SortableQueuedMessage
               key={card.messageId}
               card={card}
-              users={users}
+              movableIds={movableIds}
               pending={reorder.pending}
               insertion={
                 card.messageId === drag?.over && fromIndex !== overIndex
@@ -137,23 +137,23 @@ function SortableQueuedMessages({
 
 const SortableQueuedMessage = memo(function SortableQueuedMessage({
   card,
-  users,
+  movableIds,
   pending,
   insertion
 }: {
   card: QueuedMessageCard
-  users: string[]
+  movableIds: string[]
   pending: boolean
   insertion: QueuedMessageDragPresentation['insertion']
 }): ReactNode {
   const sortable = useSortable({
     id: card.messageId,
-    disabled: !!card.from || card.hold === 'sending' || pending
+    disabled: card.hold === 'sending' || pending
   })
   return (
     <QueuedMessagePresentation
       card={card}
-      users={users}
+      movableIds={movableIds}
       pending={pending}
       insertion={insertion}
       sortable={sortable}
@@ -163,13 +163,13 @@ const SortableQueuedMessage = memo(function SortableQueuedMessage({
 
 function QueuedMessagePresentation({
   card,
-  users,
+  movableIds,
   pending,
   insertion,
   sortable
 }: {
   card: QueuedMessageCard
-  users: string[]
+  movableIds: string[]
   pending: boolean
   insertion: QueuedMessageDragPresentation['insertion']
   sortable: ReturnType<typeof useSortable>
@@ -178,7 +178,7 @@ function QueuedMessagePresentation({
   if (!renderer) {
     throw new Error('Queued message renderer is missing')
   }
-  const movable = !card.from && card.hold !== 'sending'
+  const movable = card.hold !== 'sending'
   const label = translate('components.native-chat.queuedMessages.reorderMessage', 'Reorder message')
   return renderer.renderCard(card, {
     rowRef: sortable.setNodeRef,
@@ -207,8 +207,8 @@ function QueuedMessagePresentation({
                   return
                 }
                 event.preventDefault()
-                const index = users.indexOf(card.messageId)
-                const neighbor = users[index + (event.key === 'ArrowUp' ? -1 : 1)]
+                const index = movableIds.indexOf(card.messageId)
+                const neighbor = movableIds[index + (event.key === 'ArrowUp' ? -1 : 1)]
                 if (neighbor) {
                   void renderer.move(
                     card.messageId,

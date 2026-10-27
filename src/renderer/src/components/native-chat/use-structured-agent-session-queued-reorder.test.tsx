@@ -20,18 +20,20 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-it('previews an ID-relative move in user slots, reverts refusal, and adopts host publication', async () => {
-  const cards: QueuedMessageCard[] = ['a', 'mail', 'b', 'command'].map((messageId, position) => ({
-    messageId,
-    position,
-    text: messageId,
-    state: 'waiting',
-    hold: 'queue-paused',
-    ...(messageId === 'mail'
-      ? { from: { kind: 'agent' as const, senders: [], orchestration: null } }
-      : {}),
-    ...(messageId === 'command' ? { command: true as const } : {})
-  }))
+it('previews an ID-relative move across mixed senders with sending placeholders fixed, reverts refusal, and adopts host publication', async () => {
+  const cards: QueuedMessageCard[] = ['a', 'mail', 'sending', 'b', 'command'].map(
+    (messageId, position) => ({
+      messageId,
+      position,
+      text: messageId,
+      state: 'waiting',
+      hold: messageId === 'sending' ? 'sending' : 'queue-paused',
+      ...(messageId === 'mail'
+        ? { from: { kind: 'agent' as const, senders: [], orchestration: null } }
+        : {}),
+      ...(messageId === 'command' ? { command: true as const } : {})
+    })
+  )
   const answer = Promise.withResolvers<void>()
   let status: 'stale' | 'moved' = 'stale'
   const calls = vi.fn((..._args: unknown[]) => {})
@@ -41,37 +43,38 @@ it('previews an ID-relative move in user slots, reverts refusal, and adopts host
     calls(...args)
     await answer.promise
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the test writer only answers queuedMessageMove.
-    return { kind: 'done', value: { messageId: 'command', status } as T }
+    return { kind: 'done', value: { messageId: args[2].messageId, status } as T }
   }
   const hook = renderHook(
-    ({ published }) =>
+    ({ published, capable }) =>
       useStructuredAgentSessionQueuedReorder(
         published,
         {
           target: { kind: 'local' },
           sessionId: 'session',
           capable: true,
-          reorderCapable: true,
+          reorderCapable: capable,
           write
         },
         () => () => true
       ),
-    { initialProps: { published: cards } }
+    { initialProps: { published: cards, capable: true } }
   )
   let moved: Promise<void> | undefined
   act(() => {
-    moved = hook.result.current.reorder?.move('command', { beforeMessageId: 'a' })
+    moved = hook.result.current.reorder?.move('command', { beforeMessageId: 'mail' })
   })
   expect(hook.result.current.cards.map((card) => card.messageId)).toEqual([
-    'command',
-    'mail',
     'a',
+    'command',
+    'sending',
+    'mail',
     'b'
   ])
   expect(calls).toHaveBeenCalledWith(
     'agentSession.queuedMessageMove',
     'agentSession.queuedMessageMove',
-    { messageId: 'command', beforeMessageId: 'a' }
+    { messageId: 'command', beforeMessageId: 'mail' }
   )
   await act(async () => {
     answer.resolve()
@@ -83,18 +86,27 @@ it('previews an ID-relative move in user slots, reverts refusal, and adopts host
   )
   status = 'moved'
   await act(async () => {
-    await hook.result.current.reorder?.move('command', { afterMessageId: 'a' })
+    await hook.result.current.reorder?.move('mail', { afterMessageId: 'b' })
   })
   expect(hook.result.current.cards.map((card) => card.messageId)).toEqual([
     'a',
+    'b',
+    'sending',
     'mail',
-    'command',
-    'b'
+    'command'
   ])
-  const published = [cards[3]!, cards[1]!, cards[2]!, cards[0]!]
-  hook.rerender({ published })
+  expect(hook.result.current.cards[3]).toBe(cards[1])
+  await act(async () => {
+    await hook.result.current.reorder?.move('sending', { beforeMessageId: 'mail' })
+  })
+  expect(calls).toHaveBeenCalledTimes(2)
+  const published = [cards[4]!, cards[1]!, cards[2]!, cards[3]!, cards[0]!]
+  hook.rerender({ published, capable: true })
   expect(hook.result.current.cards).toBe(published)
   expect(hook.result.current.reorder?.pending).toBe(false)
+  hook.rerender({ published, capable: false })
+  expect(hook.result.current.reorder).toBeUndefined()
+  expect(calls).toHaveBeenCalledTimes(2)
 })
 
 it.each(['stale', 'not-done'] as const)(

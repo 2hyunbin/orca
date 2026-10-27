@@ -35,9 +35,9 @@ export function useStructuredAgentSessionQueuedReorder(
       if (busy.current || !transport.reorderCapable) {
         return
       }
-      const users = cards.filter((card) => !card.from && card.hold !== 'sending')
-      const moving = users.find((card) => card.messageId === messageId)
-      const remaining = users.filter((card) => card !== moving)
+      const movable = cards.filter((card) => card.hold !== 'sending')
+      const moving = movable.find((card) => card.messageId === messageId)
+      const remaining = movable.filter((card) => card !== moving)
       const anchorId = anchor.afterMessageId ?? anchor.beforeMessageId
       const at =
         anchorId == null
@@ -47,12 +47,14 @@ export function useStructuredAgentSessionQueuedReorder(
         return
       }
       remaining.splice(at + (anchor.afterMessageId ? 1 : 0), 0, moving)
-      const userSet = new Set(users)
-      let nextUser = 0
+      const movableSet = new Set(movable)
+      let nextMovable = 0
       const optimistic = {
         scope,
         base: cards,
-        cards: cards.map((card) => (userSet.has(card) ? (remaining[nextUser++] ?? card) : card))
+        cards: cards.map((card) =>
+          movableSet.has(card) ? (remaining[nextMovable++] ?? card) : card
+        )
       }
       busy.current = true
       setPending(true)

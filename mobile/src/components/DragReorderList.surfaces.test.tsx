@@ -95,13 +95,12 @@ it('asks synchronous admission before changing positions and restores a refused 
   await act(async () => fixture.root.unmount())
 })
 
-it('retains disabled user grips and layout while mail remains ineligible', async () => {
+it('retains every disabled grip and layout, including mail', async () => {
   const move = vi.fn()
   function Harness({ disabled }: { disabled: boolean }) {
     return createElement(DragReorderList<string>, {
       items: ['a', 'mail', 'b'],
       itemKey: (id) => id,
-      canMove: (id) => id !== 'mail',
       isMoveDisabled: () => disabled,
       rowHeight: 56,
       rowPresentation: 'plain',
@@ -119,7 +118,7 @@ it('retains disabled user grips and layout while mail remains ineligible', async
   const handles = () =>
     root!.root.findAll((node) => node.type === Animated.View && node.props.onAccessibilityAction)
   const first = handles()[0]!
-  expect(handles()).toHaveLength(2)
+  expect(handles()).toHaveLength(3)
   await act(async () => root!.update(createElement(Harness, { disabled: true })))
   expect(handles()[0]).toBe(first)
   expect(handles().every((handle) => handle.props.accessibilityState.disabled)).toBe(true)
@@ -130,11 +129,11 @@ it('retains disabled user grips and layout while mail remains ineligible', async
   expect(move).not.toHaveBeenCalled()
   await act(async () => root!.update(createElement(Harness, { disabled: false })))
   expect(handles()[0]).toBe(first)
-  expect(probe.enabled.slice(-3)).toEqual([true, false, true])
+  expect(probe.enabled.slice(-3)).toEqual([true, true, true])
   await act(async () =>
     first.props.onAccessibilityAction({ nativeEvent: { actionName: 'moveDown' } })
   )
-  expect(move).toHaveBeenCalledExactlyOnceWith({ movedId: 'a', afterId: 'b' })
-  expect(positions()).toEqual({ a: 2, mail: 1, b: 0 })
+  expect(move).toHaveBeenCalledExactlyOnceWith({ movedId: 'a', beforeId: 'b' })
+  expect(positions()).toEqual({ a: 1, mail: 0, b: 2 })
   await act(async () => root!.unmount())
 })

@@ -145,7 +145,20 @@ describe('mobile structured queued messages', () => {
   })
 
   it('reverts an optimistic relative move when the host reports a changed queue', async () => {
-    const messages = [queuedDraft({ messageId: 'a' }), queuedDraft({ messageId: 'b', position: 2 })]
+    const mail = queuedDraft({
+      messageId: 'mail',
+      body: {
+        kind: 'message',
+        role: 'user',
+        blocks: [],
+        from: { kind: 'agent', senders: [], orchestration: null }
+      }
+    })
+    const messages = [mail, queuedDraft({ messageId: 'b', position: 2 })]
+    await mountSession(CAPABLE, snapshotEvent({ queuedMessages: messages }))
+    expect(hook!.queued.move).toBeUndefined()
+    expect(calls('agentSession.queuedMessageMove')).toHaveLength(0)
+    unmountSession()
     await mountSession(
       { ...CAPABLE, queuedMessageReorder: true },
       snapshotEvent({ queuedMessages: messages })
@@ -159,18 +172,19 @@ describe('mobile structured queued messages', () => {
     )
     let moving!: Promise<boolean>
     await act(async () => {
-      moving = hook!.queued.move!({ movedId: 'a', afterId: 'b' })
+      moving = hook!.queued.move!({ movedId: 'mail', afterId: 'b' })
     })
-    expect(hook!.queued.cards.map((card) => card.messageId)).toEqual(['b', 'a'])
+    expect(hook!.queued.cards.map((card) => card.messageId)).toEqual(['b', 'mail'])
+    expect(hook!.queued.cards[1]?.automatic).toBe(true)
     expect(requestOf('agentSession.queuedMessageMove').params).toMatchObject({
-      messageId: 'a',
+      messageId: 'mail',
       afterMessageId: 'b'
     })
     await act(async () => {
-      finish(mutationOk({ messageId: 'a', status: 'stale' }))
+      finish(mutationOk({ messageId: 'mail', status: 'stale' }))
       expect(await moving).toBe(false)
     })
-    expect(hook!.queued.cards.map((card) => card.messageId)).toEqual(['a', 'b'])
+    expect(hook!.queued.cards.map((card) => card.messageId)).toEqual(['mail', 'b'])
   })
 
   describe('capability-gated delivery', () => {

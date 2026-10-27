@@ -54,14 +54,14 @@ describe('drag completion and cancellation', () => {
   })
 
   it.each([
-    { ids: ['a', 'mail'], distance: 80, expected: { a: 0, mail: 1 }, changed: false },
-    { ids: ['a', 'mail', 'b'], distance: 80, expected: { a: 0, mail: 1, b: 2 }, changed: false },
-    { ids: ['a', 'mail', 'b'], distance: 160, expected: { b: 0, mail: 1, a: 2 }, changed: true }
-  ])('settles a drag across protected mail at $distance with $ids', async (test) => {
+    { ids: ['a', 'fixed'], distance: 80, expected: { a: 0, fixed: 1 }, changed: false },
+    { ids: ['a', 'fixed', 'b'], distance: 80, expected: { a: 0, fixed: 1, b: 2 }, changed: false },
+    { ids: ['a', 'fixed', 'b'], distance: 160, expected: { b: 0, fixed: 1, a: 2 }, changed: true }
+  ])('settles a drag across excluded slots at $distance with $ids', async (test) => {
     const onMove = vi.fn()
     const fixture = await mounted({
       initialIds: test.ids,
-      canMove: (item) => item.id !== 'mail',
+      canMove: (item) => item.id !== 'fixed',
       onMove
     })
     await act(async () => {
@@ -78,9 +78,9 @@ describe('drag completion and cancellation', () => {
     expect(positions()).toEqual(test.expected)
     if (test.changed) {
       expect(onMove).toHaveBeenCalledExactlyOnceWith({ movedId: 'a', afterId: 'b' })
-      await fixture.updateItems(['b', 'mail', 'a'])
+      await fixture.updateItems(['b', 'fixed', 'a'])
       await fixture.updateItems(test.ids)
-      expect(positions()).toEqual({ a: 0, mail: 1, b: 2 })
+      expect(positions()).toEqual({ a: 0, fixed: 1, b: 2 })
     } else {
       expect(onMove).not.toHaveBeenCalled()
       expect(fixture.onReorder).not.toHaveBeenCalled()
@@ -311,10 +311,10 @@ it('supplies geometry inputs to both Web mappers and recalculates layout after a
 })
 
 it.each([100, 1000])(
-  'bounds accessibility work for %i rows while mail and busy slots stay fixed',
+  'bounds accessibility work for %i rows while excluded slots stay fixed',
   async (count) => {
     const ids = Array.from({ length: count }, (_, at) =>
-      at === 1 ? 'mail' : at === 2 ? 'busy' : `row-${at}`
+      at === 1 ? 'fixed' : at === 2 ? 'busy' : `row-${at}`
     )
     let keyReads = 0
     let membership = 0
@@ -329,7 +329,7 @@ it.each([100, 1000])(
         },
         canMove: (id) => {
           membership++
-          return id !== 'mail' && id !== 'busy'
+          return id !== 'fixed' && id !== 'busy'
         },
         rowHeight: 56,
         renderRow: (id, handle) => createElement('Text', null, id, handle),
@@ -354,7 +354,7 @@ it.each([100, 1000])(
     await act(async () => accessibilityAction({ nativeEvent: { actionName: 'moveDown' } }))
     expect(keyReads).toBeLessThanOrEqual(3 * count)
     expect(membership).toBeLessThanOrEqual(3 * count)
-    expect(onReorder.mock.calls[0]![0].slice(0, 4)).toEqual(['row-3', 'mail', 'busy', 'row-0'])
+    expect(onReorder.mock.calls[0]![0].slice(0, 4)).toEqual(['row-3', 'fixed', 'busy', 'row-0'])
     expect(onMove).toHaveBeenCalledExactlyOnceWith({ movedId: 'row-0', beforeId: 'row-4' })
     await act(async () => root!.update(createElement(Harness, { items: ids.slice(1) })))
     await act(async () => accessibilityAction({ nativeEvent: { actionName: 'moveDown' } }))

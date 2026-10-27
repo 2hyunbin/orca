@@ -31,22 +31,18 @@ export function useMobileQueuedMessageComposerActions(args: {
       if (!args.enabled || !messages) {
         return false
       }
-      const user = messages.filter((message) => message.body.from === undefined)
-      const source = user.find((message) => message.messageId === move.movedId)
-      const remaining = user.filter((message) => message !== source)
+      const source = messages.find((message) => message.messageId === move.movedId)
+      const remaining = messages.filter((message) => message !== source)
       const anchor = 'beforeId' in move ? move.beforeId : move.afterId
       const at = remaining.findIndex((message) => message.messageId === anchor)
       if (!source || at === -1) {
         return false
       }
       remaining.splice(at + ('afterId' in move ? 1 : 0), 0, source)
-      let index = 0
       setPreview({
         scope: sessionKey,
         source: messages,
-        messages: messages.map((message) =>
-          message.body.from === undefined ? remaining[index++]! : message
-        )
+        messages: remaining
       })
       const result = await mutate<AgentSessionQueuedMessageMoveResult>(
         'agentSession.queuedMessageMove',
