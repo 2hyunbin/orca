@@ -3,7 +3,6 @@ import type {
   BrowserCookieImportSummary
 } from '../../../../shared/browser-workspace-types'
 import { summarizePartitionSkips } from '../browser-cookie-partition-summary'
-import { withCookieMutationLock } from '../browser-cookie-import-clear'
 import { openCookieClearStore } from '../browser-cookie-clear-store'
 import { writeImportedCookies, type SourceCookieToWrite } from '../browser-cookie-import-write'
 import { deriveUrl } from '../sources/browser-cookie-validation'
@@ -34,36 +33,26 @@ export async function finalizeChromiumCookieImport(
     }
   }
 
-  await withCookieMutationLock(context.targetSession, async () => {
-    const cookieClearStore = openCookieClearStore(context.targetSession)
-    try {
-      const writable: SourceCookieToWrite[] = []
-      for (const cookie of context.decryptedCookies) {
-        const url = deriveUrl(cookie.domain, cookie.secure)
-        if (!url) {
-          context.memoryFailed++
-          continue
-        }
-        writable.push({ ...cookie, url })
+  const cookieClearStore = openCookieClearStore(context.targetSession)
+  try {
+    const writable: SourceCookieToWrite[] = []
+    for (const cookie of context.decryptedCookies) {
+      const url = deriveUrl(cookie.domain, cookie.secure)
+      if (!url) {
+        context.memoryFailed++
+        continue
       }
-      // Rejections leave other coordinates available for the remaining live writes.
-      const phase = await writeImportedCookies(cookieClearStore, writable, {
-        log: diag
-      })
-      context.memoryLoaded = phase.importedCount
-      context.memoryFailed += phase.writeRejected
-      context.skipped += phase.expired
-    } finally {
-      cookieClearStore.dispose()
+      writable.push({ ...cookie, url })
     }
-  })
-
-  if (context.memoryLoaded > 0) {
-    try {
-      await context.targetSession.cookies.flushStore()
-    } catch (error) {
-      diag(`  cookie flush failed: ${String(error)}`)
-    }
+    // Rejections leave other coordinates available for the remaining live writes.
+    const phase = await writeImportedCookies(cookieClearStore, writable, {
+      log: diag
+    })
+    context.memoryLoaded = phase.importedCount
+    context.memoryFailed += phase.writeRejected
+    context.skipped += phase.expired
+  } finally {
+    cookieClearStore.dispose()
   }
 
   diag(

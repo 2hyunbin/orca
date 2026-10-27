@@ -310,7 +310,7 @@ describe('two concurrent NATIVE imports into one partition', () => {
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it('serializes native live writes while source preparation can proceed', async () => {
+  it('serializes native source preparation and live writes', async () => {
     const sourceA = join(tmpDir, 'ChromeA', 'Default', 'Network', 'Cookies')
     const sourceB = join(tmpDir, 'ChromeB', 'Default', 'Network', 'Cookies')
     createChromiumCookieTestDatabase(sourceA, [
@@ -325,7 +325,7 @@ describe('two concurrent NATIVE imports into one partition', () => {
       []
     ).close()
 
-    // Source preparation may overlap, but live writes share the Session lock.
+    // Native preparation and live writes share the same Session admission.
     const first = importCookiesFromBrowser(chromeBrowser(sourceA), 'persist:native-conc')
     const second = importCookiesFromBrowser(chromeBrowser(sourceB), 'persist:native-conc')
     for (let i = 0; i < 100 && !events.includes('set:first'); i++) {
