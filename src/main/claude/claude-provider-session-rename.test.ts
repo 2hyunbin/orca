@@ -54,7 +54,7 @@ it('makes the SDK picker read the saved title after a torn transcript tail', asy
     sessionStore: {
       load: async () => [JSON.parse(user), JSON.parse(lines[2] ?? '')],
       append: async () => {},
-      listSessions: async () => [{ sessionId: conversation, mtime: Date.now() }]
+      listSessions: async () => [{ sessionId: conversation, mtime: 1_700_000_000_000 }]
     }
   })
   expect(listed[0]?.customTitle).toBe('Release notes')
