@@ -137,7 +137,7 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
               },
               opts.deadlineMs
             )
-          : null
+          : await this.readLiveSleepCwd(id, opts.deadlineMs)
       const committed = await this.runExclusiveCheckpoint(
         async () => {
           // Set inside: a caller past its deadline leaves this checkpoint running without it.
@@ -275,6 +275,26 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
       return result.cwd ?? ''
     } catch {
       return ''
+    }
+  }
+
+  /**
+   * A native shell's folder at Sleep (OSC 7, else its process's cwd). Bash prints no OSC 7, so
+   * without this the checkpoint keeps the spawn folder and Wake opens there (e.g. on a Linux host).
+   */
+  private async readLiveSleepCwd(id: string, deadlineMs?: number): Promise<string | null> {
+    if (!this.activeSessionIds.has(id)) {
+      return null
+    }
+    try {
+      const result = await this.client.request<{ cwd: string | null }>(
+        'getCwd',
+        { sessionId: id },
+        remainingDaemonRequestTimeoutMs(deadlineMs)
+      )
+      return result.cwd || null
+    } catch {
+      return null
     }
   }
 
