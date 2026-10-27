@@ -1,5 +1,10 @@
 @import '../../../src/renderer/src/assets/main.css';
 @source './fixture.tsx';
+@source './notification-fixture.tsx';
+@source '../../../src/renderer/src/components/NotificationCardStack.tsx';
+@source '../../../src/renderer/src/components/StarNagCard.tsx';
+@source '../../../src/renderer/src/components/star-nag/StarNagToastHost.tsx';
+@source '../../../src/renderer/src/components/native-chat/NativeChatComposerActions.tsx';
 @source '../../../src/renderer/src/components/native-chat/NativeChatPaneHeader.tsx';
 @source '../../../src/renderer/src/components/native-chat/NativeChatFindBar.tsx';
 @source '../../../src/renderer/src/components/native-chat/NativeChatContextClearFade.tsx';

@@ -61,10 +61,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
     >
       <Sonner
         theme={theme as ToasterProps['theme']}
-        position="bottom-right"
-        // Reserve status-bar clearance at both normal and sub-600px mobileOffset breakpoints.
-        offset={{ bottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}
-        mobileOffset={{ bottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}
+        position="top-right"
+        // Clear the title bar and keep notifications away from composer actions at every breakpoint.
+        offset={{ top: 'calc(2.5rem + env(safe-area-inset-top, 0px))' }}
+        mobileOffset={{ top: 'calc(2.5rem + env(safe-area-inset-top, 0px))' }}
         className="toaster group"
         icons={{
           success: <CircleCheckIcon className="size-4" />,

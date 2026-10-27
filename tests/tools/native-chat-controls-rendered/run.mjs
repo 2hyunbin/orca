@@ -109,12 +109,57 @@ try {
   expect(probe).toEqual({ overlap: true, content: 'none', wrapper: 'none', hit: true })
   await next.click()
   await expect(search).toContainText('2/2')
+  // Production notification containers must leave both real composer actions reachable in split panes.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  for (const width of [1000, 700, 480]) {
+    for (const kind of ['warning', 'star toast', 'star card']) {
+      await page.setViewportSize({ width, height: 700 })
+      await page.goto(`${url}?notifications`)
+      await page.getByRole('button', { name: `Show ${kind}`, exact: true }).click()
+      const notification =
+        kind === 'star card'
+          ? page.getByRole('complementary', { name: 'Enjoying Orca?' })
+          : page.locator('[data-sonner-toast]')
+      await expect(notification).toBeVisible()
+      if (kind !== 'star card') {
+        await expect(notification).toHaveAttribute('data-mounted', 'true')
+      }
+      const critical = (name) => page.getByRole('button', { name, exact: true })
+      for (const name of ['Send', 'Stop the agent']) {
+        await expect
+          .poll(() =>
+            critical(name).evaluate((button) => {
+              const r = button.getBoundingClientRect()
+              return button.contains(
+                document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+              )
+            })
+          )
+          .toBe(true)
+        await critical(name).click()
+      }
+      await expect(page.locator('output')).toHaveText('Sends: 1; Stops: 1; Notification actions: 0')
+      if (kind === 'warning') {
+        await notification.getByRole('button', { name: 'System Settings', exact: true }).click()
+        await expect(page.locator('output')).toContainText('Notification actions: 1')
+        await page.getByRole('button', { name: 'Update warning', exact: true }).click()
+        await expect(notification).toContainText('Notifications enabled')
+        await notification.locator('[data-close-button]').click()
+        await expect(notification).toBeHidden()
+      } else {
+        await page.getByRole('button', { name: 'Later', exact: true }).click()
+        await expect(notification).toBeHidden()
+      }
+    }
+  }
   expect(errors).toEqual([])
   const windows = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows().map((w) => [w.isVisible(), w.isFocused()])
   )
   expect(windows).toEqual([[false, false]])
-  console.log(`PASS: native header geometry and tooltip pointer passage (${output})`)
+  console.log(
+    `PASS: native header, tooltip passage and notification/composer hit testing (${output})`
+  )
 } finally {
   await app.close()
 }

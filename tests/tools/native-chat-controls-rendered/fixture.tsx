@@ -6,6 +6,7 @@ import { NativeChatContextClearFade } from '@/components/native-chat/NativeChatC
 import { nativeChatAppearanceStyle } from '@/components/native-chat/native-chat-appearance-style'
 import { useNativeChatFind } from '@/components/native-chat/use-native-chat-find'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { NotificationFixture } from './notification-fixture'
 import './fixture.css'
 
 function Fixture() {
@@ -40,5 +41,7 @@ function Fixture() {
 }
 const root = document.getElementById('root')
 if (root) {
-  createRoot(root).render(<Fixture />)
+  createRoot(root).render(
+    location.search === '?notifications' ? <NotificationFixture /> : <Fixture />
+  )
 }
