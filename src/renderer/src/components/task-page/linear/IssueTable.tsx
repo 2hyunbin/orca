@@ -35,30 +35,31 @@ export function TaskPageLinearIssueTable({
           const collapsed = collapsedSections.has(row.key)
           sectionCollapsed = collapsed
           return (
-            <Button
-              key={row.key}
-              type="button"
-              variant="ghost"
-              aria-expanded={!collapsed}
-              onClick={() => {
-                setCollapsedSections((current) => {
-                  const next = new Set(current)
-                  if (!next.delete(row.key)) {
-                    next.add(row.key)
-                  }
-                  return next
-                })
-              }}
-              className="flex h-9 w-full justify-start rounded-none bg-muted/35 px-3 text-left focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-            >
-              <ChevronDown
-                className={cn('size-3 shrink-0 text-muted-foreground', collapsed && '-rotate-90')}
-              />
-              <span className="min-w-0 truncate text-[13px] font-medium text-foreground">
-                {row.label}
-              </span>
-              <span className="shrink-0 text-[11px] text-muted-foreground">{row.count}</span>
-            </Button>
+            <div key={row.key} className="h-9 bg-muted/35">
+              <Button
+                type="button"
+                variant="ghost"
+                aria-expanded={!collapsed}
+                onClick={() => {
+                  setCollapsedSections((current) => {
+                    const next = new Set(current)
+                    if (!next.delete(row.key)) {
+                      next.add(row.key)
+                    }
+                    return next
+                  })
+                }}
+                className="flex h-full w-full justify-start text-left"
+              >
+                <ChevronDown
+                  className={cn('size-3 shrink-0 text-muted-foreground', collapsed && '-rotate-90')}
+                />
+                <span className="min-w-0 truncate text-[13px] font-medium text-foreground">
+                  {row.label}
+                </span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">{row.count}</span>
+              </Button>
+            </div>
           )
         }
         if (sectionCollapsed) {
