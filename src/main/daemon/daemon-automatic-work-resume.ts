@@ -27,11 +27,7 @@ export async function getLocalAutomaticWorkStatus(
   return (await localDaemons(provider)?.current.getAutomaticWorkStatus()) ?? null
 }
 
-/**
- * Each protocol generation keeps its own run marker, so a pause can sit on a daemon kept
- * running across an update too. The current daemon's answer is the one reported; an older
- * daemon that cannot be reached keeps its pause until it is retired.
- */
+// Resume current and legacy generations; only the current result is authoritative.
 export async function resumeLocalAutomaticWork(
   provider: IPtyProvider
 ): Promise<AutomaticWorkResumeOutcome> {

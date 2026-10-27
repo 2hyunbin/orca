@@ -60,7 +60,7 @@ export function installPtyRuntimeController(deps: PtyRuntimeControllerDeps): voi
       return adopted
     },
     spawn: async (args) => spawnPtyFromRuntimeController(deps, args),
-    // Why the local owner only: an SSH host's gate belongs to that host's own runtime.
+    // Local owner only: an SSH host's gate belongs to that host's own runtime.
     terminalLimit: (update) => localTerminalLimit(localProvider, update),
     getAutomaticWorkStatus: () => getLocalAutomaticWorkStatus(localProvider),
     resumeAutomaticWork: () => resumeLocalAutomaticWork(localProvider),
@@ -68,10 +68,7 @@ export function installPtyRuntimeController(deps: PtyRuntimeControllerDeps): voi
     writeWithSettlement: (ptyId, data, inputKind) =>
       writePtyFromRuntimeController(deps, ptyId, data, inputKind, { waitForSettlement: true }),
     probePtyLiveness: (ptyId) => probePtyLivenessFromRuntimeController(deps, ptyId),
-    // Why: subscriber-driven ingestion for daemon sessions no renderer pane
-    // ever attached. Local daemon sessions only — SSH panes have their own
-    // lease machinery, and the in-process local provider streams without
-    // attach. Attach-only and false-on-doubt: never creates or resizes.
+    // Attach-only ingestion serves unmounted daemon sessions without creating/resizing; SSH uses leases and local PTYs already stream.
     attach: (ptyId) => attachPtyFromRuntimeController(deps, ptyId),
     kill: (ptyId) => killPtyFromRuntimeController(deps, ptyId),
     retireRejectedPty: (ptyId, stopConfirmed, incarnationId) =>
@@ -92,7 +89,7 @@ export function installPtyRuntimeController(deps: PtyRuntimeControllerDeps): voi
     supportsForegroundProcessEvidence: (hostId) =>
       supportsForegroundProcessEvidenceFromRuntimeController(hostId),
     serializeBuffer: (ptyId, opts) => {
-      // Why: mobile xterm must start from the desktop's exact screen state/dimensions before live TUI chunks render correctly.
+      // Mobile needs exact screen state and geometry before rendering live TUI output.
       return requestSerializedBuffer(ptyId, opts)
     },
     serializeProviderBuffer: (ptyId, opts) =>

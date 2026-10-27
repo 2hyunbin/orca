@@ -34,7 +34,7 @@ export {
 export type { TerminalSpawnAdmissionMode } from './terminal-spawn-admission-mode'
 
 const RECENT_AUTOMATIC_WORK_MS = 10 * 60_000
-// Why poll: another daemon freeing a slot cannot wake this one's waiters.
+// Poll because another daemon releasing a slot cannot wake local waiters.
 const OTHER_DAEMON_POLL_MS = 500
 
 export type TerminalSpawnLease = {
@@ -49,7 +49,7 @@ export type TerminalSpawnGateSnapshot = {
   mode: TerminalSpawnAdmissionMode
   inFlight: Record<SpawnCharge, number>
   liveAutomatic: number
-  /** Live plus starting terminals of every charge; what the host cap counts for this daemon. */
+  /** Count live and starting terminals of every charge. */
   terminals: number
   waiting: number
   waited: number
@@ -70,16 +70,11 @@ type TerminalSpawnGateOptions = {
   /** The execution host's terminal cap; defaults to capping this daemon alone. */
   resolveMaximum?: () => Promise<number>
   hostTerminals?: HostTerminalLedger
-  /** The host's copy of old-client restores it refused (owner decision Q9). */
+  /** Retain refused restores for clients that already discarded their own resume records. */
   legacyRestores?: LegacyRestoreRecords
 }
 
-/**
- * The daemon's single fork gate. In `observe` every request is admitted at once and
- * the policy's verdict is only counted. In `enforce` automatic restores wait for a
- * slot inside the caller's deadline; a caller that declared an intent may instead be
- * told to keep its pane sleeping, and an undeclared caller is only ever paced.
- */
+/** Observe skips pacing, never the host cap; only declared callers can defer into sleeping panes. */
 export class TerminalSpawnGate {
   private readonly mode: TerminalSpawnAdmissionMode
   private readonly limits: SpawnAdmissionLimits
@@ -118,7 +113,6 @@ export class TerminalSpawnGate {
   admit(
     facts: SpawnRequestFacts,
     cancel?: { signal: AbortSignal; error: () => Error },
-    /** What the request would resume; recorded if an old client's restore is refused. */
     restore?: LegacyRestoreDetails
   ): TerminalSpawnLease | Promise<TerminalSpawnLease> {
     return admitRecordingLegacyRestore(
@@ -164,7 +158,6 @@ export class TerminalSpawnGate {
     const others = this.host.readOthers(now)
     const charge = resolveSpawnCharge(this.state, facts, this.limits, now)
     const decision = decideSpawnAdmission({
-      // Why: automatic restores share one budget with every other daemon on this host (Q1).
       state: withOtherDaemonsAutomaticWork(
         this.state,
         others.automatic,
@@ -180,14 +173,14 @@ export class TerminalSpawnGate {
       now
     })
     if (this.mode === 'observe' || decision.kind === 'admit') {
-      // Why reserve before recording: a refused fork must not be logged as admitted.
+      // Reserve first so refused forks cannot be logged as admitted.
       if (!this.host.tryReserve(this.state, maximum)) {
         this.refuseAtHostCap(facts, charge, maximum)
       }
       this.record(decision, charge, facts, !alreadyWaited)
       return { kind: 'lease', lease: this.lease(facts, charge, now) }
     }
-    // Why: a request that would only wait to be refused at the cap is told at once.
+    // Refuse at the host cap before spending time in the pacing queue.
     if (
       decision.kind === 'wait' &&
       this.host.terminals(this.state) + 1 + others.terminals > maximum
@@ -211,7 +204,6 @@ export class TerminalSpawnGate {
     }
   }
 
-  /** A pressure change can let a waiter through, or make it give up. */
   onPressureChanged(): void {
     this.waiters.wakeAll()
   }
@@ -249,12 +241,10 @@ export class TerminalSpawnGate {
     }
   }
 
-  /** Starts keeping this daemon's entry in the host's shared count fresh. */
   startHostTerminals(): void {
     this.host.start()
   }
 
-  /** Removes this daemon from the host's shared count; its sessions are gone. */
   stopHostTerminals(): void {
     this.host.stop()
   }
@@ -314,7 +304,7 @@ export class TerminalSpawnGate {
     facts: SpawnRequestFacts,
     firstDecision: boolean
   ): void {
-    // Why first only: a woken waiter re-decides, and counting each pass would inflate `waited`.
+    // Count each request once, even when its waiter wakes and re-decides.
     if ((decision.kind === 'admit' && charge === 'interactive') || !firstDecision) {
       return
     }

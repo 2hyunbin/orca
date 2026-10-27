@@ -11,7 +11,7 @@ const { turnedOnDarkBuildDefines } = createRequire(import.meta.url)('../dark-bui
 export const ORCAD_ENTRY_POINT = 'src/main/orcad/main.ts'
 export const ORCAD_LAUNCHER_ENTRY_POINT = 'src/main/orcad/launcher.ts'
 export const ORCAD_CHILD_ENTRY_POINTS = {
-  watcher: 'src/main/ipc/parcel-watcher-process-entry.ts',
+  watcher: 'src/main/ipc/filesystem/watcher-process/parcel-watcher-process-entry.ts',
   daemon: 'src/main/daemon/daemon-entry.ts',
   writer: 'src/main/persistence/profile-state/profile-state-writer-worker-entry.ts',
   backup: 'src/main/persistence/profile-state/profile-state-backup-worker-entry.ts',
@@ -21,7 +21,8 @@ export const ORCAD_CHILD_ENTRY_POINTS = {
   workerThreadChildProcess:
     'src/main/worker-thread-child-process/worker-thread-child-process-entry.ts',
   claudeProfileSetup: 'src/main/claude-accounts/claude-profile-setup-worker-entry.ts',
-  sttWorker: 'src/main/speech/stt-worker.ts'
+  sttWorker: 'src/main/speech/stt-worker.ts',
+  computerSidecar: 'src/main/computer/computer-sidecar.ts'
 }
 
 /** Each child ships flat beside orcad.js under its source basename; the runtime resolvers look there. */
@@ -62,11 +63,10 @@ const jsoncParserEsm = {
   }
 }
 
-/**
- * Where the bundle leaves the one-byte range, if anywhere. A single non-ASCII character makes V8 hold
- * the whole ~11 MB server source as a two-byte string (~21 MB); esbuild escapes strings itself but
- * not regex literals or tagged templates.
- */
+// Every orcad bundle (server, children, CLI) must share these, or one ships a UMD build that cannot load (#33592).
+export const ORCAD_BUNDLE_PLUGINS = [jsoncParserEsm, externalNativeAddons]
+
+// One non-ASCII character makes V8 store the ~11MB bundle as ~21MB two-byte text; esbuild escapes strings but leaves regex/tagged-template literals.
 export function findNonAsciiSource(source) {
   let index = 0
   while (index < source.length && source.charCodeAt(index) < 0x80) {
@@ -145,7 +145,7 @@ function buildOrcadEntryBundle(outfile, minify) {
     format: 'cjs',
     outfile,
     external: ORCAD_EXTERNAL_MODULES,
-    plugins: [jsoncParserEsm, externalNativeAddons],
+    plugins: ORCAD_BUNDLE_PLUGINS,
     metafile: true,
     minify,
     // Licenses stay in the bundle as a trailing comment, which `escapeLegalCommentTail` keeps ASCII.
@@ -167,6 +167,7 @@ export function buildOrcadCli(outfile) {
     target: 'node18',
     format: 'cjs',
     outfile,
+    plugins: ORCAD_BUNDLE_PLUGINS,
     metafile: true,
     minify: true,
     sourcemap: false,
