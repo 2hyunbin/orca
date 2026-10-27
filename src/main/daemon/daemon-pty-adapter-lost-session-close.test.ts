@@ -31,6 +31,8 @@ describe('closing a kept host-loss tab after a relaunch', () => {
   let socketPath: string
   let tokenPath: string
   let lostId: string
+  let original: DaemonPtyAdapter
+  let lastSubprocess: () => ReturnType<typeof createMockSubprocess>
   const opened: DaemonPtyAdapter[] = []
 
   beforeEach(async () => {
@@ -49,6 +51,8 @@ describe('closing a kept host-loss tab after a relaunch', () => {
       }
     )
     ;({ dir, server, socketPath, tokenPath } = harness)
+    lastSubprocess = () => subprocess!
+    original = harness.adapter
     opened.push(harness.adapter)
     const exited: string[] = []
     harness.adapter.onExit(({ id }) => exited.push(id))
@@ -158,6 +162,27 @@ describe('closing a kept host-loss tab after a relaunch', () => {
     await expect(unconnected.listsSession(lostId)).resolves.toBeNull()
     expect(connect).not.toHaveBeenCalled()
     expect(connectWithin).not.toHaveBeenCalled()
+  })
+
+  // Wider than host loss: any tab with unended history and no session, e.g. a slept one.
+  async function sleptId(): Promise<string> {
+    const { id } = await original.spawn({ cols: 80, rows: 24 })
+    lastSubprocess()._simulateData('user@host:~$ echo slept\r\nslept\r\nuser@host:~$ ')
+    await original.shutdown(id, { immediate: true, keepHistory: true })
+    return id
+  }
+
+  it('ends a slept tab’s history when it is closed without waking', async () => {
+    const id = await sleptId()
+    expect(relaunchedAdapter().hasRestorableHistory(id)).toBe(true)
+    await expect(close(relaunchedAdapter(), id)).resolves.toBeUndefined()
+    expect(existsSync(join(historyDir, getHistorySessionDirName(id)))).toBe(false)
+  })
+
+  it('keeps a slept tab’s history while another daemon lists its session', async () => {
+    const id = await sleptId()
+    await expect(close(routerWithLegacyListing(true), id)).rejects.toThrow('Session not found')
+    expect(existsSync(join(historyDir, getHistorySessionDirName(id)))).toBe(true)
   })
 
   it('still refuses an id with no unended history', async () => {
