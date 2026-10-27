@@ -144,4 +144,40 @@ describe('releasing moved projects here', () => {
     }))
     expect(refocusHere.mock.calls.map(([released]) => released.migrationId)).toEqual(['m2'])
   })
+
+  it("turns each move's host automations off before releasing that move", async () => {
+    const stopHostAutomations = vi.fn(async (stopped: Move) => {
+      // Not released yet when its automations go off on the host.
+      expect(journal.released).not.toContain(stopped.migrationId)
+      return 'stopped' as const
+    })
+    const result = await releaseWslMoveChainHere('/user-data', 'Ubuntu', [], () => ({
+      stopHostCopies: vi.fn(async () => 'stopped' as const),
+      stopHostAutomations
+    }))
+    expect(result).toMatchObject({ released: true })
+    // Partial chains stay per move: each call names only the move being released.
+    expect(stopHostAutomations.mock.calls.map(([stopped]) => stopped.migrationId)).toEqual([
+      'm2',
+      'm1'
+    ])
+  })
+
+  it('refuses, releasing nothing, when the host cannot turn its automations off', async () => {
+    for (const [stop, reason] of [
+      ['unreachable', 'host-unreachable'],
+      ['failed', 'failed']
+    ] as const) {
+      journal.chain = [move('m1', 'r1'), move('m2', 'r2')]
+      journal.released = []
+      window.reloads = 0
+      const result = await releaseWslMovedProjectHere('/user-data', { repoId: 'r2' }, [], () => ({
+        stopHostCopies: vi.fn(async () => 'stopped' as const),
+        stopHostAutomations: vi.fn(async () => stop)
+      }))
+      expect(result).toMatchObject({ released: false, reason, detail: 'host-automations' })
+      expect(journal.released).toEqual([])
+      expect(window.reloads).toBe(0)
+    }
+  })
 })

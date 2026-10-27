@@ -16,9 +16,17 @@ import { wslMoveReleasedSessionFocusPatch } from '../persistence/moving-wsl-proj
 import { applyWslMoveSessionFocus } from '../persistence/moving-wsl-projects/wsl-move-main-rewrite-stores'
 import { listEnvironments } from '../../shared/runtime-environment-store'
 import { callRuntimeEnvironment } from './runtime-environments/runtime-environment-transport-routing'
+import {
+  stopWslMoveHostAutomations,
+  wslMoveAutomationsToTurnOffOnHost,
+  type WslMoveHostAutomationStop
+} from '../persistence/moving-wsl-projects/wsl-move-undo-host-automations'
+import { disableWslHostAutomations } from './wsl-host-automation-disable'
 
 export type WslMoveUndoPorts = {
   stopHostCopies: (move: WslMoveCutover) => Promise<WslMoveHostCopyStop>
+  /** Before the release: the host's copies of the move's automations that are on here turn off. */
+  stopHostAutomations?: (move: WslMoveCutover) => Promise<WslMoveHostAutomationStop>
   /** After the release, with window writes held: focus on the host copy returns here. */
   refocusHere?: (move: WslMoveCutover) => void
 }
@@ -32,7 +40,7 @@ const SLEEP_TIMEOUT_MS = 60_000
 const LIST_TIMEOUT_MS = 10_000
 
 export function createWslMoveUndoPorts(
-  store: Pick<Store, 'getWorkspaceSession' | 'patchWorkspaceSession'>,
+  store: Pick<Store, 'getWorkspaceSession' | 'patchWorkspaceSession' | 'listAutomations'>,
   userDataPath: string
 ): WslMoveUndoPorts {
   return {
@@ -80,6 +88,16 @@ export function createWslMoveUndoPorts(
         },
         wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms))
       })
+    },
+    stopHostAutomations: async (move) => {
+      // A removed host took its automations with it.
+      if (!listEnvironments(userDataPath).some((env) => env.id === move.destinationEnvironmentId)) {
+        return 'stopped'
+      }
+      return stopWslMoveHostAutomations(
+        wslMoveAutomationsToTurnOffOnHost(move, store.listAutomations()),
+        (ids) => disableWslHostAutomations(userDataPath, move.destinationEnvironmentId, ids)
+      )
     },
     refocusHere: (move) => {
       applyWslMoveSessionFocus(

@@ -8,17 +8,22 @@ import { getWslHostService } from '../wsl/wsl-host-service-instance'
 import type { WslMoveMovedAutomation } from '../persistence/moving-wsl-projects/wsl-move-host-automations-rewrite'
 
 // The host's automation service message for an id it does not hold.
-const AUTOMATION_NOT_FOUND = 'Automation not found'
+export const AUTOMATION_NOT_FOUND = 'Automation not found'
 
-const ShownAutomationSchema = z.object({
+export const ShownAutomationSchema = z.object({
   automation: z.object({ enabled: z.boolean(), updatedAt: z.number() })
 })
 
-export async function enableWslHostAutomations(
+export type WslHostAutomationApi = (
+  method: 'automation.show' | 'automation.update',
+  params: unknown
+) => ReturnType<typeof sendSupportedMigrationRequest>
+
+/** The host's automation API, never booting its distro; throws when the host is not reachable. */
+export async function openWslHostAutomationApi(
   userDataPath: string,
-  environmentId: string,
-  automations: readonly WslMoveMovedAutomation[]
-): Promise<void> {
+  environmentId: string
+): Promise<WslHostAutomationApi> {
   const service = getWslHostService()
   if (!service?.recordForEnvironment(environmentId)) {
     throw new Error('wsl_move_host_unavailable')
@@ -30,13 +35,17 @@ export async function enableWslHostAutomations(
     throw new Error('orcad_migration_pairing_code_invalid')
   }
   const options = environment.runtimeId ? { expectedRuntimeId: environment.runtimeId } : {}
+  return (method, params) => sendSupportedMigrationRequest(pairing, method, params, options)
+}
+
+export async function enableWslHostAutomations(
+  userDataPath: string,
+  environmentId: string,
+  automations: readonly WslMoveMovedAutomation[]
+): Promise<void> {
+  const request = await openWslHostAutomationApi(userDataPath, environmentId)
   for (const moved of automations) {
-    const shown = await sendSupportedMigrationRequest(
-      pairing,
-      'automation.show',
-      { id: moved.id },
-      options
-    )
+    const shown = await request('automation.show', { id: moved.id })
     if (!shown.ok) {
       // Deleted on the host since the move: nothing left to turn on.
       if (shown.error.message.includes(AUTOMATION_NOT_FOUND)) {
@@ -49,12 +58,7 @@ export async function enableWslHostAutomations(
     if (row.enabled || moved.updatedAt === null || row.updatedAt !== moved.updatedAt) {
       continue
     }
-    const updated = await sendSupportedMigrationRequest(
-      pairing,
-      'automation.update',
-      { id: moved.id, updates: { enabled: true } },
-      options
-    )
+    const updated = await request('automation.update', { id: moved.id, updates: { enabled: true } })
     if (!updated.ok) {
       throw new Error(`wsl_move_automation_enable_failed:${updated.error.message}`)
     }

@@ -103,12 +103,23 @@ async function releaseWslMovesHere(
   let failure: Extract<WslMoveUseLocallyResult, { released: false }> | null = null
   for (const move of newestFirst) {
     const moveRefusal = move === first ? null : wslMoveReleaseRefusal(userDataPath, move)
+    const ports = createUndoPorts()
     // The host's copies stop first, or an agent the move resumed there runs beside this one.
-    const stop = moveRefusal ? null : await createUndoPorts().stopHostCopies(move)
+    const stop = moveRefusal ? null : await ports.stopHostCopies(move)
     if (moveRefusal || stop !== 'stopped') {
       failure = moveRefusal ?? {
         released: false,
         reason: stop === 'unreachable' ? 'host-unreachable' : 'host-still-running'
+      }
+      break
+    }
+    // Its automations run here again once released; the host's copies turn off first.
+    const automations = (await ports.stopHostAutomations?.(move)) ?? 'stopped'
+    if (automations !== 'stopped') {
+      failure = {
+        released: false,
+        reason: automations === 'unreachable' ? 'host-unreachable' : 'failed',
+        detail: 'host-automations'
       }
       break
     }

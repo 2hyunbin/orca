@@ -22,7 +22,7 @@ vi.mock('../ssh/orcad-migration-catalog-client', () => ({
   sendSupportedMigrationRequest: async (
     _pairing: unknown,
     method: string,
-    params: { id: string }
+    params: { id: string; updates?: { enabled: boolean } }
   ) => {
     const row = hostRows.get(params.id)
     if (method === 'automation.show') {
@@ -36,13 +36,14 @@ vi.mock('../ssh/orcad-migration-catalog-client', () => ({
     }
     updates.push(params.id)
     if (row) {
-      row.enabled = true
+      row.enabled = params.updates?.enabled ?? true
     }
     return { ok: true, result: {} }
   }
 }))
 
 import { enableWslHostAutomations } from './wsl-host-automation-enable'
+import { disableWslHostAutomations } from './wsl-host-automation-disable'
 
 beforeEach(() => {
   hostRows.clear()
@@ -71,5 +72,28 @@ describe('enableWslHostAutomations', () => {
     ).rejects.toThrow('wsl_move_automation_enable_failed:busy')
     await enableWslHostAutomations('/user-data', 'wsl:Ubuntu', [{ id: 'a', updatedAt: 1 }])
     expect(updates).toEqual(['a'])
+  })
+})
+
+describe('disableWslHostAutomations', () => {
+  it("turns off the host's copies that are on, and skips ones it has off or no longer has", async () => {
+    hostRows.set('on', { enabled: true, updatedAt: 10 })
+    hostRows.set('off', { enabled: false, updatedAt: 10 })
+    await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', ['on', 'off', 'deleted-on-host'])
+    expect(updates).toEqual(['on'])
+    expect(hostRows.get('on')?.enabled).toBe(false)
+  })
+
+  it('throws when the host refuses one, so undo refuses rather than run it twice', async () => {
+    hostRows.set('a', { enabled: true, updatedAt: 1 })
+    failNextUpdate.value = true
+    await expect(disableWslHostAutomations('/user-data', 'wsl:Ubuntu', ['a'])).rejects.toThrow(
+      'wsl_move_automation_disable_failed:busy'
+    )
+  })
+
+  it('asks the host nothing when no automation needs turning off', async () => {
+    await disableWslHostAutomations('/user-data', 'wsl:Ubuntu', [])
+    expect(updates).toEqual([])
   })
 })
