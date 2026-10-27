@@ -1,6 +1,9 @@
 export type WslRelayRecoveryState = {
   distro: string
   cooldownUntil: number
+  /** What a later restart must bring back: the managed Codex home and the pi/omp launch setups. */
+  codexHomePath?: string
+  launchKinds?: ReadonlySet<'pi' | 'omp'>
   restartTimer?: ReturnType<typeof setTimeout>
   reinstallTimer?: ReturnType<typeof setTimeout>
 }
@@ -13,9 +16,17 @@ export type WslRelayRecoveryIo = {
   warn: (message: string) => void
   isDisposed: () => boolean
   isCurrent: (state: WslRelayRecoveryState) => boolean
-  restart: (distro: string) => void
+  restart: (distro: string, setup?: WslRelayRestartSetup) => void
   dropState: (state: WslRelayRecoveryState) => void
 }
+
+export type WslRelayRestartSetup = {
+  codexHomePath?: string
+  launchKinds: readonly ('pi' | 'omp')[]
+}
+
+// A failed running-list read is not proof the distro stopped; look once more after WSL's backoff.
+const REPROBE_AFTER_STOPPED_MS = 30_000
 
 export class WslRelayRecovery {
   constructor(private io: WslRelayRecoveryIo) {}
@@ -64,6 +75,11 @@ export class WslRelayRecovery {
     if (this.io.isDisposed() || !this.io.isCurrent(state)) {
       return
     }
+    // Captured now: once the state is dropped, a later restart would otherwise come back bare.
+    const setup: WslRelayRestartSetup = {
+      codexHomePath: state.codexHomePath,
+      launchKinds: [...(state.launchKinds ?? [])]
+    }
     const running = await this.io.isDistroRunning(state.distro, linkDiedAt)
     // The probe await may outlive state replacement; never drop or restart the replacement relay.
     if (this.io.isDisposed() || !this.io.isCurrent(state)) {
@@ -75,13 +91,23 @@ export class WslRelayRecovery {
       )
       this.io.dropState(state)
       // E9: come back when the distro runs again (started by the user or another act), never boot it.
-      this.io.deferUntilRunning(state.distro, () => {
-        if (!this.io.isDisposed()) {
-          this.io.restart(state.distro)
+      let restarted = false
+      const restartOnce = (): void => {
+        if (!restarted && !this.io.isDisposed()) {
+          restarted = true
+          this.io.restart(state.distro, setup)
         }
-      })
+      }
+      this.io.deferUntilRunning(state.distro, restartOnce)
+      const reprobe = setTimeout(() => {
+        void this.io
+          .isDistroRunning(state.distro, performance.now())
+          .then((running) => running && restartOnce())
+          .catch(() => {})
+      }, REPROBE_AFTER_STOPPED_MS)
+      reprobe.unref?.()
       return
     }
-    this.io.restart(state.distro)
+    this.io.restart(state.distro, setup)
   }
 }
