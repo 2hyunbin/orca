@@ -81,11 +81,7 @@ export function createClaudeTurnOpener(deps: {
       return
     }
     const send = deps.startedSend()
-    // An unsolicited API error has no user turn or selection to retain.
-    if (
-      (!send && (deps.isSuppressed() || frame.is_api_error_message === true)) ||
-      deps.isTurnOpen()
-    ) {
+    if ((!send && deps.isSuppressed()) || deps.isTurnOpen()) {
       return
     }
     deps.open(

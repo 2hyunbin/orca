@@ -477,5 +477,26 @@ describe('Claude accepted message choices', () => {
       params: { settings: { fastMode: true } }
     })
     expect(connection.sent).toHaveLength(4)
+    claudeTurnEnds(connection)
+    const settingsAfterTurn = [...settings()]
+    const originalSend = connection.send
+    connection.send = async (message, prepare) => {
+      await prepare?.()
+      connection.sent.push(message)
+    }
+    try {
+      await expect(send('starts', 'opus')).resolves.toMatchObject({ state: 'admitted' })
+      claudeFrame(connection, {
+        type: 'command_lifecycle',
+        state: 'started',
+        command_uuid: connection.sent.at(-1)?.uuid
+      })
+      await expect(send('before-echo', 'sonnet')).resolves.toMatchObject({ state: 'admitted' })
+      expect(models()).toEqual(['sonnet', 'opus'])
+      expect(settings()).toEqual(settingsAfterTurn)
+    } finally {
+      connection.send = originalSend
+      await adapter.closeAll()
+    }
   })
 })

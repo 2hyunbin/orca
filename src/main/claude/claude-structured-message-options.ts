@@ -1,3 +1,4 @@
+import { claudeStartedUnechoedSend } from './claude-command-lifecycle'
 import { claudeExecutionObservations } from './claude-structured-execution-observations'
 import { dispatchClaudeTurn } from './claude-structured-dispatch'
 import type { StructuredAgentSessionAdapter } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
@@ -95,7 +96,9 @@ export async function dispatchClaudeMessage(
       // Input joining a running turn, and Orca mail notices, run on the choices Claude already has;
       // new choices apply at the next new turn.
       const messageOptions =
-        session.translator?.currentTurnId ||
+        session.translator?.openTurnHasInputWork ||
+        session.translator?.commandTurnId ||
+        claudeStartedUnechoedSend(session) ||
         input.body.from?.orchestration?.message === 'mail-notice'
           ? undefined
           : input.executionOptions
