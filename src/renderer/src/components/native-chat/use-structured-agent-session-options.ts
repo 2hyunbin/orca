@@ -143,13 +143,11 @@ export function useStructuredAgentSessionOptions(args: StructuredAgentSessionOpt
         isCurrentContext() && activeOptionRecordRef.current === targetRecord
       const isCurrent = (): boolean =>
         sameRecord() && isLatestStructuredOptionPick(optionPicks.current, pick)
-      if (shownAtOnce) {
-        updateOptionState((current) =>
-          commitStructuredAgentSessionOptionValues(current, { [id]: encoded })
-        )
-      } else {
-        updateOptionState((current) => ({ ...current, pendingId: id }))
-      }
+      updateOptionState((current) =>
+        shownAtOnce
+          ? commitStructuredAgentSessionOptionValues(current, { [id]: encoded })
+          : { ...current, pendingId: id }
+      )
       let result: AgentSessionOptionResult | null = null
       try {
         result = await mutate<AgentSessionOptionResult>(
@@ -229,10 +227,6 @@ export function useStructuredAgentSessionOptions(args: StructuredAgentSessionOpt
   const setStructuredOption = useCallback(
     async (id: string, value: string | boolean): Promise<boolean> => {
       const view = pendingView(optionStateRef.current)
-      const pickState = {
-        ...view,
-        pendingId: structuredOptionPickBlockingId(optionPicks.current, id, providerStarting)
-      }
       const encoded = encodeStructuredAgentSessionOptionValue(id, value)
       if (
         (id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID &&
@@ -242,7 +236,10 @@ export function useStructuredAgentSessionOptions(args: StructuredAgentSessionOpt
         !optionCatalog ||
         encoded === null ||
         !canSetStructuredAgentSessionOption(
-          pickState,
+          {
+            ...view,
+            pendingId: structuredOptionPickBlockingId(optionPicks.current, id, providerStarting)
+          },
           id,
           value,
           lockSnapshotRef.current(structuredAgentSessionOptionSnapshot(view))
