@@ -1,8 +1,13 @@
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import { runCodexAppServerSession, type CodexAppServerRpc } from './codex-app-server-session'
-import { buildNativeHealInvocation } from './codex-session-index-heal'
-import type { CodexSession } from './codex-structured-session-state'
+import { randomUUID } from 'node:crypto'
+import { agentSessionProviderHandleChainHead } from '../../shared/agent-session-provider-handle'
+import { CODEX_SHORT_LIVED_PROBE_APP_SERVER_ARGS } from '../codex-cli/codex-read-only-app-server-args'
+import type {
+  CodexSession,
+  CodexStructuredSessionAdapterDeps
+} from './codex-structured-session-state'
 
 const RENAME_TIMEOUT_MS = 15_000
 // Older Codex refuses a name until the thread's first record reaches disk; give a fresh
@@ -39,6 +44,7 @@ export async function renameCodexProviderSession(input: {
   record: AgentSessionRecord
   providerSessionId: string
   name: string
+  resolveLaunch: CodexStructuredSessionAdapterDeps['resolveLaunch']
 }): Promise<void> {
   const { session, providerSessionId, name } = input
   const live = session && !session.ended && !session.connection.closed ? session : null
@@ -51,7 +57,28 @@ export async function renameCodexProviderSession(input: {
     return
   }
   const codexHome = requireLegacyAgentSessionAccountHome(input.record.accountHome).path
-  await runCodexAppServerSession(buildNativeHealInvocation(codexHome, RENAME_TIMEOUT_MS), (rpc) =>
-    setThreadName(rpc.request, providerSessionId, name)
+  const { record } = input
+  const launch = await input.resolveLaunch({
+    identity: {
+      sessionId: record.sessionId,
+      workspaceId: record.location.workspaceId,
+      hostId: record.location.executionHostId,
+      agent: 'codex',
+      providerHandle:
+        agentSessionProviderHandleChainHead(record.providerHandleChain)?.handle ?? null
+    },
+    spawnToken: randomUUID()
+  })
+  await runCodexAppServerSession(
+    {
+      command: launch.command,
+      args: [...launch.args.slice(0, -1), ...CODEX_SHORT_LIVED_PROBE_APP_SERVER_ARGS],
+      cwd: launch.cwd,
+      cliPath: launch.command,
+      env: { ...launch.env, CODEX_HOME: codexHome },
+      envToDelete: launch.envToDelete,
+      timeoutMs: RENAME_TIMEOUT_MS
+    },
+    (rpc) => setThreadName(rpc.request, providerSessionId, name)
   )
 }

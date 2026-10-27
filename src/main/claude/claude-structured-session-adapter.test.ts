@@ -56,7 +56,7 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
   it('pins the account and proves init without treating the system-frame uuid as a chain leaf', async () => {
     const claude = fakeClaude()
     const events: ClaudeStructuredSessionEvent[] = []
-    const adapter = adapterFor(claude, {}, events)
+    const adapter = adapterFor(claude, { continuesChain: true, resumesTranscript: false }, events)
 
     const acquisition = await adapter.acquire({
       identity: identityFor(),
@@ -84,10 +84,11 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
     expect((await claudeOpened(adapter, 'session-1')).link).toEqual({
       linkId: `claude-7-${PROVIDER_SESSION_ID}-empty`,
       handle: claudeProviderHandle(PROVIDER_SESSION_ID, null),
-      origin: 'created',
+      origin: 'resumed',
       mintedAtFence: 7,
       observedAt: 1_700_000_000_500
     })
+    expect((await claudeOpened(adapter, 'session-1')).newConversation).toBe(true)
     expect(events[0]).toMatchObject({ type: 'message', message: { subtype: 'hook_started' } })
   })
 

@@ -45,6 +45,7 @@ let failAcquire: boolean
 const forkForRewind = vi.fn<NonNullable<StructuredAgentSessionAdapter['forkForRewind']>>(
   async () => ({ ok: true, fork: FORK })
 )
+const nameProviderConversation = vi.fn()
 const closeSession = vi.fn(async () => true)
 
 const attachParams = (fence: number | null) =>
@@ -58,6 +59,7 @@ const attachParams = (fence: number | null) =>
 beforeEach(async () => {
   resetHostTestOperationIds()
   failAcquire = false
+  nameProviderConversation.mockClear()
   forkForRewind.mockReset()
   closeSession.mockClear()
   forkForRewind.mockImplementation(async ({ record, beforeMessage }) => ({
@@ -92,14 +94,22 @@ beforeEach(async () => {
           },
           acquisitionGeneration: 'generation-1',
           link: {
-            linkId: 'link-1',
+            linkId: `acquire-${input.fence}`,
             mintedAtFence: input.fence,
             observedAt: HOST_TEST_NOW,
-            origin: 'created',
-            handle: claudeProviderHandle(SOURCE, 'answer-2')
+            origin: input.identity.providerHandle ? 'resumed' : 'created',
+            handle: input.identity.providerHandle ?? claudeProviderHandle(SOURCE, 'answer-2')
           }
         }
       },
+      open: async ({ fence }) => ({
+        reportedOptions: { model: '' },
+        link: {
+          ...store.getRecord(HOST_TEST_SESSION)!.providerHandleChain.at(-1)!,
+          origin: 'resumed',
+          mintedAtFence: fence
+        }
+      }),
       dispatch: async () => ({ state: 'unknown', reason: 'test' }),
       cancelTurn: async () => ({ cancelled: false }),
       answerPrompt: async () => {},
@@ -114,6 +124,7 @@ beforeEach(async () => {
   const agents = claudeAndCodexAgents({ claude: adapter, codex: adapter })
   host = new StructuredAgentSessionHost({
     agents,
+    nameProviderConversation,
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter,
@@ -196,6 +207,16 @@ describe('rewinding a chat whose agent forks', () => {
       origin: 'forked',
       handle: claudeProviderHandle(fork.sessionId, 'fork-answer-1')
     })
+    expect(nameProviderConversation).toHaveBeenCalledTimes(1)
+    expect(await host.attach(caller, attachParams(record.lease.runtimeFence))).toMatchObject({
+      ok: true
+    })
+    await vi.waitFor(() => {
+      expect(host.collaboratorsForTests().sessions.get(HOST_TEST_SESSION)?.child?.phase).toBe(
+        'ready'
+      )
+    })
+    expect(nameProviderConversation).toHaveBeenCalledTimes(1)
     const snapshot = await host.journalSnapshot(HOST_TEST_SESSION)
     expect(snapshot.items.map((item) => item.itemId)).toEqual([key('prompt-1'), key('answer-1')])
 

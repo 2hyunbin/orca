@@ -145,12 +145,7 @@ export function fakeClaude(
           ...(options.initAccount === undefined ? {} : { account: options.initAccount })
         }
       },
-      renameSession: async (title, sessionId) => {
-        connection.calls.push({
-          subtype: 'rename_session',
-          params: { title, session_id: sessionId }
-        })
-      },
+      renameSession: async () => {},
       getContextUsage: async () => {
         connection.calls.push({ subtype: 'get_context_usage' })
         return options.contextUsage ?? {}

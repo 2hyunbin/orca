@@ -91,7 +91,12 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
 
   renameProviderSession: NonNullable<StructuredAgentSessionAdapter['renameProviderSession']> = (
     input
-  ) => renameCodexProviderSession({ ...input, session: this.sessions.get(input.record.sessionId) })
+  ) =>
+    renameCodexProviderSession({
+      ...input,
+      session: this.sessions.get(input.record.sessionId),
+      resolveLaunch: this.deps.resolveLaunch
+    })
 
   permissionModeRequiresAcquisition = (): boolean => false
 

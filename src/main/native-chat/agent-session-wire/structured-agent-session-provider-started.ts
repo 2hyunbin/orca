@@ -22,7 +22,6 @@ import {
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 import { recordAgentSessionProviderHandle } from '../../runtime/agent-session/ownership/agent-session-provider-handle-transition'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
-import { agentSessionProviderHandleChainHead } from '../../../shared/agent-session-provider-handle'
 import {
   applyStructuredRewindRecovery,
   readStructuredRewindRecovery,
@@ -71,7 +70,6 @@ export async function settleStructuredAgentSessionProviderStarted(
     ) {
       return null
     }
-    const priorConversation = headConversation(context.deps.store.getRecord(event.sessionId))
     if (!(await recordStartedHandle(context, event))) {
       context.stopStartingChild(event.sessionId, child)
       return null
@@ -98,7 +96,9 @@ export async function settleStructuredAgentSessionProviderStarted(
     void context.wakeDelivery(event.sessionId)
     // A new agent conversation (first message, /clear, rewind) takes the user's chat name;
     // resuming one never does, so a rename made in the agent's own CLI is kept.
-    if (event.link && event.link.handle.nativeId !== priorConversation) {
+    const newConversation =
+      event.newConversation ?? (event.link?.origin === 'created' || event.link?.origin === 'forked')
+    if (newConversation) {
       context.deps.nameProviderConversation?.(event.sessionId)
     }
     noteStructuredAgentSessionProviderStarted(context.deps, event.sessionId)
@@ -108,12 +108,6 @@ export async function settleStructuredAgentSessionProviderStarted(
     context.publishStatus?.(event.sessionId)
     return undefined
   })
-}
-
-function headConversation(record: AgentSessionRecord | null): string | null {
-  return record
-    ? (agentSessionProviderHandleChainHead(record.providerHandleChain)?.handle.nativeId ?? null)
-    : null
 }
 
 /** Reconcile uncertain rewind before delivery; persistent uncertainty fails startup. */

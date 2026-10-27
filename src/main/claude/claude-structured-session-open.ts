@@ -89,5 +89,5 @@ export async function openClaudeStructuredSession(input: {
     )
     current()
   }
-  return { link: session.link, ...result }
+  return { ...result, link: session.link, newConversation: !resumesTranscript }
 }

@@ -13,7 +13,11 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 import type { JournalOperationReceipt } from '../agent-session-journal/journal-row-writer'
 import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
 
-type RewindRecoveryDeps = { store: AgentSessionRecordStore; logger: StructuredAgentSessionLogger }
+type RewindRecoveryDeps = {
+  store: AgentSessionRecordStore
+  logger: StructuredAgentSessionLogger
+  nameProviderConversation?: (sessionId: string) => void
+}
 
 export function persistRewindRecord(
   store: AgentSessionRecordStore,
@@ -226,6 +230,7 @@ export async function applyStructuredRewindRecovery(
         receipt?.(completed, fence, cursor) ??
         store.conversationReceipts.rewind(sessionId, fence, completed, cursor)
     )
+    deps.nameProviderConversation?.(sessionId)
     return
   }
   if (rewind.contextClearOperationId && rewind.contextClearSequence) {
@@ -246,6 +251,9 @@ export async function applyStructuredRewindRecovery(
         receipt?.(completed, fence, cursor) ??
         store.conversationReceipts.rewind(sessionId, fence, completed, cursor)
     )
+    if (rewind.providerFork?.materialized) {
+      deps.nameProviderConversation?.(sessionId)
+    }
     return
   }
   const cursor = alreadyReplaced

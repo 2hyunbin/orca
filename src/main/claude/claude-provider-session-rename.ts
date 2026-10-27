@@ -21,10 +21,18 @@ export async function renameClaudeProviderSession(input: {
 }): Promise<void> {
   const { session, providerSessionId, name } = input
   if (session && !session.connection.closed && session.providerSessionId === providerSessionId) {
-    await session.connection.renameSession(name, providerSessionId, {
-      ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs })
-    })
+    await session.connection.renameSession(
+      name,
+      providerSessionId,
+      input.timeoutMs === undefined ? undefined : { timeoutMs: input.timeoutMs }
+    )
     return
+  }
+  if (session?.providerSessionId === providerSessionId) {
+    await session.closeFinalization
+    if (session.connection.exitVerdict.root !== 'exited') {
+      throw new Error('the Claude conversation still has an unproven transcript writer')
+    }
   }
   const transcript = await findClaudeTranscript(input.record, providerSessionId)
   if (!transcript) {
