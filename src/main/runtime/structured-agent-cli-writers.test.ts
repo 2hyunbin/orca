@@ -1,3 +1,7 @@
+import {
+  pairedWriterFixture,
+  pairedWriterHoldingTerminal
+} from '../../shared/__fixtures__/captured-pinned-terminal-close.test-fixture'
 import { hostSleepKey } from './terminal/stop/worktree-terminal-sleep-key'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
@@ -51,7 +55,9 @@ function inspection(verdict: AgentProcessVerdict | null = null) {
     saved: () => [],
     observation: () => observation,
     sleeping: () => false,
-    terminal: () => ({ pane: { ptyId: 'pty', incarnationId: identity, identity } }),
+    terminal: ({ paneKey }) => ({
+      pane: { ptyId: 'pty', paneKey, incarnationId: identity, identity }
+    }),
     links: () => [],
     shellAlone: vi.fn(async () => true)
   }
@@ -96,7 +102,7 @@ function writerLayoutStore(): RuntimeStore {
 beforeEach(() => vi.clearAllMocks())
 describe('execution-host conversation writer inspection', () => {
   it.each(['source', 'row', 'link', 'saved', 'final'] as const)(
-    'names the actual %s blocker, leaving a final proof failure unnamed',
+    'names the inspected %s blocker, leaving unproved holders unnamed',
     async (kind) => {
       const check = inspection('unverifiable')
       const blocker = { paneKey: 'blocker:leaf', worktreeId: 'workspace' }
@@ -109,7 +115,13 @@ describe('execution-host conversation writer inspection', () => {
       }
       if (kind === 'link') {
         check.host.links = () => [
-          { ...blocker, agent: 'codex', id: 'conversation', paneOwned: false, terminal: () => null }
+          {
+            worktreeId: blocker.worktreeId,
+            agent: 'codex',
+            id: 'conversation',
+            paneOwned: false,
+            terminal: () => null
+          }
         ]
       }
       if (kind === 'saved') {
@@ -144,12 +156,33 @@ describe('execution-host conversation writer inspection', () => {
       await expect(run).rejects.toMatchObject({
         refusal: {
           details:
-            kind === 'final' ? { reason: 'conversationHeldElsewhere' } : { terminal: blocker }
+            kind === 'final' || kind === 'saved' || kind === 'link'
+              ? { reason: 'conversationHeldElsewhere' }
+              : { terminal: { ...blocker, incarnationId: 'original-pty' } }
         }
       })
-      if (kind === 'final') {
+      if (kind === 'final' || kind === 'saved' || kind === 'link') {
         await expect(run).rejects.not.toHaveProperty('refusal.details.terminal')
       }
+    }
+  )
+
+  it.each(['pane', 'key', 'scope'] as const)(
+    'keeps missing %s evidence generic',
+    async (missing) => {
+      const check = inspection('live')
+      if (missing === 'pane') {
+        check.host.terminal = () => ({ pane: null })
+      } else if (missing === 'key') {
+        check.host.terminal = () => ({
+          pane: { ptyId: 'pty', paneKey: null, incarnationId: 'life', identity: 'life' }
+        })
+      } else {
+        check.host.rows = () => [{ ...row, worktreeId: undefined }]
+      }
+      const run = check.run()
+      await expect(run).rejects.toMatchObject(refusal)
+      await expect(run).rejects.not.toHaveProperty('refusal.details.terminal')
     }
   )
 
@@ -504,7 +537,7 @@ describe('execution-host conversation writer inspection', () => {
       source?: { workspaceId: string; paneKey: string }
     ) => runtime.assertStructuredAdoptionTerminalWritersExited(agent, 'conversation', source)
     const shell = { pid: 10, ppid: 1, stat: 'Ss+', command: '/bin/zsh' }
-    const census = async (run: () => Promise<void>) => {
+    const census = async (run: () => Promise<void>, ownerPane = pane) => {
       // A prompt's zpty worker left the session; any suspended or background job counts, whatever its name.
       const worker = [
         shell,
@@ -513,7 +546,13 @@ describe('execution-host conversation writer inspection', () => {
       ]
       for (const stat of ['T', 'SN']) {
         snapshot.mockResolvedValue([...worker, { pid: 22, ppid: 10, stat, command: 'agent-alias' }])
-        await expect(run()).rejects.toMatchObject(refusal)
+        await expect(run()).rejects.toMatchObject({
+          refusal: {
+            details: {
+              terminal: { paneKey: ownerPane, worktreeId: 'workspace', incarnationId: 'i1' }
+            }
+          }
+        })
       }
       snapshot.mockResolvedValue(worker)
       await expect(run()).resolves.toBeUndefined()
@@ -546,7 +585,7 @@ describe('execution-host conversation writer inspection', () => {
     report('claude')
     report('claude', { providerSession: { key: 'session_id', id: 'later-run' } })
     register('tab-b', 'i1')
-    await census(() => check('claude'))
+    await census(() => check('claude'), `tab-b:${leaf}`)
     // The agent's own process can outlive the terminal's tree, as in detached tmux or nohup.
     report('claude', {
       agentPresence: { agent: 'claude', process: { pid: 12, platform: 'darwin', startTime: 's' } }
@@ -563,7 +602,7 @@ describe('execution-host conversation writer inspection', () => {
     Object.defineProperty(proven, OPEN_CODE_WRITER_TOPOLOGY, { value: 'pane-owned' })
     report('opencode2', { providerSession: proven })
     report('opencode2')
-    await census(() => check('opencode'))
+    await census(() => check('opencode'), `tab-b:${leaf}`)
     register('tab-b', undefined, true)
     await expect(check('opencode')).rejects.toMatchObject(refusal)
     register('tab-b', undefined, false)
@@ -624,5 +663,54 @@ it.each([10, 100])(
       }
     })
     expect(runtime.paneReads).toBeLessThanOrEqual(2)
+  }
+)
+
+it.each(['projected-source', 'host-journal'] as const)(
+  'emits the owning pane from actual registered writer for %s',
+  async (entry) => {
+    const { tabId, leafId, worktreeId, ptyId, incarnationId } = pairedWriterFixture
+    const paneKey = `${tabId}:${leafId}`
+    const runtime = new OrcaRuntimeService(
+      ORCA_LAYOUT_OWNER_IS_MAIN ? writerLayoutStore() : null,
+      undefined,
+      {
+        getAgentProviderSessionSnapshot: () =>
+          entry === 'host-journal' ? [{ ...row, paneKey, worktreeId }] : [],
+        readHookCliWriterObservation: () => ({
+          current: () => true,
+          topology: 'pane-owned',
+          presence: async () => 'live'
+        })
+      }
+    )
+    bindPaneFirst(runtime, { worktreeId, tabId, leafId, ptyId, incarnationId })
+    runtime.registerPty(ptyId, worktreeId, null, { tabId, leafId, incarnationId })
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => false,
+      getForegroundProcess: async () => null,
+      listProcesses: async () => [
+        { id: ptyId, rootProcessId: 10, incarnationId, cwd: '/workspace', title: 'codex' }
+      ]
+    })
+    snapshot.mockResolvedValue([
+      { pid: 10, ppid: 1, stat: 'Ss+', command: '/bin/zsh' },
+      { pid: 22, ppid: 10, stat: 'S+', command: 'codex' }
+    ])
+    await expect(
+      runtime.assertStructuredAdoptionTerminalWritersExited(
+        'codex',
+        'conversation',
+        entry === 'projected-source'
+          ? { workspaceId: worktreeId, paneKey: `web-terminal-${paneKey}` }
+          : undefined
+      )
+    ).rejects.toMatchObject({
+      refusal: {
+        code: 'agent_session_conflict',
+        details: { reason: 'conversationHeldElsewhere', terminal: pairedWriterHoldingTerminal }
+      }
+    })
   }
 )

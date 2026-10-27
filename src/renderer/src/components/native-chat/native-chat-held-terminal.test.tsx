@@ -17,6 +17,10 @@ import {
 import { replaceRuntimeEnvironmentRevisions } from '@/runtime/runtime-environment-revision'
 import type * as CloseHoldingTerminalModule from './close-holding-terminal'
 import type { RuntimeTerminalResolvePane } from '../../../../shared/runtime-types'
+import {
+  pairedWriterFixture,
+  pairedWriterHoldingTerminal
+} from '../../../../shared/__fixtures__/captured-pinned-terminal-close.test-fixture'
 const mocks = vi.hoisted(() => ({ reveal: vi.fn(), capture: vi.fn(), close: vi.fn() }))
 vi.mock('@/lib/reveal-terminal-pane', () => ({ revealTerminalPane: mocks.reveal }))
 vi.mock('./close-holding-terminal', () => ({
@@ -207,7 +211,7 @@ it.each([undefined, false, 'true'])(
   }
 )
 
-it.each(['original', 'mirror-replaced'] as const)(
+it.each(['original', 'mirror-replaced', 'paired-producer'] as const)(
   'joins paired original refusal to verified naming/link/Close: %s',
   async (outcome) => {
     const actual = await vi.importActual<typeof CloseHoldingTerminalModule>(
@@ -215,13 +219,15 @@ it.each(['original', 'mirror-replaced'] as const)(
     )
     mocks.capture.mockImplementation(actual.captureHeldTerminal)
     const environmentId = '8612d81e-3491-4816-9aee-88352de753be'
+    const specimen = outcome === 'paired-producer' ? pairedWriterFixture : null
     const worktreeId =
+      specimen?.worktreeId ??
       'cdb257c7-b8b4-4a66-bc78-49002dbef0ae::C:/Users/neil/orca/workspaces/orca/qa-pr-33721-qg/qa-runtime/fixture-folder'
-    const tabId = '36f930a4-86c0-4fe2-b956-e67ceda7193b'
+    const tabId = specimen?.tabId ?? '36f930a4-86c0-4fe2-b956-e67ceda7193b'
     const mirrorId = `web-terminal-${tabId}`
-    const leafId = '866c3ff1-fc61-4e27-b9c3-0064fdf1a26c'
-    const incarnationId = '33e20019-451d-4211-8844-fc2c45793fff'
-    const handle = 'term_75a94bdc-111d-4797-a524-16399980eccc'
+    const leafId = specimen?.leafId ?? '866c3ff1-fc61-4e27-b9c3-0064fdf1a26c'
+    const incarnationId = specimen?.incarnationId ?? '33e20019-451d-4211-8844-fc2c45793fff'
+    const handle = specimen?.handle ?? 'term_75a94bdc-111d-4797-a524-16399980eccc'
     const ptyId = `remote:${environmentId}@@${handle}`
     const title = 'Reply with T2530-HOST-CODEX'
     const row = {
@@ -240,7 +246,7 @@ it.each(['original', 'mirror-replaced'] as const)(
       createdAt: 1793019974077,
       generation: 0,
       hasLeaf: true,
-      ptyId: `${worktreeId}@@7ad4d16e`,
+      ptyId: specimen?.ptyId ?? `${worktreeId}@@7ad4d16e`,
       incarnationId
     }
     const resolved: RuntimeTerminalResolvePane = {
@@ -255,19 +261,20 @@ it.each(['original', 'mirror-replaced'] as const)(
       supportsPinCloseConsent: true,
       presentation: { identity, holders: [{ hostId: 'local', identity }] }
     }
-    const holder = { worktreeId, paneKey: `${tabId}:${leafId}`, incarnationId }
+    const holder = specimen
+      ? pairedWriterHoldingTerminal
+      : { worktreeId, paneKey: `${tabId}:${leafId}`, incarnationId }
+    const layout = {
+      root: { type: 'leaf' as const, leafId },
+      activeLeafId: leafId,
+      expandedLeafId: null,
+      ptyIdsByLeafId: { [leafId]: ptyId }
+    }
     replaceRuntimeEnvironmentRevisions([{ id: environmentId, createdAt: 1 }])
     markRuntimeEnvironmentCompatible(environmentId)
     useAppStore.setState({
       tabsByWorktree: { [worktreeId]: [row] },
-      terminalLayoutsByTabId: {
-        [mirrorId]: {
-          root: { type: 'leaf', leafId },
-          activeLeafId: leafId,
-          expandedLeafId: null,
-          ptyIdsByLeafId: { [leafId]: ptyId }
-        }
-      }
+      terminalLayoutsByTabId: specimen ? {} : { [mirrorId]: layout }
     })
     useAppStore.getState().createUnifiedTab(worktreeId, 'terminal', {
       entityId: mirrorId,
@@ -284,17 +291,26 @@ it.each(['original', 'mirror-replaced'] as const)(
       return { ok: true, result: { terminal: resolved } }
     })
     Object.assign(window.api, { runtimeEnvironments: { call: rpc } })
+    if (specimen) {
+      expect(
+        resolveHeldTerminalTarget(useAppStore.getState(), holder, `runtime:${environmentId}`)
+      ).toBeNull()
+    }
+    await act(async () => {
+      notice(holder, { ...view, heldTerminal: { executionHostId: `runtime:${environmentId}` } })
+    })
+    if (specimen) {
+      expect(mocks.capture).not.toHaveBeenCalled()
+      await act(async () =>
+        useAppStore.setState({ terminalLayoutsByTabId: { [mirrorId]: layout } })
+      )
+    }
     const target = resolveHeldTerminalTarget(
       useAppStore.getState(),
       holder,
       `runtime:${environmentId}`
     )
-    if (!target) {
-      throw new Error('Missing recorded paired target')
-    }
-    await act(async () => {
-      notice(holder, { ...view, heldTerminal: { executionHostId: `runtime:${environmentId}` } })
-    })
+    expect(target).not.toBeNull()
     const captured = await mocks.capture.mock.results[0].value
     expect(rpc).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -304,7 +320,7 @@ it.each(['original', 'mirror-replaced'] as const)(
         params: { worktreeId, paneKey: holder.paneKey }
       })
     )
-    if (outcome === 'original') {
+    if (outcome !== 'mirror-replaced') {
       expect(row.createdAt).not.toBe(identity.createdAt)
       expect(
         captured,

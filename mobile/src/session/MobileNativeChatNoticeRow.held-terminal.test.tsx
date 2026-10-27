@@ -2,6 +2,10 @@ import { createElement, type ContextType, type PropsWithChildren } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, it, vi } from 'vitest'
 import { MobileNativeChatNoticeRow, MobileHeldTerminalContext } from './MobileNativeChatNoticeRow'
+import {
+  pairedWriterFixture,
+  pairedWriterHoldingTerminal
+} from '../../../src/shared/__fixtures__/captured-pinned-terminal-close.test-fixture'
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   Text: ({ children }: PropsWithChildren) => createElement('span', null, children),
@@ -14,19 +18,19 @@ vi.mock('lucide-react-native', () => ({
   Info: 'Info'
 }))
 vi.mock('../components/MobileMarkdown', () => ({ MobileMarkdown: 'Markdown' }))
-const leafId = '11111111-1111-4111-8111-111111111111'
+const { leafId, worktreeId, tabId, incarnationId } = pairedWriterFixture
 const heldScreen = {
-  worktreeId: 'w',
+  worktreeId,
   agent: 'codex',
   tabs: [
     {
       type: 'terminal',
       id: 'pane',
-      parentTabId: 't',
+      parentTabId: tabId,
       leafId,
       title: 'Review',
       terminal: 'pty',
-      incarnationId: 'life',
+      incarnationId,
       isActive: false
     }
   ]
@@ -51,9 +55,10 @@ it.each(['named', 'workspace', 'missing', 'replaced', 'legacy', 'unknown-agent']
               text: 'Unnamed fallback',
               failure: { kind: 'conversationOpenInTerminal' },
               heldByTerminal: {
-                paneKey: `t:${leafId}`,
-                worktreeId: kind === 'workspace' ? 'other' : 'w',
-                incarnationId: kind === 'legacy' ? undefined : kind === 'replaced' ? 'old' : 'life'
+                ...pairedWriterHoldingTerminal,
+                worktreeId: kind === 'workspace' ? 'other' : worktreeId,
+                incarnationId:
+                  kind === 'legacy' ? undefined : kind === 'replaced' ? 'old' : incarnationId
               }
             }
           ]}

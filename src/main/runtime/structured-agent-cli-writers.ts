@@ -21,7 +21,12 @@ import {
   type SleepingAgentSessionRecord
 } from '../../shared/agent-session-resume'
 
-export type CliWriterPane = { ptyId: string; incarnationId: PtyIncarnationId; identity: string }
+export type CliWriterPane = {
+  ptyId: string
+  paneKey: string | null
+  incarnationId: PtyIncarnationId
+  identity: string
+}
 type CliWriterCoordinates = { paneKey: string; worktreeId?: string }
 /** `pane` is null when the PTY can't be inspected: remote, WSL, disconnected or unresolvable. */
 export type CliWriterTerminal = { pane: CliWriterPane | null }
@@ -33,7 +38,6 @@ export type CliWriterConversation = {
   process?: AgentProcessIdentity
 }
 export type CliWriterLink = CliWriterConversation & {
-  paneKey?: string
   worktreeId: string
   terminal: () => CliWriterTerminal | null
 }
@@ -73,12 +77,12 @@ export async function assertCliConversationWritersExited(
   const refuse = (at?: { paneKey?: string; worktreeId?: string }, pane?: CliWriterPane | null) =>
     agentSessionRefusalError('agent_session_conflict', {
       reason: 'conversationHeldElsewhere',
-      ...(at?.paneKey && at.worktreeId
+      ...(pane?.paneKey && at?.worktreeId
         ? {
             terminal: {
-              paneKey: at.paneKey,
+              paneKey: pane.paneKey,
               worktreeId: at.worktreeId,
-              ...(pane ? { incarnationId: pane.incarnationId } : {})
+              incarnationId: pane.incarnationId
             }
           }
         : {})
