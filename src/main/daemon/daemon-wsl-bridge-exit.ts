@@ -19,15 +19,15 @@ export type ReadRunningWslDistros = (options: {
   startedAfter?: number
 }) => Promise<WslRunningDistrosRead>
 
+/** What the running list said about the distro after a bridge exit. */
+export type WslBridgeExitVerdict = 'lost' | 'running' | 'unavailable'
+
 /**
  * Lost only when a running list confirmed after the exit lacks the distro. The probe is the shared,
  * coalesced `wsl --list --running` (it never boots): a terminate that exits many panes costs one
  * spawn, and a probe already in flight from before the exit (which may predate the distro's boot)
  * gets one fresh probe after it. Unavailable or late means unchanged: the exit stays an exit.
  */
-/** What the running list said about the distro after a bridge exit. */
-export type WslBridgeExitVerdict = 'lost' | 'running' | 'unavailable'
-
 export async function checkWslBridgeDistro(
   distro: string,
   exitAt: number,
