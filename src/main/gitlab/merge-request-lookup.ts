@@ -105,7 +105,7 @@ export async function getMergeRequestForBranch(
         ],
         glabRepoExecOptions(repoPath, connectionId, localGitOptions)
       )
-      // SAFETY: the single-MR endpoint returns the MR fields and its optional pipeline.
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the single-MR endpoint returns the MR fields and its optional pipeline.
       const raw = JSON.parse(stdout) as Parameters<typeof mapMRInfo>[0]
       const pipelineStatus = derivePipelineStatus(raw.head_pipeline ?? raw.pipeline ?? null)
       return mapMRInfo(raw, pipelineStatus)
@@ -123,7 +123,7 @@ export async function getMergeRequestForBranch(
         ],
         glabRepoExecOptions(repoPath, connectionId, localGitOptions)
       )
-      // SAFETY: the branch-list endpoint returns MR summaries; only their identity is used.
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the branch-list endpoint returns MR summaries; only their identity is used.
       const data = JSON.parse(stdout) as Parameters<typeof mapMRInfo>[0][]
       if (Array.isArray(data) && data.length > 0) {
         // List summaries omit head_pipeline; only detail can supply an authoritative check result.
