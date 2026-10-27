@@ -4,31 +4,47 @@ import { HIDDEN_WINDOW_FRAME_PUMP_STOP_CHANNEL } from '../../shared/hidden-windo
 import { stopHiddenWindowFramePumpOnShow } from './hidden-window-frame-pump'
 
 function fakeWindow(destroyed = false) {
-  const emitter = new EventEmitter()
+  const windowEvents = new EventEmitter()
+  const contentsEvents = new EventEmitter()
   const send = vi.fn()
   const window = {
-    once: (event: 'show', listener: () => void) => emitter.once(event, listener),
-    webContents: { isDestroyed: () => destroyed, send }
+    once: (event: 'show', listener: () => void) => windowEvents.once(event, listener),
+    webContents: {
+      isDestroyed: () => destroyed,
+      on: (event: 'did-finish-load', listener: () => void) => contentsEvents.on(event, listener),
+      send
+    }
   }
-  return { window, emitter, send }
+  return { window, windowEvents, contentsEvents, send }
 }
 
 describe('stopHiddenWindowFramePumpOnShow', () => {
-  it('tells the renderer to stop once, on the first show', () => {
-    const { window, emitter, send } = fakeWindow()
+  it('keeps pumping across reloads while the window has never been shown', () => {
+    const { window, contentsEvents, send } = fakeWindow()
     stopHiddenWindowFramePumpOnShow(window)
 
-    emitter.emit('show')
-    emitter.emit('show')
+    contentsEvents.emit('did-finish-load')
 
-    expect(send).toHaveBeenCalledExactlyOnceWith(HIDDEN_WINDOW_FRAME_PUMP_STOP_CHANNEL)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('stops on the first show and again after a later reload restarts the pump', () => {
+    const { window, windowEvents, contentsEvents, send } = fakeWindow()
+    stopHiddenWindowFramePumpOnShow(window)
+
+    windowEvents.emit('show')
+    windowEvents.emit('show')
+    contentsEvents.emit('did-finish-load')
+
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(send).toHaveBeenCalledWith(HIDDEN_WINDOW_FRAME_PUMP_STOP_CHANNEL)
   })
 
   it('sends nothing to destroyed contents', () => {
-    const { window, emitter, send } = fakeWindow(true)
+    const { window, windowEvents, send } = fakeWindow(true)
     stopHiddenWindowFramePumpOnShow(window)
 
-    emitter.emit('show')
+    windowEvents.emit('show')
 
     expect(send).not.toHaveBeenCalled()
   })

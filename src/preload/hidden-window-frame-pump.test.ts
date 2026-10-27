@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest'
-import { HIDDEN_WINDOW_FRAME_PUMP_INTERVAL_MS } from '../shared/hidden-window-frame-pump'
-import { startHiddenWindowFramePump } from './hidden-window-frame-pump'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  HIDDEN_WINDOW_FRAME_PUMP_INTERVAL_MS,
+  formatHiddenWindowFramePumpArgument
+} from '../shared/hidden-window-frame-pump'
+import {
+  installHiddenWindowFramePump,
+  startHiddenWindowFramePump
+} from './hidden-window-frame-pump'
 
 function harness(initial?: { value: string; priority: string }) {
   const props = new Map<string, { value: string; priority: string }>()
@@ -95,5 +101,32 @@ describe('startHiddenWindowFramePump', () => {
     expect(h.cancelled()).toBe(true)
     expect(h.props.has('background-color')).toBe(false)
     expect(h.frames).toHaveLength(0)
+  })
+})
+
+describe('installHiddenWindowFramePump', () => {
+  function deps() {
+    const every = vi.fn((_callback: () => void, _ms: number) => vi.fn())
+    return { rootStyle: () => null, requestAnimationFrame: vi.fn(), every }
+  }
+
+  it('does not start without the flag main stamps', () => {
+    const d = deps()
+    const onStopRequest = vi.fn()
+    installHiddenWindowFramePump(['--other'], onStopRequest, d)
+
+    expect(d.every).not.toHaveBeenCalled()
+    expect(onStopRequest).not.toHaveBeenCalled()
+  })
+
+  it('starts with the flag and hands main the stop', () => {
+    const d = deps()
+    let stop: (() => void) | undefined
+    installHiddenWindowFramePump([formatHiddenWindowFramePumpArgument()], (s) => (stop = s), d)
+    const cancel = d.every.mock.results[0]?.value
+
+    stop?.()
+
+    expect(cancel).toHaveBeenCalledOnce()
   })
 })
