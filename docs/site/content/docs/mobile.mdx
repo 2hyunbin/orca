@@ -48,6 +48,8 @@ Closing the desktop app drops a direct/LAN session until you reopen it. Relay-ba
 
 For chat-capable agents (Claude, Codex, and others Orca recognizes), mobile can open the session in **Chat UI** instead of the raw terminal — the same idea as desktop's [Chat UI](/docs/agents/native-chat): a readable transcript, composer, permissions/questions, and image attachments.
 
+Sessions started as native Chat UI on desktop are structured chats, not terminals. A supporting mobile app opens them in Chat UI regardless of the phone's terminal default. The view switches below apply to terminal-backed sessions; switching views cannot add support for a structured chat to an older app.
+
 - **Device default** — on first launch, mobile asks how sessions should open on this phone. Change it later under **Settings → Chat UI → Open sessions in Chat UI**. The default is terminal until you choose Chat UI.
 - **Per-session** — long-press a session tab and choose **Switch to chat view** or **Switch to terminal view**. That override sticks for that tab without changing the device default.
 - **Composer** — type a reply, `@` mention workspace files, use agent-aware `/` slash commands from the shared catalog (Claude vs Codex sets, with descriptions), attach a photo, or dictate. Attached images appear as removable thumbnails and ride along on send (including image-only sends and multi-image attachments).
@@ -111,6 +113,14 @@ The mobile terminal has a dedicated **Terminal settings** screen (Settings → T
 - **Update Orca Mobile / Update Orca on your computer** — the phone and desktop speak a versioned mobile protocol. If either side is too old, mobile blocks that host and points you at the App Store (iOS), [GitHub Releases](https://github.com/stablyai/orca/releases) (Android APK or desktop), then back to hosts. After updating, refresh the connection; if the message stays, remove the host and pair again.
 - **Quick Commands unavailable** — update the paired desktop so it advertises the quick-commands capability.
 - **Can't reach desktop** — phone and desktop must share a network path (LAN, Tailscale, or the pairing path you used). Closing the desktop app drops the connection; reopen desktop and the phone reconnects automatically.
+
+### Blank chat tab labeled Update mobile or Update to view
+
+If a desktop-created chat opens as a blank pane with disabled terminal controls, check its tab label. **Update mobile** (**Update to view** on older desktop builds) means the desktop has not received this mobile connection's capability to display that structured agent session. It reports feature compatibility, not an empty transcript. An unsupported Claude chat may instead say **Open on desktop**.
+
+Update **the phone app**, not just desktop: install the [current Android APK](https://www.onorca.dev/download/android) or update from the [iOS App Store](https://apps.apple.com/us/app/orca-ide/id6766130217). Then reopen the host connection so the phone advertises its supported features again. A green Connected indicator proves connectivity, not support for every chat type.
+
+Do not close or recreate the desktop session to resolve this label. If it persists after updating and reconnecting, include both app versions, the agent name, the tab label, and whether the connection is direct or Relay in a bug report; a failed capability negotiation also needs investigation. Keep working on desktop in the meantime.
 
 <Callout title="Next steps">
   Pair mobile notifications with [desktop notifications](/docs/notifications) so agent-finished
